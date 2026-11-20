@@ -23,6 +23,7 @@
  */
 
 import { currentLink, linkWords } from "./jarvis-link.js";
+import { liveRow } from "./settings-live.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -148,7 +149,11 @@ async function setSwitch(on) {
 
 if (el.body && IS_TAURI) {
   el.sw?.addEventListener("click", () => setSwitch(!(view && view.on === true)));
-  load();
+  // The ONE refresh rule: a chat sentence can change this switch too, and this
+  // page used to read it once (DESKTOP-STATE-DRIFT row 37). It re-reads on the
+  // approval queue, when this window comes back into view, and on a bounded
+  // steady poll - its own card can stay open for the big coder's long wait.
+  liveRow({ read: load });
 } else if (el.reading) {
   el.reading.textContent = "This window cannot ask the PC.";
 }

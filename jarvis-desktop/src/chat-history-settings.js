@@ -32,6 +32,7 @@
  */
 
 import { currentLink, linkWords } from "./jarvis-link.js";
+import { liveRow } from "./settings-live.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -243,7 +244,11 @@ if (el.body && IS_TAURI) {
   paintKeep();
   el.sw?.addEventListener("click", () => setSwitch(!(view && view.enabled === true)));
   el.keep?.addEventListener("change", () => setKeep(Number(el.keep.value)));
-  load();
+  // The ONE refresh rule: the switch can also be changed in Brain -> History
+  // or from the phone, and this page used to read it once (DESKTOP-STATE-DRIFT
+  // row 36). It re-reads on the approval queue, when this window comes back
+  // into view, and on a bounded steady poll.
+  liveRow({ read: load });
 } else if (el.reading) {
   el.reading.textContent = "This window cannot ask the PC.";
 }

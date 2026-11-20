@@ -627,6 +627,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // answer carries `{active: false}` and the next read sees it.
   faultRetry,
   altSpace, reclaimAltSpace, bigCoder, chatHistory,
+  // The backend supervisor's own status (commands.rs `supervisor_status`),
+  // replaceable by a scenario so the 2026-11-19 state-drift audit's failed-save
+  // case can be driven: the store says the PC is NOT supervised, the owner
+  // ticks the box and the save is refused, and the box must fall back to the
+  // store (DESKTOP-STATE-DRIFT.md 3.5). Unset, the old shape is returned.
+  supervisor,
   tutorials, faq, hudLayout, advisor, versionSync, recentChanges }) {
   const listeners = {};
   window.__calls = [];
@@ -642,6 +648,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // exactly the defect, and it cannot be caught by a scenario that only ever
   // sees successes.
   window.__invokeFails = invokeFails || {};
+  // `supervisor_status`'s answer, when a scenario replaces it (see the
+  // destructured parameter above); null means "the PC as this harness has
+  // always drawn it".
+  window.__supervisor = supervisor || null;
   // "Update both halves" (2026-10-13): { where, afterSave, outcome, statusFails,
   // saveFails, fails, modes }. Unset, the card finds both folders and both
   // halves come back ok - see UPDATE_BOTH above for the shapes each one takes.
@@ -805,7 +815,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__apiSettings.saveNote || null;
           }
           case "supervisor_status":
-            return { supervise: true, owned: true, configured: true, pid: 24188,
+            return window.__supervisor || { supervise: true, owned: true, configured: true, pid: 24188,
                      uptime_seconds: 5127, launcher_exited: false,
                      base: "http://127.0.0.1:4719",
                      backend: { program: "C:\\Python312\\python.exe",

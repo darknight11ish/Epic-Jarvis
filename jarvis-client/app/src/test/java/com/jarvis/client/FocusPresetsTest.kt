@@ -54,9 +54,15 @@ class FocusPresetsTest {
     /**
      * The documented live GET answer (jarvis_presets.live_status): the same
      * canonical rows plus `apply_route` on each apply action, `hardware` as the
-     * detected block, top-level `questionnaire`, and chosen/active_lane/paths.
-     * The fixture stays canonical; this is what the PC answers until its
+     * detected block, top-level `questionnaire`, and chosen/active_lane/lane/
+     * paths. The fixture stays canonical; this is what the PC answers until its
      * follow-up regenerates the fixture.
+     *
+     * The chosen/active values here are deliberately the MISMATCH the 2026-11-18
+     * audit named: `chosen` is Coding (a preset on the pooled lane) while the
+     * PC's chat is on the everyday lane - what a restart/reconcile leaves when
+     * the chosen file could not be cleared. The tests below use the same data
+     * for the agreeing case by changing only the lane.
      */
     private val live: FocusPresets.View by lazy {
         val hardware = fixture["hardware"] as JsonObject
@@ -81,6 +87,15 @@ class FocusPresetsTest {
                     put("active_lane", buildJsonObject {
                         put("key", "main")
                         put("base_url", "http://127.0.0.1:11436")
+                    })
+                    put("lane", buildJsonObject {
+                        put("key", "main")
+                        put("base_url", "http://127.0.0.1:11436")
+                        put("card", "RTX 2060")
+                        put("words", "the everyday lane")
+                        put("label", "RTX 2060 · the everyday lane")
+                        put("ready", true)
+                        put("why", "")
                     })
                     put("apply_path", "/api/work/apply")
                     put("switch_path", "/api/models/switch")
@@ -174,8 +189,10 @@ class FocusPresetsTest {
     fun `the live GET answer - hardware, questionnaire, chosen, active lane and paths - parses`() {
         assertEquals(10, live.presets.size)
         assertEquals("coding", live.chosen)
-        assertEquals("Coding", FocusPresets.chipLabel(live))
-        assertEquals("main", (live.activeLane!!["key"] as JsonPrimitive).content)
+        // The live shape is the restart case, so the chip already says the
+        // saved preset is not the one running (see the state test below).
+        assertEquals("Coding (not running)", FocusPresets.chipLabel(live))
+        assertEquals("main", live.activeLane!!.key)
         assertEquals("/api/work/apply", live.applyPath)
         assertEquals("/api/models/switch", live.switchPath)
         assertNotNull(live.detected)
@@ -184,6 +201,178 @@ class FocusPresetsTest {
         for (p in live.presets) {
             assertEquals(p.id, FocusPresets.APPLY_PATH, FocusPresets.applyRoute(p))
             assertEquals(p.id, "{\"preset\":\"${p.id}\"}", FocusPresets.applyBody(p).toString())
+        }
+    }
+
+    @Test
+    fun `the live lane is read in both blocks - the pointer and the PC's own words`() {
+        assertEquals("main", live.activeLane!!.key)
+        assertEquals("http://127.0.0.1:11436", live.activeLane!!.baseUrl)
+        val lane = requireNotNull(live.laneNow) { "the lane block was not read" }
+        assertEquals("main", lane.key)
+        assertEquals("RTX 2060", lane.card)
+        assertEquals("the everyday lane", lane.words)
+        assertEquals("RTX 2060 · the everyday lane", lane.label)
+        assertTrue(lane.ready)
+        // A PC that sends only `active_lane` (an older backend) is still read,
+        // and its lane's words come from the contract's rows - never typed here.
+        val older = requireNotNull(
+            FocusPresets.parse(
+                buildJsonObject {
+                    put("presets", fixture["presets"]!!)
+                    put("chosen", "fast")
+                    put("active_lane", buildJsonObject {
+                        put("key", "main")
+                        put("base_url", "http://127.0.0.1:11436")
+                    })
+                },
+            ),
+        )
+        assertEquals("main", older.activeLane!!.key)
+        assertNull("no lane block, no invented lane", older.laneNow)
+        assertEquals(
+            "Your PC's chat is on RTX 2060 · the everyday lane now.",
+            FocusPresets.runningLine(older),
+        )
+        // A lane key the PC does not name (or a missing block) is no sentence at
+        // all: never "nothing is running", never a guess.
+        assertNull(FocusPresets.runningLine(null))
+        assertNull(
+            FocusPresets.runningLine(
+                FocusPresets.View(view.presets, chosen = null, found = null, switchPath = null),
+            ),
+        )
+    }
+
+    @Test
+    fun `the Current mark follows the PC's live lane - the saved pick is never called running when it is not`() {
+        // The documented live shape really is the restart/reconcile case:
+        // Coding saved, chat on the everyday lane. Coding's own lane is pooled,
+        // so it is NOT running and the row must not say Current.
+        assertEquals("pooled", view.preset("coding")!!.lane.key)
+        assertTrue("the live shape is the restart case", FocusPresets.chosenNotRunning(live))
+        assertEquals(
+            FocusPresets.CHOSEN_NOT_RUNNING,
+            FocusPresets.rowMark(live, view.preset("coding")!!),
+        )
+        assertNull(
+            "a row that was not picked never gets a mark",
+            FocusPresets.rowMark(live, view.preset("fast")!!),
+        )
+        assertEquals("Coding (not running)", FocusPresets.chipLabel(live))
+        assertEquals(
+            "Coding is the preset you picked last, but your PC is not running it " +
+                "now. Use Coding again to switch your PC back to it.",
+            FocusPresets.chosenElsewhereLine(live),
+        )
+        assertEquals(
+            "Your PC's chat is on RTX 2060 · the everyday lane now.",
+            FocusPresets.runningLine(live),
+        )
+
+        // The agreeing case: the same PC saves Coding AND its chat is on the
+        // pooled lane Coding names. Only then may the row say Current.
+        val agrees = live.copy(
+            activeLane = FocusPresets.ActiveLane("pooled", "http://127.0.0.1:11450"),
+        )
+        assertFalse(FocusPresets.chosenNotRunning(agrees))
+        assertEquals(
+            FocusPresets.CHOSEN,
+            FocusPresets.rowMark(agrees, view.preset("coding")!!),
+        )
+        assertEquals("Coding", FocusPresets.chipLabel(agrees))
+        assertNull(FocusPresets.chosenElsewhereLine(agrees))
+
+        // Silence is not proof: a PC that sends no lane at all is NOT called a
+        // mismatch, and the row keeps the plain Current mark.
+        val silent = FocusPresets.View(
+            view.presets,
+            chosen = "coding",
+            found = null,
+            switchPath = null,
+        )
+        assertFalse(FocusPresets.chosenNotRunning(silent))
+        assertEquals(
+            FocusPresets.CHOSEN,
+            FocusPresets.rowMark(silent, view.preset("coding")!!),
+        )
+        assertEquals("Coding", FocusPresets.chipLabel(silent))
+
+        // A PC that has applied nothing yet says so in its own reason, never
+        // "nothing is running" and never a lane it guessed.
+        val notYet = live.copy(
+            chosen = null,
+            activeLane = FocusPresets.ActiveLane(null, "http://127.0.0.1:11436"),
+            laneNow = FocusPresets.LaneNow(
+                key = null,
+                card = "",
+                words = "",
+                label = "",
+                ready = false,
+                why = "no preset has been applied on this PC yet",
+            ),
+        )
+        assertNull(
+            "no chosen row, no mark",
+            FocusPresets.rowMark(notYet, view.preset("coding")!!),
+        )
+        assertEquals(FocusPresets.NO_CHOICE, FocusPresets.chipLabel(notYet))
+        assertEquals(
+            "Your PC says: no preset has been applied on this PC yet",
+            FocusPresets.runningLine(notYet),
+        )
+    }
+
+    @Test
+    fun `the plate's sentence is the PC's rule - no card for every row it lists, Cloud the one carded row`() {
+        val sentence = FocusPresets.HOW_PICKING_WORKS
+        // The list draws exactly the contract's local rows; the Cloud row is not
+        // one of them (the PC sends it separately as `cloud_preset`), so the
+        // sentence may promise no card for every row here and name Cloud as the
+        // one that still asks - the two halves the old sentence had backwards.
+        assertEquals(10, view.presets.size)
+        assertNull("the Cloud row is not in the drawn list", view.preset("cloud"))
+        assertTrue("the sentence names the one carded row", sentence.contains("Cloud"))
+        assertTrue(
+            "... and says a local pick raises no card",
+            sentence.contains("no approval card"),
+        )
+        for (p in view.presets) {
+            assertFalse(
+                "a client must never name the preset '${p.title}': that is how " +
+                    "the old 'Coding and Medical raise one approval card' sentence drifted",
+                sentence.contains(p.title),
+            )
+        }
+        // The rule the sentence describes, with its proof in the PC's own suite:
+        // every row in `presets[]` applies cardless on the route both apps call
+        // (the heavy rows included since 2026-11-16), and Cloud is the one row
+        // that still raises a card. If those tests are renamed away the sentence
+        // has lost its evidence, and this fails rather than waiting for a drift.
+        val suite = repoFile("backend/test_presets_owner_ui.py").readText()
+        for (name in listOf(
+            "t_route_applies_local_preset_with_no_card",
+            "t_every_named_lane_preset_click_is_still_uncarded",
+            "t_a_heavy_click_applies_uncarded_and_starts_the_pooled_lane",
+            "t_the_cloud_preset_still_raises_its_card",
+            "t_every_preset_on_the_contract_is_covered",
+        )) {
+            assertTrue("the PC's rule lost its proof: def $name", suite.contains("def $name"))
+        }
+        // And the contract sends NO per-row card field today (the `apply` block
+        // is action/route/lane_start/auto only), so the sentence cannot be
+        // derived. The day the PC adds one, this fails on purpose and the
+        // sentence must start reading it instead of staying plain words.
+        for (row in fixture["presets"] as JsonArray) {
+            val apply = (row as JsonObject)["apply"] as JsonObject
+            assertTrue(
+                "a card field has appeared in an apply block ($apply): derive " +
+                    "HOW_PICKING_WORKS from it instead of hand-typing the rule",
+                apply.keys.none { key ->
+                    key.contains("card", ignoreCase = true) ||
+                        key.contains("tier", ignoreCase = true)
+                },
+            )
         }
     }
 

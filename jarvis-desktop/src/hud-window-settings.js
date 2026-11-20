@@ -56,6 +56,7 @@ import {
   readAloudIconsOn,
   saveReadAloudIcons,
 } from "./read-aloud-icons.js";
+import { liveRow } from "./settings-live.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -273,18 +274,24 @@ export function initHudWindowSettings() {
       paintReadAloudIcons();
     });
   }
-  // `painted` guards the one-time row build; the async load repaints the
-  // chosen row when the store answers (and reports an honest failure).
   const editButton = $("hud-edit-open");
   if (editButton) editButton.addEventListener("click", openEditor);
   const reset = $("hud-reset-layout");
   if (reset) reset.addEventListener("click", resetToCockpit);
-  buildLayoutRows();
-  loadLayout().then((loaded) => {
-    answer = loaded;
+  // `painted` guards the one-time row build. The layout is a store the HUD's
+  // own Layouts menu writes too, so it is read through the ONE refresh rule
+  // (DESKTOP-STATE-DRIFT row 34): the Rust store's own `jarvis:hud-layout-changed`
+  // event, when this window comes back into view, and a bounded steady poll.
+  const refreshLayout = async () => {
+    answer = await loadLayout();
     buildLayoutRows();
     paintChosen();
-  });
+  };
+  const live = liveRow({ read: refreshLayout });
+  const tauri = globalThis.__TAURI__;
+  if (tauri && tauri.event && typeof tauri.event.listen === "function") {
+    tauri.event.listen("jarvis:hud-layout-changed", () => live.soon());
+  }
 }
 
 if (typeof document !== "undefined") {

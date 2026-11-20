@@ -63,9 +63,11 @@ import {
   loadHeard,
   loadMoment,
   MOMENT_KEY,
+  readOneMoment,
   saveHeard,
   saveMoment,
 } from "./voice-flow.js";
+import { liveRow } from "./settings-live.js";
 import {
   checkLine as voiceCheckLine,
   isTrained as voiceIsTrained,
@@ -305,7 +307,17 @@ let busy = false;
  *  a `let` declared later in this module would be in its temporal dead zone. */
 let ubBusy = false;
 
-async function act(button, target, work) {
+/**
+ * Runs one card action.
+ *
+ * `repaint` says which state the action just changed, and is called in the
+ * FINALLY INSTEAD of the plain backend repaint - so the state is read back from
+ * the PC even when the action failed. A refused supervision save used to leave
+ * the tick on screen over a sentence saying the PC is not managing Jarvis
+ * (DESKTOP-STATE-DRIFT 3.5); the tick is now painted from the store by the same
+ * read that paints the words.
+ */
+async function act(button, target, work, { repaint = null } = {}) {
   if (busy) return;
   const others = [dom.saveBackend, dom.startBackend, dom.stopBackend];
   const lock = others.includes(button) ? others : [button];
@@ -320,7 +332,7 @@ async function act(button, target, work) {
   } finally {
     busy = false;
     lock.forEach((b) => (b.disabled = false));
-    await paintBackend();
+    await (repaint ? repaint() : paintBackend());
   }
 }
 
@@ -465,7 +477,7 @@ dom.reconnect.addEventListener("click", () => {
  * it re-enabled Start while a start was still in flight — long enough to issue
  * a second one.
  */
-async function paintBackend({ fields = false } = {}) {
+async function paintBackend({ fields = false, syncSwitch = false } = {}) {
   let status;
   try {
     status = await invoke("supervisor_status");
@@ -476,8 +488,16 @@ async function paintBackend({ fields = false } = {}) {
 
   // Never overwrite a field the user is editing.
   const editing = [dom.program, dom.args, dom.cwd].includes(document.activeElement);
-  if (fields && !editing) {
+  // The tick is a state claim in its own right. On a save of the supervision
+  // setting it is repainted from THIS read whatever `fields` says - a refused
+  // save must not leave it ticked over words saying the PC is not managing
+  // Jarvis (DESKTOP-STATE-DRIFT 3.5). `syncSwitch` is set by the save, never by
+  // the five-second poll, so a tick the owner has changed but not saved is not
+  // reverted underneath them.
+  if ((fields || syncSwitch) && !editing) {
     dom.supervise.checked = Boolean(status.supervise);
+  }
+  if (fields && !editing) {
     dom.program.value = status.backend.program || "";
     dom.args.value = (status.backend.args || []).join("\n");
     dom.cwd.value = status.backend.cwd || "";
@@ -522,22 +542,30 @@ function formatUptime(seconds) {
 }
 
 dom.saveBackend.addEventListener("click", () =>
-  act(dom.saveBackend, dom.backendStatus, async () => {
-    await invoke("set_supervision", {
-      supervise: dom.supervise.checked,
-      backend: {
-        program: dom.program.value.trim(),
-        args: dom.args.value
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean),
-        cwd: dom.cwd.value.trim() || null,
-      },
-    });
-    // Saving never starts or stops anything: a preference change is not the
-    // moment to take down a running process.
-    return "Saved.";
-  })
+  act(
+    dom.saveBackend,
+    dom.backendStatus,
+    async () => {
+      await invoke("set_supervision", {
+        supervise: dom.supervise.checked,
+        backend: {
+          program: dom.program.value.trim(),
+          args: dom.args.value
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean),
+          cwd: dom.cwd.value.trim() || null,
+        },
+      });
+      // Saving never starts or stops anything: a preference change is not the
+      // moment to take down a running process.
+      return "Saved.";
+    },
+    // Whether it saved or refused, repaint the tick from the PC's store: the
+    // tick and the sentence beside it are one state, and a failed save is
+    // exactly when the old code let them disagree.
+    { repaint: () => paintBackend({ syncSwitch: true }) },
+  )
 );
 
 dom.startBackend.addEventListener("click", () =>
@@ -1297,7 +1325,11 @@ dom.openLogs.addEventListener("click", async () => {
     report(dom.connectionStatus, String((error && error.message) || error), "bad");
   }
   await paintBackend({ fields: true });
-  await paintAutostart();
+  // The ONE refresh rule for the registry row: Task Manager (or Windows
+  // itself) can change this while the page is open, and a tick that is read
+  // once and never again is a stale claim about the machine. It re-reads when
+  // this window comes back into view and on a bounded steady poll.
+  liveRow({ read: paintAutostart });
   await paintLogs();
   await paintCrashNotes();
   // Cheap, and only while the window is actually on screen — a settings page
@@ -1310,10 +1342,7 @@ dom.openLogs.addEventListener("click", async () => {
       : setInterval(() => {
           paintBackend();
           // The backend log grows while the backend runs, so the size on
-          // screen should move. Autostart is not polled: it changes only when
-          // someone changes it, here or in Task Manager, and re-reading the
-          // registry every five seconds to catch the second case is not worth
-          // it - the page re-reads it on open.
+          // screen should move. Autostart is refreshed by its own rule above.
           paintLogs();
         }, 5000);
   };
@@ -4459,6 +4488,10 @@ function vcPaint(status) {
   const gate = status.gate || {};
   vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;
   paintVoicePanel(status);
+  // The PC's half of "Say One moment": the row above the voice card ANDs this
+  // with its own localStorage, and must move when THIS answer moves it.
+  pcMomentStatus = status;
+  paintOneMoment();
 }
 
 async function loadVoice() {
@@ -4556,16 +4589,24 @@ if (interruptBox) {
   paintInterrupt();
 }
 
-/* "Say 'One moment' if I'm kept waiting" - this PC's own too (voice-flow.js),
-   read by the Jarvis bar when a tool starts during a spoken question. */
+/* "Say 'One moment' if I'm kept waiting" - TWO stores, ANDed at use time
+   (voice-flow.js): this PC's localStorage, which this row writes, and the PC's
+   own voice-flow.json, which a chat sentence writes. The behaviour only plays
+   the clip when BOTH are on (main.js `momentFlow.toolStarted(loadMoment() &&
+   voiceFlow.moment, …)`), so ONE reader (`readOneMoment`) computes the tick and
+   the sentence from both - a chat sentence can no longer turn the feature off
+   and leave the row saying On (the 2026-11-19 settings audit). */
 const oneMoment = $("voice-one-moment");
 const oneMomentDetail = $("voice-one-moment-detail");
+/** The last `get_voice_status` answer: the PC's half. Null until one is read -
+ *  which is not "off", it is "not confirmed yet". */
+let pcMomentStatus = null;
 
 function paintOneMoment() {
   if (!oneMoment) return;
-  const on = loadMoment();
-  oneMoment.checked = on;
-  oneMomentDetail.textContent = describeMoment(on);
+  const reading = readOneMoment(loadMoment(), pcMomentStatus);
+  oneMoment.checked = reading.on;
+  if (oneMomentDetail) oneMomentDetail.textContent = reading.words;
 }
 
 if (oneMoment) {
@@ -4615,10 +4656,11 @@ onQueue(() => {
 onEvent((frame) => {
   if (frame && frame.kind === "voice") loadVoice();
 });
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) loadVoice();
-});
-loadVoice();
+// The ONE refresh rule, for the ONE row whose other half is the PC's: a steady
+// poll while this page is visible, plus the window coming back into view. Its
+// first read is this section's first read (the queue and the `voice` doorbell
+// above still reload only while a voice card was waiting).
+liveRow({ read: loadVoice, queue: false });
 
 /* ==========================================================================
    What this backend supports

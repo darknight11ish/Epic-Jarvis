@@ -1292,22 +1292,22 @@ apps' own preset controls call (`POST /api/work/apply`) applies it at once with
 no `jarvis_gate` question, and writes a `preset_apply` receipt through
 `jarvis_receipts` naming the preset, model and lane it replaced, so the change
 is recorded and the existing receipts route can undo it (when the preset it
-replaced is itself a local one; going back to Coding or Cloud is a carded menu
-click, not an Undo). The everyday way back is the old preset's own menu row.
+replaced is itself a local one; going back to Cloud is a carded menu click,
+not an Undo). The everyday way back is the old preset's own menu row.
 Four facts must ALL hold, and they are the boundary: the request came from a
-route only a screen calls (the model's own
-tool path never posts to the HTTP API - it calls
-`jarvis_presets.apply_from_body` in-process and keeps its card), the change is
-one model switch on a lane that already exists, the preset it replaced is one
-click away in the same menu, and nothing is downloaded, installed, deleted or
-spent. `jarvis_presets.apply_preset` applies this rule; `owner_ui` is set by ONE
-caller, the route wrapper, and is never read from a request body. It is
-deliberately NOT a tier change: `switch_model` stays `ask` in
-`[autonomy.tiers]`, and a chat/voice apply, the heavy Coding preset (its pooled
-lane unloads both other models) and the Cloud row (it changes where the owner's
-words go) all still raise their card; `install` and `download_model` are
-untouched. JARVIS-API section 209 has the full preset rule,
-`backend/test_presets_owner_ui.py` proves both halves.
+route only a screen calls (the model's own tool path never posts to the HTTP
+API - it calls `jarvis_presets.apply_from_body` in-process and keeps its card),
+the change is one model switch on a lane that already exists (a heavy row
+starts the on-demand pooled lane with the press itself as its approval), the
+replaced is one click away in the same menu, and nothing is downloaded,
+installed, deleted or spent. `jarvis_presets.apply_preset` applies this rule;
+`owner_ui` is set by ONE caller, the route wrapper, and is never read from a
+request body. It is deliberately NOT a tier change: `switch_model` stays `ask`
+in `[autonomy.tiers]`, and a chat/voice apply and the Cloud row (it changes
+where the owner's words go) still raise their card - a preset clicked in
+either app's own control, the heavy rows included since 2026-11-16, does not;
+`install` and `download_model` are untouched. JARVIS-API section 209 has the
+full preset rule, `backend/test_presets_owner_ui.py` proves both halves.
 
 **The same rule is ONE allow-list, not a second code path.** Since 2026-11-09
 `backend/jarvis_reversible_ui.py` holds the explicit allow-list

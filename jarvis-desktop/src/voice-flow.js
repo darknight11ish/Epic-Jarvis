@@ -200,6 +200,9 @@ export function flowFromStatus(status) {
   const moment = flow && flow.moment && typeof flow.moment === "object" ? flow.moment : {};
   const on = Boolean(flow && flow.available === true);
   return {
+    // Whether the PC reports the flow block at all. Added 2026-11-18 for the
+    // Settings row: a PC that does not say is not a PC that says "off".
+    available: on,
     bargeIn: on && barge.enabled === true && barge.available === true,
     bargeInWhy: typeof barge.why === "string" ? barge.why : "",
     moment: on && moment.enabled === true,
@@ -257,6 +260,52 @@ export function describeMoment(on) {
   return on
     ? "On: when Jarvis has to look something up for a spoken question, it says \"One moment.\" first, once, in its own voice."
     : "Off: Jarvis stays quiet until its answer is ready.";
+}
+
+/** The chat/Live sentence turned the PC's own half off. Says WHICH half, and
+ *  what turns it back on - the row above must never read "On" while this is
+ *  true (the behaviour ANDs both halves). */
+export const MOMENT_OFF_ON_THE_PC =
+  "Off: a chat sentence turned the PC's own half of this off, so Jarvis stays " +
+  "quiet. Say \"start saying one moment again\" in chat to turn it back on.";
+
+/** This window has it on, but the PC has not said whether its half is on - and
+ *  the behaviour only plays it when BOTH are. Never drawn as "On". */
+export const MOMENT_NOT_CONFIRMED =
+  "Not playing for now: this window has it on, but Jarvis has not confirmed the " +
+  "PC's own half. This row updates itself when the PC answers.";
+
+/**
+ * "Say One moment if I'm kept waiting": the ONE reader of the TWO stores the
+ * behaviour ANDs.
+ *
+ * `main.js` says `momentFlow.toolStarted(loadMoment() && voiceFlow.moment, …)`
+ * - this page's localStorage AND the PC's `voice-flow.json`, reported as
+ * `flow.moment.enabled` by `GET /api/voice/status`. The Settings row used to
+ * read only the local half, so a chat sentence ("stop saying one moment")
+ * turned the feature off and left the tick saying On (the 2026-11-19 desktop
+ * settings audit, MISMATCH-WORDS). One reader now computes both the tick and
+ * the sentence from BOTH halves, so they cannot disagree with the behaviour.
+ *
+ * @param {boolean} localOn - `loadMoment()`.
+ * @param {object|null} status - the raw `get_voice_status` answer, or null when
+ *   it has not been read (which is NOT "off").
+ * @returns {{on: boolean, words: string, half: "both"|"this-window"|"pc-silent"|"pc-off"}}
+ */
+export function readOneMoment(localOn, status) {
+  const local = Boolean(localOn);
+  if (!local) {
+    // The local half is enough to be off: the AND is false whatever the PC says.
+    return { on: false, words: describeMoment(false), half: "this-window" };
+  }
+  const flow = status && typeof status === "object" ? flowFromStatus(status) : null;
+  if (!flow || flow.available !== true) {
+    return { on: false, words: MOMENT_NOT_CONFIRMED, half: "pc-silent" };
+  }
+  if (flow.moment !== true) {
+    return { on: false, words: MOMENT_OFF_ON_THE_PC, half: "pc-off" };
+  }
+  return { on: true, words: describeMoment(true), half: "both" };
 }
 
 /* ── The "I heard you" switch - this PC's own, beside "One moment" ── */

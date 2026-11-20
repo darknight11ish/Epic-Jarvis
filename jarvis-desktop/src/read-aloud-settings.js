@@ -15,10 +15,19 @@
  * quickbar's voice answers obey. The state is painted from the PC's answer,
  * never from the click - a save that did not happen reads as not saved.
  *
+ * THE PAGE KEEPS ASKING (fixed 2026-11-18, DESKTOP-STATE-DRIFT). The markup row
+ * promises "one source of truth, no second copy in this window", but this
+ * module used to read the PC once, at module load, and never again: a chat
+ * sentence then left the tick and the sentence saying On while the PC said off.
+ * It now refreshes through the ONE rule in `settings-live.js` - the PC's own
+ * `read_aloud` event, the approval queue, the window coming back into view, and
+ * a bounded steady poll - so the row and the PC cannot stay apart.
+ *
  * @module read-aloud-settings
  */
 
 import { describeReadAloud, readReadAloud } from "./read-aloud.js";
+import { liveRow } from "./settings-live.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -92,5 +101,8 @@ async function save(on) {
 const box = $("hud-read-replies");
 if (box) {
   box.addEventListener("change", () => save(Boolean(box.checked)));
-  load();
+  // The ONE refresh rule (settings-live.js): the PC's own `read_aloud` event for
+  // a chat or Live sentence, the approval queue, the window coming back into
+  // view, and a bounded steady poll. Its first read is this module's first read.
+  liveRow({ read: load, kinds: ["read_aloud"] });
 }

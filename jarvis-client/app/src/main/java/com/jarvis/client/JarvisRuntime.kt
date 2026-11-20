@@ -3071,12 +3071,16 @@ object JarvisRuntime {
     }
 
     // ------------------------------------------------------- focus presets ----
-    // The owner's decision of 2026-10-18: four (then five) focus presets from
-    // ONE backend contract (net/FocusPresets.kt, backend/fixtures/work_presets.json).
+    // The owner's decision of 2026-10-18: the focus presets from ONE backend
+    // contract (net/FocusPresets.kt, backend/fixtures/work_presets.json).
     // Reading never changes anything; using a local preset posts the contract's
-    // single apply action and switches at once (the owner's own reversible
-    // click, 2026-11-09), while Coding and the Cloud row still raise the
-    // PC's approval card.
+    // single apply action and switches at once with NO card (the owner's own
+    // reversible click, 2026-11-09; every row since 2026-11-16, the heavy ones
+    // included). The Cloud row is the ONE preset whose own pick still raises a
+    // card, and the PC sends it as a separate `cloud_preset` row that this list
+    // does not draw. Never name a preset here: the old comment named Coding and
+    // Cloud and drifted from the PC, which is exactly why the plate's sentence
+    // is now the data-free constant net/FocusPresets.HOW_PICKING_WORKS.
 
     /** Re-reads the preset contract. Reads only; a failed read is said in words. */
     suspend fun refreshFocusPresets() {
@@ -3086,9 +3090,10 @@ object JarvisRuntime {
     /**
      * Uses the preset [id] by posting the ONE apply action the contract names
      * (never a route invented here). Held on a stale link (rule 4); a pending
-     * preset is never posted. A local preset switches at once; Coding and the
-     * Cloud row answer with a card asked for, not a model changed. Either way
-     * the list is re-read and the PC's answer says which.
+     * preset is never posted. Every row this list offers is a local preset and
+     * switches at once with no card, heavy or not; only the Cloud row answers
+     * with a card asked for, and this list does not offer it. Either way the
+     * list is re-read and the PC's answer says which.
      */
     suspend fun useFocusPreset(id: String): String {
         actionBlocker()?.let { return it }

@@ -160,6 +160,21 @@ object Handsfree {
     const val OFF = "Hands-free is off"
 
     /**
+     * The PC did not answer, so the mode is not known - and it is NOT off.
+     *
+     * A read that never arrived used to be drawn as a definite "Hands-free is
+     * off" (settings audit, `PHONE-STATE-DRIFT.md` 3.3): title, switch and
+     * sentence all claimed off from a store holding no answer. The sentence is
+     * the same shape the project already uses for the same situation in
+     * `VoiceSwitchesPlate` ("The desktop has not answered, so this is not
+     * known. It is not being reported as off...") and in the voice-check card
+     * ("Your PC has not answered yet, so this is not shown as off."), because
+     * "off" and "could not ask" are not the same thing.
+     */
+    const val UNKNOWN = "Your PC has not answered, so this is not known. " +
+        "It is not being reported as off."
+
+    /**
      * The ONE sentence a PC without the feature gets, on every surface that
      * explains it. Not a failure and not red: the app has no reason to think
      * anything is broken -

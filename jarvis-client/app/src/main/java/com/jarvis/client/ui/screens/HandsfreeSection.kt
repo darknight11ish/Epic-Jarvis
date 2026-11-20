@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.Handsfree
+import com.jarvis.client.net.HandsfreeRow
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Secondary
@@ -102,7 +103,12 @@ internal fun HandsfreeSection(canAct: Boolean = false) {
         if (wanted.isEmpty()) set(true) else ask.launch(wanted.toTypedArray())
     }
 
-    val armed = read?.enabled == true
+    // ONE ROW, ONE READ (the 2026-11-18 settings audit's finding C). A read
+    // that never arrived is `checked = null` with the words saying it is not
+    // known - never a definite "Hands-free is off" from a store holding no
+    // answer. The tick and the sentence both come from HandsfreeRow.
+    val row = HandsfreeRow.of(read, canAct, busy)
+    val armed = row.checked == true
     val canRecord = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
         PackageManager.PERMISSION_GRANTED
     val canText = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) ==
@@ -135,25 +141,47 @@ internal fun HandsfreeSection(canAct: Boolean = false) {
                 )
             } else {
                 SwitchRow(
-                    title = if (armed) Handsfree.ON else Handsfree.OFF,
-                    detail = null,
-                    checked = armed,
+                    // The heading is the SETTING's name now, not the state: the
+                    // state is said once, in `row.words`, and it cannot come
+                    // from a different read than the tick.
+                    title = Handsfree.SECTION,
+                    detail = row.words,
+                    checked = row.checked,
+                    enabled = row.enabled,
                     // OFF is always available, ON waits for a fresh link: the
                     // same rule every other switch on this screen follows.
-                    enabled = !busy && (armed || canAct),
                     onChange = { on -> if (on) requestThenSet() else set(false) },
                 )
-                Text(
-                    when {
-                        busy -> "Asking your PC…"
-                        said != null -> said!!
-                        now.line != null -> now.line!!
-                        armed -> read?.why ?: Handsfree.ON_DONE
-                        else -> read?.why ?: Handsfree.OFF
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (now.listening) chrome.warnInk else chrome.textMid,
-                )
+                // The transient line only: what is happening RIGHT NOW (a
+                // write in flight, the PC's answer to the last press, the
+                // service's listening state). The state claim itself is the
+                // row's own sentence above.
+                val live = when {
+                    busy -> "Asking your PC…"
+                    said != null -> said
+                    now.line != null -> now.line
+                    else -> null
+                }
+                live?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (now.listening) chrome.warnInk else chrome.textMid,
+                    )
+                }
+                if (row.checked == null && read == null) {
+                    // No answer arrived. The row says it is not known; this is
+                    // how to ask again, and it is not the switch (a null
+                    // position draws none, so it cannot claim a state).
+                    Gap(4)
+                    Secondary(
+                        "Ask your PC again",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            scope.launch { runCatching { JarvisRuntime.refreshHandsfree() } }
+                        },
+                    )
+                }
                 if (armed && read?.voicePrint.isNullOrBlank()) {
                     // Section 191.5 step 5: with no enrolled print the PC
                     // refuses a spoken YES outright, because it cannot tell the
