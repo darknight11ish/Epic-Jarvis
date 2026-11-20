@@ -143,6 +143,47 @@ def t_the_check_exit_codes_are_real():
           R.main(["--check", "--fragments", str(frags), "--changelog", str(changelog)]) == 1)
 
 
+
+def t_the_roll_reanchors_a_claim_that_cited_a_fragment():
+    """A claim source naming a rolled fragment is moved to CHANGELOG.md.
+
+    The roll removes the fragment files, so `backend/test_claims.py`'s "every
+    source is a file and a line inside it" would fail on a register still
+    pointing at one. The roll rewrites those cells itself, in the same run.
+    """
+    frags, changelog = fresh()
+    fragment(frags, "2026-10-31-phone-doors.md",
+             "- **Phone doors (2026-10-31).** one file, one card.\n")
+    claims = frags.parent / "CLAIMS.tsv"
+    claims.write_text(
+        "# The claims register.\n"
+        "id\tclaim\tcheck\tstate\tsource\n"
+        "C1\tone\tfile:x\tstated\tchangelog.d/2026-10-31-phone-doors.md:1\n"
+        "C2\ttwo\tfile:y\tstated\tdocs/DECISIONS.md:9\n", encoding="utf-8")
+    R.roll(frags, changelog, claims=claims)
+    rows = claims.read_text(encoding="utf-8").splitlines()
+    moved = [r for r in rows if r.startswith("C1\t")][0].split("\t")[-1]
+    kept = [r for r in rows if r.startswith("C2\t")][0].split("\t")[-1]
+    check("a claim that cited a rolled fragment now cites CHANGELOG.md",
+          moved.startswith("CHANGELOG.md:"), moved)
+    text = changelog.read_text(encoding="utf-8").splitlines()
+    line = int(moved.split(":")[1]) if moved.startswith("CHANGELOG.md:") else 0
+    check("... and that line really is the rolled bullet",
+          0 < line <= len(text) and "Phone doors (2026-10-31)" in text[line - 1],
+          (line, text[line - 1] if 0 < line <= len(text) else None))
+    check("a claim that names another file is untouched", kept == "docs/DECISIONS.md:9", kept)
+    # A dry run must not rewrite the register.
+    frags2, changelog2 = fresh()
+    fragment(frags2, "2026-10-31-phone-doors.md",
+             "- **Phone doors (2026-10-31).** one file, one card.\n")
+    claims2 = frags2.parent / "CLAIMS.tsv"
+    claims2.write_text("C1\tone\tfile:x\tstated\tchangelog.d/2026-10-31-phone-doors.md:1\n",
+                       encoding="utf-8")
+    before = claims2.read_text(encoding="utf-8")
+    R.roll(frags2, changelog2, dry_run=True, claims=claims2)
+    check("a dry run leaves the claims register exactly as it was",
+          claims2.read_text(encoding="utf-8") == before)
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":
