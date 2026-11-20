@@ -2808,6 +2808,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -5648,6 +5680,38 @@
       {
        "id": "approval_policy",
        "title": "Changing what needs a card, a second yes or Windows Hello"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -8496,6 +8560,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -11349,6 +11445,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -14202,6 +14330,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -17050,6 +17210,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -19893,6 +20085,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -22752,6 +22976,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -25606,6 +25862,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -28449,6 +28737,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -31306,6 +31626,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",
@@ -34154,6 +34506,38 @@
       {
        "id": "check_records",
        "title": "The record check before a push: READY, or what is missing"
+      },
+      {
+       "id": "project_create",
+       "title": "Creating a project, in your words"
+      },
+      {
+       "id": "project_seed_plan",
+       "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+      },
+      {
+       "id": "project_decompose_plan",
+       "title": "Saving a whole plan - milestones, work items and their links - on one card"
+      },
+      {
+       "id": "work_item_add",
+       "title": "Adding one work item to a project"
+      },
+      {
+       "id": "work_item_update_status",
+       "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+      },
+      {
+       "id": "work_item_link_dependency",
+       "title": "Linking two work items: one blocks the other, or contains it, or is related"
+      },
+      {
+       "id": "project_checkpoint_reflect",
+       "title": "Writing a checkpoint or a lesson into a project's own log"
+      },
+      {
+       "id": "project_export_obsidian_hub",
+       "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
       }
      ],
      "label": "New — currently off",

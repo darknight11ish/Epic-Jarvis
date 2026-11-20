@@ -58,6 +58,12 @@ THE_FIVE = ("approval_policy", "pack_list", "pack_inspect", "pack_install",
 #: the pill is exactly how a default reaches it: they are in the template and
 #: absent from an older file, so they appear as "New - currently off".
 REVIEW = ("review_changes", "check_records")
+#: And the plan store's eight typed tools (2026-11-20, PM2), in the same
+#: position: shipped ON, so an existing file that predates them gets the pill.
+PLAN = ("project_create", "project_seed_plan", "project_decompose_plan",
+        "work_item_add", "work_item_update_status",
+        "work_item_link_dependency", "project_checkpoint_reflect",
+        "project_export_obsidian_hub")
 
 
 def template_tools() -> tuple:
@@ -81,8 +87,8 @@ def t_the_constant_is_the_shipped_template():
     names = template_tools()
     check("the shipped template's [tools] enabled list was found", bool(names),
           "no line matched; this suite is blind")
-    check("the template offers 21 abilities (19 + the two review gates)",
-          len(names) == 21, len(names))
+    check("the template offers 29 abilities (21 + the plan store's eight)",
+          len(names) == 29, len(names))
     check("jarvis_asks_first.TEMPLATE_TOOLS is exactly the template's list",
           tuple(AF.TEMPLATE_TOOLS) == names, (tuple(AF.TEMPLATE_TOOLS), names))
     check("the five this build added are all in it",
@@ -91,12 +97,12 @@ def t_the_constant_is_the_shipped_template():
 
 def t_with_the_live_list_the_five_and_the_review_gates_appear():
     live = tuple(t for t in AF.TEMPLATE_TOOLS
-                 if t not in THE_FIVE and t not in REVIEW)
+                 if t not in THE_FIVE and t not in REVIEW and t not in PLAN)
     check("the live fixture is the owner's own 14", len(live) == 14, len(live))
     rows = AF.newly_off_tools(set(live))
     ids = [r["id"] for r in rows]
-    new_here = THE_FIVE + REVIEW
-    check("the five new tools and the two review gates appear",
+    new_here = THE_FIVE + REVIEW + PLAN
+    check("the five, the two review gates and the plan store's eight appear",
           sorted(ids) == sorted(new_here), ids)
     check("each carries a title for the pill", all(r.get("title") for r in rows), rows)
     check("in the template's own order, so the pill reads like the page",
@@ -119,12 +125,13 @@ def t_the_review_gates_are_offered_on_an_older_pc_template():
     """A PC whose settings file predates Q-D still gets the pill for the two
     review gates: their own file is never overwritten, so this is how "enabled
     by default" reaches an EXISTING install."""
-    older = tuple(t for t in AF.TEMPLATE_TOOLS if t not in REVIEW)
+    older = tuple(t for t in AF.TEMPLATE_TOOLS
+                  if t not in REVIEW and t not in PLAN)
     check("the older fixture is the old 19-name template", len(older) == 19,
           len(older))
     rows = AF.newly_off_tools(set(older))
-    check("both review gates appear as new-and-off on an older PC",
-          sorted(r["id"] for r in rows) == sorted(REVIEW),
+    check("both review gates and the plan store's eight appear on an older PC",
+          sorted(r["id"] for r in rows) == sorted(REVIEW + PLAN),
           [r["id"] for r in rows])
 
 

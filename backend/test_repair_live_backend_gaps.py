@@ -240,9 +240,10 @@ def t_check_names_both_missing_then_apply_fixes_them():
               "project_decompose_plan": "change_own_config",
               "project_export_obsidian_hub": "edit_vault_note"},
           f"the literal's keys are {sorted(table)}")
+    risk = risk_table(gate)
     check("... and the one new risk row for todo_add landed",
-          gate.count('"todo_add": ("yes", "local"') == 1,
-          [line for line in gate.splitlines() if '"todo_add": (' in line])
+          risk.get("todo_add", ())[:2] == ("yes", "local"),
+          risk.get("todo_add"))
     hud = (live / "jarvis_hud.py").read_text(encoding="utf-8")
     check("both history routes landed", '"/api/history/pin"' in hud
           and '"/api/history/archive"' in hud)
