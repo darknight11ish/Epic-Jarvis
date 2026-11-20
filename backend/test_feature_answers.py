@@ -826,9 +826,23 @@ def t_the_phone_document_door_is_in_the_list_and_answers_from_it():
     # be a deploy: the phone doors landed on 2026-11-05 and their own record is
     # where the claim is anchored. This PR is the catalogue catching up.
     door_record = REPO / "changelog.d" / "2026-11-05-phone-upload-phone.md"
+    # The roll folds fragments into CHANGELOG.md and removes the fragment
+    # files (tools/roll_changelog.py), so the record must be read from
+    # whichever form the tree holds: the fragment before a roll, the rolled
+    # entry after it. A record that is in NEITHER is still a failure.
+    if door_record.is_file():
+        record = door_record.read_text(encoding="utf-8")
+    else:
+        rolled = REPO / "CHANGELOG.md"
+        text = rolled.read_text(encoding="utf-8") if rolled.is_file() else ""
+        # Anchor on the sentence that NAMES the doors, not on the first
+        # "Send a document" in the file (later bullets mention the row too).
+        start = text.find("Bring in a Notion export")
+        if start < 0:
+            start = text.find("Send a document")
+        record = text[max(0, start - 900): start + 1500] if start >= 0 else ""
     check("the change that added the phone doors is on the record",
-          door_record.is_file(), str(door_record))
-    record = door_record.read_text(encoding="utf-8") if door_record.is_file() else ""
+          bool(record), f"{door_record} or its rolled entry in CHANGELOG.md")
     for want in ("Send a document", "Bring in a Notion export", "2026-11-05"):
         check(f"... and that record names {want!r}", want in record, record[:220])
     check("... and the row does not claim the doors are new in this change",
