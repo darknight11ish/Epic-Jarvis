@@ -321,15 +321,20 @@ def t_no_preset_default_is_changed():
     check("deep_think is not offered as a preset yet",
           all(m.model not in {p.model for p in P.PRESETS}
               for m in B.MODES if m.key == "deep_think"))
-    # 2026-11-18: the review ruled the uncensored model onto the SEPARATE
-    # general_uncensored preset. It is the same model and window `creative` has
-    # carried since Wave 9, but it reaches the lane through the preset layer's
-    # own mode row (`pooled_modes()`), never by widening the big-coder route's
-    # three keys or by renaming `creative` into a preset.
+    # 2026-11-18: the review ruled uncensored models onto the SEPARATE
+    # general_uncensored preset, reached through the preset layer's own pooled-mode
+    # row (`pooled_modes()`), never by widening the big-coder route's three keys or
+    # by renaming `creative` into a preset. 2026-11-19: that preset then SWAPPED to
+    # the downloaded 30B MoE, which beat the 27B on quality, speed and tool calls -
+    # so `creative` keeps the 27B and the preset's model is its own row again.
     gu = presets["general_uncensored"]
-    check("creative's MODEL is offered - on the separate General Uncensored preset "
-          "(the 2026-11-18 ruling) - and it is still not the `creative` mode key",
-          gu.model == B.mode_profile("creative").model
+    check("General Uncensored's model is the preset layer's OWN row, not the "
+          "big-coder `creative` mode's, and it is still not a mode key",
+          gu.model != B.mode_profile("creative").model
+          and B.mode_profile("creative").model
+          == "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M"
+          and gu.model
+          == "huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M"
           and gu.mode != "creative"
           and B.mode_profile(gu.mode).model == gu.model
           and gu.id not in B.MODE_KEYS,

@@ -58,10 +58,10 @@
       "id": "general_uncensored",
       "title": "General Uncensored",
       "focus": "general work with the uncensored model",
-      "what": "General everyday work with the uncensored model, for answers the ordinary model's safety tuning would refuse or water down. General stays the aligned 26B; THIS is the separate preset uncensored models live on, and it names the measured uncensored 27B rather than a guess.",
-      "cost": "HEAVY MODE: it needs all three cards at once as one pooled lane (port 11450) and pauses the everyday model while it loads. Measured on this PC on 2026-11-18 on that lane at 32,768 tokens: 17.379 GiB loaded ENTIRELY in the cards' memory (0.000 GiB spilled), a 47.4-57.1 s cold load and 9.04-13.05 tokens a second over seven clean samples (median 9.99, the low end shown). Its measured zero-spill window reaches 49,152 tokens; 65,536 measured 1.507 GiB spilled, so 32,768 is the window this row runs.",
-      "worse": "A bigger, uncensored model is NOT automatically better. The aligned 26B on General scores 22/24 on the project's blind eight-task battery at 52.3 tokens a second; this row scores 20/24 and writes about 10 tokens a second, on three cards instead of one. It drops the second half of a two-effect instruction (it appends the note but not the pin), and on three deliberately benign probes the uncensored tag changed nothing observable - what it does on material this project deliberately never tested is unknown. `muse-glimmer-uncensored:30b` (15.77 GiB, already on this PC, tools and thinking) is the other local uncensored candidate: it is described here rather than chosen because it has NOT been benchmarked on this PC, so its tool behaviour is unverified. Two MoE candidates (`huihui_ai/qwen3-abliterated:30b-a3b` and `TrevorJS/gemma-4-26B-A4B-it-uncensored`) are still downloading and will be benchmarked for this preset later; they are not named as choices now. A window above 49,152 tokens is not offered, so very long documents are Documents & Notes' job.",
-      "model": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+      "what": "General everyday work with the uncensored model, for answers the ordinary model's safety tuning would refuse or water down. General stays the aligned 26B; THIS is the separate preset uncensored models live on, and it names the measured uncensored 30B mixture of experts (30.5B parameters, 8 of its 128 experts active per token) rather than a guess.",
+      "cost": "HEAVY MODE: it needs all three cards at once as one pooled lane (port 11450) and pauses the everyday model while it loads. Measured on this PC on 2026-11-19 on that lane at 32,768 tokens: 19.520 GiB loaded ENTIRELY in the cards' memory (0.000 GiB spilled), a 55.1-66.3 s cold load and about 21 tokens a second - the median of three separate loads on a PC with no test load. The three disagreed (19.71-62.55 tok/s, spread 203.6%) because of the cards' clock state, not competing load, so the row publishes the median and that spread; the PC was running its own assistant and browser (12-17% CPU on the perf counter; no test load), so ~21 is a floor, not a best case. 49,152 tokens measured 0.226 GiB spilled, so 32,768 is the largest proven zero-spill window and the window this row runs.",
+      "worse": "The speed and the tool actions are measured gains; quality is a TIE, not a gain. Speed is ONE rounded figure - the median of three separate loads on a PC with no test load on 2026-11-19 - and the three runs disagreed widely (19.71, 21.04 and 62.55 tok/s; spread 203.6% of the median), which is the cards' clock state, not competing load. The PC was running its own assistant and browser during the measurement (12-17% CPU on the perf counter; no test load), so ~21 is a floor, not a best case; the row publishes the median plus the spread, never a stability claim. The earlier ten-sample set on a busy PC read 16.19-20.22 tok/s. The aligned 26B on General still scores 22/24 on the project's blind eight-task battery at 52.3 tokens a second, so a bigger, uncensored model is NOT automatically better: this row scores 20/24, exactly the 27B it replaced. The trade for the speed is running cost: it loads 2.1 GiB heavier than that 27B (19.520 GiB against 17.379), takes about 10 seconds longer cold (55.1-66.3 s against 47.4-57.1 s), and its largest proven zero-spill window is 32,768 tokens - 49,152 measured 0.226 GiB spilled - so the 27B's 49,152-token headroom is not offered. It has NO vision: the 27B reported vision, this model reports completion, tools and thinking only. It clears the two-effect instruction the 27B dropped - on 'add squats to my workout log and pin it' it emits both the append and the pin (22/22 tool calls correct against 18/19) - but on the mood-log sentence it also created one extra note the owner did not ask for by name. On three deliberately benign probes the uncensored tag changed nothing observable - what it does on material this project deliberately never tested is unknown. The 27B it replaced is NOT deleted: it stays on this PC as the pooled lane's `creative` mode model and the smaller-footprint alternative. `muse-glimmer-uncensored:30b` (15.77 GiB, already on this PC, tools and thinking) is still described rather than chosen, because it has NOT been benchmarked on this PC. The other downloaded MoE candidate, `TrevorJS/gemma-4-26B-A4B-it-uncensored`, is NOT measured on this PC and is not a choice. A window above 32,768 tokens is not offered, so very long documents are Documents & Notes' job.",
+      "model": "huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M",
       "lane": {
         "key": "pooled",
         "card": "all three cards",
@@ -76,32 +76,41 @@
         "tools": []
       },
       "measured": {
-        "tok_s": 9.04,
-        "tok_s_on": "2026-11-18",
-        "tok_s_note": "17.379 GiB, 0.000 GiB spill, all three cards, 32,768 context; two runs of the measurement (the machine was busy) read 9.04-13.05 tok/s over seven clean fixed-prompt samples, median 9.99 - the low end is the figure the row shows",
-        "size_gib": 17.379,
-        "vram_gib": 17.379,
+        "tok_s": 21,
+        "tok_s_on": "2026-11-19",
+        "tok_s_runs": [
+          62.55,
+          19.71,
+          21.04
+        ],
+        "tok_s_median": 21.04,
+        "tok_s_spread_pct": 203.6,
+        "tok_s_note": "19.520 GiB, 0.000 GiB spill, all three cards, 32,768 context; THREE separate loads on a PC with no test load, one fixed-prompt decode each at temperature 0, read 62.55, 19.71, 21.04 tok/s - median 21.04, published as the rounded figure ~21. The three disagree by 203.6% of the median: the cards' clock state, not competing load (run 1's RTX 2060 at 1,995 MHz, runs 2 and 3 near 800 MHz). The PC was running its own assistant and browser (12-17% CPU on the perf counter; no test load), so ~21 is a floor, not a best case, and the row publishes the median plus this spread rather than a stable-looking number (ruling 5.4). The earlier ten-sample set on a busy PC read 16.19-20.22 tok/s (median 17.16)",
+        "size_gib": 19.52,
+        "vram_gib": 19.52,
         "spill_gib": 0.0,
-        "cold_load_s": 57.1,
+        "cold_load_s": 66.3,
+        "cold_load_range_s": [
+          55.1,
+          66.3
+        ],
         "context_measured": 32768,
-        "context_zero_spill": 49152,
-        "spill_at_65536_gib": 1.507,
-        "params_b": 27.3,
-        "disk_gib": 16.52,
+        "context_zero_spill": 32768,
+        "spill_at_49152_gib": 0.226,
+        "params_b": 30.5,
         "capabilities": [
           "completion",
-          "vision",
           "tools",
           "thinking"
         ],
-        "quality_general": "20/24 on the blind eight-task battery of 2026-11-18 (one rater, model known while marking; the mechanical cells are the firm ones)",
-        "tool_calls": "19/19 emitted (15 repo-bench samples + 4 notes tasks); 18/19 fully correct - the miss is t03, where only append_note was emitted and the pin was dropped",
-        "alternative": "muse-glimmer-uncensored:30b, 15.77 GiB, already on this PC with tools and thinking, NOT benchmarked here - described, not chosen",
-        "source": "measured on this PC on 2026-11-18 (16:20:45-16:47:06 PST) on the real pooled lane (port 11450, the two named lanes paused, one model resident): 18,660,993,263 B resident and the same 18,660,993,263 B in the cards' memory at 32,768 tokens (0.000 GiB spilled); 49,152 also measured 0.000 GiB, 65,536 spilled 1.507 GiB; 9.04-13.05 tok/s over seven clean fixed-prompt samples (the stored 17.96 was NOT reproduced); 20/24 on the project's blind eight-task battery at 32,768; 19/19 tool calls emitted, 18/19 fully correct. Full evidence: .dsh-scratch/wave21/research/MEASURE-27B.md"
+        "quality_general": "20/24 on the blind eight-task battery of 2026-11-19 - a TIE with the 27B it replaced, which also scored 20/24; one rater, model known while marking, so the mechanical cells are the firm ones",
+        "tool_calls": "22/22 emitted (100%) and 22/22 fully correct (15/15 repo bench + 3/3 squats + 4/4 notes tasks); the 27B was 18/19 and dropped the pin on the squats sentence. Caveat: on the mood-log sentence it also made one extra, unrequested note",
+        "alternative": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M - the model this row replaced on 2026-11-19, still on this PC as the pooled lane's `creative` mode model: 17.379 GiB, 0.000 GiB spilled, a 49,152-token zero-spill window, vision, ~10 tok/s",
+        "source": "measured on this PC on 2026-11-19 (10:35:23-10:59:58 PST) on the real pooled lane (port 11450, the two named lanes paused, one model resident): 20,959,251,656 B resident and the same 20,959,251,656 B in the cards' memory at 32,768 tokens (0.000 GiB spilled); 49,152 measured 0.226 GiB spilled and was disqualified; the speed is the median of THREE separate loads on a PC with no test load (the three decodes read 62.55, 19.71, 21.04 tok/s; median 21.04, spread 203.6%, published as ~21), with zero suite runners, no LLM call in flight, no model download and every GPU idle before each load; the PC's own assistant and browser held a 12-17% CPU baseline on the perf counter (no test load), so the figure is a floor; the earlier ten-sample busy-PC set read 16.19-20.22 (median 17.16), kept as the honest limit, never the figure; 20/24 on the project's blind eight-task battery at 32,768; 22/22 tool calls emitted and 22/22 fully correct; a 55.1-66.3 s cold load over three cold loads; /api/show reports completion, tools and thinking and NO vision. Full evidence: .dsh-scratch/wave21/research/MEASURE-MOE.md; the quiet-machine three-run median and its spread: .dsh-scratch/wave21/research/quiet-median-2026-11-19/ (median-run.json, SUMMARY.md)"
       },
       "pending": false,
       "heavy_mode": true,
-      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday model is paused - it comes back, proved from the model list, when you apply a preset that is not heavy, and a coding model another preset left loaded is ended first, because only one preset's model is loaded at a time. It loads about 17.4 GiB with nothing spilled into system memory, takes about a minute cold and writes about 10 tokens a second.",
+      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday model is paused - it comes back, proved from the model list, when you apply a preset that is not heavy, and a coding model another preset left loaded is ended first, because only one preset's model is loaded at a time. It loads about 19.5 GiB with nothing spilled into system memory, takes 55-66 seconds cold and writes about 21 tokens a second.",
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -529,7 +538,7 @@
         },
         "general_uncensored": {
           "preset": "general_uncensored",
-          "model": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+          "model": "huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M",
           "card_index": 0,
           "card": "card 0",
           "context": 32768,
@@ -641,14 +650,14 @@
         },
         "general_uncensored": {
           "preset": "general_uncensored",
-          "model": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+          "model": "huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M",
           "card_index": 0,
           "card": "all three cards (pooled lane, port 11450)",
           "context": 32768,
-          "tok_s": 9.04,
+          "tok_s": 21,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: orcarouter/Qwen3.8-27B-Uncensored:q4_K_M on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
+          "note": "HEAVY MODE: huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the everyday model while it runs"
         },
         "coding": {
           "preset": "coding",
@@ -753,14 +762,14 @@
         },
         "general_uncensored": {
           "preset": "general_uncensored",
-          "model": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+          "model": "huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M",
           "card_index": 0,
           "card": "all the cards (pooled lane, port 11450)",
           "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
+          "note": "huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M on ONE pooled lane (port 11450) across ALL the cards at 32,768 tokens: HEAVY MODE, it pauses the everyday model while it runs"
         },
         "coding": {
           "preset": "coding",
@@ -855,7 +864,7 @@
     "basis": "one preset's model is loaded at a time; every heavy preset, General included, needs the pooled lane's three cards, so one- and two-card layouts are reasoned and labelled, never claimed as measured",
     "three_gpu_plan": {
       "confirmed": true,
-      "layout": "ONE preset's model is loaded at a time: applying another preset ends the previous one first, so no preset has to keep a card free for another. The everyday lane (port 11436) is ONE card on this PC and serves the 9B rows - Documents & Notes and Browser & Forms at 196,608 tokens, Fast and Agentic + Vision at 16,384. The pooled lane (port 11450) sees ALL THREE cards and carries every heavy preset - General's 26B at 32,768, General Uncensored's 27B at 32,768, Coding, Reflective Coach, Pictures & Screens and Medical - and it pauses the everyday model while it runs, because no preset has to keep a card free for another. So any preset may use all three cards where its model warrants it. There is no one-lane-per-GPU split any more.",
+      "layout": "ONE preset's model is loaded at a time: applying another preset ends the previous one first, so no preset has to keep a card free for another. The everyday lane (port 11436) is ONE card on this PC and serves the 9B rows - Documents & Notes and Browser & Forms at 196,608 tokens, Fast and Agentic + Vision at 16,384. The pooled lane (port 11450) sees ALL THREE cards and carries every heavy preset - General's 26B at 32,768, General Uncensored's measured 30B MoE at 32,768, Coding, Reflective Coach, Pictures & Screens and Medical - and it pauses the everyday model while it runs, because no preset has to keep a card free for another. So any preset may use all three cards where its model warrants it. There is no one-lane-per-GPU split any more.",
       "cards": [
         {
           "role": "everyday lane: ONE card (the RTX 2060), port 11436 - the 9B long-window rows at 196,608; Fast and Agentic + Vision at 16,384",
@@ -863,14 +872,14 @@
           "context": 196608
         },
         {
-          "role": "pooled lane, started on demand: all three cards, port 11450 - General's 26B at 32,768, General Uncensored's 27B at 32,768, Coding, Reflective Coach, Pictures & Screens and Medical; it pauses the everyday model while it runs",
+          "role": "pooled lane, started on demand: all three cards, port 11450 - General's 26B at 32,768, General Uncensored's measured 30B MoE at 32,768, Coding, Reflective Coach, Pictures & Screens and Medical; it pauses the everyday model while it runs",
           "card": "all three cards (pooled lane, port 11450)",
           "context": 32768
         }
       ],
-      "heavy_pooled": "on demand, a heavy preset pauses the everyday model and loads ONE model on the pooled lane on port 11450 across all the cards: General (gemma4:26b-a4b-it-qat at 32,768), Coding (qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), Medical (medgemma:27b at 32,768), Reflective Coach (gemma4:26b-a4b-it-qat at 32,768), Pictures & Screens (gemma4:12b-it-qat at 32,768) and General Uncensored (orcarouter/Qwen3.8-27B-Uncensored:q4_K_M at 32,768). Each is too big for one card, which is why a heavy preset splits one model across the cards; every preset that is not heavy runs on the one everyday lane, one model at a time.",
+      "heavy_pooled": "on demand, a heavy preset pauses the everyday model and loads ONE model on the pooled lane on port 11450 across all the cards: General (gemma4:26b-a4b-it-qat at 32,768), Coding (qwen3-coder-30b-a3b-ud-q3-k-xl at 49,152 tokens), Medical (medgemma:27b at 32,768), Reflective Coach (gemma4:26b-a4b-it-qat at 32,768), Pictures & Screens (gemma4:12b-it-qat at 32,768) and General Uncensored (huihui_ai/qwen3-abliterated:30b-a3b-instruct-2507-q4_K_M at 32,768). Each is too big for one card, which is why a heavy preset splits one model across the cards; every preset that is not heavy runs on the one everyday lane, one model at a time.",
       "link_note": "the third card likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane: the everyday model is loaded once across all three cards on the pooled lane, so the link is paid at load, not per token.",
-      "future_not_a_preset": "The two uncensored MoE candidates still downloading - huihui_ai/qwen3-abliterated:30b-a3b and TrevorJS/gemma-4-26B-A4B-it-uncensored - are not presets and no figure is claimed for them until each is measured on this PC. The uncensored 27B itself is a preset now: General Uncensored runs it on the pooled lane at 32,768 tokens, measured at 17.379 GiB with 0.000 GiB spilled."
+      "future_not_a_preset": "The other downloaded uncensored MoE candidate - TrevorJS/gemma-4-26B-A4B-it-uncensored - is not a preset and no figure is claimed for it until it is measured on this PC. The huihui MoE that was a future candidate is General Uncensored's model since 2026-11-19, measured at 19.520 GiB with 0.000 GiB spilled. The uncensored 27B that row replaced is NOT deleted: it stays on this PC as the pooled lane's `creative` mode model."
     }
   }
 }
