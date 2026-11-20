@@ -2969,9 +2969,10 @@ PROFILES: dict = {
     "work_item_link_dependency": {
         "id": "work_item_link_dependency",
         "title": "Link two work items",
-        "what": "Records ONE typed link between two work items - blocks, "
-                "parent_child, related or discovered_from. A link that would "
-                "make a circle is refused and nothing at all is written.",
+        "what": "Records ONE typed link between two work items - one blocks "
+                "another, one contains another, two are related, or one was "
+                "discovered from the other. A link that would make a circle is "
+                "refused and nothing at all is written.",
         "gives": [
             "Say one step must finish before another can start",
             "Say one item contains another, or that two are related",
@@ -3027,8 +3028,7 @@ PROFILES: dict = {
         "title": "Write a project's hub note",
         "what": "Writes ONE read-only Markdown copy of a project - its objective, "
                 "milestones, work items and recent activity - into the owner's "
-                "Obsidian vault, behind the notes editor's own "
-                "`edit_vault_note` card.",
+                "Obsidian vault, behind the notes editor's own card.",
         "gives": [
             "See a project as a note in the vault the owner already reads",
             "Have the old note copied by the File Guardian before it is replaced",
