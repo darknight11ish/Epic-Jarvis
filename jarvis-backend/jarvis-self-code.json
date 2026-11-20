@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "27e7b9817ac5245a983bf053b583b739f0146759",
- "built_at": "2026-11-19T06:39:23-08:00",
+ "ref": "c75ee418a538af39506840aa028abb5fd39c8827",
+ "built_at": "2026-11-19T15:28:14-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3896,6 +3896,7 @@
     "backend/test_ci_emulator_install.py",
     "backend/test_claims.py",
     "backend/test_clipboard.py",
+    "backend/test_cloud_answer_bound.py",
     "backend/test_cloud_degrade_chain.py",
     "backend/test_cloud_escalate_setting.py",
     "backend/test_cloud_honesty.py",
@@ -4173,6 +4174,7 @@
     "backend/test_patch_history.py",
     "backend/test_patch_original_text.py",
     "backend/test_patch_wellformed.py",
+    "backend/test_patched_base_refresh.py",
     "backend/test_pc_facts.py",
     "backend/test_pc_help.py",
     "backend/test_pending_expiry_on_read.py",
@@ -4270,6 +4272,7 @@
     "backend/test_roll_changelog.py",
     "backend/test_roll_decisions.py",
     "backend/test_router_private_terms.py",
+    "backend/test_router_strikes.py",
     "backend/test_rules_first_relay.py",
     "backend/test_runtime_identity.py",
     "backend/test_sandbox_exec.py",
@@ -4457,7 +4460,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 725,
+   "file_count": 728,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4908,6 +4911,12 @@
     "changelog.d/2026-11-18-two-ci-guards.md",
     "changelog.d/2026-11-18-unknown-lane-name-fails-closed.md",
     "changelog.d/2026-11-18-wifi-checkbox-tells-the-truth.md",
+    "changelog.d/2026-11-19-cloud-answer-bound.md",
+    "changelog.d/2026-11-19-defect-register-answers-untagged-chat.md",
+    "changelog.d/2026-11-19-general-uncensored-is-the-moe.md",
+    "changelog.d/2026-11-19-note-edit-risk-row-reaches-live.md",
+    "changelog.d/2026-11-19-patched-base-refresh.md",
+    "changelog.d/2026-11-19-the-ruled-gaps-are-pinned.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -5207,6 +5216,12 @@
     "decisions.d/2026-11-18-tool-diet-named-thing-floor.md",
     "decisions.d/2026-11-18-two-ci-guards.md",
     "decisions.d/2026-11-18-wifi-reconnect-one-reader.md",
+    "decisions.d/2026-11-19-cloud-answer-bound.md",
+    "decisions.d/2026-11-19-general-uncensored-is-the-moe.md",
+    "decisions.d/2026-11-19-note-edit-row-delivery-route.md",
+    "decisions.d/2026-11-19-patched-base-refresh.md",
+    "decisions.d/2026-11-19-read-only-fast-path-does-not-need-the-tag.md",
+    "decisions.d/2026-11-19-unreadable-records-refuse.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5712,7 +5727,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 1214,
+   "file_count": 1226,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6258,6 +6273,7 @@
     "tools/prebuild_guards/windows_names.py",
     "tools/pretend_linux.py",
     "tools/reconcile_live_backend.py",
+    "tools/refresh_patched_base.py",
     "tools/repair_live_backend_gaps.py",
     "tools/requirements-dev.txt",
     "tools/reseal_live_install.py",
@@ -6282,7 +6298,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 546,
+   "file_count": 547,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6841,111 +6857,111 @@
  ],
  "recent_commits": [
   {
+   "sha": "c75ee418a538af39506840aa028abb5fd39c8827",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1410 from darknight11ish/feat/general-uncensored-is-the-moe-2026-11-19"
+  },
+  {
+   "sha": "d8db0bb9f7be9f8b63dd940fe7e3ea9126c59a89",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1408 from darknight11ish/feat/the-cloud-answer-has-a-bound-2026-11-19"
+  },
+  {
+   "sha": "ec524b976769ff44ef3c4a46c77fff1e03e280d3",
+   "date": "2026-11-19",
+   "subject": "fix(presets): publish the quiet-machine 3-run median for General Uncensored (ruling 5.4)"
+  },
+  {
+   "sha": "1addc37073085f7f9d33510664761dd41efe2cfc",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1409 from darknight11ish/fix/the-defect-lane-still-answers-2026-11-19"
+  },
+  {
+   "sha": "ed6dd3f61f12038d2d1917e9bab9e9c21654d9d3",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1405 from darknight11ish/fix/the-favourite-tier-resolves-2026-11-19"
+  },
+  {
+   "sha": "8e4db0966bdc6d973f93f0477fbf18de7ece9d08",
+   "date": "2026-11-19",
+   "subject": "test(egress): the answer-bound suite needs no host exception"
+  },
+  {
+   "sha": "2fcf8435729cb62c5123b4465a9e457f6c6b7e77",
+   "date": "2026-11-19",
+   "subject": "test(cloud): derive the lane addresses from the presets, not typed hosts"
+  },
+  {
+   "sha": "1c02c4dc0a9fe37a62116759b2869e11cfd6d4c9",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1406 from darknight11ish/test/the-ruled-gaps-are-pinned-2026-11-19"
+  },
+  {
+   "sha": "bd78b9283523d82815ca103cdaeb03835cc4a6e7",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1407 from darknight11ish/feat/the-patched-base-can-be-refreshed-2026-11-19"
+  },
+  {
+   "sha": "03122c8c12433c7e82c3b575470f9d97d397fc01",
+   "date": "2026-11-19",
+   "subject": "test(egress): the answer-bound suite's fixture hosts are recorded"
+  },
+  {
+   "sha": "1a36036d44bc8ae3119c8842fde272da3247c31f",
+   "date": "2026-11-19",
+   "subject": "feat(presets): general_uncensored swaps to the measured uncensored 30B MoE (2026-11-19)"
+  },
+  {
+   "sha": "af294f39eba053928a30756e0fb65e5fc4fb746e",
+   "date": "2026-11-19",
+   "subject": "fix(cloud): bound the cloud answer, and let a twice-failed coding turn fall back"
+  },
+  {
+   "sha": "7b6208521126cf03f133df414eaf123f44abcb9f",
+   "date": "2026-11-19",
+   "subject": "fix(chat): a record-read question answers without the provenance tag"
+  },
+  {
+   "sha": "2bf1ab0972feae4fd34dc5aab6d94584de3cb485",
+   "date": "2026-11-19",
+   "subject": "test(pins): the note-edit repair's one position pin is recorded"
+  },
+  {
+   "sha": "e4648a36d259c57c047e0230b592124b65108fc7",
+   "date": "2026-11-19",
+   "subject": "feat(deploy): the patched-base file can be refreshed, and the shims go"
+  },
+  {
+   "sha": "6ac3a988b073d30ec42142170fc0cd959e22b91d",
+   "date": "2026-11-19",
+   "subject": "test(money+search): the ruled gaps are pinned, and two failures refuse"
+  },
+  {
+   "sha": "7b43fbe3ffc918fedeb7eb381a2f3098a21107a5",
+   "date": "2026-11-19",
+   "subject": "fix(deploy): the note-edit risk row reaches the live gate through the repair tool"
+  },
+  {
+   "sha": "343fb428c9119855ff898b2cd3562c9780db932f",
+   "date": "2026-11-19",
+   "subject": "Merge pull request #1404 from darknight11ish/chore/generated-files-refresh-2026-11-18e"
+  },
+  {
+   "sha": "bfa56595f06184009b1fc164bc0550e0d7dd8f2c",
+   "date": "2026-11-19",
+   "subject": "chore(records): re-take the generated files on the merge tip"
+  },
+  {
    "sha": "27e7b9817ac5245a983bf053b583b739f0146759",
    "date": "2026-11-19",
    "subject": "Merge pull request #1400 from darknight11ish/fix/the-deploy-checks-the-pieces-fit-2026-11-18"
-  },
-  {
-   "sha": "16f09c30e260dc5496a2e1530d160c733e0f8f4e",
-   "date": "2026-11-19",
-   "subject": "Merge pull request #1402 from darknight11ish/fix/the-github-read-returns-what-it-claims-2026-11-18"
-  },
-  {
-   "sha": "64875322dc7eea343e442c81e392921b9aa792cd",
-   "date": "2026-11-19",
-   "subject": "test(pins): the cross-file rule's fixture-shape check is recorded, with its reason"
-  },
-  {
-   "sha": "43dc15108d50e7e8eb4a5e644038ef75cfe5d9b3",
-   "date": "2026-11-19",
-   "subject": "Merge remote-tracking branch 'origin/main' into retrig-1402"
-  },
-  {
-   "sha": "880e617639d27fb67edf3256f992d6c0e77145f3",
-   "date": "2026-11-19",
-   "subject": "Merge remote-tracking branch 'origin/main' into retrig-1400"
-  },
-  {
-   "sha": "5b4fa1dfd29fd06e3c40a48d39c3eafc37906c56",
-   "date": "2026-11-19",
-   "subject": "Merge pull request #1401 from darknight11ish/feat/general-uncensored-preset-2026-11-18"
-  },
-  {
-   "sha": "a30bf3e2a8b65f0f5267a3e526ee7e440c8a0a11",
-   "date": "2026-11-18",
-   "subject": "test(capability): the dated known losses are fixed, so remove them and prove the mechanism by planting"
-  },
-  {
-   "sha": "51e8908d0f708acbf31e66963bbf3d51ffa311fd",
-   "date": "2026-11-18",
-   "subject": "docs(github): the measured list size is the ten-row measurement, not the field run's own figure"
-  },
-  {
-   "sha": "6bc054cc17ba9724841c1befd83309d4725c5116",
-   "date": "2026-11-18",
-   "subject": "fix(github): the read returns what it claims - paging, the commit, the ready lane"
-  },
-  {
-   "sha": "0ee24d9622eb05c863ac1507e96f2abb53cc412c",
-   "date": "2026-11-18",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat-uncensored"
-  },
-  {
-   "sha": "7c6e758d0864ebff315f85df2425e716e0a77582",
-   "date": "2026-11-18",
-   "subject": "test(reconcile): keep both sides of the cross-file and cloud-honesty tests"
-  },
-  {
-   "sha": "53e44f22b92c59bda2a79ae622bec67555f8ae2b",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1372 from darknight11ish/chore/installer-and-temp-artifact-guards-2026-11-18"
-  },
-  {
-   "sha": "32ee3a34939af4d7ba92a9b6fbf95ade004284bc",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1390 from darknight11ish/fix/the-pictures-preset-that-spills-2026-11-18"
-  },
-  {
-   "sha": "e1af0fabf592fc18976b60f0ff3dece091b9786a",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1392 from darknight11ish/fix/a-suite-cannot-write-live-config-2026-11-18"
-  },
-  {
-   "sha": "967e672c8c04a1f64cd381db0a13da5a3bb6bce2",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1399 from darknight11ish/fix/the-wifi-checkbox-tells-the-truth-2026-11-18"
-  },
-  {
-   "sha": "fdf173c9e173d7b2f620f23f0384f12d5e980303",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1395 from darknight11ish/fix/the-hud-refuses-an-empty-service-2026-11-18"
-  },
-  {
-   "sha": "1ad8d51804f6c7b074639f2231ecc2a3f039fd68",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1393 from darknight11ish/ci/the-two-guards-the-review-asked-for-2026-11-18"
-  },
-  {
-   "sha": "ca9a9446a13a8f7d63a72f83eee54fc975a5b8e3",
-   "date": "2026-11-18",
-   "subject": "feat(presets): uncensored models live only on general_uncensored, on the measured 27B"
-  },
-  {
-   "sha": "966bd9021903ce28609b780d1bd5169ea4dfa022",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1388 from darknight11ish/fix/no-approve-without-a-detail-2026-11-18"
-  },
-  {
-   "sha": "3c1355a98288e5ce8654dd2592b6e0ffa36cddad",
-   "date": "2026-11-18",
-   "subject": "Merge pull request #1387 from darknight11ish/fix/the-diet-must-not-hide-a-named-tool-2026-11-18"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1490
+   "files": 1494
   },
   {
    "path": "jarvis-desktop/",
@@ -6965,7 +6981,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 405
+   "files": 411
   },
   {
    "path": "jarvis-backend/",
@@ -6973,14 +6989,14 @@
    "files": 359
   },
   {
-   "path": "tools/",
-   "line": "the generators and checkers that keep the records true",
-   "files": 300
-  },
-  {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 299
+   "files": 305
+  },
+  {
+   "path": "tools/",
+   "line": "the generators and checkers that keep the records true",
+   "files": 301
   },
   {
    "path": "videos/",
@@ -7064,15 +7080,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 6178,
-  "covered": 5692,
-  "excluded": 486,
+  "tracked_files": 6195,
+  "covered": 5708,
+  "excluded": 487,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 230,
+   "count": 231,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
