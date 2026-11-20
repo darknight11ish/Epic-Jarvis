@@ -143,6 +143,13 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "github_issue_labels", "github_edit_pr", "github_pr_review",
   "github_issue_state",
   "approval_policy",
+  // 2026-11-20: the plan store's own tools (PM2). The seed/import and the
+  // work-item actions are switchable like any other tool; the list must
+  // equal jarvis_asks_first.TOOLS_SWITCHABLE (83), which
+  // backend/test_settings_switches.py enforces.
+  "project_create", "project_seed_plan", "project_decompose_plan",
+  "work_item_add", "work_item_update_status", "work_item_link_dependency",
+  "project_checkpoint_reflect", "project_export_obsidian_hub",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

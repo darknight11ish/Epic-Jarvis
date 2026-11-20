@@ -139,12 +139,12 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
     # switch the turn ignored would be a lie. test_asks_first.py carries the
     # same 74 and the same reason: the union of wave 16E's two review tools and
     # the 22:30/23:00 rulings' seven GitHub tools (67 + 7).
-    check("the in-app rows: 75, every tool the model can be offered",
+    check("the in-app rows: 83, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 75)
+          and len(AF.TOOLS_SWITCHABLE) == 83)
     # The PC half of the law, proved against the page itself rather than
     # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
     # list (the Tools page's rows), so a tool added on one side alone fails
