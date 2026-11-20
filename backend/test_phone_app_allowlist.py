@@ -666,6 +666,10 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
     # local-model-guard.patch (2026-11-18) is the fourth: ONE hunk in
     # jarvis_hud.py only (the `use_tools` line), appended immediately before
     # the loader, and it touches no gate row and no route.
+    # router-strikes.patch (2026-11-20) is the fifth: SEVEN hunks, all in
+    # jarvis_hud.py (the relay's local-failure recorder, the clear on a
+    # successful local turn, and `conversation=` on the router call), appended
+    # immediately before the loader, and it touches no gate row and no route.
     check("... with only the patches written after this one between it and "
           "the loader",
           "phone-apps.patch" in order
@@ -673,7 +677,7 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
           and order[order.index("bench.patch") + 1:]
           == ["packs-tamper-on-load.patch", "skill-scan-wiring.patch",
               "activity-turn-guard.patch", "local-model-guard.patch",
-              "plugin-loader.patch"],
+              "router-strikes.patch", "plugin-loader.patch"],
           order[-4:])
     # handsfree.patch (2026-11-04, hands-free mode) is NOT appended after this
     # patch. Its three `jarvis_gate.py` rows are ONE end-of-file hunk, and it is

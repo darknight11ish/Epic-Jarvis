@@ -5919,13 +5919,15 @@ def t_the_activity_turn_guard_is_carried_by_its_six_hunks():
             "PATCHES")
         at = patches.index(ACTIVITY_PATCH) if ACTIVITY_PATCH in patches else -1
         # local-model-guard.patch (2026-11-18) is appended after the activity
-        # guard and immediately before the loader; the loader must stay last of
-        # all, and the guard must still be walked before it.
-        check("the stack registers it immediately BEFORE plugin-loader.patch (the "
-              "position the tool walks)",
+        # guard, and router-strikes.patch (2026-11-20) after that - it is a
+        # jarvis_hud.py-only patch too and touches no activity-guard line. The
+        # loader must stay last of all, and the guard must still be walked
+        # before it.
+        check("the stack registers it after the activity guard and before "
+              "plugin-loader.patch (the position the tool walks)",
               at >= 1 and at + 2 < len(patches)
               and patches[at + 1] == "local-model-guard.patch"
-              and patches[at + 2] == "plugin-loader.patch"
+              and patches[at + 2] == "router-strikes.patch"
               and patches[-1] == "plugin-loader.patch",
               patches[max(at - 1, 0):at + 3])
     finally:

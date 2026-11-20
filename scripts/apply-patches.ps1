@@ -2262,6 +2262,35 @@ $PATCHES = @(
     # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
     # test_screen_attach.py, test_hud_manual_lane_gate.py).
     'local-model-guard.patch'
+    # router-strikes.patch (2026-11-20, external review ruling 6.1's other
+    # half): the 2-strike local-failure fallback that #1408 gave the router a
+    # caller for. `jarvis_router.note_local_failure()` and
+    # `choose(conversation=, coding=)` shipped in #1408 and NOTHING CALLED
+    # THEM, so the third attempt at a coding turn could not escalate after two
+    # local failures. This patch is the HUD half, and nothing else:
+    #   * the recorder at the relay's own local-failure point - the two
+    #     `except` handlers that end a turn when the local lane produced no
+    #     usable answer (the generic one, and the HTTP refusal that cannot step
+    #     down), plus the local answering loop's returned summary with no
+    #     `finish_reason` - never on a cloud lane, and never a word of the
+    #     conversation: the router keeps a count keyed by conversation id;
+    #   * the clear at the two points a local turn really produced an answer
+    #     (a finished plain relay, and a local turn that returned a
+    #     `finish_reason`) - so a new conversation starts at zero and a chat
+    #     that recovers does too;
+    #   * `conversation=` handed to the ONE `jarvis_router.choose()` call, so
+    #     the count the router reads is this chat's.
+    # SEVEN hunks, all in jarvis_hud.py: two module-level helpers and five
+    # call points. No install block, no route, no gate row, no tier line, and
+    # no jarvis_gate.py or shipped module touched. Its context is text earlier
+    # patches write (attached-file.patch's `has_file=`, chat-stream.patch's
+    # failure wording, cloud-honesty.patch's block, chat-stream's `use_tools`
+    # lines), so it is appended after every patch before it, immediately
+    # before plugin-loader.patch (which MUST stay the last entry,
+    # tools/check_plugins.py). The `choose()` fallback itself is unchanged:
+    # every safety gate still runs, in the same order, and the cloud lane still
+    # needs the owner's yes / this PC's standing switch.
+    'router-strikes.patch'
     'plugin-loader.patch'
 )
 

@@ -465,9 +465,17 @@ def t_the_patch_is_well_formed_and_applies_where_it_claims():
           "        use_tools = ((lane == local_model or decision.inject_memory)" in added
           and "                      and _agent_ok)" in text.splitlines(), added[-2:])
     order = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
-    check("... it is in apply-patches.ps1's list, immediately BEFORE "
-          "plugin-loader.patch (which must stay last of all)",
-          order[-2] == "local-model-guard.patch" and order[-1] == "plugin-loader.patch",
+    # router-strikes.patch (2026-11-20) is the newest jarvis_hud.py-only patch,
+    # so this one is no longer immediately before the loader. What this patch
+    # needs is unchanged: every earlier patch is applied before it, and only
+    # jarvis_hud.py-only patches (which rewrite none of its single line) sit
+    # between it and the loader, which stays last of all.
+    check("... it is in apply-patches.ps1's list, before every patch after it "
+          "and with plugin-loader.patch last of all",
+          "local-model-guard.patch" in order
+          and order[-1] == "plugin-loader.patch"
+          and all(n in ("router-strikes.patch", "plugin-loader.patch")
+                  for n in order[order.index("local-model-guard.patch") + 1:]),
           order[-3:])
     # It reads ONLY lines earlier patches write (chat-stream's use_tools lines
     # and cloud-honesty's crisis block), so the walk invents nothing for it.
