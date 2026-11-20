@@ -5721,6 +5721,596 @@ def _run_android_app(args: dict, state, **_unused) -> dict:
                     "card, and this did not do it."}
 
 
+# ==========================================================================
+#   The plan store's typed tools (PM2, 2026-11-20)
+# ==========================================================================
+# The store (jarvis_projects.py, PM1) keeps the rows: the plan fields on
+# projects, milestones, work items, typed links and the append-only event log.
+# These helpers are the model's only doors into writing those rows; the
+# declarations in TOOLS below name them, "what tier and when a card" is decided
+# in _one_call's plan-store section, and the rows themselves are written by the
+# store's own methods (no raw SQL here).
+#
+# THE TIERS, and where each is checked:
+#   * owner-direct (project_create, work_item_add, work_item_update_status,
+#     work_item_link_dependency, project_checkpoint_reflect) go through the gate
+#     under `todo_add` - "auto" in both shipped settings files, the same line
+#     the goal tools use - so a clean owner turn writes with no card. A turn
+#     shaped by outside text, or the conversation taint latch, SWAPS them to the
+#     existing `change_own_config` action ("ask"): ONE card, and no write unless
+#     a person says yes. That swap lives in this file because the gate decides
+#     an ACTION's tier and cannot know a TURN's provenance.
+#   * project_seed_plan and project_decompose_plan always ask: they go through
+#     the gate under `change_own_config` ("ask") - the product's existing card
+#     for a change to Jarvis's own configuration of the owner's data - and their
+#     prepare() builds the exact picture the card shows. They are also in
+#     NEEDS_A_PERSON, so a loosened tier line still raises a card.
+#   * project_export_obsidian_hub is handed to jarvis_notes_edit BEFORE the
+#     generic gate: its ONE card is the notes editor's own `edit_vault_note`
+#     card, which also owns the File Guardian copy and the undo receipt. Asking
+#     here as well would ask the same question twice.
+#
+# NO TOOL HERE TAKES A DATE. Not a due date, not a target date: the schemas have
+# no field for one, so the model cannot hand one over. A date in this store
+# arrives only from the owner's own route/app, or from a source row the import
+# copies unchanged. "Never invent a due date or a target date from chat" is a
+# rule about what can be written, so it is enforced where the writing happens.
+
+PROJECT_OWN_DIRECT_ACTION = "todo_add"
+PROJECT_CARD_ACTION = "change_own_config"
+PROJECT_EXPORT_ACTION = "edit_vault_note"
+PROJECT_OWNER_DIRECT_TOOLS = frozenset({
+    "project_create", "work_item_add", "work_item_update_status",
+    "work_item_link_dependency", "project_checkpoint_reflect"})
+PROJECT_ASK_TOOLS = frozenset({"project_seed_plan", "project_decompose_plan"})
+PROJECT_CARD_TOOLS = PROJECT_ASK_TOOLS
+PROJECT_EXPORT_TOOL = "project_export_obsidian_hub"
+PROJECT_TOOLS = PROJECT_OWNER_DIRECT_TOOLS | PROJECT_ASK_TOOLS | {
+    PROJECT_EXPORT_TOOL}
+#: How much of the hub note's own text the ONE card shows. A hub note is small;
+#: this bound keeps a card readable and never changes what is written.
+HUB_CARD_MAX_TEXT = 6000
+PROJECT_AFTER_READING = ("Jarvis read outside text in this conversation, so it asks "
+                         "before changing your plan.")
+
+
+class _ProjectNoCard:
+    """A plan tool's answer that needs no card at all: a dry run, or "nothing
+    to do". `_one_call` returns `result` to the model before any gate
+    question, so a dry run can never raise one."""
+
+    def __init__(self, result: dict):
+        self.result = dict(result or {})
+
+
+def _projects_store():
+    import jarvis_projects as P
+    return P, P.get()
+
+
+def _prepare_project_create(args):
+    name = " ".join(str(args.get("name") or "").split())
+    kind = str(args.get("kind") or "").strip().lower()
+    if not name:
+        raise ValueError("a project needs a name")
+    if kind not in ("coding", "life"):
+        raise ValueError('a project is "coding" or "life"')
+    objective = str(args.get("objective") or "").strip()
+    criteria = str(args.get("success_criteria") or "").strip()
+    text = f'Create the project "{name}" ({kind}).'
+    if objective:
+        text += f'\nIts objective, in their words: "{objective}"'
+    if criteria:
+        text += f'\nWhat done looks like, in their words: "{criteria}"'
+    text += "\nNo date is set."
+    return ({"name": name, "kind": kind, "objective": objective,
+             "success_criteria": criteria}, text)
+
+
+def _execute_project_create(args, state, **kwargs):
+    _P, store = _projects_store()
+    state = state if isinstance(state, dict) else {}
+    try:
+        project = store.create({"name": state.get("name") or "Project",
+                                "kind": state.get("kind") or "life"}, here=False)
+    except (ValueError, OverflowError, PermissionError) as exc:
+        return {"ok": False, "created": False, "error": str(exc)}
+    fields = {}
+    if state.get("objective"):
+        fields["objective"] = state["objective"]
+    if state.get("success_criteria"):
+        fields["success_criteria"] = state["success_criteria"]
+    if fields:
+        try:
+            store.set_plan_fields(project["id"], fields)
+        except ValueError as exc:
+            return {"ok": True, "project": project["id"],
+                    "name": project["name"],
+                    "message": f'Created the project "{project["name"]}", but the '
+                               f'plan fields were not saved: {exc}'}
+    return {"ok": True, "created": True, "project": project["id"],
+            "name": project["name"],
+            "message": f'Created the project "{project["name"]}". No date was set.'}
+
+
+def _prepare_project_seed(args):
+    P, store = _projects_store()
+    try:
+        # `seed_sources()` is the store's own READ: it returns items, pending,
+        # edges, skipped, sources and already, and writes NOTHING. (It is also
+        # exactly what `seed_plan(dry_run=True)` starts from; using it directly
+        # here keeps the card's picture and the dry run the same read.)
+        proposal = store.seed_sources()
+    except Exception as exc:                 # noqa: BLE001 - unreadable, said so
+        raise ValueError(f"the import could not read your goals and work lists "
+                         f"({type(exc).__name__})") from None
+    if args.get("dry_run") is True:
+        return _ProjectNoCard({
+            "ok": True, "wrote": False, "dry_run": True,
+            "items": [{key: item[key] for key in
+                       ("source", "kind", "project_name", "title", "status",
+                        "due_date") if key in item}
+                      for item in proposal["items"]],
+            "already": proposal["already"], "skipped": proposal["skipped"],
+            "sources": proposal["sources"],
+            "message": ("Nothing would be imported: there is no goal step or "
+                        "work-list item attached to a project yet."
+                        if not proposal["items"] else
+                        f"{len(proposal['pending'])} row(s) would be imported, "
+                        f"{proposal['already']} are already in the plan.")}), ""
+    if not proposal["items"]:
+        return _ProjectNoCard({"ok": True, "wrote": False,
+                               "message": P.SEED_NOTHING}), ""
+    if not proposal["pending"]:
+        return _ProjectNoCard({"ok": True, "wrote": False,
+                               "message": P.SEED_ALL_DONE,
+                               "already": proposal["already"]}), ""
+    lines = ["Save this plan? Nothing will run - every step that acts gets its "
+             "own card later.", ""]
+    lines.append(f"From your goals and work lists: "
+                 f"{proposal['sources']['goal_steps']} goal step(s) and "
+                 f"{proposal['sources']['work_list_items']} work-list item(s).")
+    shown = 0
+    for item in proposal["pending"]:
+        if shown >= 15:
+            lines.append(f"- ...and {len(proposal['pending']) - shown} more")
+            break
+        mark = "milestone" if item["kind"] == "milestone" else "item"
+        due = (f' - due {item["due_date"]}' if item.get("due_date")
+               else " - no date" if item["kind"] == "work_item" else "")
+        lines.append(f'- [{mark}] {item["project_name"]}: "{item["title"]}"{due}')
+        shown += 1
+    for skipped in proposal["skipped"][:5]:
+        label = skipped.get("title") or skipped.get("source") or "row"
+        lines.append(f"- not imported: {label} - {skipped['why']}")
+    if proposal["already"]:
+        lines.append(f"- {proposal['already']} row(s) are already imported and "
+                     f"are skipped.")
+    return ({"dry_run": False}, "\n".join(lines))
+
+
+def _execute_project_seed(args, state, **kwargs):
+    _P, store = _projects_store()
+    result = store.seed_plan(dry_run=False)
+    created = result["created"]
+    return {"ok": True, "wrote": bool(result["wrote"]), "created": created,
+            "already": result["already"], "skipped": result["skipped"],
+            "message": (f"Saved {created['milestones']} milestone(s), "
+                        f"{created['work_items']} work item(s) and "
+                        f"{created['edges']} link(s). Nothing ran.")}
+
+
+def _decompose_clean(args, store):
+    """Validate ONE proposed plan and return (project, milestones, items,
+    blocks) with milestone/item numbers turned into 0-based indexes. A circle
+    of blockers is refused HERE, before the card - so nothing is written and
+    no card asks about a plan that cannot be saved."""
+    project = store.resolve_project(args.get("project"))
+    milestones = args.get("milestones") or []
+    items = args.get("items") or []
+    blocks = args.get("blocks") or []
+    if not isinstance(milestones, list) or not isinstance(items, list) \
+            or not isinstance(blocks, list):
+        raise ValueError("a plan is a list of milestones, a list of items and a "
+                         "list of blocking pairs")
+    if len(milestones) > 9:
+        raise ValueError("keep the plan to at most 9 milestones")
+    if len(items) > 30:
+        raise ValueError("keep the plan to at most 30 work items")
+    clean_milestones = []
+    for m in milestones:
+        if not isinstance(m, dict):
+            raise ValueError("a milestone is an object with a title")
+        title = " ".join(str(m.get("title") or "").split())
+        if not title:
+            raise ValueError("a milestone needs a title")
+        clean_milestones.append({"title": title[:120]})
+    clean_items = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("a work item is an object with a title")
+        title = " ".join(str(item.get("title") or "").split())
+        if not title:
+            raise ValueError("a work item needs a title")
+        milestone_index = None
+        milestone = item.get("milestone")
+        if milestone not in (None, ""):
+            try:
+                milestone_index = int(milestone) - 1
+            except (TypeError, ValueError):
+                raise ValueError("an item's milestone is its number in the plan, "
+                                 "from 1") from None
+            if not 0 <= milestone_index < len(clean_milestones):
+                raise ValueError("that item names a milestone the plan does not have")
+        priority = item.get("priority")
+        if priority is not None:
+            try:
+                priority = int(priority)
+            except (TypeError, ValueError):
+                raise ValueError("a priority is a whole number from 0 to 9") from None
+            if not 0 <= priority <= 9:
+                raise ValueError("a priority is a whole number from 0 to 9")
+        clean_items.append({"title": title[:120],
+                            "detail": str(item.get("detail") or "")[:2000],
+                            "milestone": milestone_index, "priority": priority})
+    pairs, adjacency = [], {}
+    for pair in blocks:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            raise ValueError("a blocking pair is [first, second]")
+        try:
+            first, second = int(pair[0]), int(pair[1])
+        except (TypeError, ValueError):
+            raise ValueError("a blocking pair names two items by their number, "
+                             "from 1") from None
+        if not (1 <= first <= len(clean_items)
+                and 1 <= second <= len(clean_items)):
+            raise ValueError("a blocking pair names an item the plan does not have")
+        if first == second:
+            raise ValueError("an item cannot block itself")
+        pairs.append([first - 1, second - 1])
+        adjacency.setdefault(first - 1, []).append(second - 1)
+    for start in adjacency:
+        seen, stack = set(), [start]
+        while stack:
+            at = stack.pop()
+            for nxt in adjacency.get(at, ()):
+                if nxt == start:
+                    raise ValueError("that plan has a circle of blockers, so it "
+                                     "was not saved")
+                if nxt in seen:
+                    continue
+                seen.add(nxt)
+                stack.append(nxt)
+    return project, clean_milestones, clean_items, pairs
+
+
+def _prepare_project_decompose(args):
+    _P, store = _projects_store()
+    project, milestones, items, pairs = _decompose_clean(args, store)
+    lines = [f'Save this plan for "{project["name"]}"? Nothing will run - every '
+             f"step that acts gets its own card later.", ""]
+    if milestones:
+        lines.append("Milestones:")
+        for number, m in enumerate(milestones, 1):
+            lines.append(f"{number}. {m['title']}")
+        lines.append("")
+    if items:
+        lines.append("Work items:")
+        for number, item in enumerate(items, 1):
+            line = f"{number}. {item['title']}"
+            if item.get("priority") is not None:
+                line += f" (priority {item['priority']})"
+            line += " - no date"
+            if item.get("milestone") is not None:
+                line += f"; milestone {item['milestone'] + 1}"
+            lines.append(line)
+        lines.append("")
+    if pairs:
+        lines.append("Blocked by:")
+        for first, second in pairs:
+            lines.append(f'- "{items[first]["title"]}" must finish before '
+                         f'"{items[second]["title"]}"')
+        lines.append("")
+    lines.append("Nothing runs and no date is set.")
+    return ({"project": project["id"], "milestones": milestones,
+             "items": items, "blocks": pairs}, "\n".join(lines))
+
+
+def _execute_project_decompose(args, state, **kwargs):
+    _P, store = _projects_store()
+    state = state if isinstance(state, dict) else {}
+    try:
+        result = store.apply_plan(state.get("project") or "",
+                                  state.get("milestones") or [],
+                                  state.get("items") or [],
+                                  state.get("blocks") or [])
+    except (KeyError, ValueError) as exc:
+        return {"ok": False, "created": False, "error": str(exc)}
+    return {"ok": True, "created": {key: result[key]
+                                    for key in ("milestones", "work_items", "edges")},
+            "message": (f"Saved the plan: {result['milestones']} milestone(s), "
+                        f"{result['work_items']} work item(s), {result['edges']} "
+                        f"link(s). Nothing ran.")}
+
+
+def _prepare_work_item_add(args):
+    P, store = _projects_store()
+    project = store.resolve_project(args.get("project"))
+    title = " ".join(str(args.get("title") or "").split())
+    if not title:
+        raise ValueError("a work item needs a title")
+    status = str(args.get("status") or "backlog").strip().lower()
+    if status not in P.WORK_STATUSES:
+        raise ValueError("a work item is " + ", ".join(P.WORK_STATUSES))
+    priority = args.get("priority")
+    if priority is not None:
+        try:
+            priority = int(priority)
+        except (TypeError, ValueError):
+            raise ValueError("a priority is a whole number from 0 to 9") from None
+        if not 0 <= priority <= 9:
+            raise ValueError("a priority is a whole number from 0 to 9")
+    milestone, milestone_title = None, ""
+    words = str(args.get("milestone") or "").strip()
+    if words:
+        found = [m for m in store.milestones(project["id"])
+                 if m["title"].casefold() == words.casefold()]
+        if not found:
+            found = [m for m in store.milestones(project["id"])
+                     if words.casefold() in m["title"].casefold()]
+        if len(found) != 1:
+            raise ValueError(f'there is no single milestone called "{words}" in '
+                             f'"{project["name"]}"')
+        milestone, milestone_title = found[0]["id"], found[0]["title"]
+    text = f'Add the work item "{title}" to "{project["name"]}"'
+    if milestone_title:
+        text += f' under "{milestone_title}"'
+    if priority is not None:
+        text += f" (priority {priority})"
+    text += ". No date is set."
+    return ({"project": project["id"], "project_name": project["name"],
+             "title": title, "detail": str(args.get("detail") or ""),
+             "status": status, "priority": priority, "milestone": milestone,
+             "milestone_title": milestone_title}, text)
+
+
+def _execute_work_item_add(args, state, **kwargs):
+    _P, store = _projects_store()
+    state = state if isinstance(state, dict) else {}
+    try:
+        item = store.add_work_item(state["project"], {
+            "title": state.get("title"),
+            "detail": state.get("detail") or "",
+            "status": state.get("status") or "backlog",
+            "priority": state.get("priority"),
+            "milestone": state.get("milestone")})
+    except (KeyError, ValueError) as exc:
+        return {"ok": False, "added": False, "error": str(exc)}
+    return {"ok": True, "added": True, "item": item["id"],
+            "title": item["title"], "status": item["status"],
+            "ready": item["ready"],
+            "message": (f'Added "{item["title"]}" to "{state.get("project_name")}". '
+                        f'No date was set.')}
+
+
+def _prepare_work_item_update_status(args):
+    P, store = _projects_store()
+    item = store.find_work_item(args.get("item"))
+    status = str(args.get("status") or "").strip().lower()
+    if status not in P.WORK_STATUSES:
+        raise ValueError("a work item is " + ", ".join(P.WORK_STATUSES))
+    text = (f'Change the work item "{item["title"]}" from {item["status"]} to '
+            f"{status}.")
+    if item["status"] == status:
+        text = (f'The work item "{item["title"]}" is already {status}.')
+    return ({"item": item["id"], "title": item["title"],
+             "project": item["project"], "status": status,
+             "before": item["status"]}, text)
+
+
+def _execute_work_item_update_status(args, state, **kwargs):
+    _P, store = _projects_store()
+    state = state if isinstance(state, dict) else {}
+    try:
+        before_ready = store.ready_next(project_id=state["project"], limit=1000)
+        item = store.set_work_item_status(state["item"], state["status"])
+        after_ready = store.ready_next(project_id=state["project"], limit=1000)
+    except (KeyError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    already = {row["id"] for row in before_ready}
+    unlocked = [row["title"] for row in after_ready if row["id"] not in already]
+    message = f'Moved "{item["title"]}" to {item["status"]}.'
+    if item["status"] == state.get("before"):
+        message = f'"{item["title"]}" was already {item["status"]}.'
+    elif unlocked:
+        message += f' That makes "{unlocked[0]}" ready.'
+    message += " Undo is in your receipts."
+    return {"ok": True, "item": item["id"], "title": item["title"],
+            "status": item["status"], "ready": item["ready"],
+            "unlocked": unlocked, "message": message}
+
+
+def _prepare_work_item_link_dependency(args):
+    P, store = _projects_store()
+    source = store.find_work_item(args.get("from"))
+    target = store.find_work_item(args.get("to"))
+    kind = str(args.get("kind") or "blocks").strip().lower()
+    if kind not in P.EDGE_KINDS:
+        raise ValueError("a link is " + ", ".join(P.EDGE_KINDS))
+    if source["id"] == target["id"]:
+        raise ValueError(P.SELF_EDGE)
+    if kind in P.ORDERING_EDGES and source["project"] != target["project"]:
+        raise ValueError(P.CROSS_PROJECT_EDGE)
+    if store.would_cycle(kind, source["id"], target["id"]):
+        raise ValueError(P.CYCLE_EDGE)
+    text = f'Record the link "{source["title"]}" -> {kind} -> "{target["title"]}".'
+    return ({"from": source["id"], "to": target["id"], "kind": kind,
+             "from_title": source["title"], "to_title": target["title"]}, text)
+
+
+def _execute_work_item_link_dependency(args, state, **kwargs):
+    _P, store = _projects_store()
+    state = state if isinstance(state, dict) else {}
+    try:
+        edge = store.add_edge(state["kind"], state["from"], state["to"])
+    except (KeyError, ValueError, OverflowError) as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "edge": edge["id"], "kind": edge["kind"],
+            "message": (f'Recorded: "{state.get("from_title")}" '
+                        f'{edge["kind"]} "{state.get("to_title")}". Nothing else '
+                        f'changed.')}
+
+
+def _prepare_project_checkpoint(args):
+    P, store = _projects_store()
+    project = store.resolve_project(args.get("project"))
+    words = " ".join(str(args.get("text") or "").split())
+    if not words:
+        raise ValueError("a checkpoint needs its own words")
+    kind = str(args.get("kind") or "checkpoint").strip().lower()
+    if kind not in P.CHECKPOINT_KINDS:
+        raise ValueError("a checkpoint is " + " or ".join(P.CHECKPOINT_KINDS))
+    item = None
+    if args.get("item"):
+        row = store.find_work_item(args["item"])
+        if row["project"] != project["id"]:
+            raise ValueError("that work item is not in this project")
+        item = row["id"]
+    text = f'Write a {kind} about "{project["name"]}": "{words[:200]}"'
+    return ({"project": project["id"], "text": words, "kind": kind,
+             "item": item}, text)
+
+
+def _execute_project_checkpoint(args, state, **kwargs):
+    _P, store = _projects_store()
+    state = state if isinstance(state, dict) else {}
+    try:
+        event = store.record_checkpoint(state["project"], state.get("text"),
+                                        kind=state.get("kind") or "checkpoint",
+                                        item_id=state.get("item"))
+    except (KeyError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "event": event["id"], "kind": event["kind"],
+            "message": f'Wrote the {event["kind"]}. Nothing else changed.'}
+
+
+def _prepare_project_export(args):
+    """Present because every Tool needs a prepare; NEVER REACHED by a real
+    turn. `_one_call` hands `project_export_obsidian_hub` to
+    `_project_export_call` before the generic prepare()/gate/execute() path,
+    because the ONE card is the notes editor's own `edit_vault_note` card and a
+    generic card as well would ask the same question twice."""
+    return None, ("Write one read-only hub note into the owner's Obsidian vault, "
+                  "through the notes editor's one card.")
+
+
+def _execute_project_export(args, state, **kwargs):
+    """NEVER REACHED - see `_prepare_project_export`. Refuses rather than
+    exporting, so no path that skips `_project_export_call` can write a file
+    without the notes editor's own card, File Guardian copy and receipt."""
+    return {"ok": False, "exported": False,
+            "error": "refused: the hub note is written through the notes editor's "
+                     "own `edit_vault_note` card, not this path, so nothing was "
+                     "written."}
+
+
+def _project_after_outside_why(watch) -> str:
+    """Why a plan WRITE in this turn must wait for a person, or "".
+
+    The rule the architecture states, in three parts, each checked here because
+    the gate's own tier cannot express it: the conversation taint LATCH
+    (jarvis_gate.taint_active, fail-open on a read error is not acceptable, so a
+    failure answers "tainted"), the turn's own taint, and any outside text read
+    or app text in THIS turn. A message that is not the owner's own words
+    (shared/pasted/forwarded) counts too. Clean owner words: "" - cardless.
+    """
+    if watch is None:
+        return ""
+    if getattr(watch, "tainted", False):
+        return PROJECT_AFTER_READING
+    try:
+        import jarvis_gate
+        if jarvis_gate.taint_active():
+            return PROJECT_AFTER_READING
+    except Exception:                        # noqa: BLE001 - fail closed
+        return PROJECT_AFTER_READING
+    reads = [n for n in getattr(watch, "read", {}) if n not in PROJECT_TOOLS]
+    if reads:
+        return PROJECT_AFTER_READING
+    if getattr(watch, "provenance", ""):
+        how = _NOT_OWN_WORDS.get(watch.provenance, "was not typed by you")
+        return (f"Your newest message {how}, so Jarvis asks before changing your "
+                f"plan.")
+    if getattr(watch, "app_context", ""):
+        return ("The app sent text with this request, so Jarvis asks before "
+                "changing your plan.")
+    return ""
+
+
+def _project_export_call(args, call, convo, steps, say_step, watch, checker,
+                         out) -> None:
+    """The hub note: ONE `edit_vault_note` card, raised by the notes editor.
+
+    Handled here, before the generic gate, for the reason the cloud switch is:
+    the card is the notes module's own (it also owns the File Guardian copy and
+    the undo receipt), and asking under the generic path as well would ask the
+    same question twice."""
+    name = PROJECT_EXPORT_TOOL
+    step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
+    steps.append(step)
+    limit = _card_limit(watch, name) if watch is not None else CARDS_PER_TURN
+    if watch is not None and watch.cards >= limit:
+        result = {"ok": False, "error": CARD_LIMIT_ERROR.format(n=limit)}
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
+    try:
+        P, store = _projects_store()
+        project = store.resolve_project(args.get("project"))
+        note = store.hub_note(project["id"])
+    except (KeyError, ValueError) as exc:
+        result = {"ok": False, "error": str(exc)}
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
+    shown = note["text"]
+    if len(shown) > HUB_CARD_MAX_TEXT:
+        shown = shown[:HUB_CARD_MAX_TEXT] + "\n..."
+
+    def card_gate(action, detail, prompt):
+        # The ONE card shows the exact path and the note's own words. The
+        # notes editor builds the action/detail; this adds the text the owner
+        # is approving and keeps the module's own title line.
+        detail = dict(detail or {})
+        detail["text"] = shown
+        return checker(action, detail,
+                       f"Write {note['path']} in your Obsidian vault? "
+                       f"(one file)\n\n{shown}")
+
+    out.set_status("approval")
+    try:
+        # The note itself is rebuilt inside export_hub from the SAME project
+        # state, so the text the card showed and the text written are the same
+        # build of the store (never a second, stale copy passed in).
+        result = P.export_hub(project["id"], gate_check=card_gate)
+    except Exception as exc:                 # noqa: BLE001 - the turn survives
+        result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    out.set_status("thinking")
+    if watch is not None and result.get("state") in ("saved", "denied", "failed",
+                                                     "waiting"):
+        watch.cards += 1
+    step["ok"] = bool(result.get("ok"))
+    step["ran"] = bool(result.get("ok"))
+    say_step("tool_started" if step["ran"] else "tool_refused", name)
+    say_step("tool_finished", name, ok=step["ok"])
+    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                  "content": _tool_content(result)})
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -6929,6 +7519,129 @@ TOOLS: dict = {
          "required": ["goal"]},
         _plain_prepare("Goal done"), lambda args, state, **_: {"ok": False},
         gate_lookup_name=lambda args: GOAL_GATE_ACTION),
+    # ------------------------------------------------------------------
+    #   The plan store's typed tools (PM2, 2026-11-20)
+    # ------------------------------------------------------------------
+    # The store (jarvis_projects.py, PM1) has the rows; these are the model's
+    # only doors into writing them. Each is in PROJECT_OWNER_DIRECT_TOOLS or
+    # PROJECT_ASK_TOOLS, and _one_call's plan-store section below owns the
+    # rule that decides whether a card is raised (a tainted or outside-shaped
+    # turn always raises one). The owner-direct five are cardless in a clean
+    # turn for the same reason `goal_add` is: they write the owner's own
+    # words about the owner's own plan. NO schema here carries a date field,
+    # deliberately - a date can only come from the store's own route or the
+    # source row the import copies, never from a model's guess.
+    "project_create": Tool(
+        "project_create",
+        "Create ONE project on this PC, in the owner's own words: a name, "
+        "coding or life, and - only when they said them - the objective and "
+        "what done looks like. Set no date.",
+        {"type": "object", "properties": {
+            "name": {"type": "string", "description": "the project's name, in their words"},
+            "kind": {"type": "string", "enum": ["coding", "life"]},
+            "objective": {"type": "string",
+                          "description": "optional, in their words: what they want"},
+            "success_criteria": {"type": "string",
+                                 "description": "optional, in their words: what done looks like"}},
+         "required": ["name", "kind"]},
+        _prepare_project_create, _execute_project_create,
+        gate_lookup_name=lambda args: PROJECT_OWN_DIRECT_ACTION),
+    "project_seed_plan": Tool(
+        "project_seed_plan",
+        "Import the plan the owner already has: goal steps from their goals "
+        "and open items from each project's work list, as plan rows. ONE "
+        "approval card shows what would be saved; nothing runs. A second run "
+        "imports nothing twice. `dry_run` shows the list without writing.",
+        {"type": "object", "properties": {
+            "dry_run": {"type": "boolean",
+                        "description": "true: show what would be imported, write nothing"}}},
+        _prepare_project_seed, _execute_project_seed),
+    "project_decompose_plan": Tool(
+        "project_decompose_plan",
+        "Propose a plan for ONE project and save it on one approval card. "
+        "Nothing runs; no date is set. `blocks` pairs are [first, second].",
+        {"type": "object", "properties": {
+            "project": {"type": "string", "description": "its name"},
+            "milestones": {"type": "array", "items": {
+                "type": "object", "properties": {"title": {"type": "string"}},
+                "required": ["title"]}},
+            "items": {"type": "array", "items": {
+                "type": "object", "properties": {
+                    "title": {"type": "string"},
+                    "detail": {"type": "string"},
+                    "milestone": {"type": "integer", "description": "its number"},
+                    "priority": {"type": "integer", "description": "0 first"}},
+                "required": ["title"]}},
+            "blocks": {"type": "array", "items": {
+                "type": "array", "items": {"type": "integer"},
+                "description": "[first, its blocked item]"}}},
+         "required": ["project"]},
+        _prepare_project_decompose, _execute_project_decompose),
+    "work_item_add": Tool(
+        "work_item_add",
+        "Add ONE work item to a project on this PC, in the owner's own words. "
+        "Optional priority (0 runs first) and milestone. Set no date.",
+        {"type": "object", "properties": {
+            "project": {"type": "string", "description": "its name, or enough of it"},
+            "title": {"type": "string", "description": "the step, in their words"},
+            "detail": {"type": "string"},
+            "priority": {"type": "integer", "description": "0 runs first"},
+            "status": {"type": "string",
+                       "enum": ["backlog", "ready", "in_progress"]},
+            "milestone": {"type": "string",
+                          "description": "a milestone's title in that project"}},
+         "required": ["project", "title"]},
+        _prepare_work_item_add, _execute_work_item_add,
+        gate_lookup_name=lambda args: PROJECT_OWN_DIRECT_ACTION),
+    "work_item_update_status": Tool(
+        "work_item_update_status",
+        "Move ONE work item between backlog, ready, in_progress, done and "
+        "cancelled. Logs one event and keeps one Undo receipt.",
+        {"type": "object", "properties": {
+            "item": {"type": "string", "description": "its title, or enough of it"},
+            "status": {"type": "string",
+                       "enum": ["backlog", "ready", "in_progress", "done",
+                                "cancelled"]}},
+         "required": ["item", "status"]},
+        _prepare_work_item_update_status, _execute_work_item_update_status,
+        gate_lookup_name=lambda args: PROJECT_OWN_DIRECT_ACTION),
+    "work_item_link_dependency": Tool(
+        "work_item_link_dependency",
+        "Record ONE typed link between two work items: blocks, parent_child, "
+        "related or discovered_from. A link that would make a circle is "
+        "refused and nothing is written.",
+        {"type": "object", "properties": {
+            "from": {"type": "string", "description": "the first item's title"},
+            "to": {"type": "string", "description": "the second item's title"},
+            "kind": {"type": "string",
+                     "enum": ["blocks", "parent_child", "related",
+                              "discovered_from"]}},
+         "required": ["from", "to", "kind"]},
+        _prepare_work_item_link_dependency, _execute_work_item_link_dependency,
+        gate_lookup_name=lambda args: PROJECT_OWN_DIRECT_ACTION),
+    "project_checkpoint_reflect": Tool(
+        "project_checkpoint_reflect",
+        "Write one checkpoint or lesson about a project into its event log, "
+        "in the owner's or Jarvis's own words. Writes no plan row and runs "
+        "nothing.",
+        {"type": "object", "properties": {
+            "project": {"type": "string", "description": "its name, or enough of it"},
+            "text": {"type": "string", "description": "the checkpoint or lesson"},
+            "kind": {"type": "string", "enum": ["checkpoint", "reflection"]},
+            "item": {"type": "string",
+                     "description": "optional work item this is about"}},
+         "required": ["project", "text"]},
+        _prepare_project_checkpoint, _execute_project_checkpoint,
+        gate_lookup_name=lambda args: PROJECT_OWN_DIRECT_ACTION),
+    "project_export_obsidian_hub": Tool(
+        "project_export_obsidian_hub",
+        "Write ONE read-only Markdown copy of a project into the owner's "
+        "Obsidian vault, behind its one edit_vault_note card. The project "
+        "stays in Jarvis's own store; the note is a one-way copy.",
+        {"type": "object", "properties": {
+            "project": {"type": "string", "description": "its name, or enough of it"}},
+         "required": ["project"]},
+        _prepare_project_export, _execute_project_export),
     # Changing one of Jarvis's own settings by name - see SETTINGS_TOOL above
     # for why this is not put to the gate here, and why that is not a weakening.
     # Its prepare/execute are deliberately unreachable: _one_call hands it to
@@ -7700,6 +8413,20 @@ NEEDS_A_PERSON = {
                         "then runs inside Jarvis at start-up",
     GRANT_TOOL: "lets web searches in this chat run without asking you, which only "
                 "you may allow",
+    # THE PLAN STORE'S TWO PROPOSAL TOOLS (PM2, 2026-11-20). Both are decided
+    # under `change_own_config` at "ask", so a person is asked anyway; these
+    # entries are the belt for the day someone loosens that line. The owner
+    # approved one picture - the plan the card shows - and neither tool runs
+    # anything: they write rows and stop. The five owner-direct plan tools are
+    # deliberately NOT here: they are cardless by design in a clean turn, and
+    # their shaped-turn rule (the swap to `change_own_config`) is enforced in
+    # `_one_call`'s plan-store section, which the gate's tier table cannot
+    # express.
+    "project_seed_plan": "imports the owner's own goal steps and work-list items "
+                         "into their plan store, on one card showing every row",
+    "project_decompose_plan": "writes a whole plan - milestones, work items and "
+                              "their blocking links - into the owner's plan store, "
+                              "on one card showing all of it",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -7728,6 +8455,15 @@ NOBODY_ASKED_WORDS = (
     "nobody was asked, so nothing was run. Your settings file is letting it through without "
     "asking: open jarvis-framework.toml, put {action} back to \"ask\", then try again from "
     "Jarvis on the PC.")
+#: PM2's shaped-turn rule: a plan write in a turn shaped by outside text waits
+#: for a person. The action was swapped to `change_own_config`; this is the belt
+#: for the day that line is loosened.
+NOBODY_ASKED_PROJECT_WORDS = (
+    "{name} writes to your project plan, and this turn had read something from "
+    "outside, so it only runs after you say yes on a card - and this time nobody "
+    "was asked, so nothing was written. Your settings file is letting it through "
+    "without asking: open jarvis-framework.toml, put {action} back to \"ask\", "
+    "then try again from Jarvis on the PC.")
 NOBODY_ASKED_NOTE_WORDS = (
     "{name} writes to your notes, and this turn had read something from outside, so "
     "it only runs after you say yes on a card - and this time nobody was asked, so nothing "
@@ -10374,7 +11110,18 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # here: an old chat's answers may quote a page or an email, so
                 # opening one counts as reading, and a note write later in that
                 # turn must still wait for a person.
-                SELF_PORTRAIT_TOOL}
+                SELF_PORTRAIT_TOOL,
+                # THE PLAN STORE'S TYPED TOOLS (PM2, 2026-11-20). Every result
+                # is this PC's own sentence about a row Jarvis just wrote, a
+                # card it raised, or - for the dry-run seed - the owner's own
+                # goal steps and work-list items read back out of their own two
+                # stores. None of it came from outside this PC, so recording a
+                # plan write as a READ would be untrue, would taint the whole
+                # conversation (making every later plan write ask), and would
+                # make the second plan tool of a clean turn wait for a person
+                # for no reason - the exact bug the comments above record for
+                # notes and settings.
+                *PROJECT_TOOLS}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -11650,6 +12397,20 @@ TOOL_GROUPS = (
     # owner's settings name them, like every tool here.
     ("goals", "the owner's goals and what they have recorded so far",
      ("goals_list", "goal_add", "goal_progress", "goal_done")),
+    # The plan store's typed tools (PM2, 2026-11-20): the owner's projects,
+    # their milestones and work items, the links and checkpoints between them,
+    # and the one-way Obsidian hub note. Its own group rather than joining
+    # `goals`: a question about goals must not also put eight plan writes in
+    # front of the model. A group's MEMBERS cost nothing extra in `more_tools`'
+    # own enum (which lists group names only), so the short list's token pin
+    # grows by this group's name and its one line, paid only with
+    # `[tools] short_list = true` (OFF by default) and only when one of these
+    # tools is enabled.
+    ("projects", "create a project, import or plan its work, write a "
+                 "checkpoint, or export its hub note",
+     ("project_create", "project_seed_plan", "project_decompose_plan",
+      "work_item_add", "work_item_update_status", "work_item_link_dependency",
+      "project_checkpoint_reflect", "project_export_obsidian_hub")),
     ("send_email", "send an email", ("send_email",)),
     # tidy_inbox (jarvis_inbox_tidy.py) shares this group rather than adding
     # a fifth-from-last name to more_tools' own description (see propose_plan
@@ -12228,6 +12989,35 @@ TOOL_HINTS = {
     "product_check": (r"\bproduct page\b", r"\bamazon\b", r"\bproduct\b",
                       r"\breviews?\b", r"\bis (?:this|it) (?:fake|real|genuine)\b",
                       r"\bscam\b", r"\bbuy(?:ing)?\b", r"\bprice\b"),
+    # THE PLAN STORE'S TYPED TOOLS (PM2, 2026-11-20). "project" alone is
+    # already on project_read and github_create_repo; the words that narrow
+    # these are the plan store's own - a plan, a step, a milestone, a work
+    # item, a checkpoint, the hub note - plus the import words. Without these
+    # entries `test_tool_eval.py` fails: it refuses to let a new tool land where
+    # the diet can never show it.
+    "project_create": (r"\bnew project\b", r"\bcreate\b[\s\S]{0,20}\bproject\b",
+                       r"\bstart\b[\s\S]{0,20}\bproject\b",
+                       r"\bproject\b[\s\S]{0,20}\b(?:called|named)\b"),
+    "project_seed_plan": (r"\bimport\b", r"\bseed\b", r"\bfrom my goals\b",
+                          r"\bmy work list\b", r"\bplan i already have\b",
+                          r"\bput my goals\b", r"\bgoal steps?\b"),
+    "project_decompose_plan": (r"\bbreak (?:it |that )?down\b", r"\bdecompose\b",
+                               r"\bmilestones?\b", r"\bplan\b[\s\S]{0,20}\bproject\b",
+                               r"\bplan for\b", r"\bbreak\b[\s\S]{0,20}\b(?:steps|tasks)\b"),
+    "work_item_add": (r"\bwork items?\b", r"\badd\b[\s\S]{0,20}\b(?:step|task|item)\b",
+                      r"\bnew (?:step|task)\b", r"\bto the plan\b"),
+    "work_item_update_status": (r"\bstatus\b", r"\bmark\b[\s\S]{0,20}\b(?:done|started)\b",
+                                r"\bstarted\b", r"\bfinished\b", r"\bcancell?ed\b",
+                                r"\bmove it to\b"),
+    "work_item_link_dependency": (r"\bblocks?\b", r"\bblocked by\b",
+                                  r"\bdepends? on\b", r"\bdependency\b",
+                                  r"\blink\b[\s\S]{0,20}\b(?:items?|steps?)\b"),
+    "project_checkpoint_reflect": (r"\bcheckpoint\b", r"\breflect", r"\blesson\b",
+                                   r"\bwhat i learned\b", r"\bnote (?:that|how)\b",
+                                   r"\bwhere (?:i|we) are\b"),
+    "project_export_obsidian_hub": (r"\bhub note\b", r"\bexport\b",
+                                    r"\bobsidian\b[\s\S]{0,20}\bproject\b",
+                                    r"\bcopy\b[\s\S]{0,20}\b(?:vault|note)\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -20051,6 +20841,14 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return
+    if name == PROJECT_EXPORT_TOOL:
+        # The hub note's ONE card is the notes editor's own `edit_vault_note`
+        # card - it also owns the File Guardian copy and the undo receipt - so
+        # it is handled before the generic gate, the shape cloud_escalation and
+        # change_setting use. A generic card here as well would ask the same
+        # question twice.
+        _project_export_call(args, call, convo, steps, say_step, watch, checker, out)
+        return
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
     if not outside_program:
@@ -20132,6 +20930,32 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         action_name = DRAFT_EMAIL_ACTION
     if name == "tidy_inbox":
         action_name = TIDY_INBOX_ACTION
+    # THE PLAN STORE'S TYPED TOOLS (PM2, 2026-11-20). They decide their own
+    # action here, and the plan store is the ONE place their rows are written.
+    #
+    #   * the owner-direct five are written under `todo_add` - the shipped
+    #     "auto" line the goals tools already resolve under (GOAL_GATE_ACTION),
+    #     so a clean owner turn writes the owner's own words about the owner's
+    #     own plan with no card, exactly like `goal_add`;
+    #   * a turn shaped by anything that is not the owner's own words swaps
+    #     them to `change_own_config` ("ask"): ONE card, and no write unless a
+    #     person says yes. The gate cannot know a TURN's provenance, so this
+    #     swap lives here - the same shape NOTE_WRITES' swap uses below;
+    #   * the two proposal tools (the import/seed and the decomposed plan)
+    #     ALWAYS ask, under `change_own_config`, and their prepare() built the
+    #     exact picture the card shows. They are also in NEEDS_A_PERSON, so a
+    #     loosened tier line still raises a card.
+    #
+    # `project_export_obsidian_hub` never reaches here: it is handed to the
+    # notes editor before the generic gate (see the branch above `**_said`).
+    project_ask_why = ""
+    if name in PROJECT_TOOLS:
+        if name in PROJECT_ASK_TOOLS:
+            action_name = PROJECT_CARD_ACTION
+        else:
+            project_ask_why = _project_after_outside_why(watch)
+            action_name = (PROJECT_CARD_ACTION if project_ask_why
+                           else PROJECT_OWN_DIRECT_ACTION)
     # A note write after outside text waits for a person (NOTE_WRITES): put
     # to the gate as NOTE_AFTER_OUTSIDE_ACTION when its own tier would not
     # ask. "never" stays "never", and "ask" asks anyway.
@@ -20194,6 +21018,20 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                     f"arguments: {type(exc).__name__}: {exc}"})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
+        return
+    if name in PROJECT_TOOLS and isinstance(state, _ProjectNoCard):
+        # NOTHING TO APPROVE, so no card (the same rule _GitHubAnswered and
+        # _ProtectionListed follow). A plan tool's prepare() returns one of
+        # these for a DRY RUN, or for "there is nothing to import / everything
+        # is already imported": a card showing either would ask the owner to
+        # approve nothing. Returned BEFORE the gate, so it can never raise one.
+        result = dict(state.result)
+        say_step("tool_started", name)
+        say_step("tool_finished", name, ok=bool(result.get("ok")))
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": True, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed"})
         return
     if name in GITHUB_TOOLS and isinstance(state, _GitHubNoToken):
         # NO TOKEN, so nothing to approve and NO CARD (2026-11-03). A card here
@@ -20558,6 +21396,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     shaped = watch.shaped_by(args)
     if note_why:
         plan_text = f"{plan_text}\n\n{note_why}"
+    if project_ask_why:
+        plan_text = f"{plan_text}\n\n{project_ask_why}"
     if sandbox_why:
         plan_text = f"{plan_text}\n\n{sandbox_why}"
     if shaped:
@@ -20612,7 +21452,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # Android builder's card does the same: prepare() returns the module's
         # own `plan.says`, with the exact command, folder, SDK, JDK and the
         # download disclosure - the one thing the owner is approving.
-        prompt = (plan_text if name in (SEND_FILE_TOOL, ANDROID_APP_TOOL)
+        prompt = (plan_text if (name in (SEND_FILE_TOOL, ANDROID_APP_TOOL)
+                                or name in PROJECT_TOOLS)
                   else _gate_prompt(name, args))
         if name == SEND_TEXT_TOOL:
             prompt = plan_text
@@ -20656,6 +21497,19 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         result = {"ok": False,
                   "error": "refused: " + NOBODY_ASKED_WORDS.format(
                       name=name, why=why, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
+    elif project_ask_why and not _a_person_said_yes(verdict):
+        # Allowed, but nobody was asked - a plan write in a turn shaped by
+        # outside text (PM2's shaped-turn rule). The action was swapped to
+        # `change_own_config` ("ask"), so this is a BELT: if that line is ever
+        # loosened in a settings file, a page or an email still cannot write
+        # the owner's plan with nobody asked.
+        say_step("tool_refused", name)
+        vtier = getattr(verdict, "tier", None) or "unknown"
+        vaction = getattr(verdict, "action", None) or action_name
+        result = {"ok": False,
+                  "error": "refused: " + NOBODY_ASKED_PROJECT_WORDS.format(
+                      name=name, action=vaction),
                   "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
     elif note_why and not _a_person_said_yes(verdict):
         # Allowed, but nobody was asked - after outside text. See NOTE_WRITES.

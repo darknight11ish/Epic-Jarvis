@@ -195,7 +195,18 @@ TOOL_NAMES = {
     "goal_add": "Adding a goal, in your words",
     "goal_progress": "Recording one progress line on one of your goals",
     "goal_done": "Marking one of your goals done (kept, with its progress)",
-    # REA (2026-10-20; the full toolbox since 2026-11-04): the reverse-engineering
+    # The plan store's typed tools (2026-11-20, PM2). They write the owner's
+    # own plan rows in projects.db; the five owner-direct writes are cardless
+    # in a clean turn and the two proposal tools and the hub note each raise
+    # ONE card. test_reach.py requires every tool to have plain words here.
+    "project_create": "Creating a project, in your words",
+    "project_seed_plan": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+    "project_decompose_plan": "Saving a whole plan - milestones, work items and their links - on one card",
+    "work_item_add": "Adding one work item to a project",
+    "work_item_update_status": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+    "work_item_link_dependency": "Linking two work items: one blocks the other, or contains it, or is related",
+    "project_checkpoint_reflect": "Writing a checkpoint or a lesson into a project's own log",
+    "project_export_obsidian_hub": "Writing a one-way copy of a project into your Obsidian vault (one card)",    # REA (2026-10-20; the full toolbox since 2026-11-04): the reverse-engineering
     # tool ships OFF and asks a person for every call; the page still needs plain
     # words for it, like every tool (test_reach.py). It is no longer read-only -
     # it can patch a local copy, write an export, install its own helper and start

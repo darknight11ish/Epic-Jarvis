@@ -588,6 +588,17 @@ TIER_EXTRA = (
     # switch here offers the ability to the model at all; it never changes a
     # policy by itself, and every loosening still needs its own card.
     "approval_policy",
+    # The plan store's eight typed tools (jarvis_agent.py, PM2, 2026-11-20).
+    # They ship ON in [tools].enabled, and each really is decided by that line
+    # (plus the shaped-turn rule in _one_call, which raises a card in a turn
+    # outside text shaped), so a switch here is real - the same reason every
+    # other row in this group is. The five owner-direct writes are cardless in
+    # a clean turn, exactly like goal_add; the two proposal tools always raise
+    # ONE card, and the hub note raises the notes editor's own edit_vault_note
+    # card. None of them runs anything or deletes a row.
+    "project_create", "project_seed_plan", "project_decompose_plan",
+    "work_item_add", "work_item_update_status", "work_item_link_dependency",
+    "project_checkpoint_reflect", "project_export_obsidian_hub",
 )
 
 #: The standing cloud escalation switch (2026-11-06) rides with

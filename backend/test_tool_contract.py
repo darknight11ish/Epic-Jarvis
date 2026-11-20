@@ -85,8 +85,11 @@ FULL_ENABLED = [
     "conversation_find", "conversation_open",
     "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install",
     "pack_list", "pack_remove", "phone_apps", "plugin_list", "plugin_switch",
+    "project_checkpoint_reflect", "project_create", "project_decompose_plan",
+    "project_export_obsidian_hub", "project_seed_plan",
     "refresh_abilities", "review_changes", "self_portrait", "send_text_message",
-    "web_search",
+    "web_search", "work_item_add", "work_item_link_dependency",
+    "work_item_update_status",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -116,8 +119,12 @@ OFFERED_FRESH = [
     "change_setting", "check_records", "cloud_escalation",
     "conversation_find", "conversation_open", "feature_guide", "memory_search",
     "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
-    "plugin_list", "plugin_switch", "refresh_abilities", "review_changes",
-    "self_portrait", "stop_web_search_approval", "web_search",
+    "plugin_list", "plugin_switch",
+    "project_checkpoint_reflect", "project_create", "project_decompose_plan",
+    "project_export_obsidian_hub", "project_seed_plan",
+    "refresh_abilities", "review_changes",
+    "self_portrait", "stop_web_search_approval", "web_search", "work_item_add",
+    "work_item_link_dependency", "work_item_update_status",
 ]
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
@@ -193,7 +200,12 @@ CATALOGUE = [
     "plugin_list",
     "plugin_switch",
     "product_check",
+    "project_checkpoint_reflect",
+    "project_create",
+    "project_decompose_plan",
+    "project_export_obsidian_hub",
     "project_read",
+    "project_seed_plan",
     "propose_plan",
     "protect_from_jarvis",
     "rea_investigate",
@@ -215,6 +227,9 @@ CATALOGUE = [
     "todo_add",
     "todo_done",
     "web_search",
+    "work_item_add",
+    "work_item_link_dependency",
+    "work_item_update_status",
 ]
 
 PASSED, FAILED, SKIPPED = [], [], []

@@ -2264,11 +2264,27 @@ star_floor = 25        # ...but never fewer than this many
 # code in it, in phase 1) is a plain answer and never becomes a card. Nothing is
 # enabled by installing: the pack is moved to `skills-off` straight afterwards.
 #
+# The PLAN STORE's eight typed tools ALSO ship ON (2026-11-20, PM2). They are
+# the owner's own plan rows in projects.db, in the owner's own words: the five
+# owner-direct writes (project_create, work_item_add, work_item_update_status,
+# work_item_link_dependency, project_checkpoint_reflect) are decided under
+# `todo_add`, the SHIPPED "auto" line the goals tools already resolve under, so
+# a clean owner turn writes them with NO card - exactly like `goal_add` - and a
+# turn shaped by outside text swaps them to `change_own_config` ("ask"), so a
+# page or an email can never write the plan. The two proposal tools
+# (project_seed_plan, project_decompose_plan) ALWAYS ask ONE
+# `change_own_config` card and show every row they would write; neither runs
+# anything. project_export_obsidian_hub writes ONE one-way Markdown copy through
+# the notes editor's own `edit_vault_note` card (File Guardian copy first, undo
+# in receipts). No tool here takes a date - a due/target date can only be the
+# owner's own or one the import copies from a row that really had it. Nothing
+# is deleted by any of them.
+#
 # Everything else here stays opt-in - send_email, browser_control,
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy", "review_changes", "check_records"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy", "review_changes", "check_records", "project_create", "project_seed_plan", "project_decompose_plan", "work_item_add", "work_item_update_status", "work_item_link_dependency", "project_checkpoint_reflect", "project_export_obsidian_hub"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

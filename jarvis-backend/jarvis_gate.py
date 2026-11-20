@@ -3482,3 +3482,43 @@ UNCLASSIFIED_WARNING = ("Unclassified action - never runs on its own, and a "
                         "swipe cannot approve it")
 _UNKNOWN_RISK = ("no", "outbound", UNCLASSIFIED_WARNING)
 
+
+# --------------------------------------------------------------------------
+#   The plan store's typed tools (jarvis_agent.py, PM2, 2026-11-20)
+# --------------------------------------------------------------------------
+# HERE, AT THE END OF THE FILE, for the reason the blocks above give: every
+# line inside `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL` is some
+# earlier patch's hunk context, and the very end of this file is the one region
+# no patch's hunk claims. Both updates run at import, before any `check()`.
+#
+# WHY THESE ROWS. The plan store's five OWNER-DIRECT write tools are decided
+# under `todo_add` - the shipped "auto" line the four goals tools already
+# resolve under - so a clean owner turn writes the owner's own words about the
+# owner's own plan with no card. `todo_add` has carried that tier line since
+# the scheduler existed but had NO risk row, because the scheduler tools never
+# reach the gate; the moment a chat tool is decided under it, the gate's own
+# rule forces an action with no row to "ask", which would turn every cardless
+# plan write into a card. The row says what the action really is: ONE row of
+# the owner's own, local and reversible. It changes no tier and no card -
+# `todo_add` is still "auto". The two proposal tools (the import/seed and the
+# decomposed plan) and the hub note are decided under `change_own_config` and
+# `edit_vault_note`, which already carry their own rows and "ask" lines.
+#
+# The `_TOOL_ACTIONS` rows make `action_for_tool()` answer the specific action
+# for each tool NAME rather than "unclassified_tool". Without them the Reach
+# page calls the eight new tools unclassified and the card shown is not the one
+# the tool raises - the same gap gate-tool-actions-gap.patch fixed for the
+# older tools.
+_TOOL_ACTIONS.update({
+    "project_create": "todo_add",
+    "work_item_add": "todo_add",
+    "work_item_update_status": "todo_add",
+    "work_item_link_dependency": "todo_add",
+    "project_checkpoint_reflect": "todo_add",
+    "project_seed_plan": "change_own_config",
+    "project_decompose_plan": "change_own_config",
+    "project_export_obsidian_hub": "edit_vault_note",
+})
+_RISK.update({
+    "todo_add": ("yes", "local", "adds ONE row to your own to-do list or project plan on this PC; nothing existing is changed or deleted, the row can be moved or removed again, and nothing is sent anywhere"),
+})

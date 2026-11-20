@@ -2047,7 +2047,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -2651,6 +2659,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -4819,7 +4891,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -5423,6 +5503,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -7587,7 +7731,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -8191,6 +8343,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -10368,7 +10584,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -10972,6 +11196,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -13149,7 +13437,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -13753,6 +14049,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -15925,7 +16285,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -16529,6 +16897,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -18696,7 +19128,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -19300,6 +19740,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -21487,7 +21991,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -22091,6 +22603,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -24269,7 +24845,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -24873,6 +25457,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -27036,7 +27684,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -27640,6 +28296,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -29821,7 +30541,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -30425,6 +31153,70 @@
       "last": null,
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
       "waiting": false
      }
     ],
@@ -32597,7 +33389,15 @@
        "github_edit_pr",
        "github_pr_review",
        "github_issue_state",
-       "approval_policy"
+       "approval_policy",
+       "project_create",
+       "project_seed_plan",
+       "project_decompose_plan",
+       "work_item_add",
+       "work_item_update_status",
+       "work_item_link_dependency",
+       "project_checkpoint_reflect",
+       "project_export_obsidian_hub"
       ],
       "title": "Jarvis's own tools"
      }
@@ -33202,6 +34002,70 @@
       "on": false,
       "title": "Changing what needs a card, a second yes or Windows Hello",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_create",
+      "last": null,
+      "on": false,
+      "title": "Creating a project, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_seed_plan",
+      "last": null,
+      "on": false,
+      "title": "Importing the goal steps and work-list items you already have into a project's plan (one card)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_decompose_plan",
+      "last": null,
+      "on": false,
+      "title": "Saving a whole plan - milestones, work items and their links - on one card",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_add",
+      "last": null,
+      "on": false,
+      "title": "Adding one work item to a project",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_update_status",
+      "last": null,
+      "on": false,
+      "title": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "work_item_link_dependency",
+      "last": null,
+      "on": false,
+      "title": "Linking two work items: one blocks the other, or contains it, or is related",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_checkpoint_reflect",
+      "last": null,
+      "on": false,
+      "title": "Writing a checkpoint or a lesson into a project's own log",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "project_export_obsidian_hub",
+      "last": null,
+      "on": false,
+      "title": "Writing a one-way copy of a project into your Obsidian vault (one card)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
@@ -33432,7 +34296,15 @@
   "github_edit_pr",
   "github_pr_review",
   "github_issue_state",
-  "approval_policy"
+  "approval_policy",
+  "project_create",
+  "project_seed_plan",
+  "project_decompose_plan",
+  "work_item_add",
+  "work_item_update_status",
+  "work_item_link_dependency",
+  "project_checkpoint_reflect",
+  "project_export_obsidian_hub"
  ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",

@@ -126,7 +126,20 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    # ruling put them IN the shipped default list so a fresh
                    # install can use them; their own switch still exists and an
                    # existing PC gets them through the twenty-name master switch.
-                   "review_changes", "check_records"]
+                   "review_changes", "check_records",
+                   # The plan store's eight typed tools (2026-11-20, PM2): the
+                   # owner's own project plan rows in projects.db. Appended, so
+                   # the comments above stay true, and in the order the template
+                   # names them. The five owner-direct writes are decided under
+                   # the shipped "auto" `todo_add` line (no card in a clean
+                   # turn, ONE change_own_config card after outside text); the
+                   # two proposal tools always ask ONE card; the hub note asks
+                   # the notes editor's own edit_vault_note card. None runs
+                   # anything, none deletes a row and none takes a date.
+                   "project_create", "project_seed_plan",
+                   "project_decompose_plan", "work_item_add",
+                   "work_item_update_status", "work_item_link_dependency",
+                   "project_checkpoint_reflect", "project_export_obsidian_hub"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
@@ -145,6 +158,12 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      # The two review gates (2026-11-11, Q-D/Q7) sit where TOOLS
                      # puts them, after the pack tools and before web_search.
                      "review_changes", "check_records", "web_search",
+                     # The plan store's eight (2026-11-20, PM2) sit where TOOLS
+                     # puts them, after web_search and before change_setting.
+                     "project_create", "project_seed_plan",
+                     "project_decompose_plan", "work_item_add",
+                     "work_item_update_status", "work_item_link_dependency",
+                     "project_checkpoint_reflect", "project_export_obsidian_hub",
                      "change_setting",
                      # The standing cloud escalation switch (2026-11-06): it
                      # rides with change_setting and is not a [tools].enabled
@@ -164,7 +183,14 @@ OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list
                        # Same two review gates, same TOOLS position, plus the
                        # folder-gated my_files as before.
                        "review_changes", "check_records", "web_search",
-                       "my_files", "change_setting",
+                       "my_files",
+                       # The plan store's eight (2026-11-20, PM2), same TOOLS
+                       # position as above.
+                       "project_create", "project_seed_plan",
+                       "project_decompose_plan", "work_item_add",
+                       "work_item_update_status", "work_item_link_dependency",
+                       "project_checkpoint_reflect", "project_export_obsidian_hub",
+                       "change_setting",
                        "cloud_escalation", "feature_guide",
                        "refresh_abilities", "self_portrait",
                        "conversation_find", "conversation_open",
