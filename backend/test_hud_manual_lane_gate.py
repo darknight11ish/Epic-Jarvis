@@ -238,6 +238,14 @@ def t_the_patch_and_the_base():
              # line, and no hunk in jarvis_gate.py, so it rewrites nothing this patch
              # wrote; it sits immediately before plugin-loader.patch, the last entry.
              "router-strikes.patch",
+             # crisis-route.patch (2026-11-20, ruling 5.2): ONE hunk in jarvis_hud.py -
+             # the crisis turn's route header gains `crisis: true` and, where a cloud
+             # lane was in play or the taint gate held the turn, `cloud_refused:
+             # "crisis"`. No gate is weakened, no gate list entry, tier row, _RISK
+             # row or _TOOL_ACTIONS line changes, and it has no jarvis_gate.py hunk, so
+             # it rewrites nothing this patch wrote; it sits immediately before
+             # plugin-loader.patch, the last entry.
+             "crisis-route.patch",
              "skill-scan-wiring.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
