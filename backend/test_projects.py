@@ -65,6 +65,27 @@ anything tries):
     match so a project's list is one call. The label's own half is driven
     with a FAKE memory layer (nothing here opens the owner's real memory.db);
     the bridge to the REAL jarvis_memory.py is proved in its own test;
+  - the PLAN STORE (2026-11-19, PM1, docs/JARVIS-API.md section 88.7):
+    milestones, work items, typed links and an append-only event log, added
+    to the SAME projects.db by four new tables and seven nullable columns. The
+    migration writes its own timestamped `projects.db.before-migrate-<stamp>`
+    copy before the first schema statement and writes none on an up-to-date
+    file; a backup that cannot be written refuses the migration and alters
+    nothing. A 13-column database from before this opens, keeps every row, and
+    gains the columns and tables without any table being rebuilt; a refused
+    NOT NULL ALTER leaves the file byte-for-byte unchanged; a store shaped
+    like the owner's own (2 coding projects, 1 app, 1 work list, 0 benchmarks,
+    0 linked goals, 0 goals, 0 to-dos) migrates and answers honestly; ready
+    work (priority then due date, and nothing open blocking it); an open
+    blocker named by blocking_chain(); the DFS circle guard refusing a
+    blocks/parent_child circle and writing nothing; the one project_next()
+    union over ready items, active goals' next step and each project's first
+    open work-list item; project_doctor() reporting contradictory rows without
+    fixing one; and the three deterministic answers - "what am I working on",
+    "what should I work on next", "what's blocking X" - answered from the
+    store, naming projects.db and the date they read, with honest empty
+    answers, ahead of the model, and as record reads an untagged request may
+    use;
   - the routes, install() and the patch on the stack of earlier patches;
   - the audit log never carries a name, a note or a number.
 
@@ -2315,6 +2336,862 @@ def t_the_guardian_store_is_this_suites_own():
     receipts = os.path.realpath(str(os.environ.get("JARVIS_RECEIPTS_DB", "")))
     check("... and the receipts DB it links is under the same temp folder",
           receipts.startswith(os.path.realpath(str(_TMP))), receipts)
+
+
+# --------------------------------------------------------------------------
+#   The plan store (2026-11-19, PM1; docs/JARVIS-API.md section 88.7)
+# --------------------------------------------------------------------------
+
+#: The projects.db shape exactly as it was BEFORE the plan store: thirteen
+#: project columns and the five original tables. Hand-written here on purpose:
+#: building it from `P._SCHEMA` would prove nothing, because that schema is the
+#: thing the extension is added to.
+_OLD_PROJECTS_DB = """
+CREATE TABLE projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    instructions TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '[]',
+    folder TEXT,
+    shareable INTEGER NOT NULL DEFAULT 0,
+    auto_route_cloud INTEGER NOT NULL DEFAULT 0,
+    work_list TEXT,
+    goals TEXT NOT NULL DEFAULT '[]',
+    created REAL NOT NULL,
+    changed REAL NOT NULL,
+    app TEXT
+);
+CREATE TABLE benchmarks (
+    id TEXT PRIMARY KEY,
+    project TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT '',
+    better TEXT,
+    target REAL,
+    command TEXT,
+    owner_sensitive INTEGER NOT NULL DEFAULT 0,
+    auto_cleared TEXT,
+    created REAL NOT NULL,
+    changed REAL NOT NULL
+);
+CREATE TABLE results (
+    id TEXT PRIMARY KEY,
+    bench TEXT NOT NULL,
+    value REAL NOT NULL,
+    at REAL NOT NULL,
+    source TEXT NOT NULL,
+    logged REAL NOT NULL
+);
+CREATE TABLE balance_axes (
+    position INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    project TEXT NOT NULL DEFAULT '',
+    ref TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE project_facts (
+    project TEXT NOT NULL,
+    fact INTEGER NOT NULL,
+    created REAL NOT NULL,
+    PRIMARY KEY (project, fact)
+);
+"""
+
+#: The exact thirteen project columns an older (pre-plan) projects.db has.
+_SCHEMA_COLS_13 = ("id", "name", "kind", "instructions", "notes", "folder",
+                   "shareable", "auto_route_cloud", "work_list", "goals",
+                   "created", "changed", "app")
+
+_DATE = "2026-11-19"
+_NOW = time.mktime(time.strptime("2026-11-19 09:30:00", "%Y-%m-%d %H:%M:%S"))
+
+
+class _AnswerSched:
+    """A made-up scheduler for the three read answers. `todos` is what the
+    work-list source sees; a card raised by a read answer is a failure."""
+
+    def __init__(self, todos=()):
+        self._todos = list(todos)
+        self.commands = []
+
+    def todos(self):
+        return self._todos
+
+    def listed(self):
+        return []
+
+    def mark_command(self, text):
+        self.commands.append(text)
+
+    def act(self, *args, **kwargs):
+        raise AssertionError("a card was raised by a read-only answer")
+
+
+class _FakeGoals:
+    def __init__(self, goals):
+        self._goals = list(goals)
+
+    def list(self):
+        return list(self._goals)
+
+    def next_open_step(self, goal_id):
+        return {"step": "Write the plan", "by": "Friday"}
+
+
+def _ticking_clock():
+    ticks = [1_790_000_000.0]
+
+    def tick():
+        ticks[0] += 1.0
+        return ticks[0]
+
+    return tick
+
+
+def _old_projects_db(path):
+    """Write the pre-plan 13-column database and one row of each kind."""
+    import sqlite3
+    c = sqlite3.connect(str(path))
+    c.executescript(_OLD_PROJECTS_DB)
+    c.execute("INSERT INTO projects (id, name, kind, instructions, notes, work_list, "
+              "goals, created, changed) VALUES (?,?,?,?,?,?,?,?,?)",
+              ("a" * 32, "Before plan", "coding", "Keep it", '["a note"]', "garden",
+               '["g1"]', 5.0, 5.0))
+    c.execute("INSERT INTO benchmarks (id, project, name, kind, unit, created, changed) "
+              "VALUES (?,?,?,?,?,?,?)",
+              ("b" * 32, "a" * 32, "Pushups", "number", "reps", 5.0, 5.0))
+    c.execute("INSERT INTO results (id, bench, value, at, source, logged) "
+              "VALUES (?,?,?,?,?,?)", ("c" * 32, "b" * 32, 20.0, 5.0, "app", 5.0))
+    c.commit()
+    c.close()
+
+
+def t_the_plan_store_extends_an_old_database():
+    """PM1 is an EXTENSION of the shipped projects.db, not a migration and not
+    a second store. A current-shape (13 columns, 5 tables) database opens,
+    keeps every row, and `list()`/`get()` answer exactly what they answered;
+    the seven plan columns are appended nullable and the four plan tables are
+    created. A refused NOT NULL ALTER is an availability failure only - the
+    file is unchanged."""
+    import sqlite3
+    path = _TMP / "before-plan.db"
+    bad = _TMP / "before-plan-bad-alter.db"
+    _old_projects_db(path)
+    shutil.copyfile(path, bad)
+    c = sqlite3.connect(str(path))
+    cols_before = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+    tables_before = {r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+    raw = dict(zip([r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()],
+                   c.execute("SELECT * FROM projects").fetchone()))
+    c.close()
+    check("the fixture really is the old shape: 13 columns and no plan tables",
+          len(cols_before) == 13 and "app" in cols_before
+          and not ({"milestones", "work_items", "work_edges", "project_events"}
+                   & tables_before), (cols_before, sorted(tables_before)))
+
+    s = P.Projects(path)
+    got = s.get("a" * 32)
+    check("a 13-column projects.db opens and its project is still there",
+          got["name"] == "Before plan" and got["kind"] == "coding", got.get("name"))
+    check("... get() returns the same values for the fields it had before",
+          got["instructions"] == "Keep it" and got["notes"] == ["a note"]
+          and got["goals"] == ["g1"] and got["work_list"]["name"] == "garden")
+    check("... and its benchmark and number are still readable",
+          len(got["benchmark_list"]) == 1
+          and got["benchmark_list"][0]["name"] == "Pushups"
+          and got["benchmark_list"][0]["latest"]["value"] == 20.0)
+    lst = s.list()
+    check("list() returns the same project",
+          len(lst) == 1 and lst[0]["name"] == "Before plan"
+          and lst[0]["kind"] == "coding", lst)
+    state = s.plan_state("a" * 32)
+    check("the seven plan fields are there on the old row and are NULL/default",
+          all(state.get(column) is None for column in P.PLAN_COLUMNS)
+          and state["work_items"] == 0 and state["milestones"] == 0, state)
+
+    c = sqlite3.connect(str(path))
+    cols_after = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+    info = {r[1]: r for r in c.execute("PRAGMA table_info(projects)").fetchall()}
+    tables_after = {r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+    counts = {name: c.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
+              for name in ("projects", "benchmarks", "results")}
+    integrity = c.execute("PRAGMA integrity_check").fetchone()[0]
+    c.close()
+    check("the 13 original columns are byte-for-byte in the same order",
+          cols_after[:13] == cols_before, cols_after[:13])
+    check("... and the seven plan columns are appended after them",
+          cols_after == cols_before + list(P.PLAN_COLUMNS), cols_after[13:])
+    check("... every one of them is NULLABLE (never a NOT NULL ALTER)",
+          all(info[column][3] == 0 for column in P.PLAN_COLUMNS
+              if column in info) and len(P.PLAN_COLUMNS) == 7,
+          {column: info.get(column) for column in P.PLAN_COLUMNS})
+    check("the four plan tables were created and no original table was rebuilt",
+          {"milestones", "work_items", "work_edges", "project_events"} <= tables_after
+          and {"projects", "benchmarks", "results", "balance_axes",
+               "project_facts"} <= tables_after, sorted(tables_after))
+    check("row counts are unchanged by the extension", counts ==
+          {"projects": 1, "benchmarks": 1, "results": 1}, counts)
+    check("... and the file's own integrity check still says ok",
+          integrity == "ok", integrity)
+    # Opening the same extended file again is idempotent: no column twice.
+    s2 = P.Projects(path)
+    c = sqlite3.connect(str(path))
+    cols_again = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+    c.close()
+    check("a second open adds nothing (the guard is idempotent)",
+          cols_again == cols_after and s2.get("a" * 32)["name"] == "Before plan")
+
+    # THE PRE-MIGRATION BACKUP (2026-11-19, ruling 5.2): an existing database
+    # about to change gets its own timestamped copy BEFORE the first schema
+    # statement, and a second run writes none.
+    backups = sorted(_TMP.glob("before-plan.db.before-migrate-*"))
+    check("the migration wrote exactly one pre-migration backup", len(backups) == 1,
+          [b.name for b in backups])
+    if backups:
+        c = sqlite3.connect(str(backups[0]))
+        backup_cols = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+        backup_tables = {r[0] for r in c.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+        backup_row = c.execute("SELECT name FROM projects").fetchone()
+        c.close()
+        check("... made BEFORE the migration: it has the OLD 13-column schema",
+              backup_cols == cols_before and not (
+                  {"milestones", "work_items", "work_edges", "project_events"}
+                  & backup_tables), (backup_cols, sorted(backup_tables)))
+        check("... and it holds the row the migration was about to change",
+              backup_row is not None and backup_row[0] == "Before plan", backup_row)
+        check("... and the migrated file is still the one this test reads",
+              path.is_file() and backups[0] != path)
+    s3 = P.Projects(path)
+    check("a second open of the migrated file adds nothing", s3.get("a" * 32)["name"]
+          == "Before plan")
+    check("... and leaves no trail of backups behind",
+          len(sorted(_TMP.glob("before-plan.db.before-migrate-*"))) == 1)
+
+    # THE BAD ALTER RULE, on a copy that is still the old shape: a NOT NULL
+    # column with no default raises, changes nothing and returns the file
+    # byte-for-byte. That is an availability failure, never data loss.
+    before = bad.read_bytes()
+    c = sqlite3.connect(str(bad))
+    refused = raises(lambda: c.execute("ALTER TABLE projects ADD COLUMN broken "
+                                       "TEXT NOT NULL"), sqlite3.OperationalError)
+    c.close()
+    after = bad.read_bytes()
+    c = sqlite3.connect(str(bad))
+    bad_cols = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+    bad_counts = {name: c.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
+                  for name in ("projects", "benchmarks", "results")}
+    bad_integrity = c.execute("PRAGMA integrity_check").fetchone()[0]
+    c.close()
+    check("a refused NOT NULL ALTER says why",
+          "NOT NULL" in refused or "not null" in refused.lower(), refused)
+    check("... and leaves the file byte-for-byte unchanged", before == after)
+    check("... and leaves the rows, the columns and the integrity check as they were",
+          bad_cols == cols_before and bad_counts ==
+          {"projects": 1, "benchmarks": 1, "results": 1}
+          and bad_integrity == "ok",
+          (bad_counts, bad_integrity))
+
+    # A BACKUP THAT CANNOT BE WRITTEN REFUSES THE MIGRATION: nothing is
+    # altered, nothing is left behind, and the error says so in plain words.
+    refuse = _TMP / "refused-migration.db"
+    shutil.copyfile(bad, refuse)
+    real_backup = P._migration_backup
+
+    def _no_room(source, target):
+        raise OSError("no space left on this test's disk")
+
+    P._migration_backup = _no_room
+    try:
+        said = raises(lambda: P.Projects(refuse).get("a" * 32),
+                      sqlite3.OperationalError)
+    finally:
+        P._migration_backup = real_backup
+    check("a pre-migration backup that cannot be written refuses the migration",
+          "pre-migration backup" in said and "nothing was changed" in said, said)
+    c = sqlite3.connect(str(refuse))
+    refuse_cols = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+    refuse_tables = {r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+    refuse_rows = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+    c.close()
+    check("... so the file is still the old schema, with its row and no plan tables",
+          refuse_cols == cols_before and refuse_rows == 1
+          and not ({"milestones", "work_items", "work_edges", "project_events"}
+                   & refuse_tables), (refuse_cols, sorted(refuse_tables)))
+    check("... and no half-written backup was left behind",
+          list(_TMP.glob("refused-migration.db.before-migrate-*")) == [])
+
+
+def t_the_owner_shaped_store_migrates_and_answers_honestly():
+    """The audit measured the owner's live store: 2 projects (both coding), 1
+    app project, 1 work list, 0 benchmarks, 0 linked goals; goals.db has 0
+    goals and schedule.db has 0 to-dos. A store shaped like THAT must migrate
+    and answer - not look broken because a relation is empty. Nothing here
+    assumes a benchmark, a goal or a to-do exists."""
+    import sqlite3
+    path = _TMP / "owner-shaped.db"
+    c = sqlite3.connect(str(path))
+    c.executescript(_OLD_PROJECTS_DB)
+    c.execute("INSERT INTO projects (id, name, kind, instructions, notes, work_list, "
+              "goals, created, changed) VALUES (?,?,?,?,?,?,?,?,?)",
+              ("1" * 32, "Jarvis", "coding", "", "[]", "jarvis", "[]", 10.0, 10.0))
+    c.execute("INSERT INTO projects (id, name, kind, instructions, notes, work_list, "
+              "goals, created, changed, app) VALUES (?,?,?,?,?,?,?,?,?,?)",
+              ("2" * 32, "Notes app", "coding", "", "[]", None, "[]",
+               11.0, 11.0, "notes-app"))
+    c.commit()
+    c.close()
+    old = _point_env("JARVIS_PROJECTS_DB", str(path))
+    old_goals = _point_env("JARVIS_GOALS_DB", str(_TMP / "owner-shaped-goals.db"))
+    P._reset_for_tests()
+    try:
+        store = P.get()
+        projects = store.list()
+        check("the owner-shaped store migrates and keeps both coding projects",
+              len(projects) == 2 and {p["name"] for p in projects}
+              == {"Jarvis", "Notes app"}
+              and all(p["kind"] == "coding" for p in projects), projects)
+        check("... one app project and one work list, exactly as measured",
+              sum(1 for p in projects if p["app"]) == 1
+              and sum(1 for p in projects if p["work_list"]) == 1,
+              [(p["name"], p["app"], p["work_list"]) for p in projects])
+        check("... with 0 benchmarks and 0 linked goals (not a broken read)",
+              all(p["benchmarks"] == 0 and p["goals"] == [] for p in projects))
+        check("the migration wrote its pre-migration backup for this file",
+              len(list(_TMP.glob("owner-shaped.db.before-migrate-*"))) == 1,
+              list(_TMP.glob("owner-shaped.db.before-migrate-*")))
+        c = sqlite3.connect(str(path))
+        cols = [r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()]
+        rows = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        c.close()
+        check("... and the migrated file has the 20 columns and both rows",
+              cols == list(_SCHEMA_COLS_13) + list(P.PLAN_COLUMNS) and rows == 2,
+              (len(cols), rows))
+        P._reset_for_tests()
+        res = Q.answer("what am I working on?", sched=_AnswerSched(), now=_NOW)
+        said = str(res.reply)
+        check("the working answer names both real projects, from projects.db",
+              "projects.db" in said and _DATE in said and "2 projects" in said
+              and '"Jarvis"' in said and '"Notes app"' in said, said[:400])
+        check("... and says the empty relations are empty, not broken",
+              "0 benchmarks" in said
+              and "No milestones, work items or events are recorded" in said,
+              said[:500])
+        res = Q.answer("what should I work on next?", sched=_AnswerSched(todos=[]),
+                       now=_NOW)
+        check("the next answer is the EXACT honest empty one on this store",
+              str(res.reply) == (f"Nothing is ready to work on right now (read "
+                                 f"{_DATE}): projects.db has no ready work item; "
+                                 f"goals.db has no active goal step; the scheduler has "
+                                 f"no open work-list item."), str(res.reply))
+        res = Q.answer("what's blocking the Jarvis project?", sched=_AnswerSched(),
+                       now=_NOW)
+        check("... and the blocking answer records no blocker, naming the project",
+              str(res.reply) == (f'No blockers are recorded for the "Jarvis" project '
+                                 f'in projects.db (read {_DATE}).'), str(res.reply))
+    finally:
+        _restore_env("JARVIS_PROJECTS_DB", old)
+        _restore_env("JARVIS_GOALS_DB", old_goals)
+        P._reset_for_tests()
+
+
+def t_ready_work_blocking_and_the_circle_guard():
+    """Ready means startable: not blocked by an open item, ordered by priority
+    then due date; completing the blocker promotes the blocked item; an open
+    blocker is named by blocking_chain(); a circle is refused and NOTHING is
+    written (no edge, no event)."""
+    s = fresh(clock=_ticking_clock())
+    p = s.create({"name": "Jarvis", "kind": "coding"}, here=True)
+    first = s.add_work_item(p["id"], {"title": "First by date", "status": "ready",
+                                      "priority": 0, "due_date": "2026-11-20"})
+    second = s.add_work_item(p["id"], {"title": "Second by date", "status": "ready",
+                                       "priority": 0, "due_date": "2026-11-25"})
+    later = s.add_work_item(p["id"], {"title": "Lower priority", "priority": 2})
+    no_priority = s.add_work_item(p["id"], {"title": "No priority or date",
+                                            "status": "ready"})
+    blocker = s.add_work_item(p["id"], {"title": "The blocker", "priority": 1,
+                                        "status": "backlog"})
+    blocked = s.add_work_item(p["id"], {"title": "The blocked one",
+                                        "status": "ready", "priority": 0})
+    s.add_edge("blocks", blocker["id"], blocked["id"])
+    ready = [row["title"] for row in s.ready_next()]
+    check("ready order is priority first, then due date, then the earlier row",
+          ready == ["First by date", "Second by date", "The blocker",
+                    "Lower priority", "No priority or date"], ready)
+    check("a work item with an OPEN blocker is not ready",
+          "The blocked one" not in ready and
+          next(row for row in s.work_items() if row["id"] == blocked["id"])["ready"]
+          is False)
+    direct = next(row for row in s.work_items()
+                  if row["id"] == blocked["id"])["blocked_by"]
+    check("... and its direct blocker is named on it",
+          [b["title"] for b in direct] == ["The blocker"], direct)
+    chain = s.blocking_chain(blocked["id"])
+    check("blocking_chain names the open blocker",
+          [b["title"] for b in chain["blockers"]] == ["The blocker"]
+          and chain["blockers"][0]["depth"] == 1, chain)
+    check("... and counts the link that points at it", chain["edges"] == 1)
+    s.set_work_item_status(blocker["id"], "done")
+    check("completing the blocker promotes the blocked item",
+          any(row["id"] == blocked["id"] for row in s.ready_next()))
+    chain = s.blocking_chain(blocked["id"])
+    check("... the recorded link stays, but names no open blocker",
+          chain["edges"] == 1 and chain["blockers"] == [], chain)
+    # A project whose plan is closed offers no ready work.
+    s.set_plan_fields(p["id"], {"status": "done"})
+    check("a closed project offers no ready work", s.ready_next() == [])
+    s.set_plan_fields(p["id"], {"status": "active"})
+    check("... and it offers its work again when it is open", bool(s.ready_next()))
+
+    # The DFS circle guard: refused, and it writes nothing at all.
+    edges_before = s.edge_count()
+    events_before = len(s.events())
+    said = raises(lambda: s.add_edge("blocks", blocked["id"], blocker["id"]),
+                  ValueError)
+    check("a blocks circle is refused in words", "circle" in said, said)
+    check("... and nothing was written: no edge and no event",
+          s.edge_count() == edges_before and len(s.events()) == events_before,
+          (s.edge_count(), len(s.events())))
+    check("would_cycle() says so before the write is attempted",
+          s.would_cycle("blocks", blocked["id"], blocker["id"]) is True)
+    # A second ordering kind gets the same guard: one allowed link, then the
+    # link that would close the circle is refused and writes nothing.
+    s.add_edge("parent_child", blocker["id"], blocked["id"])
+    edges_before = s.edge_count()
+    events_before = len(s.events())
+    said = raises(lambda: s.add_edge("parent_child", blocked["id"], blocker["id"]),
+                  ValueError)
+    check("... a parent_child circle is refused the same way", "circle" in said, said)
+    check("... and it wrote nothing either",
+          s.edge_count() == edges_before and len(s.events()) == events_before)
+    said = raises(lambda: s.add_edge("blocks", blocked["id"], blocked["id"]),
+                  ValueError)
+    check("an item cannot link to itself", "itself" in said, said)
+    said = raises(lambda: s.add_edge("blocks", blocker["id"], blocked["id"]),
+                  OverflowError)
+    check("the same link cannot be recorded twice", "already" in said, said)
+    said = raises(lambda: s.add_edge("unknown_kind", blocker["id"], blocked["id"]),
+                  ValueError)
+    check("an unknown link kind is refused", "blocks" in said, said)
+
+
+def t_project_next_is_one_union_of_ready_goals_and_work_lists():
+    """The one canonical next answer unions the plan store's ready work with
+    the two sources that already hold next-work: an active goal's first open
+    step (jarvis_goals) and each project's first open work-list item (the one
+    scheduler). One answer, ready items first, never the same text twice."""
+    s = fresh(clock=_ticking_clock())
+    p = s.create({"name": "Jarvis", "kind": "coding"}, here=True)
+    ready = s.add_work_item(p["id"], {"title": "Ready first", "status": "ready",
+                                      "priority": 0})
+    work_list = (p.get("work_list") or {}).get("name")
+    check("the project has a named work list from its name", work_list == "jarvis",
+          work_list)
+    fake_goals_file = _TMP / "fake-goals-used.db"
+    fake_goals_file.write_text("", encoding="utf-8")
+    fake = types.ModuleType("jarvis_goals")
+    fake.db_path = lambda: fake_goals_file
+    fake.get = lambda: _FakeGoals([{"id": "g1", "text": "Ship PM1",
+                                    "status": "active"}])
+    saved = sys.modules.get("jarvis_goals")
+    sys.modules["jarvis_goals"] = fake
+    try:
+        sched = _AnswerSched([{"kind": "todo", "state": "active", "list": work_list,
+                               "text": "Water the plants"}])
+        out = s.project_next(3, sched=sched)
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_goals", None)
+        else:
+            sys.modules["jarvis_goals"] = saved
+    check('project_next returns ONE answer: {"items", "sources"}',
+          isinstance(out, dict) and set(out) == {"items", "sources"}, out)
+    check("... the ready work item comes first",
+          out["items"] and out["items"][0]["kind"] == "work_item"
+          and out["items"][0]["text"] == "Ready first"
+          and out["items"][0]["id"] == ready["id"], out["items"][:1])
+    check("... then the active goal's next open step",
+          [item["kind"] for item in out["items"]][:3] ==
+          ["work_item", "goal", "work_list"]
+          and out["items"][1]["text"] == "Write the plan"
+          and out["items"][1]["goal"] == "Ship PM1", out["items"])
+    check("... then the project's first open work-list item",
+          out["items"][2]["kind"] == "work_list"
+          and out["items"][2]["text"] == "Water the plants"
+          and out["items"][2]["project_id"] == p["id"], out["items"][2])
+    check("... and the sources are counted honestly",
+          out["sources"]["ready"] == 1 and out["sources"]["goals"] == 1
+          and out["sources"]["work_lists"] == 1, out["sources"])
+    check("the cap is 3 items", len(out["items"]) <= 3)
+    saved = sys.modules.get("jarvis_goals")
+    sys.modules["jarvis_goals"] = fake
+    try:
+        scoped = s.project_next(3, sched=_AnswerSched(
+            [{"kind": "todo", "state": "active", "list": work_list,
+              "text": "Water the plants"}]), project_id=p["id"])
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_goals", None)
+        else:
+            sys.modules["jarvis_goals"] = saved
+    check("a project-scoped next reads that project's sources only (no goal link)",
+          [item["kind"] for item in scoped["items"]] == ["work_item", "work_list"],
+          scoped["items"])
+    no_sched = s.project_next(3)
+    check("with no scheduler the work-list source is unread, not invented empty",
+          no_sched["sources"]["work_lists"] is None, no_sched["sources"])
+
+
+def t_project_doctor_reports_contradictions_and_fixes_nothing():
+    """The doctor is a READ: it names the rows that cannot all be true, and
+    it repairs none of them."""
+    import sqlite3
+    s = fresh(clock=_ticking_clock())
+    p = s.create({"name": "Jarvis", "kind": "coding"}, here=True)
+    s.add_work_item(p["id"], {"title": "Clean one", "status": "ready"})
+    check("a clean plan store is ok", s.project_doctor()["ok"] is True,
+          s.project_doctor())
+    blocker = s.add_work_item(p["id"], {"title": "Open blocker", "status": "ready"})
+    finished = s.add_work_item(p["id"], {"title": "Finished", "status": "ready"})
+    s.add_edge("blocks", blocker["id"], finished["id"])
+    s.set_work_item_status(finished["id"], "done")
+    # Deliberately contradictory rows a real store refuses to write.
+    clean = s.add_work_item(p["id"], {"title": "Clean one"})
+    clean2 = s.add_work_item(p["id"], {"title": "Clean two"})
+    with sqlite3.connect(str(s.path)) as c:
+        c.execute("INSERT INTO milestones (id, project, title, status, created, changed) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("b" * 32, "c" * 32, "Orphan milestone", "planned", 1, 1))
+        c.execute("INSERT INTO work_items (id, project, title, status, created, changed) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("d" * 32, "c" * 32, "Orphan item", "backlog", 1, 1))
+        c.execute("INSERT INTO work_items (id, project, title, status, created, changed) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("e" * 32, p["id"], "Unknown state", "someday", 1, 1))
+        c.execute("INSERT INTO project_events (id, project, at, kind) "
+                  "VALUES (?,?,?,?)", ("f" * 32, "c" * 32, 1, "x"))
+        c.execute("INSERT INTO work_edges (id, project, kind, src, dst, created) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("1" * 32, p["id"], "related", clean["id"], clean["id"], 1))
+        c.execute("INSERT INTO work_edges (id, project, kind, src, dst, created) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("2" * 32, p["id"], "wat", clean["id"], clean2["id"], 1))
+        c.execute("INSERT INTO work_edges (id, project, kind, src, dst, created) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("3" * 32, p["id"], "related", "9" * 32, clean["id"], 1))
+        c.execute("INSERT INTO work_edges (id, project, kind, src, dst, created) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("4" * 32, p["id"], "blocks", clean["id"], clean2["id"], 1))
+        c.execute("INSERT INTO work_edges (id, project, kind, src, dst, created) "
+                  "VALUES (?,?,?,?,?,?)",
+                  ("5" * 32, p["id"], "blocks", clean2["id"], clean["id"], 1))
+    counts_before = {name: len(getattr(s, name)()) if name != "project_events" else
+                     len(s.events()) for name in ("work_items", "milestones",
+                                                  "project_events")}
+    counts_before["edges"] = s.edge_count()
+    doctor = s.project_doctor()
+    kinds = {problem["kind"] for problem in doctor["problems"]}
+    check("the doctor says the plan store is not ok", doctor["ok"] is False, doctor)
+    check("... count matches the problems it lists",
+          doctor["count"] == len(doctor["problems"]) > 0, doctor["count"])
+    for expected in ("orphan-row", "orphan-link", "unknown-work-status",
+                     "unknown-edge-kind", "self-link", "link-circle",
+                     "closed-item-blocked"):
+        check(f"the doctor catches {expected}", expected in kinds, sorted(kinds))
+    check("... naming the ids it found",
+          any("ids" in problem for problem in doctor["problems"]
+              if problem["kind"] == "link-circle"),
+          [p_ for p_ in doctor["problems"] if p_["kind"] == "link-circle"])
+    counts_after = {name: len(getattr(s, name)()) if name != "project_events" else
+                    len(s.events()) for name in ("work_items", "milestones",
+                                                 "project_events")}
+    counts_after["edges"] = s.edge_count()
+    check("the doctor is read-only: every row is still there and none was repaired",
+          counts_after == counts_before, (counts_before, counts_after))
+    check("... and a second run reports exactly the same problems",
+          s.project_doctor()["count"] == doctor["count"])
+    # Deleting a project takes its plan rows and its event history with it,
+    # so the doctor does not inherit orphans from the existing delete route.
+    s.delete(p["id"])
+    with sqlite3.connect(str(s.path)) as c:
+        left = {name: c.execute(f"SELECT COUNT(*) FROM {name} WHERE project = ?",
+                                (p["id"],)).fetchone()[0]
+                for name in ("milestones", "work_items", "work_edges",
+                             "project_events")}
+    check("deleting a project takes its plan rows and its event history with it",
+          left == {"milestones": 0, "work_items": 0, "work_edges": 0,
+                   "project_events": 0}, left)
+    s2 = fresh(clock=_ticking_clock())
+    check("an empty store has a clean bill of health", s2.project_doctor() ==
+          {"ok": True, "problems": [], "count": 0}, s2.project_doctor())
+
+
+def _point_env(name, value):
+    old = os.environ.get(name)
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
+    return old
+
+
+def _restore_env(name, old):
+    if old is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = old
+
+
+def t_the_three_project_answers_answer_from_the_store():
+    """The three deterministic answers: from projects.db, naming the file and
+    the date they read, with EXACT honest-empty answers - and ahead of the
+    model (they match in the fast path, at zero model calls)."""
+    path = _TMP / "answers-projects.db"
+    s = P.Projects(path)
+    coding = s.create({"name": "Jarvis", "kind": "coding"}, here=True)
+    trip = s.create({"name": "Trip", "kind": "life"}, here=True)
+    s.add_milestone(coding["id"], {"title": "Ship PM1", "due_date": "2026-12-01"})
+    first = s.add_work_item(coding["id"], {"title": "Fix the parser",
+                                           "status": "ready", "priority": 0,
+                                           "due_date": "2026-11-25"})
+    s.add_work_item(coding["id"], {"title": "Write the tests", "status": "backlog",
+                                   "priority": 1})
+    s.set_plan_fields(coding["id"], {"status": "active", "target_date": "2026-12-31",
+                                     "objective": "Ship the plan store"})
+    old = _point_env("JARVIS_PROJECTS_DB", str(path))
+    P._reset_for_tests()
+    try:
+        res = Q.answer("what am I working on?", sched=_AnswerSched(), now=_NOW)
+        said = str(res.reply)
+        check("'what am I working on' is answered by the project store",
+              res is not None and res.intent == "project_working", repr(res))
+        check("... from projects.db, naming the file and the date it read",
+              "projects.db" in said and _DATE in said, said[:240])
+        check("... with both real projects and their kinds",
+              "2 projects" in said and '"Jarvis"' in said and '"Trip"' in said
+              and "1 coding, 1 life" in said, said[:400])
+        check("... and the plan store's real counts",
+              "1 milestone" in said and "2 work items" in said and "ready" in said,
+              said[:400])
+        check("... and the status/target the plan fields hold",
+              "status active" in said and "target 2026-12-31" in said, said[:400])
+
+        res = Q.answer("what should I work on next?", sched=_AnswerSched(todos=[]),
+                       now=_NOW)
+        said = str(res.reply)
+        check("'what should I work on next' is answered by project_next()",
+              res is not None and res.intent == "project_next", repr(res))
+        check("... naming the file and the date", "projects.db" in said
+              and _DATE in said, said[:240])
+        check("... with the higher-priority item first and its due date",
+              said.find("Fix the parser") < said.find("Write the tests")
+              and "priority 0" in said and "due 2026-11-25" in said, said[:400])
+
+        # HONEST EMPTY: an item with no link pointing at it says exactly that.
+        res = Q.answer("what's blocking Fix the parser?", sched=_AnswerSched(),
+                       now=_NOW)
+        said = str(res.reply)
+        check("'what's blocking X' answers with no recorded blocker, naming the item",
+              res is not None and res.intent == "project_blocking"
+              and said == (f'No blockers are recorded for "Fix the parser" in '
+                           f'projects.db (read {_DATE}).'), said)
+        res = Q.answer("what's blocking the Trip project?", sched=_AnswerSched(),
+                       now=_NOW)
+        said = str(res.reply)
+        check("... and for a project with no link rows at all",
+              said == (f'No blockers are recorded for the "Trip" project in '
+                       f'projects.db (read {_DATE}).'), said)
+        res = Q.answer("what's blocking the Jervis project?", sched=_AnswerSched(),
+                       now=_NOW)
+        check("a name the store does not hold is honestly not found, never guessed",
+              str(res.reply) == (f'I don\'t see a project or work item called '
+                                 f'"Jervis" in projects.db (read {_DATE}), so I '
+                                 f'won\'t guess.'), str(res.reply))
+
+        # A recorded, OPEN blocker is named - for the item and for its project.
+        blocker = s.add_work_item(coding["id"], {"title": "Open blocker",
+                                                 "status": "ready", "priority": 1})
+        s.add_edge("blocks", blocker["id"], first["id"])
+        said = str(Q.answer("what's blocking Fix the parser?", sched=_AnswerSched(),
+                            now=_NOW).reply)
+        check("an open blocker is named for the work item",
+              said == (f'"Fix the parser" is blocked by "Open blocker" (ready) '
+                       f'(projects.db, read {_DATE}).'), said)
+        said = str(Q.answer("what's blocking the Jarvis project?",
+                            sched=_AnswerSched(), now=_NOW).reply)
+        check("... and for the project, naming the blocked item and its blocker",
+              said == (f'In the "Jarvis" project, 1 item is blocked (read {_DATE}): '
+                       f'"Fix the parser" is waiting on "Open blocker" (ready).'), said)
+        s.set_work_item_status(blocker["id"], "done")
+        said = str(Q.answer("what's blocking the Jarvis project?",
+                            sched=_AnswerSched(), now=_NOW).reply)
+        check("a recorded blocker that is done means nothing is blocking it now",
+              said == (f'Nothing is blocking the "Jarvis" project right now - every '
+                       f'blocker recorded in projects.db is already done '
+                       f'(read {_DATE}).'), said)
+
+        # HONEST EMPTY: no projects.db at all - said, and nothing created.
+        empty_dir = _TMP / "answers-empty"
+        empty_dir.mkdir()
+        empty_path = empty_dir / "projects.db"
+        _restore_env("JARVIS_PROJECTS_DB", old)
+        old = _point_env("JARVIS_PROJECTS_DB", str(empty_path))
+        P._reset_for_tests()
+        res = Q.answer("what am I working on?", sched=_AnswerSched(), now=_NOW)
+        check("with no projects.db the working answer is exactly the empty one",
+              str(res.reply) == (f"You have no projects on this PC yet - projects.db "
+                                 f"does not exist (read {_DATE})."), str(res.reply))
+        res = Q.answer("what should I work on next?", sched=_AnswerSched(), now=_NOW)
+        check("... the next answer too",
+              str(res.reply) == (f"Nothing is ready to work on right now - projects.db "
+                                 f"does not exist on this PC yet (read {_DATE})."),
+              str(res.reply))
+        res = Q.answer("what's blocking the Jarvis project?", sched=_AnswerSched(),
+                       now=_NOW)
+        check("... and the blocking answer",
+              str(res.reply) == (f'There is no projects.db on this PC yet, so no '
+                                 f'blocker is recorded for "Jarvis" (read {_DATE}).'),
+              str(res.reply))
+        check("... and nothing created a projects.db for a read", not empty_path.exists())
+
+        # A projects.db that exists and is empty is a DIFFERENT honest answer.
+        import sqlite3
+        sqlite3.connect(str(empty_path)).close()
+        P._reset_for_tests()
+        res = Q.answer("what am I working on?", sched=_AnswerSched(), now=_NOW)
+        check("an existing but empty projects.db is said in its own words",
+              str(res.reply) == (f"You have no projects on this PC - projects.db has "
+                                 f"no project rows (read {_DATE})."), str(res.reply))
+        res = Q.answer("what should I work on next?", sched=_AnswerSched(), now=_NOW)
+        check("... and the next answer says nothing is ready",
+              str(res.reply) == (f"Nothing is ready to work on right now (read "
+                                 f"{_DATE}): projects.db has no ready work item; "
+                                 f"goals.db has no active goal step; the scheduler has "
+                                 f"no open work-list item."), str(res.reply))
+        res = Q.answer("what's blocking the Jarvis project?", sched=_AnswerSched(),
+                       now=_NOW)
+        check("... and a project name in an empty store is honestly not found",
+              str(res.reply) == (f'I don\'t see a project or work item called '
+                                 f'"Jarvis" in projects.db (read {_DATE}), so I '
+                                 f'won\'t guess.'), str(res.reply))
+    finally:
+        _restore_env("JARVIS_PROJECTS_DB", old)
+        P._reset_for_tests()
+
+
+def t_the_three_project_answers_are_read_only_and_the_widening_is_narrow():
+    """They are RECORD READS: nothing filed, written or carded by the answer,
+    and the untagged widening (UNTAGGED_RECORD_READS) still refuses an action,
+    a chat-filing intent and a file write. An ordinary question still reaches
+    the model."""
+    folder = _TMP / "answers-purity"
+    folder.mkdir(exist_ok=True)
+    path = folder / "projects.db"
+    s = P.Projects(path)
+    p = s.create({"name": "Jarvis", "kind": "coding"}, here=True)
+    s.add_work_item(p["id"], {"title": "Fix the parser", "status": "ready",
+                              "priority": 0})
+    old = _point_env("JARVIS_PROJECTS_DB", str(path))
+    old_config = _point_env("OPENJARVIS_CONFIG_DIR", str(_TMP / "answers-config"))
+    P._reset_for_tests()
+    sentences = ("what am I working on?", "what should I work on next?",
+                 "what's blocking the Trip project?")
+    files_before = {item.name: item.read_bytes() for item in folder.iterdir()
+                    if item.is_file()}
+    counts_before = s.plan_counts()
+    statuses_before = [(row["id"], row["status"]) for row in s.work_items()]
+    try:
+        for sentence in sentences:
+            sched = _AnswerSched()
+            res = Q.answer(sentence, sched=sched, now=_NOW)
+            check(f"a read-only answer for {sentence[:32]!r}",
+                  res is not None and res.made == [] and res.ids == []
+                  and res.open_settings is None and res.open_brain is None, repr(res))
+            check("... in READ_ONLY_INTENTS and the untagged gate",
+                  res is not None and res.intent in Q.READ_ONLY_INTENTS
+                  and res.intent in Q.UNTAGGED_RECORD_READS, repr(res))
+            check("... and the only scheduler call is the pre-existing command "
+                  "note (no card, no todo written)",
+                  sched.commands == [sentence], sched.commands)
+        files_after = {item.name: item.read_bytes() for item in folder.iterdir()
+                       if item.is_file()}
+        check("the project store is byte-for-byte unchanged by the reads",
+              files_before.get("projects.db") == files_after.get("projects.db")
+              and not (set(files_after) - set(files_before)),
+              (sorted(files_before), sorted(files_after)))
+        check("... every plan row is unchanged", s.plan_counts() == counts_before)
+        check("... and so is every work item's state",
+              [(row["id"], row["status"]) for row in s.work_items()] == statuses_before)
+
+        # The explicit gate: a SUBSET of READ_ONLY_INTENTS, never the other way
+        # round - `chat_tag` is read-only for "cancel that" but it FILES a chat.
+        check("the untagged gate is a subset of READ_ONLY_INTENTS",
+              Q.UNTAGGED_RECORD_READS <= Q.READ_ONLY_INTENTS,
+              sorted(Q.UNTAGGED_RECORD_READS - Q.READ_ONLY_INTENTS))
+        check("... and holds the three project reads",
+              {"project_working", "project_next", "project_blocking"}
+              <= Q.UNTAGGED_RECORD_READS)
+        check("... but not the chat-filing intent nor a timer",
+              "chat_tag" not in Q.UNTAGGED_RECORD_READS
+              and "timer_set" not in Q.UNTAGGED_RECORD_READS)
+        check("... nor a file write", "note_create" not in Q.UNTAGGED_RECORD_READS)
+
+        def turn(sentence, **extra):
+            body = {"messages": [{"role": "user", "content": sentence}], **extra}
+            return Q.answer_turn(body, sched=_AnswerSched(), now=_NOW)
+
+        got = turn("what should I work on next?")
+        check("an UNTAGGED request (the script shape) answers the bare sentence",
+              got is not None and got.intent == "project_next", repr(got))
+        check("... with the same words the owner's own tagged request gets",
+              got is not None
+              and str(got.reply) == str(Q.answer("what should I work on next?",
+                                                 sched=_AnswerSched(), now=_NOW).reply))
+        tagged = Q.answer_turn({"messages": [{"role": "user",
+                                              "content": "what should I work on next?",
+                                              "provenance": "typed"}]},
+                               sched=_AnswerSched(), now=_NOW)
+        check("... and a tagged request answers the same words",
+              tagged is not None and str(tagged.reply) == str(got.reply), repr(tagged))
+        # CONTROLS: the widening is THREE record reads, not "everything".
+        check("an ordinary untagged question still goes to the model",
+              turn("tell me a joke about cats") is None)
+        check("an untagged ACTION still goes to the model",
+              turn("set a timer for 10 minutes") is None
+              and Q.match("set a timer for 10 minutes", now=_NOW).name == "timer_set")
+        check("an untagged CHAT-filing intent still goes to the model",
+              turn("label this chat Work") is None
+              and Q.match("label this chat Work", now=_NOW).name == "chat_tag")
+        check("an untagged FILE/WRITE intent still goes to the model",
+              turn("write a note called Groceries") is None
+              and Q.match("write a note called Groceries", now=_NOW).name
+              == "note_create")
+        check("a deterministic read OUTSIDE the gate keeps the old rule",
+              turn("how many models are installed") is None)
+        check("a pasted project question keeps its old rule (a tag was given)",
+              Q.answer_turn({"messages": [{"role": "user",
+                                           "content": "what should I work on next?",
+                                           "provenance": "pasted"}]},
+                            sched=_AnswerSched(), now=_NOW) is None)
+        check("a private chat keeps its own stricter rule",
+              turn("what should I work on next?", private=True) is None)
+        check("the old reader is untouched: untagged is still NOT the owner's own",
+              Q.newest_own_words({"messages": [{"role": "user",
+                                                "content": "what am I working on?"}]})
+              is None)
+        check("... while a tagged one still is",
+              Q.newest_own_words({"messages": [
+                  {"role": "user", "content": "what am I working on?",
+                   "provenance": "typed"}]}) == "what am I working on?")
+    finally:
+        _restore_env("JARVIS_PROJECTS_DB", old)
+        _restore_env("OPENJARVIS_CONFIG_DIR", old_config)
+        P._reset_for_tests()
 
 
 def main():

@@ -184,6 +184,48 @@ KINDS = ("coding", "life")
 BENCH_KINDS = ("number", "command")
 BETTER = ("higher", "lower")
 
+#: The plan store (2026-11-19, PM1): milestones, work items, typed links and
+#: an append-only event log, kept in this SAME projects.db. It is additive -
+#: four `CREATE TABLE IF NOT EXISTS` and seven nullable columns added through
+#: the guarded ALTER block below - and it replaces nothing this file already
+#: keeps (docs/JARVIS-API.md section 88.7). Nothing in this step adds a route,
+#: an app screen, a card or a model tool: the three deterministic answers in
+#: jarvis_quick.py are its first readers.
+MAX_MILESTONE_TITLE = 120
+MAX_WORK_TITLE = 120
+MAX_WORK_DETAIL = 2000
+MAX_PRIORITY = 9
+MAX_EVENT_SUBJECT = 80
+#: The states one work item may be in. A step is READY when it has not been
+#: started or finished and nothing open blocks it (`ready_next()`).
+WORK_STATUSES = ("backlog", "ready", "in_progress", "done", "cancelled")
+READY_STATUSES = ("backlog", "ready")
+#: A work item in one of these states is never started again, and a blocker in
+#: one of them no longer blocks (it is met, not waiting).
+CLOSED_STATUSES = ("done", "cancelled")
+#: A project in one of these states offers no ready work.
+CLOSED_PROJECT_STATUSES = ("done", "archived")
+MILESTONE_STATUSES = ("planned", "active", "done")
+PROJECT_STATUSES = ("planned", "active", "paused", "done", "archived")
+#: The typed links. `blocks` and `parent_child` order work, so they get the
+#: DFS circle guard; `related` and `discovered_from` record a link only.
+EDGE_KINDS = ("blocks", "parent_child", "related", "discovered_from")
+ORDERING_EDGES = ("blocks", "parent_child")
+#: The project columns the plan adds, in the order the ALTER block adds them.
+#: All nullable on purpose: a NOT NULL column with no default is an ALTER that
+#: fails, and a failed ALTER is an availability failure (docs/JARVIS-API.md
+#: 88.7) - the one shape this migration must never take.
+PLAN_COLUMNS = ("objective", "success_criteria", "status", "target_date",
+                "linked_repo", "linked_note_path", "slug")
+#: The one file the three answers name. There is no second store.
+PLAN_DB = "projects.db"
+#: A plan write's own refusals, in plain words (the tests quote them).
+WORK_NOT_FOUND = "There is no work item with that id."
+SELF_EDGE = "A work item cannot block or contain itself."
+CROSS_PROJECT_EDGE = "A blocking link joins two work items in the same project."
+CYCLE_EDGE = "That link would make a circle of work, so it was not saved."
+EDGE_EXISTS = "That link is already recorded."
+
 #: The card this module raises: turning Shareable ON, and taking an
 #: automatic private mark off a benchmark. The same action "Folders Jarvis
 #: may look in" raises, so the gate needs no new line.
@@ -391,6 +433,60 @@ def _default_work_list(name: str) -> Optional[str]:
         return clean_work_list(name)
     except Exception:
         return None
+
+
+def _clean_date(value) -> Optional[str]:
+    """A day written YYYY-MM-DD, or None. A made-up day is refused, never
+    guessed into one (the plan store has no business inventing a date)."""
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    try:
+        time.strptime(text, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        raise ValueError("a date is a day written YYYY-MM-DD") from None
+    return text
+
+
+def _clean_priority(value) -> Optional[int]:
+    """0 to 9, or None. Lower runs first (`ready_next()` orders by it)."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"a priority is a whole number from 0 to {MAX_PRIORITY}")
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"a priority is a whole number from 0 to {MAX_PRIORITY}") from None
+    if not 0 <= number <= MAX_PRIORITY:
+        raise ValueError(f"a priority is a whole number from 0 to {MAX_PRIORITY}")
+    return number
+
+
+#: The ONE ready-work condition, shared by `ready_next()` and the counts in
+#: `plan_counts()` so the two cannot disagree about what is ready. A work item
+#: is ready when it has not been started or finished, its project is not
+#: closed, and no OPEN `blocks` link points at it.
+_READY_WHERE = (
+    "w.status IN ('backlog', 'ready') "
+    "AND (p.status IS NULL OR p.status NOT IN ('done', 'archived')) "
+    "AND NOT EXISTS (SELECT 1 FROM work_edges e JOIN work_items b ON b.id = e.src "
+    "                WHERE e.kind = 'blocks' AND e.dst = w.id "
+    "                  AND b.status NOT IN ('done', 'cancelled'))")
+
+#: The ONE blocked condition: an open work item with at least one open
+#: `blocks` link pointing at it. Used by the reads that name blockers.
+_BLOCKED_WHERE = (
+    "w.status NOT IN ('done', 'cancelled') "
+    "AND EXISTS (SELECT 1 FROM work_edges e JOIN work_items b ON b.id = e.src "
+    "            WHERE e.kind = 'blocks' AND e.dst = w.id "
+    "              AND b.status NOT IN ('done', 'cancelled'))")
+
+#: How `ready_next()` orders: lower priority first, then the earlier day, then
+#: the one written first. NULLS LAST both ways - an item with no priority or
+#: no date is not "priority zero" and not "due at the epoch".
+_READY_ORDER = ("w.priority IS NULL, w.priority, w.due_date IS NULL, w.due_date, "
+                "w.created, w.id")
 
 
 def _real(path: str) -> str:
@@ -680,7 +776,121 @@ CREATE TABLE IF NOT EXISTS project_facts (
     PRIMARY KEY (project, fact)
 );
 CREATE INDEX IF NOT EXISTS project_facts_by_fact ON project_facts (fact);
+-- The plan store (2026-11-19, PM1; docs/JARVIS-API.md section 88.7). Four NEW
+-- tables appended after the five this file already had: a milestone a project
+-- works towards, a work item that can be started, a typed link between two
+-- items, and an append-only log of what changed. Additive only: every table is
+-- `CREATE TABLE IF NOT EXISTS`, no existing table is rebuilt, no column of an
+-- existing table is dropped or renamed, and no foreign key is declared (this
+-- file keeps that shape everywhere - `PRAGMA foreign_keys` is never turned on
+-- here). Ids are 32-hex, exactly like a project's or a benchmark's.
+CREATE TABLE IF NOT EXISTS milestones (
+    id TEXT PRIMARY KEY,
+    project TEXT NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'planned',
+    due_date TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    created REAL NOT NULL,
+    changed REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS milestones_by_project ON milestones (project, position);
+CREATE TABLE IF NOT EXISTS work_items (
+    id TEXT PRIMARY KEY,
+    project TEXT NOT NULL,
+    milestone TEXT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'backlog',
+    priority INTEGER,
+    due_date TEXT,
+    created REAL NOT NULL,
+    changed REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work_items_by_project ON work_items (project, status, priority);
+CREATE TABLE IF NOT EXISTS work_edges (
+    id TEXT PRIMARY KEY,
+    project TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    src TEXT NOT NULL,
+    dst TEXT NOT NULL,
+    created REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS work_edges_once ON work_edges (kind, src, dst);
+CREATE INDEX IF NOT EXISTS work_edges_by_dst ON work_edges (kind, dst);
+CREATE INDEX IF NOT EXISTS work_edges_by_src ON work_edges (kind, src);
+-- Append-only: an event is only ever INSERTed. The trigger refuses an UPDATE
+-- outright, and this file exposes no way to rewrite or remove one event. A
+-- project's own delete takes its history with it, exactly as it already takes
+-- its benchmarks (2026-11-19). Ids and transitions only - a title, a name or a
+-- number is never copied into this table.
+CREATE TABLE IF NOT EXISTS project_events (
+    id TEXT PRIMARY KEY,
+    project TEXT NOT NULL,
+    at REAL NOT NULL,
+    kind TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS project_events_by_project ON project_events (project, at);
+CREATE TRIGGER IF NOT EXISTS project_events_append_only
+BEFORE UPDATE ON project_events
+BEGIN
+    SELECT RAISE(ABORT, 'project_events is append-only');
+END;
 """
+
+#: Every table, index and trigger `_db()` ensures. Kept beside `_SCHEMA` so
+#: `_missing_schema()` can answer "would opening this file change it at all?"
+#: BEFORE one schema statement runs. That answer is what decides whether the
+#: pre-migration backup is written, so an up-to-date database never grows a
+#: trail of backup copies.
+_SCHEMA_TABLES = ("projects", "benchmarks", "results", "balance_axes",
+                  "project_facts", "milestones", "work_items", "work_edges",
+                  "project_events")
+_SCHEMA_INDEXES = ("results_by_bench", "results_by_at", "bench_by_project",
+                   "project_facts_by_fact", "milestones_by_project",
+                   "work_items_by_project", "work_edges_once", "work_edges_by_dst",
+                   "work_edges_by_src", "project_events_by_project",
+                   "projects_by_app")
+_SCHEMA_TRIGGERS = ("project_events_append_only",)
+#: The columns `_db()` adds to the two tables an older build could have made.
+_SCHEMA_OLD_COLUMNS = {
+    "projects": ("app", "auto_route_cloud") + PLAN_COLUMNS,
+    "benchmarks": ("auto_cleared",),
+}
+
+
+def _migration_backup(source, path: Path) -> None:
+    """Copy the open database to `path` through SQLite's own backup API.
+
+    Module-level on purpose: a test can replace it with one that fails, and
+    prove that the migration then does not run at all."""
+    dest = sqlite3.connect(str(path))
+    try:
+        source.backup(dest)
+    finally:
+        dest.close()
+
+
+def _missing_schema(c: sqlite3.Connection) -> list:
+    """What this file does not have yet, asked WITHOUT changing anything.
+
+    An empty list means the migration has nothing to do - so no backup is
+    written and no earlier copy is left behind. It reads `sqlite_master` and
+    `PRAGMA table_info` only: no CREATE, no ALTER, no write."""
+    have = {r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master "
+        "WHERE type IN ('table', 'index', 'trigger')").fetchall()}
+    missing = [name for name in _SCHEMA_TABLES + _SCHEMA_INDEXES + _SCHEMA_TRIGGERS
+               if name not in have]
+    for table, columns in _SCHEMA_OLD_COLUMNS.items():
+        if table not in have:
+            continue
+        present = {r[1] for r in c.execute(f"PRAGMA table_info({table})").fetchall()}
+        missing.extend(f"{table}.{column}" for column in columns
+                       if column not in present)
+    return missing
 
 
 def _new_id() -> str:
@@ -743,6 +953,20 @@ class Projects:
         c = jarvis_sqlite.connect(self.path, timeout=30)
         c.row_factory = sqlite3.Row
         if not self._ready:
+            # THE PRE-MIGRATION BACKUP COMES FIRST (2026-11-19, ruling 5.2).
+            # The guarded schema below is additive and was proved on a copy of
+            # the owner's real file, but "additive" is not the same promise as
+            # "a copy of the file before this program touched it exists". So an
+            # EXISTING database that really is about to gain something gets one
+            # `projects.db.before-migrate-<stamp>` copy through SQLite's own
+            # backup API, before the first CREATE/ALTER. An up-to-date database
+            # needs nothing, so it writes nothing; a brand-new file has no rows
+            # to protect, so it writes nothing either. A backup that cannot be
+            # written REFUSES the migration (it raises here, before any schema
+            # statement) rather than proceeding unprotected.
+            missing = _missing_schema(c)
+            if missing:
+                self._backup_before_migration(c, missing)
             c.executescript(_SCHEMA)
             cols = {r[1] for r in c.execute("PRAGMA table_info(benchmarks)").fetchall()}
             if "auto_cleared" not in cols:
@@ -760,6 +984,17 @@ class Projects:
                 # loosening already on.
                 c.execute("ALTER TABLE projects ADD COLUMN auto_route_cloud "
                           "INTEGER NOT NULL DEFAULT 0")
+            # The plan store's project fields (2026-11-19, PM1). Each one is
+            # NULLABLE, and that is the rule this migration keeps rather than a
+            # style: `ALTER TABLE ... ADD COLUMN x TEXT NOT NULL` with no
+            # default raises OperationalError and changes nothing, so an older
+            # projects.db would fail to open rather than gain a column. A
+            # nullable column always applies. If an ALTER does raise, the
+            # exception leaves `_ready` False and every later call retries -
+            # "cannot read projects" is the honest answer, never a wrong one.
+            for column in PLAN_COLUMNS:
+                if column not in pcols:
+                    c.execute(f"ALTER TABLE projects ADD COLUMN {column} TEXT")
             # One project per app folder. After the column exists, so an old
             # file gets the column first.
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS projects_by_app ON projects (app) "
@@ -767,6 +1002,44 @@ class Projects:
             c.commit()
             self._ready = True
         return c
+
+    def _backup_before_migration(self, c, missing: list) -> Optional[Path]:
+        """Copy the database to `projects.db.before-migrate-<stamp>` before the
+        first schema statement (2026-11-19, ruling 5.2).
+
+        Called only when `_missing_schema()` said the file would really change.
+        A brand-new file (no tables at all) has nothing to protect and gets no
+        copy. A copy that cannot be written raises `sqlite3.OperationalError`
+        BEFORE anything is altered, so the migration refuses rather than
+        running without a way back; any half-written copy is removed first.
+        The name never ends in `.db`, so `jarvis_backup.py`'s list of source
+        databases is unchanged and the file is not mistaken for a store."""
+        try:
+            tables = int(c.execute("SELECT COUNT(*) FROM sqlite_master "
+                                   "WHERE type = 'table'").fetchone()[0])
+        except sqlite3.Error:
+            tables = 0
+        if not tables:
+            return None
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self.clock()))
+        backup = self.path.with_name(self.path.name + ".before-migrate-" + stamp)
+        n = 1
+        while backup.exists():
+            n += 1
+            backup = self.path.with_name(self.path.name + ".before-migrate-"
+                                         + stamp + "-" + str(n))
+        try:
+            _migration_backup(c, backup)
+        except Exception as exc:           # noqa: BLE001 - refuse, do not proceed
+            try:
+                backup.unlink()
+            except OSError:
+                pass
+            raise sqlite3.OperationalError(
+                f"cannot write the pre-migration backup {backup.name} "
+                f"({type(exc).__name__}: {exc}); nothing was changed") from exc
+        _audit("projects.migrate.backup", {"missing": len(missing)})
+        return backup
 
     def exists(self) -> bool:
         """Is there a projects.db at all? The quick command asks this first,
@@ -1210,6 +1483,15 @@ class Projects:
             # the facts are the owner's, and deleting a project never forgets
             # one - only the memory module's own Forget does that.
             c.execute("DELETE FROM project_facts WHERE project = ?", (pid,))
+            # The PLAN rows go with the project too (2026-11-19, PM1). The
+            # event log is the project's own history, so it leaves with the
+            # project exactly as its benchmarks do: the table stays append-only
+            # (no per-event edit or delete exists), and nothing is left behind
+            # for `project_doctor()` to report as an orphan.
+            c.execute("DELETE FROM work_edges WHERE project = ?", (pid,))
+            c.execute("DELETE FROM work_items WHERE project = ?", (pid,))
+            c.execute("DELETE FROM milestones WHERE project = ?", (pid,))
+            c.execute("DELETE FROM project_events WHERE project = ?", (pid,))
             c.execute("DELETE FROM projects WHERE id = ?", (pid,))
             self._drop_axes(c, "bench", benches)
         # The row is gone as of that commit. If it was the ACTIVE project the
@@ -1582,6 +1864,666 @@ class Projects:
                  "sensitive": marks(r["name"], r["unit"], r["owner_sensitive"],
                                     r["auto_cleared"])["sensitive"]}
                 for r in rows]
+
+    # ---- the plan store: milestones, work items, links and events (2026-11-19) ----
+    # Additive to THIS projects.db (docs/JARVIS-API.md section 88.7). These are
+    # the store's own reads and writes; no route, no card and no model tool
+    # calls them in this step. A write here is the owner's own row - like a
+    # benchmark or a note - and it appends ONE event in the same transaction.
+    # Nothing here changes a column this store had before 2026-11-19.
+
+    def _work_row(self, c, item_id: str):
+        """One work item row, or KeyError. A raw string is never put in SQL."""
+        if not isinstance(item_id, str) or not _ID.fullmatch(item_id):
+            raise KeyError(item_id)
+        r = c.execute("SELECT * FROM work_items WHERE id = ?", (item_id,)).fetchone()
+        if r is None:
+            raise KeyError(item_id)
+        return r
+
+    def _milestone_row(self, c, milestone_id: str):
+        if not isinstance(milestone_id, str) or not _ID.fullmatch(milestone_id):
+            raise KeyError(milestone_id)
+        r = c.execute("SELECT * FROM milestones WHERE id = ?", (milestone_id,)).fetchone()
+        if r is None:
+            raise KeyError(milestone_id)
+        return r
+
+    def _direct_open_blockers(self, c, item_id: str) -> list:
+        """The OPEN `blocks` links pointing at one item: the direct blockers,
+        not the whole chain (that is `blocking_chain()`)."""
+        rows = c.execute(
+            "SELECT e.src AS id, b.title AS title, b.status AS status "
+            "FROM work_edges e JOIN work_items b ON b.id = e.src "
+            "WHERE e.kind = 'blocks' AND e.dst = ? "
+            "AND b.status NOT IN ('done', 'cancelled') ORDER BY e.created, e.id",
+            (item_id,)).fetchall()
+        return [{"id": r["id"], "title": r["title"], "status": r["status"]} for r in rows]
+
+    def _work_view(self, c, r) -> dict:
+        project = c.execute("SELECT name, status FROM projects WHERE id = ?",
+                            (r["project"],)).fetchone()
+        blockers = self._direct_open_blockers(c, r["id"])
+        project_open = bool(project is not None
+                            and (project["status"] is None
+                                 or project["status"] not in CLOSED_PROJECT_STATUSES))
+        return {
+            "id": r["id"], "project": r["project"],
+            "project_name": project["name"] if project is not None else "",
+            "milestone": r["milestone"], "title": r["title"], "detail": r["detail"],
+            "status": r["status"], "priority": r["priority"], "due_date": r["due_date"],
+            "created": r["created"], "changed": r["changed"],
+            "blocked_by": blockers,
+            "ready": bool(r["status"] in READY_STATUSES and not blockers and project_open),
+        }
+
+    def _milestone_view(self, r) -> dict:
+        return {"id": r["id"], "project": r["project"], "title": r["title"],
+                "status": r["status"], "due_date": r["due_date"],
+                "position": r["position"], "created": r["created"],
+                "changed": r["changed"]}
+
+    def _event(self, c, project_id: str, kind: str, subject: str,
+               detail: Optional[dict] = None) -> None:
+        """Append ONE event row. The table is append-only: there is no update
+        and no delete for it here, and a trigger refuses an UPDATE outright.
+        Ids and transitions only - a title, a name or a number is never
+        copied here (the same rule this file's audit log keeps)."""
+        c.execute("INSERT INTO project_events (id, project, at, kind, subject, detail) "
+                  "VALUES (?,?,?,?,?,?)",
+                  (_new_id(), project_id, self.clock(),
+                   kind, str(subject)[:MAX_EVENT_SUBJECT],
+                   json.dumps(detail or {}, sort_keys=True)))
+
+    # ---- writing a plan (the store's own door; no route calls it yet) ----
+
+    def add_milestone(self, project_id: str, body: dict) -> dict:
+        """A milestone a project works towards. No card: it is the owner's own
+        row, like a project note. Nothing of the project's current columns
+        changes except `changed`."""
+        if not isinstance(body, dict):
+            raise ValueError("a milestone needs a title, and may have a status and "
+                             "a due date")
+        title = _one_line(body.get("title"), MAX_MILESTONE_TITLE, "a milestone's title",
+                          required=True)
+        status = str(body.get("status") or "planned")
+        if status not in MILESTONE_STATUSES:
+            raise ValueError("a milestone is " + ", ".join(MILESTONE_STATUSES))
+        due_date = _clean_date(body.get("due_date"))
+        position = body.get("position")
+        if position in (None, ""):
+            position = None
+        else:
+            try:
+                position = int(position)
+            except (TypeError, ValueError):
+                raise ValueError("a milestone's position is a whole number") from None
+            if position < 0:
+                raise ValueError("a milestone's position is a whole number")
+        now = self.clock()
+        mid = _new_id()
+        with self._lock, self._db() as c:
+            self._project_row(c, project_id)
+            if position is None:
+                position = int(c.execute(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM milestones WHERE project = ?",
+                    (project_id,)).fetchone()[0])
+            c.execute("INSERT INTO milestones (id, project, title, status, due_date, position, "
+                      "created, changed) VALUES (?,?,?,?,?,?,?,?)",
+                      (mid, project_id, title, status, due_date, position, now, now))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?", (now, project_id))
+            self._event(c, project_id, "milestone_added", mid, {"status": status})
+            view = self._milestone_view(self._milestone_row(c, mid))
+        _audit("projects.milestone.add", {"project": project_id, "id": mid,
+                                          "status": status})
+        return view
+
+    def add_work_item(self, project_id: str, body: dict) -> dict:
+        """One step that can be started. No card: the owner's own row."""
+        if not isinstance(body, dict):
+            raise ValueError("a work item needs a title, and may have a status, a "
+                             "priority and a due date")
+        title = _one_line(body.get("title"), MAX_WORK_TITLE, "a work item's title",
+                          required=True)
+        detail = _text(body.get("detail"), MAX_WORK_DETAIL, "a work item's detail")
+        status = str(body.get("status") or "backlog")
+        if status not in WORK_STATUSES:
+            raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
+        priority = _clean_priority(body.get("priority"))
+        due_date = _clean_date(body.get("due_date"))
+        milestone = body.get("milestone")
+        now = self.clock()
+        wid = _new_id()
+        with self._lock, self._db() as c:
+            self._project_row(c, project_id)
+            if milestone in (None, ""):
+                milestone = None
+            else:
+                milestone = str(milestone)
+                if not c.execute("SELECT 1 FROM milestones WHERE id = ? AND project = ?",
+                                 (milestone, project_id)).fetchone():
+                    raise ValueError("that milestone is not in this project")
+            c.execute("INSERT INTO work_items (id, project, milestone, title, detail, status, "
+                      "priority, due_date, created, changed) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (wid, project_id, milestone, title, detail, status, priority,
+                       due_date, now, now))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?", (now, project_id))
+            self._event(c, project_id, "work_item_added", wid, {"status": status})
+            view = self._work_view(c, self._work_row(c, wid))
+        _audit("projects.work.add", {"project": project_id, "id": wid, "status": status})
+        return view
+
+    def set_work_item_status(self, item_id: str, status: str) -> dict:
+        """Move one item between the five states. No card and no second write:
+        the status change is one row plus one event. Returns the item."""
+        status = str(status or "")
+        if status not in WORK_STATUSES:
+            raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
+        now = self.clock()
+        with self._lock, self._db() as c:
+            row = self._work_row(c, item_id)
+            old = row["status"]
+            if old != status:
+                c.execute("UPDATE work_items SET status = ?, changed = ? WHERE id = ?",
+                          (status, now, item_id))
+                c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                          (now, row["project"]))
+                self._event(c, row["project"], "work_item_status", item_id,
+                            {"from": old, "to": status})
+            view = self._work_view(c, self._work_row(c, item_id))
+        _audit("projects.work.status", {"id": item_id, "status": status})
+        return view
+
+    def set_plan_fields(self, project_id: str, body: dict) -> dict:
+        """The plan's own project fields: objective, success criteria, status,
+        target date and the two links. No card and no route in this step; the
+        guarded ALTER above is what makes them exist on an older file. Only
+        the fields actually sent change, and `slug` is never a key (A2)."""
+        if not isinstance(body, dict):
+            raise ValueError('need {"objective": ..., "status": ...}')
+        allowed = ("objective", "success_criteria", "status", "target_date",
+                   "linked_repo", "linked_note_path")
+        unknown = sorted(set(body) - set(allowed))
+        if unknown:
+            raise ValueError("a plan field is " + ", ".join(allowed))
+        sets = {}
+        if "objective" in body:
+            sets["objective"] = _text(body.get("objective"), MAX_WORK_DETAIL,
+                                      "the objective")
+        if "success_criteria" in body:
+            sets["success_criteria"] = _text(body.get("success_criteria"), MAX_WORK_DETAIL,
+                                             "the success criteria")
+        if "status" in body:
+            status = str(body.get("status") or "planned")
+            if status not in PROJECT_STATUSES:
+                raise ValueError("a project's plan status is "
+                                 + ", ".join(PROJECT_STATUSES))
+            sets["status"] = status
+        if "target_date" in body:
+            sets["target_date"] = _clean_date(body.get("target_date"))
+        if "linked_repo" in body:
+            sets["linked_repo"] = _one_line(body.get("linked_repo"), 300,
+                                            "the linked repository")
+        if "linked_note_path" in body:
+            sets["linked_note_path"] = _one_line(body.get("linked_note_path"), 500,
+                                                "the linked note's path")
+        now = self.clock()
+        with self._lock, self._db() as c:
+            self._project_row(c, project_id)
+            if sets:
+                columns = ", ".join(f"{name} = ?" for name in sets)
+                c.execute(f"UPDATE projects SET {columns}, changed = ? WHERE id = ?",
+                          tuple(sets.values()) + (now, project_id))
+                self._event(c, project_id, "project_plan_changed", project_id,
+                            {"fields": sorted(sets)})
+        _audit("projects.plan.update", {"project": project_id, "fields": len(sets)})
+        return self.plan_state(project_id)
+
+    def add_edge(self, kind: str, src: str, dst: str) -> dict:
+        """A typed link `src -> kind -> dst`. For the two ordering kinds this
+        runs a DFS first and REFUSES a link that would make a circle - the
+        refusal writes nothing at all (no edge, no event). `blocks` and
+        `parent_child` join two items of one project; `related` and
+        `discovered_from` may cross projects."""
+        kind = str(kind or "")
+        if kind not in EDGE_KINDS:
+            raise ValueError("a link is " + ", ".join(EDGE_KINDS))
+        now = self.clock()
+        with self._lock, self._db() as c:
+            source = self._work_row(c, src)
+            target = self._work_row(c, dst)
+            if src == dst:
+                raise ValueError(SELF_EDGE)
+            if kind in ORDERING_EDGES and source["project"] != target["project"]:
+                raise ValueError(CROSS_PROJECT_EDGE)
+            if c.execute("SELECT 1 FROM work_edges WHERE kind = ? AND src = ? AND dst = ?",
+                         (kind, src, dst)).fetchone():
+                raise OverflowError(EDGE_EXISTS)
+            if kind in ORDERING_EDGES and self._would_cycle(c, kind, src, dst):
+                raise ValueError(CYCLE_EDGE)
+            eid = _new_id()
+            c.execute("INSERT INTO work_edges (id, project, kind, src, dst, created) "
+                      "VALUES (?,?,?,?,?,?)",
+                      (eid, source["project"], kind, src, dst, now))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                      (now, source["project"]))
+            self._event(c, source["project"], "edge_added", eid,
+                        {"kind": kind, "src": src, "dst": dst})
+        _audit("projects.edge.add", {"kind": kind, "id": eid})
+        return {"id": eid, "project": source["project"], "kind": kind,
+                "src": src, "dst": dst, "created": now}
+
+    def _would_cycle(self, c, kind: str, src: str, dst: str) -> bool:
+        """Would `src -> dst` close a circle? Walk forward from `dst` along the
+        same kind of link; reaching `src` means yes. Seen nodes are walked
+        once, so a circle already in the rows cannot hang the walk."""
+        if kind not in ORDERING_EDGES:
+            return False
+        seen, stack = {dst}, [dst]
+        while stack:
+            at = stack.pop()
+            for row in c.execute("SELECT dst FROM work_edges WHERE kind = ? AND src = ?",
+                                 (kind, at)).fetchall():
+                nxt = row["dst"]
+                if nxt == src:
+                    return True
+                if nxt in seen:
+                    continue
+                seen.add(nxt)
+                stack.append(nxt)
+        return False
+
+    def would_cycle(self, kind: str, src: str, dst: str) -> bool:
+        """Read-only: would this link be refused as a circle?"""
+        if kind not in EDGE_KINDS:
+            raise ValueError("a link is " + ", ".join(EDGE_KINDS))
+        if not self.exists():
+            return False
+        with self._lock, self._db() as c:
+            return self._would_cycle(c, kind, src, dst)
+
+    # ---- reading a plan (the three answers' only sources) ----
+
+    def work_items(self, project_id: Optional[str] = None,
+                   status: Optional[str] = None) -> list:
+        """Every work item, oldest first, as `_work_view` shapes. Read-only."""
+        if not self.exists():
+            return []
+        sql = ("SELECT w.* FROM work_items w JOIN projects p ON p.id = w.project "
+               "WHERE 1 = 1")
+        args = []
+        if project_id is not None:
+            if not isinstance(project_id, str) or not _ID.fullmatch(project_id):
+                raise KeyError(project_id)
+            sql += " AND w.project = ?"
+            args.append(project_id)
+        if status is not None:
+            if status not in WORK_STATUSES:
+                raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
+            sql += " AND w.status = ?"
+            args.append(status)
+        sql += " ORDER BY w.created, w.id"
+        with self._lock, self._db() as c:
+            return [self._work_view(c, r) for r in c.execute(sql, args).fetchall()]
+
+    def milestones(self, project_id: Optional[str] = None) -> list:
+        if not self.exists():
+            return []
+        sql = "SELECT * FROM milestones"
+        args = []
+        if project_id is not None:
+            if not isinstance(project_id, str) or not _ID.fullmatch(project_id):
+                raise KeyError(project_id)
+            sql += " WHERE project = ?"
+            args.append(project_id)
+        sql += " ORDER BY position, created, id"
+        with self._lock, self._db() as c:
+            return [self._milestone_view(r) for r in c.execute(sql, args).fetchall()]
+
+    def events(self, project_id: Optional[str] = None, limit: int = 50) -> list:
+        """The append-only log, oldest first. Read-only; there is no setter."""
+        if not self.exists():
+            return []
+        sql = "SELECT * FROM project_events"
+        args = []
+        if project_id is not None:
+            if not isinstance(project_id, str) or not _ID.fullmatch(project_id):
+                raise KeyError(project_id)
+            sql += " WHERE project = ?"
+            args.append(project_id)
+        sql += " ORDER BY rowid LIMIT ?"
+        args.append(max(1, int(limit)))
+        with self._lock, self._db() as c:
+            rows = c.execute(sql, args).fetchall()
+        return [{"id": r["id"], "project": r["project"], "at": r["at"],
+                 "kind": r["kind"], "subject": r["subject"],
+                 "detail": json.loads(r["detail"] or "{}")} for r in rows]
+
+    def edge_count(self, *, project_id: Optional[str] = None,
+                   kind: Optional[str] = None) -> int:
+        """How many typed links are recorded (0 means none at all)."""
+        if not self.exists():
+            return 0
+        sql = "SELECT COUNT(*) FROM work_edges WHERE 1 = 1"
+        args = []
+        if project_id is not None:
+            if not isinstance(project_id, str) or not _ID.fullmatch(project_id):
+                raise KeyError(project_id)
+            sql += " AND project = ?"
+            args.append(project_id)
+        if kind is not None:
+            if kind not in EDGE_KINDS:
+                raise ValueError("a link is " + ", ".join(EDGE_KINDS))
+            sql += " AND kind = ?"
+            args.append(kind)
+        with self._lock, self._db() as c:
+            return int(c.execute(sql, args).fetchone()[0])
+
+    def ready_next(self, project_id: Optional[str] = None, limit: int = 20) -> list:
+        """The work items that can be started now: not started or finished,
+        their project not closed, and nothing open blocking them. Ordered by
+        priority (lower first), then due date (earlier first), then the order
+        they were written; NULLS LAST both ways. Read-only."""
+        if not self.exists():
+            return []
+        if project_id is not None and (not isinstance(project_id, str)
+                                       or not _ID.fullmatch(project_id)):
+            raise KeyError(project_id)
+        sql = ("SELECT w.* FROM work_items w JOIN projects p ON p.id = w.project "
+               f"WHERE {_READY_WHERE}")
+        args = []
+        if project_id is not None:
+            sql += " AND w.project = ?"
+            args.append(project_id)
+        sql += f" ORDER BY {_READY_ORDER} LIMIT ?"
+        args.append(max(1, int(limit)))
+        with self._lock, self._db() as c:
+            rows = c.execute(sql, args).fetchall()
+            return [self._work_view(c, r) for r in rows]
+
+    def blocked_items(self, project_id: Optional[str] = None) -> list:
+        """Every OPEN work item with at least one open blocker, each with the
+        blockers named. Read-only: nothing is ticked or changed."""
+        if not self.exists():
+            return []
+        if project_id is not None and (not isinstance(project_id, str)
+                                       or not _ID.fullmatch(project_id)):
+            raise KeyError(project_id)
+        sql = ("SELECT w.* FROM work_items w JOIN projects p ON p.id = w.project "
+               f"WHERE {_BLOCKED_WHERE}")
+        args = []
+        if project_id is not None:
+            sql += " AND w.project = ?"
+            args.append(project_id)
+        sql += (" ORDER BY w.priority IS NULL, w.priority, w.due_date IS NULL, "
+                "w.due_date, w.created, w.id")
+        with self._lock, self._db() as c:
+            return [{"item": self._work_view(c, r),
+                     "blockers": self._direct_open_blockers(c, r["id"])}
+                    for r in c.execute(sql, args).fetchall()]
+
+    def blocking_chain(self, item_id: str) -> dict:
+        """The OPEN items that block one work item, directly or through other
+        `blocks` links. A walk that visits each item once, so a circle already
+        in the rows is walked once, never forever.
+
+        Returns {"item": item view, "blockers": [{id, title, status, depth}],
+        "edges": N}. `edges` is how many `blocks` links point at the item AT
+        ALL - 0 means no blocker has been recorded, which is a different
+        answer from "every recorded blocker is done" (blockers is then empty
+        but `edges` is not)."""
+        with self._lock, self._db() as c:
+            item = self._work_view(c, self._work_row(c, item_id))
+            edges = int(c.execute("SELECT COUNT(*) FROM work_edges "
+                                  "WHERE kind = 'blocks' AND dst = ?",
+                                  (item_id,)).fetchone()[0])
+            blockers, seen = [], {item_id}
+            queue = [(item_id, 0)]
+            while queue:
+                current, depth = queue.pop(0)
+                for src in self._direct_open_blockers(c, current):
+                    if src["id"] in seen:
+                        continue
+                    seen.add(src["id"])
+                    blockers.append({"id": src["id"], "title": src["title"],
+                                     "status": src["status"], "depth": depth + 1})
+                    queue.append((src["id"], depth + 1))
+        blockers.sort(key=lambda b: (b["depth"], b["id"]))
+        return {"item": item, "blockers": blockers, "edges": edges}
+
+    def plan_counts(self) -> dict:
+        """project id -> {"milestones", "work_items", "ready", "blocked",
+        "edges", "events"} counts, from one read. `ready` uses the SAME
+        condition `ready_next()` does (`_READY_WHERE`). Projects with no plan
+        rows are absent. Read-only; nothing is created."""
+        if not self.exists():
+            return {}
+        with self._lock, self._db() as c:
+            counts = {}
+
+            def bump(project_id):
+                return counts.setdefault(str(project_id),
+                                         {"milestones": 0, "work_items": 0, "ready": 0,
+                                          "blocked": 0, "edges": 0, "events": 0})
+
+            for table, key in (("milestones", "milestones"), ("work_items", "work_items"),
+                               ("work_edges", "edges"), ("project_events", "events")):
+                for row in c.execute(f"SELECT project, COUNT(*) AS n FROM {table} "
+                                     "GROUP BY project").fetchall():
+                    bump(row["project"])[key] = int(row["n"])
+            for row in c.execute("SELECT w.project AS project, COUNT(*) AS n "
+                                 "FROM work_items w JOIN projects p ON p.id = w.project "
+                                 f"WHERE {_READY_WHERE} GROUP BY w.project").fetchall():
+                bump(row["project"])["ready"] = int(row["n"])
+            for row in c.execute("SELECT w.project AS project, COUNT(*) AS n "
+                                 "FROM work_items w JOIN projects p ON p.id = w.project "
+                                 f"WHERE {_BLOCKED_WHERE} GROUP BY w.project").fetchall():
+                bump(row["project"])["blocked"] = int(row["n"])
+            return counts
+
+    def plan_state(self, project_id: str) -> dict:
+        """One project's appended plan fields plus its plan counts, from one
+        read. The route views are deliberately NOT changed by this PR: the two
+        apps' frozen contract keeps its exact keys."""
+        with self._lock, self._db() as c:
+            r = self._project_row(c, project_id)
+            values = {column: (r[column] if column in r.keys() else None)
+                      for column in PLAN_COLUMNS}
+            values.update({"id": r["id"], "name": r["name"]})
+            values.update(self.plan_counts().get(project_id)
+                          or {"milestones": 0, "work_items": 0, "ready": 0,
+                              "blocked": 0, "edges": 0, "events": 0})
+            return values
+
+    def project_next(self, limit: int = 3, *, sched=None,
+                     project_id: Optional[str] = None) -> dict:
+        """THE one "what should I work on next" answer, unioning the sources
+        that already hold next-work so chat does not grow a fourth:
+          * this store's ready work items (priority, then due date);
+          * every active goal's next open step (jarvis_goals, read only);
+          * each project's first open work-list item (the one scheduler).
+        With `project_id`, only that project's own sources are read (a goal
+        has no project link, so goals are then not a source).
+
+        Returns {"items": [{"kind", "project_id", "project", "text", "by",
+        "priority", ...}], "sources": {"ready": N, "goals": N|None,
+        "work_lists": N|None}}. A None source means it could not be read, and
+        the answer says so rather than claiming it is empty. Nothing is
+        created: a goals.db that does not exist yet is not opened."""
+        limit = max(1, int(limit))
+        if project_id is not None and (not isinstance(project_id, str)
+                                       or not _ID.fullmatch(project_id)):
+            raise KeyError(project_id)
+        items = []
+        ready = self.ready_next(project_id=project_id, limit=1000) \
+            if self.exists() else []
+        for row in ready:
+            items.append({"kind": "work_item", "project_id": row["project"],
+                          "project": row["project_name"], "text": row["title"],
+                          "by": row["due_date"] or "", "priority": row["priority"],
+                          "status": row["status"], "id": row["id"]})
+        sources = {"ready": len(ready), "goals": None, "work_lists": None,
+                   "scope": project_id or ""}
+        # ---- the goals store: an active goal's next open step ----
+        try:
+            import jarvis_goals as G
+            goal_count = 0
+            if G.db_path().is_file():
+                store = G.get()
+                active = [g for g in store.list()
+                          if isinstance(g, dict) and g.get("status") == "active"]
+                goal_count = len(active)
+                if project_id is None:
+                    for goal in active:
+                        step = store.next_open_step(goal.get("id"))
+                        if isinstance(step, dict) and str(step.get("step") or "").strip():
+                            items.append({"kind": "goal", "project_id": "",
+                                          "project": "", "priority": None,
+                                          "text": str(step.get("step")).strip(),
+                                          "by": str(step.get("by") or ""),
+                                          "goal": str(goal.get("text") or ""),
+                                          "status": "active"})
+            sources["goals"] = goal_count
+        except Exception:                       # noqa: BLE001 - unreadable, said so
+            sources["goals"] = None
+        # ---- the one scheduler: each project's first open work-list item ----
+        try:
+            todos = sched.todos() if sched is not None else None
+            if todos is not None:
+                lists = {}
+                for project in (self.list() if self.exists() else []):
+                    if project_id is not None and project.get("id") != project_id:
+                        continue
+                    work = project.get("work_list") or {}
+                    if work.get("name"):
+                        lists[project["id"]] = (work["name"], project.get("name") or "")
+                picked = set()
+                for todo in todos:
+                    if not isinstance(todo, dict) or todo.get("kind") != "todo":
+                        continue
+                    if todo.get("state") not in ("active", "paused"):
+                        continue
+                    text = str(todo.get("text") or "").strip()
+                    name = todo.get("list")
+                    if not text:
+                        continue
+                    for pid, (list_name, project_name) in lists.items():
+                        if list_name == name and pid not in picked:
+                            picked.add(pid)
+                            items.append({"kind": "work_list", "project_id": pid,
+                                          "project": project_name, "text": text,
+                                          "by": "", "priority": None,
+                                          "status": ""})
+                            break
+                sources["work_lists"] = len(picked)
+        except Exception:                       # noqa: BLE001 - unreadable, said so
+            sources["work_lists"] = None
+        # ONE answer: no text twice (a ready item and a work-list item the
+        # owner wrote twice is one next thing, not two), ready items first.
+        out, seen = [], set()
+        for item in items:
+            key = (item["project_id"], item["text"].casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+        return {"items": out[:limit], "sources": sources}
+
+    def project_doctor(self) -> dict:
+        """Contradictory plan rows, REPORTED and never fixed. Read-only: no
+        row is repaired, no event is written. Returns {"ok", "problems",
+        "count"}; each problem names a kind and the ids involved. It checks
+        the things a row can say that cannot all be true: a row whose project
+        is gone, a link to a missing item, a link across projects, a link from
+        an item or project to itself, a closed item still blocked by an open
+        one, an unknown status or link kind, and a circle of `blocks` or
+        `parent_child` (a circle means nothing in it can ever be ready)."""
+        if not self.exists():
+            return {"ok": True, "problems": [], "count": 0}
+        problems = []
+
+        def problem(kind, **detail):
+            problems.append(dict({"kind": kind}, **detail))
+
+        with self._lock, self._db() as c:
+            project_ids = {r[0] for r in c.execute("SELECT id FROM projects").fetchall()}
+            item_ids = {r[0] for r in c.execute("SELECT id FROM work_items").fetchall()}
+            for table in ("milestones", "work_items", "work_edges", "project_events"):
+                for row in c.execute(f"SELECT id, project FROM {table}").fetchall():
+                    if row["project"] not in project_ids:
+                        problem("orphan-row", table=table, id=row["id"],
+                                project=row["project"])
+            for row in c.execute("SELECT id, status FROM milestones").fetchall():
+                if row["status"] not in MILESTONE_STATUSES:
+                    problem("unknown-milestone-status", id=row["id"],
+                            status=row["status"])
+            for row in c.execute("SELECT id, status FROM work_items").fetchall():
+                if row["status"] not in WORK_STATUSES:
+                    problem("unknown-work-status", id=row["id"], status=row["status"])
+            for row in c.execute("SELECT id, status FROM projects "
+                                 "WHERE status IS NOT NULL").fetchall():
+                if row["status"] not in PROJECT_STATUSES:
+                    problem("unknown-project-status", id=row["id"], status=row["status"])
+            for row in c.execute("SELECT id, project, kind, src, dst "
+                                 "FROM work_edges").fetchall():
+                if row["kind"] not in EDGE_KINDS:
+                    problem("unknown-edge-kind", id=row["id"], edge_kind=row["kind"])
+                if row["src"] == row["dst"]:
+                    problem("self-link", id=row["id"], src=row["src"])
+                if row["src"] not in item_ids or row["dst"] not in item_ids:
+                    problem("orphan-link", id=row["id"], src=row["src"], dst=row["dst"])
+            for row in c.execute(
+                    "SELECT e.id AS id, e.project AS project FROM work_edges e "
+                    "JOIN work_items s ON s.id = e.src "
+                    "JOIN work_items d ON d.id = e.dst "
+                    "WHERE e.project != s.project OR e.project != d.project").fetchall():
+                problem("link-project-mismatch", id=row["id"], project=row["project"])
+            for row in c.execute(
+                    "SELECT DISTINCT e.dst AS id FROM work_edges e "
+                    "JOIN work_items b ON b.id = e.src "
+                    "JOIN work_items w ON w.id = e.dst "
+                    "WHERE e.kind = 'blocks' "
+                    "AND b.status NOT IN ('done', 'cancelled') "
+                    "AND w.status IN ('done', 'cancelled')").fetchall():
+                problem("closed-item-blocked", id=row["id"])
+            for kind in ORDERING_EDGES:
+                for circle in self._find_cycles(c, kind):
+                    problem("link-circle", edge_kind=kind, ids=circle)
+        return {"ok": not problems, "problems": problems, "count": len(problems)}
+
+    def _find_cycles(self, c, kind: str) -> list:
+        """Every circle in one kind's links, each as the ids walked (the
+        closing id appears twice). Iterative, so a long chain cannot hit
+        Python's recursion limit."""
+        edges = {}
+        for row in c.execute("SELECT src, dst FROM work_edges WHERE kind = ?",
+                             (kind,)).fetchall():
+            edges.setdefault(row["src"], []).append(row["dst"])
+        colour, circles = {}, []
+        for start in list(edges) + [n for ns in edges.values() for n in ns]:
+            if colour.get(start):
+                continue
+            colour[start] = 1
+            path = [start]
+            stack = [(start, iter(edges.get(start, ())))]
+            while stack:
+                node, children = stack[-1]
+                advanced = False
+                for child in children:
+                    state = colour.get(child, 0)
+                    if state == 1:
+                        circles.append(path[path.index(child):] + [child])
+                    elif state == 0:
+                        colour[child] = 1
+                        path.append(child)
+                        stack.append((child, iter(edges.get(child, ()))))
+                        advanced = True
+                        break
+                if not advanced:
+                    colour[node] = 2
+                    stack.pop()
+                    path.pop()
+        return circles
 
     # ---- the progress side (the heatmap and balance chart; JARVIS-API section 105) ----
     # Read-only for the heatmap and the balance chart, plus the owner's own
