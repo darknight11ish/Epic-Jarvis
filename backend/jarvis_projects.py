@@ -1513,6 +1513,7 @@ class Projects:
         _withdraw_share(pid)
         for bid in benches:
             _withdraw_unmark(bid)
+            _forget_log_state(bid)
         if app:
             try:
                 import jarvis_apps
@@ -1689,6 +1690,9 @@ class Projects:
             c.execute("DELETE FROM benchmarks WHERE id = ?", (bid,))
             self._drop_axes(c, "bench", [bid])
         _withdraw_unmark(bid)
+        # A card waiting to write into it must never write into a benchmark
+        # that is gone (nor into a new one the id could not name twice).
+        _forget_log_state(bid)
         _audit("projects.benchmark.delete", {"project": pid, "id": bid})
         return True
 
@@ -1770,6 +1774,22 @@ class Projects:
             rows = c.execute("SELECT fact, created FROM project_facts WHERE project = ? "
                              "ORDER BY created, fact", (pid,)).fetchall()
         return [{"fact": int(r["fact"]), "created": r["created"]} for r in rows]
+
+    def fact_labels(self, pid: str) -> dict:
+        """The IDS of the facts this project labels, and the ids OTHER
+        projects label: {"own": [...], "others": [...]}.
+
+        The labels only, never a fact's words - the same rule `facts()` keeps.
+        A project-scoped chat uses this to keep one project's facts out of
+        another project's turn (`jarvis_hud.py` asks, `jarvis_quick.py` says
+        what to keep) and to let this project's own labelled facts in."""
+        own = [f["fact"] for f in self.facts(pid)]
+        if not self.exists():
+            return {"own": own, "others": []}
+        with self._lock, self._db() as c:
+            rows = c.execute("SELECT DISTINCT fact FROM project_facts "
+                             "WHERE project != ?", (pid,)).fetchall()
+        return {"own": own, "others": [int(r["fact"]) for r in rows]}
 
     def label_fact(self, pid: str, fact) -> dict:
         """Label ONE of the owner's own remembered facts with this project.
@@ -2932,6 +2952,37 @@ def quick_match(text, store: Optional[Projects] = None) -> Optional[dict]:
     return dict(parsed, **got)
 
 
+def quick_match_project(text, pid: str, *, store: Optional[Projects] = None,
+                        now: Optional[float] = None) -> Optional[dict]:
+    """`quick_match`, restricted to ONE project's number benchmarks.
+
+    For a chat that belongs to a project (2026-11-19): the same sentences
+    ("I ran 5 km", "log 5 km run") are matched only against THAT project's
+    own benchmarks, so one project's words can never land in another
+    project's numbers by accident. None when the sentence is not that shape,
+    the project is gone, or nothing in it fits."""
+    parsed = parse_log(text)
+    if parsed is None:
+        return None
+    try:
+        store = store or get()
+        project = store.get(pid)
+    except Exception:
+        return None
+    benches = []
+    for b in (project.get("benchmark_list") or []):
+        if b.get("kind") != "number":
+            continue
+        benches.append({"id": b.get("id"), "project": pid,
+                        "name": b.get("name"), "unit": b.get("unit") or "",
+                        "project_name": project.get("name") or "",
+                        "sensitive": bool(b.get("sensitive"))})
+    got = match_log(parsed, benches)
+    if not got:
+        return None
+    return dict(parsed, **got)
+
+
 def quick_log(found: dict, *, store: Optional[Projects] = None,
               now: Optional[float] = None) -> dict:
     """For jarvis_quick.py: log what quick_match() found. {"said",
@@ -2956,6 +3007,529 @@ def quick_log(found: dict, *, store: Optional[Projects] = None,
     if ch.get("target_reached"):
         said += " Target reached."
     return {"said": said, "private": bool(out.get("sensitive"))}
+
+
+# --------------------------------------------------------------------------
+#   A chat that belongs to a project (2026-11-19, design step 4)
+#
+#   `/api/chat` may carry an optional `project`: the project's id, or the
+#   project's own name, resolved HERE by the store's own lookup - never
+#   guessed, never a prefix, never a partial match. The absent key is every
+#   caller that existed before this: no scope, no change, byte for byte.
+#
+#   A reference that names nothing, or names more than one thing, is REFUSED
+#   with a plain sentence and nothing is written. The chat turn answers the
+#   refusal directly (jarvis_quick.py) and the HUD refuses it with a 400
+#   before any model or quick answer (jarvis_hud.py) - two doors, one rule.
+# --------------------------------------------------------------------------
+
+#: How long a project reference from a request body may be. A name is at most
+#: MAX_NAME characters and an id 32, so this only keeps nonsense out.
+MAX_REF = 120
+
+#: A benchmark is "due a new measurement" when its newest number is older
+#: than this many days, or when it has none yet. Fixed on purpose: "what's
+#: next" must answer the same thing twice in a row.
+DUE_DAYS = 7
+
+#: How much of a project the two chat answers may read out, so an answer on
+#: the 8 GB card's context stays short (docs/PROJECTS-DESIGN.md section 1).
+NEXT_MAX_GOALS = 5
+NEXT_MAX_STEPS = 6
+NEXT_MAX_BENCHES = 5
+NEXT_MAX_TODOS = 8
+
+#: The project prompt's own hard cap, in characters. The recalled-facts block
+#: and the project block share the 8 GB card's context with the conversation;
+#: a project whose instructions are long enough to crowd it is CUT, and the
+#: block says so in its own line instead of failing.
+MAX_PROMPT_CHARS = 2400
+
+
+def _clean_ref(value) -> Optional[str]:
+    """A project reference from a request body: one line, or None for none.
+
+    None and "" mean "no project" - exactly the absent key, so a client that
+    sends an empty string is the same as an older client. ValueError, in
+    words, for anything that is not a piece of text."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError('"project" is the project\'s id or its name, as one line of text')
+    ref = " ".join(value.split())
+    if not ref:
+        return None
+    if len(ref) > MAX_REF:
+        raise ValueError(f"the project's id or name is longer than {MAX_REF} characters")
+    return ref
+
+
+def resolve_ref(ref, *, store: Optional[Projects] = None) -> dict:
+    """The project a reference names: the id first, then the name.
+
+    The STORE's own lookup does the answering - this never guesses at a
+    prefix, a first match or a "closest" name. ValueError with a plain
+    sentence for an id that is not a project, a name nothing is called, and a
+    name more than one project is called (which the store refuses to create,
+    but an edited database could still hold); nothing is written either way."""
+    store = store or get()
+    fix = _clean_ref(ref)
+    if fix is None:
+        raise ValueError("name a project by its id or its own name")
+    if _ID.fullmatch(fix):
+        try:
+            return store.get(fix)
+        except KeyError:
+            raise ValueError(f'There is no project with the id "{fix}". '
+                             f"Nothing was changed.") from None
+    want = fix.casefold()
+    hits = [p for p in store.list()
+            if " ".join(str(p.get("name") or "").split()).casefold() == want]
+    if not hits:
+        raise ValueError(f'There is no project called "{fix}". Nothing was changed.')
+    if len(hits) > 1:
+        names = ", ".join(f'"{p.get("name")}" (id {p.get("id")})' for p in hits)
+        raise ValueError(f'More than one project is called "{fix}" ({names}), so nothing '
+                         f"was changed - say which one by its id.")
+    return store.get(hits[0]["id"])
+
+
+def chat_scope(body, *, store: Optional[Projects] = None) -> dict:
+    """What a /api/chat body's `project` says: no project, a project, or a
+    refusal - and never an exception.
+
+    The answer every caller reads:
+        {"given": bool, "ok": bool, "project": <full view>|None,
+         "id": str|None, "name": str, "error": str, "why": str}
+    `given` False is every request before this existed. `ok` False is a
+    refusal with `error` already a plain sentence - the turn must refuse and
+    write nothing. A store that cannot be read is `ok` False too (fail
+    closed: an unscoped turn must never be turned into a guessed one)."""
+    out = {"given": False, "ok": True, "project": None, "id": None, "name": "",
+           "error": "", "why": "No project was named, so this turn is an ordinary one."}
+    if not isinstance(body, dict):
+        return out
+    try:
+        ref = _clean_ref(body.get("project"))
+    except ValueError as exc:
+        out.update({"given": True, "ok": False, "error": _sentence(exc)})
+        return out
+    if ref is None:
+        return out
+    out["given"] = True
+    try:
+        project = resolve_ref(ref, store=store)
+    except ValueError as exc:
+        out.update({"ok": False, "error": _sentence(exc)})
+        return out
+    except Exception as exc:                       # noqa: BLE001 - fail closed
+        out.update({"ok": False, "error": (
+            f"The projects store could not be read ({type(exc).__name__}), so nothing "
+            f"was scoped and nothing was changed.")})
+        return out
+    out.update({"ok": True, "project": project, "id": project["id"],
+                "name": project.get("name") or "",
+                "why": (f"This turn belongs to the project "
+                        f"\"{project.get('name')}\" - its own instructions, notes, goals "
+                        f"and benchmarks.")})
+    return out
+
+
+def fact_scope(pid: str, *, store: Optional[Projects] = None) -> dict:
+    """Which remembered facts a project-scoped turn may see: this project's
+    own labelled ids, and the ids OTHER projects label.
+
+    IDS ONLY - no fact's words are read here (the module's own rule: the
+    words come from jarvis_memory's read, and jarvis_hud.py makes it). `ok`
+    False means the labels could not be proved, and the caller must then use
+    NO remembered facts for the turn: a project scope that cannot be checked
+    must not guess that a fact is unlabelled."""
+    store = store or get()
+    try:
+        labels = store.fact_labels(pid)
+        return {"ok": True, "own": list(labels["own"]), "others": list(labels["others"]),
+                "why": ""}
+    except Exception as exc:                       # noqa: BLE001 - fail closed
+        return {"ok": False, "own": [], "others": [],
+                "why": (f"The project's fact labels could not be read "
+                        f"({type(exc).__name__}), so no remembered facts were used.")}
+
+
+def _due_words(view: dict, now: float) -> str:
+    """Why this benchmark is due, in the owner's words, or "" when it is not."""
+    latest = view.get("latest") or {}
+    at = latest.get("at")
+    if at is None:
+        return "no numbers yet"
+    try:
+        age = max(0.0, float(now) - float(at))
+    except (TypeError, ValueError):
+        return ""
+    if age > DUE_DAYS * 86400:
+        return "last number on " + time.strftime("%Y-%m-%d", time.localtime(float(at)))
+    return ""
+
+
+def next_on_project(pid: str, *, store: Optional[Projects] = None,
+                    now: Optional[float] = None, sched=None, goals=None) -> dict:
+    """The read behind "what's next on this project" - and nothing else.
+
+    Reads three of the owner's stores, never a model, never a socket, and
+    writes nothing:
+      * projects.db - the project's own work list name, linked goal ids and
+        benchmarks;
+      * schedule.db - the open items on that named work list, when it has one;
+      * goals.db - the linked goals still open, with their own steps (a step
+        already met by its benchmark number is shown as met, not as to do).
+
+    Private (health or money) benchmarks are COUNTED, never named and never
+    given a number: the answer to this question can be read aloud, and the
+    project's own rule is that those numbers stay on their screen. The result
+    carries `read` - which stores were opened - so the answer can say what it
+    read, like the defect-register answer does."""
+    store = store or get()
+    now = time.time() if now is None else float(now)
+    p = store.get(pid)
+    out = {
+        "ok": True, "id": pid, "name": p.get("name") or "",
+        "date": time.strftime("%Y-%m-%d", time.localtime(now)),
+        "work_list": None, "goals": [], "goals_missing": [],
+        "benchmarks_due": [], "benchmarks_private": 0,
+        "read": ["projects.db"], "why": "",
+    }
+    wl = p.get("work_list") or None
+    if wl:
+        try:
+            sched = sched or _schedule_store()
+            items = [t for t in sched.todos() if (t.get("list") or "") == wl["name"]]
+        except Exception:
+            items = None
+        if items is None:
+            out["work_list"] = {"name": wl["name"], "title": wl.get("title") or "",
+                                "open": [], "count": 0, "read": False}
+        else:
+            out["work_list"] = {"name": wl["name"], "title": wl.get("title") or "",
+                                "open": [str(t.get("text") or "") for t in items
+                                         if t.get("state") in ("active", "paused")],
+                                "count": len(items), "read": True}
+            out["read"].append("schedule.db")
+    ids = [g for g in (p.get("goals") or []) if isinstance(g, str)]
+    if ids:
+        try:
+            goals = goals or _goals_store()
+        except Exception:
+            goals = None
+        if goals is None:
+            out["goals_missing"] = ids[:MAX_GOALS_LINKED]
+        else:
+            out["read"].append("goals.db")
+            for gid in ids[:MAX_GOALS_LINKED]:
+                try:
+                    g = goals.get(gid)
+                except Exception:
+                    g = None
+                if not isinstance(g, dict):
+                    out["goals_missing"].append(gid)
+                    continue
+                if g.get("status") not in ("draft", "active"):
+                    continue
+                steps = []
+                for st in (g.get("plan") or []):
+                    if len(steps) >= NEXT_MAX_STEPS:
+                        break
+                    if st.get("state") not in ("open", "met_by_number", "locked"):
+                        continue
+                    steps.append({
+                        "step": str(st.get("step") or ""),
+                        "state": st.get("state") or "",
+                        "measure_name": str(st.get("measure_name") or ""),
+                        "reached_words": str(st.get("reached_words") or ""),
+                        "lock_words": str(st.get("lock_words") or ""),
+                    })
+                if len(out["goals"]) >= NEXT_MAX_GOALS:
+                    break
+                out["goals"].append({"id": gid, "text": str(g.get("text") or ""),
+                                     "status": g.get("status") or "", "steps": steps})
+    due, private = [], 0
+    for b in (p.get("benchmark_list") or []):
+        if b.get("sensitive"):
+            private += 1
+            continue
+        why = _due_words(b, now)
+        if not why:
+            continue
+        if len(due) >= NEXT_MAX_BENCHES:
+            continue
+        latest = b.get("latest") or {}
+        due.append({"id": b.get("id"), "name": str(b.get("name") or ""),
+                    "unit": str(b.get("unit") or ""), "why": why,
+                    "latest": latest.get("value")})
+    out["benchmarks_due"] = due
+    out["benchmarks_private"] = private
+    return out
+
+
+def _schedule_store():
+    import jarvis_schedule
+    return jarvis_schedule.get()
+
+
+def _goals_store():
+    import jarvis_goals
+    return jarvis_goals.get()
+
+
+# ---- "log this number against <benchmark>", with ONE card ---------------------
+#
+# By the owner's 2026-09-28 decision a number the owner writes down needs NO
+# card (docs/PROJECTS-DESIGN.md section 3, "Life projects"). This sentence is
+# the owner's 2026-11-19 ruling on TOP of that rule: a number said in chat
+# against a NAMED project benchmark must be CARDED if it is written, because
+# it is a write made from words and rule 4 means nothing is auto-approved.
+# The card shows the project, the benchmark, the number and the date, and
+# nothing is written until it is approved. A yes writes through the SAME
+# `Projects.log` the log route calls - never raw SQL.
+
+LOG_ACTION = CARD_ACTION
+LOG_WAITING = "Waiting for your approval. Nothing is logged until you approve the card."
+LOG_LAST_WORDS = {
+    "logged": "Logged it. You can remove the number in the project's own screen.",
+    "denied": "Nothing was logged - you said no.",
+    "timed_out": "Nothing was logged - the card timed out.",
+    "refused": "Nothing was logged.",
+    "withdrawn": "Nothing was logged - the benchmark was deleted while the card waited.",
+    "failed": "Nothing was logged - it could not be saved.",
+}
+
+_LOG_LOCK = threading.Lock()
+#: Held while a waiting card's benchmark is removed, and while a card's yes is
+#: written, so the two never interleave (the shape _P_SWITCH has).
+_LOG_SWITCH = threading.RLock()
+_LOG_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}}
+
+
+def log_card(project_name: str, benchmark_name: str, value_words: str,
+             when_words: str) -> str:
+    """The card's own words: one number, one benchmark, one project, said
+    plainly, with what a yes does and what a no leaves alone."""
+    return "\n".join([
+        f"Log this number in the project \"{project_name}\"?",
+        "",
+        f"Benchmark: \"{benchmark_name}\"",
+        f"Number: {value_words}",
+        f"When: {when_words}",
+        "",
+        "Saving a number changes nothing else: no command runs, no test starts, and "
+        "nothing is sent anywhere. It is kept with this project's own benchmark, where "
+        "you can remove it at once.",
+        "",
+        "If you say no: nothing is logged.",
+    ])
+
+
+def _when_words(at: Optional[float], now: float) -> str:
+    if at is None:
+        return "today"
+    day = time.strftime("%Y-%m-%d", time.localtime(float(at)))
+    today = time.strftime("%Y-%m-%d", time.localtime(float(now)))
+    yday = time.strftime("%Y-%m-%d", time.localtime(float(now) - 86400))
+    if day == today:
+        return "today"
+    if day == yday:
+        return "yesterday"
+    return day
+
+
+def _finish_log(bid: str, token: str, outcome: str, why: str = "") -> None:
+    with _LOG_LOCK:
+        p = _LOG_STATE["pending"].get(bid)
+        if p and p.get("token") == token:
+            _LOG_STATE["pending"].pop(bid, None)
+        _LOG_STATE["withdrawn"].discard(token)
+        _LOG_STATE["last"][bid] = {"outcome": outcome, "why": why, "at": time.time(),
+                                   "message": LOG_LAST_WORDS.get(outcome, "")}
+    _audit("projects.log.card", {"bench": bid, "outcome": outcome})
+
+
+def _decide_log(pid: str, bid: str, token: str, value: float, at: Optional[float],
+                name: str, bench_name: str, value_words: str, when_words: str,
+                store: Projects, gate: Callable, tier_of: Callable) -> None:
+    text = log_card(name, bench_name, value_words, when_words)
+    detail = {"text": text,
+              "what": "save one number you said into one of this project's benchmarks",
+              "project": name, "benchmark": bench_name,
+              "value": value_words, "when": when_words}
+    try:
+        v = gate(LOG_ACTION, detail, text)
+    except Exception as exc:                       # noqa: BLE001 - said, never swallowed
+        return _finish_log(bid, token, "refused",
+                           f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(LOG_ACTION) != "ask":
+        return _finish_log(bid, token, "refused",
+                           f"the gate answered at tier {vtier!r}, which is not a person "
+                           f"saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _finish_log(bid, token, outcome)
+        return _finish_log(bid, token, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _LOG_SWITCH:
+        with _LOG_LOCK:
+            withdrawn = token in _LOG_STATE["withdrawn"]
+        if withdrawn:
+            return _finish_log(bid, token, "withdrawn")
+        try:
+            store.log(pid, bid, value, at=at, source="words")
+        except KeyError:
+            return _finish_log(bid, token, "withdrawn", "the benchmark is gone")
+        except Exception as exc:                   # noqa: BLE001 - said, never swallowed
+            return _finish_log(bid, token, "failed", type(exc).__name__)
+    _finish_log(bid, token, "logged")
+
+
+def _withdraw_log(bid: str) -> None:
+    with _LOG_LOCK:
+        p = _LOG_STATE["pending"].pop(bid, None)
+        if p:
+            _LOG_STATE["withdrawn"].add(p["token"])
+
+
+def _bench_in_project(project: dict, bid: str) -> dict:
+    for b in (project.get("benchmark_list") or []):
+        if b.get("id") == bid:
+            return b
+    raise KeyError(bid)
+
+
+def match_benchmark(benchmarks: list, ref: str) -> dict:
+    """Which benchmark a spoken reference names: exactly one, several, or none.
+
+    Whole-name first (case and spacing ignored), then by words: a benchmark
+    whose every name-word the reference says, or whose name contains every
+    word of a one/two-word reference. NEVER a guess: two matches are
+    `ambiguous` and the caller refuses in words, the same shape
+    `match_log()` already uses for "I ran 5 km"."""
+    want = " ".join(str(ref or "").split()).casefold()
+    if not want:
+        return {}
+    named = [b for b in benchmarks
+             if " ".join(str(b.get("name") or "").split()).casefold() == want]
+    if len(named) == 1:
+        return {"match": named[0]}
+    if len(named) > 1:
+        return {"ambiguous": named}
+    want_words = _stems(want)
+    hits = []
+    for b in benchmarks:
+        name_words = _stems(str(b.get("name") or ""))
+        if name_words and want_words and (name_words <= want_words
+                                          or (len(want_words) <= 2
+                                              and want_words <= name_words)):
+            hits.append(b)
+    if len(hits) == 1:
+        return {"match": hits[0]}
+    if len(hits) > 1:
+        return {"ambiguous": hits}
+    return {}
+
+
+def log_by_words(pid: str, ref: str, value, *, at: Optional[float] = None,
+                 store: Optional[Projects] = None, now: Optional[float] = None,
+                 gate: Optional[Callable] = None, tier_of: Optional[Callable] = None,
+                 spawn: Optional[Callable] = None) -> dict:
+    """One number said against one NAMED benchmark of ONE project - carded.
+
+    {"ok", "waiting", "said", "private", "benchmark"}.
+    Refuses, writing nothing, when: the benchmark does not exist in THIS
+    project, two benchmarks match the words, the benchmark is a coding
+    command (its numbers come from running it, not from saying them), the
+    number is not a number, the card cannot be raised, or its tier is not
+    `ask` (rule 4: no card, no write). Never looks at another project's
+    benchmarks - the scope is the project's own `benchmark_list`."""
+    store = store or get()
+    now = store.clock() if now is None else float(now)
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    project = store.get(pid)
+    name = project.get("name") or ""
+    benches = [b for b in (project.get("benchmark_list") or []) if b.get("kind") == "number"]
+    got = match_benchmark(benches, ref)
+    if got.get("ambiguous"):
+        names = ", ".join(f'"{b.get("name")}"' for b in got["ambiguous"][:4])
+        return {"ok": False, "waiting": False, "private": False, "benchmark": "",
+                "said": (f"More than one benchmark in \"{name}\" fits that: {names}. "
+                         f"Nothing was logged - name one exactly.")}
+    b = got.get("match")
+    if b is None:
+        if not benches:
+            return {"ok": False, "waiting": False, "private": False, "benchmark": "",
+                    "said": (f"The project \"{name}\" has no number benchmark yet, so "
+                             f"there is nothing to log against. Nothing was logged.")}
+        names = ", ".join(f'"{x.get("name")}"' for x in benches[:6])
+        return {"ok": False, "waiting": False, "private": False, "benchmark": "",
+                "said": (f"There is no benchmark called \"{str(ref).strip()}\" in "
+                         f"\"{name}\". Nothing was logged. This project has: {names}.")}
+    try:
+        v = _value(value)
+    except ValueError as exc:
+        return {"ok": False, "waiting": False,
+                "private": bool(b.get("sensitive")), "benchmark": str(b.get("name") or ""),
+                "said": f"That is not a number I can log: {_sentence(exc)} Nothing was logged."}
+    try:
+        when = _value(at) if at is not None else None
+        if when is not None and (when > now + 86400 or when < now - 20 * 365 * 86400):
+            raise ValueError("that date is too far from today")
+    except ValueError as exc:
+        return {"ok": False, "waiting": False,
+                "private": bool(b.get("sensitive")), "benchmark": str(b.get("name") or ""),
+                "said": f"Nothing was logged: {_sentence(exc)}"}
+    bid = b["id"]
+    unit = str(b.get("unit") or "")
+    value_words = _with_unit(v, unit)
+    when_words = _when_words(at, now)
+    if tier_of(LOG_ACTION) != "ask":
+        t = tier_of(LOG_ACTION)
+        return {"ok": False, "waiting": False, "private": bool(b.get("sensitive")),
+                "benchmark": str(b.get("name") or ""),
+                "said": (f"Logging a number said in chat needs a person to say yes, and "
+                         f"{LOG_ACTION} is set to {t!r} here, so I did not raise a card. "
+                         f"Nothing was logged.")}
+    with _LOG_LOCK:
+        if bid in _LOG_STATE["pending"]:
+            return {"ok": False, "waiting": False, "private": bool(b.get("sensitive")),
+                    "benchmark": str(b.get("name") or ""),
+                    "said": (f"A card for \"{b.get('name')}\" is already waiting - answer "
+                             f"it first. Nothing was logged.")}
+        token = uuid.uuid4().hex
+        _LOG_STATE["pending"][bid] = {"token": token, "since": time.time()}
+    try:
+        spawn(lambda: _decide_log(pid, bid, token, v, at, name, str(b.get("name") or ""),
+                                  value_words, when_words, store, gate, tier_of))
+    except Exception:                              # noqa: BLE001 - refuse, never claim
+        with _LOG_LOCK:
+            _LOG_STATE["pending"].pop(bid, None)
+        return {"ok": False, "waiting": False, "private": bool(b.get("sensitive")),
+                "benchmark": str(b.get("name") or ""),
+                "said": "I could not raise the approval card, so nothing was logged."}
+    return {"ok": True, "waiting": True, "private": bool(b.get("sensitive")),
+            "benchmark": str(b.get("name") or ""), "said": LOG_WAITING,
+            "card": {"project": name, "benchmark": b.get("name"),
+                     "value": value_words, "when": when_words}}
+
+
+def log_last(bid: str) -> dict:
+    """The last card for one benchmark: {"outcome", "why", "at", "message"} or {}."""
+    with _LOG_LOCK:
+        return dict(_LOG_STATE["last"].get(str(bid)) or {})
+
+
+def _forget_log_state(bid: str) -> None:
+    """A benchmark is gone: a waiting card must not write into it."""
+    _withdraw_log(bid)
+    with _LOG_LOCK:
+        _LOG_STATE["last"].pop(str(bid), None)
 
 
 # --------------------------------------------------------------------------
@@ -4014,6 +4588,10 @@ def _reset_for_tests() -> None:
         _M_STATE["pending"].clear()
         _M_STATE["withdrawn"].clear()
         _M_STATE["last"].clear()
+    with _LOG_LOCK:
+        _LOG_STATE["pending"].clear()
+        _LOG_STATE["withdrawn"].clear()
+        _LOG_STATE["last"].clear()
     with _ONE_LOCK:
         _ONE = None
     _ARMED = False

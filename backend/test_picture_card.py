@@ -570,8 +570,8 @@ def t_registered_where_the_repo_expects():
 
 def t_its_generator_check_is_semantic_not_byte_exact():
     """What `tools/gen_picture_card_patch.py --check` compares, and what it must
-    still refuse (2026-10-14; the pin re-measured 2026-10-28, 2026-11-05 and
-    2026-11-06).
+    still refuse (2026-10-14; the pin re-measured 2026-10-28, 2026-11-05,
+    2026-11-06 and 2026-11-19).
 
     The check was byte-exact, which made the hunk header's LINE NUMBER
     load-bearing. It is not: `git apply` finds a hunk by matching its context
@@ -581,15 +581,19 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     `faces.html` and the scripts it loads - the History sidebar's modules and
     three.js (2026-10-27), the shared invoke-budget asset's three STATIC_ASSETS
     lines added 2026-10-28, the 16 history-purge route lines added 2026-11-04,
-    and the 26-line `/api/deny` note block 2026-11-06's PR 2 added to that
-    same route). 398 lines sit before this anchor now - 26 more than the 323
-    this pin was last measured at plus the 47 the memory-latch change of
-    2026-11-17 added to the HUD above it, plus the 2 that PR #1330's own
-    ollama-URL change added to `jarvis-backend/jarvis_hud.py`. All three are
-    lines the HUD gained, so the generated number moved by the lines added, not
-    by anything the patch does. The committed patch says `@@ -6591,3 +6591,25 @@` and the generator
-    derives `@@ -6989,3 +6989,25 @@`. Both files are 29 lines and line 3 is the
-    only difference. That made CI red on EVERY branch, including ones that never
+    the 26-line `/api/deny` note block 2026-11-06's PR 2 added to that same
+    route, and the 128 lines the 2026-11-19 project-chat lane added above the
+    anchor - the `/api/chat` project id and its refusal, the project memory
+    scoping, and the project context block). **526 lines sit before this
+    anchor now** - 128 more than the 398 this pin was last measured at; that
+    398 was itself 26 more than the 323 before it plus the 47 the memory-latch
+    change of 2026-11-17 added to the HUD above it, plus the 2 that PR #1330's
+    own ollama-URL change added to `jarvis-backend/jarvis_hud.py`. All of these
+    are lines the HUD gained, so the generated number moved by the lines added,
+    not by anything the patch does. The committed patch says
+    `@@ -6591,3 +6591,25 @@` and the generator derives
+    `@@ -7117,3 +7117,25 @@`. Both files are 29 lines and line 3 is the only
+    difference. That made CI red on EVERY branch, including ones that never
     touch this patch - while the 143-patch rehearsal passed with the stale
     number, which is the proof it applies.
 
@@ -629,13 +633,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     check("the committed patch's header is the stale one this was measured on",
           committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
     check("the generated header is the one this was measured on",
-          generated[2] == b"@@ -6989,3 +6989,25 @@", generated[2])
+          generated[2] == b"@@ -7117,3 +7117,25 @@", generated[2])
 
     ok, summary, why = gen.check(have, want)
     check("the committed patch PASSES the semantic check even though its hunk "
-          "header is 398 lines stale", ok, why)
+          "header is 526 lines stale", ok, why)
     check("... and the skew is reported, not swallowed",
-          ok and "398 line(s)" in (summary or ""), summary)
+          ok and "526 line(s)" in (summary or ""), summary)
 
     def must_fail(label, bad):
         ok, summary, why = gen.check(bad, want)

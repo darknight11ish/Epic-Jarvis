@@ -4776,6 +4776,44 @@ class Handler(BaseHTTPRequestHandler):
             if m.get("role") == "user" and m.get("content"):
                 query = str(m["content"])
                 break
+        # projects.patch build step 4 (2026-11-19): a chat that belongs to a
+        # project. The request may carry `project`: the project's id, or the
+        # project's own name, resolved by jarvis_projects' store lookup -
+        # never guessed, never a prefix. No key at all is every caller before
+        # this existed: no scope, no context, byte for byte the same turn.
+        # A reference that names nothing, or names two projects, is REFUSED
+        # here with one plain sentence, before a quick answer, a model or any
+        # write - so a bad id can change nothing.
+        _project = {"given": False, "ok": True, "project": None, "id": None,
+                    "name": "", "error": ""}
+        try:
+            import jarvis_projects as _projects
+        except Exception:                       # noqa: BLE001 - an older PC
+            _projects = None
+        if _projects is not None:
+            try:
+                _project = _projects.chat_scope(body)
+            except Exception:                   # noqa: BLE001 - fail closed
+                _project = {"given": True, "ok": False, "project": None, "id": None,
+                            "name": "", "error": (
+                                "The projects store could not be read, so the project "
+                                "this chat names cannot be resolved. Nothing was "
+                                "changed.")}
+        elif isinstance(body, dict) and body.get("project") not in (None, ""):
+            _project = {"given": True, "ok": False, "project": None, "id": None,
+                        "name": "", "error": (
+                            "This PC's Jarvis cannot keep projects yet, so this chat "
+                            "cannot belong to one - run apply-patches.ps1 on the PC. "
+                            "Nothing was changed.")}
+        if _project.get("given") and not _project.get("ok"):
+            return self._send(400, {"error": _project.get("error")
+                                    or "that project cannot be found",
+                                    "project": None})
+        # Why no remembered fact was used on a project-scoped turn ("" when
+        # facts were used, or when this is an ordinary turn) - carried out in
+        # X-Jarvis-Route so the app can say plainly what was held back.
+        _project_memory_why = ""
+        _project_context_added = False
         # The turn starts here: routing, memory retrieval and the model's own
         # prefill all happen before a single token comes back, and that gap is
         # exactly the part a user wants to see acknowledged.
@@ -4922,6 +4960,48 @@ class Handler(BaseHTTPRequestHandler):
                 chosen_facts = jarvis_recall.select_facts(
                     query, facts, text_of=lambda f: str(f.get("text", ""))
                 )
+            # projects.patch step 4 (2026-11-19): a project-scoped turn's
+            # remembered facts are SCOPED, read-only. `recall_for_project` (a
+            # shipped, tested function) drops every fact labelled to ANOTHER
+            # project - the control that keeps two projects' facts apart -
+            # keeps unlabelled personal facts exactly as an ordinary turn
+            # would, and ADDS this project's own labelled facts. The labels
+            # are ids only; the words come from jarvis_memory's own
+            # `used_view`, which already leaves an Off topic out and blanks
+            # an erased fact. A temporary or private chat recalls nothing and
+            # skips this whole branch (`_temporary_chat` is true for both).
+            # Any failure to prove the labels means NO facts, never a guess.
+            if _project.get("given") and _project.get("ok") \
+                    and not _temporary_chat(body):
+                try:
+                    import jarvis_quick as _jq
+                    if MEMORY_K <= 0:
+                        chosen_facts = []
+                        _project_memory_why = "memory is switched off"
+                    else:
+                        _labels = _projects.fact_scope(_project["id"])
+                        _own_rows = []
+                        if _labels.get("ok") and _labels.get("own"):
+                            try:
+                                import jarvis_memory as _mem
+                                _own_rows = (_mem.used_view(_labels["own"]).get("facts")
+                                             or [])
+                            except Exception:   # noqa: BLE001 - fail closed
+                                _labels = {"ok": False, "own": [], "others": [],
+                                           "why": ("this project's own facts could not "
+                                                   "be read, so no remembered facts were "
+                                                   "used")}
+                        _scoped = _jq.recall_for_project(
+                            chosen_facts, _project,
+                            own_ids=(_labels.get("own") if _labels.get("ok") else None),
+                            other_ids=(_labels.get("others") if _labels.get("ok") else None),
+                            own_rows=_own_rows, limit=MEMORY_K)
+                        chosen_facts = _scoped["facts"]
+                        _project_memory_why = _scoped.get("why") or ""
+                except Exception:               # noqa: BLE001 - fail closed
+                    chosen_facts = []
+                    _project_memory_why = ("the project's facts could not be scoped, so "
+                                           "no remembered facts were used")
             if chosen_facts:
                 injected = len(chosen_facts)
                 injected_ids = [f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
@@ -5074,6 +5154,54 @@ class Handler(BaseHTTPRequestHandler):
         route_header["memory_side"] = (
             "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
         )
+        # projects.patch step 4 (2026-11-19): say PLAINLY, on the wire, which
+        # project this reply was scoped to - and, when it was scoped, whether
+        # the project's own context went in and why memory used none. Both
+        # keys are ADDITIVE and appear only on a turn that named a project, so
+        # every ordinary turn's X-Jarvis-Route is byte for byte what it was.
+        if _project.get("given") and _project.get("ok"):
+            route_header["project"] = {"id": _project.get("id"),
+                                       "name": _project.get("name") or ""}
+            if _project_memory_why:
+                route_header["project_memory_held_back"] = _project_memory_why
+        # projects.patch step 4 (2026-11-19): the project's own context, as ONE
+        # more `system` message just before the newest question - the owner's
+        # instructions, the notes they pinned for this project, the work list,
+        # the open goal steps and the latest NON-private numbers (a health or
+        # money number is never named: a prompt is somewhere).
+        #
+        # ADDED AFTER `payload` IS BUILT, and that is load-bearing: `payload`
+        # is the request handed to jarvis_agent as "what the APP asked for",
+        # and a system message there is read as text the app sent
+        # (`jarvis_agent._TurnWatch.app_context`, the 2026-11-16 defect: it
+        # made the owner's own turn count as shaped from outside and refused a
+        # setting change). The model still receives the block through
+        # `messages`, the turn's own transcript. `_request_for_agent` strips
+        # only the recalled-facts turn from the request, so this block must
+        # never be in it - being built after the payload is what guarantees
+        # that, and the plain-relay fallback (used only on a backend without
+        # chat-stream's jarvis_agent) is the one path that will not carry it.
+        #
+        # LOCAL TURNS ONLY. `decision.inject_memory` is the rule recalled
+        # facts already obey: a cloud lane is decided with it False, so this
+        # block is never built for one; and because the block is a `system`
+        # message, the cloud cut above and the degrade loop's own cut strip it
+        # even if a hop that started local lands on a cloud lane later. A
+        # temporary or private chat gets none (its own rule: nothing recalled).
+        if _project.get("given") and _project.get("ok"):
+            if decision.inject_memory and not _temporary_chat(body):
+                try:
+                    import jarvis_quick as _jq
+                    _proj_text = _jq.project_prompt(_project)
+                except Exception:                   # noqa: BLE001 - no block, no crash
+                    _proj_text = ""
+                if _proj_text:
+                    _proj_msg = {"role": "system", "content": _proj_text}
+                    messages = (messages[:-1] + [_proj_msg, messages[-1]]
+                                if messages else [_proj_msg])
+                    _project_context_added = True
+            route_header["project_context"] = ("added" if _project_context_added
+                                               else "none")
 
         def _completions_url(lane: str) -> str:
             # The local lane talks to Ollama directly, which has spoken this
