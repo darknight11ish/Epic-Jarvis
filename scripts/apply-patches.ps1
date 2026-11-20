@@ -2291,6 +2291,22 @@ $PATCHES = @(
     # every safety gate still runs, in the same order, and the cloud lane still
     # needs the owner's yes / this PC's standing switch.
     'router-strikes.patch'
+    # crisis-route.patch (2026-11-20, the external review's ruling 5.2): a
+    # crisis turn now SAYS WHY it stayed local. The taint gate already keeps a
+    # crisis turn on this PC (`jarvis_router._PRIVATE` carries the same crisis
+    # terms), so `cloud_refused: "crisis"` could never be observed on the
+    # automatic path - the header just said `gate: "taint"`. This patch adds
+    # TWO route-header keys in the one place the crisis rule is evaluated
+    # (`jarvis_wellbeing.crisis_in_turn`, cloud-honesty.patch's own block):
+    # `crisis: true` whenever a crisis turn is detected, even when taint also
+    # fired, and `cloud_refused: "crisis"` whenever a cloud lane was in play
+    # (a manual pick) or the taint gate is what held the turn local. NOTHING is
+    # weakened: the decision, its gate and the lane are untouched, no gate is
+    # skipped or loosened, and nothing is sent to a cloud lane on this path -
+    # it is a route-header change only. ONE hunk in jarvis_hud.py, no install
+    # block, no route, no gate row, no tier line; it sits immediately before
+    # plugin-loader.patch (which must stay the last entry).
+    'crisis-route.patch'
     'plugin-loader.patch'
 )
 

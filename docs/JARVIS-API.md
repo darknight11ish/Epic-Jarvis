@@ -27441,14 +27441,15 @@ From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-
 
 | key | what it holds |
 |---|---|
-| `cloud_refused` | **New, 2026-10-28.** `"crisis"` - this turn was picked or routed for a cloud lane and was answered on this PC instead, because the newest message is a distress message. Absent on every other turn. |
+| `cloud_refused` | **New, 2026-10-28; extended 2026-11-20.** `"crisis"` - this turn was answered on this PC instead of the cloud lane it was headed for, because the newest message is a distress message. Since 2026-11-20 it is also present on the AUTOMATIC path, where the taint gate is what holds the turn: the crisis words are private terms, so the router answers `gate: "taint"` and `cloud_refused: "crisis"` now says plainly that a cloud lane was in play and is not being used because of it. Absent on every other turn. |
+| `crisis` | **New, 2026-11-20 (external review ruling 5.2).** `true` whenever the newest message is a distress message - even when the taint gate also fired, and whether the turn was picked for a cloud lane or held local by the automatic path. It is the ROUTING fact; `wellbeing: "crisis"` (§38.1) stays the calm-panel flag and is still sent. Absent on every other turn. |
 | `lane` | the model that REALLY answered - the local one when `cloud_refused` is present |
 | `where` | `"local"` when `cloud_refused` is present |
-| `reason` | the router's own reason, then `"; answered on this PC: a message like this is never sent to a cloud provider"` |
+| `reason` | the router's own reason. When the turn was PICKED for a cloud lane, cloud-honesty.patch appends `"; answered on this PC: a message like this is never sent to a cloud provider"`; on the automatic path the router's taint reason is left exactly as it was. |
 
-Both apps already draw the calm panel from `"wellbeing": "crisis"` (§38.1) and never read the answer aloud for such a turn; `cloud_refused` is there so a reader can say WHY the badge says Local after a cloud lane was chosen. A client that does not know the key is unaffected - it sees an ordinary local answer.
+Both apps already draw the calm panel from `"wellbeing": "crisis"` (§38.1) and never read the answer aloud for such a turn; `cloud_refused` is there so a reader can say WHY the badge says Local after a cloud lane was chosen, and the 2026-11-20 extension is there so the automatic path can say the same. **The taint gate itself is untouched:** the crisis rule is evaluated independently on its own check, and the change only ADDS header keys - no gate is skipped or loosened, the decision, its gate and the lane do not move, and nothing is sent to a cloud lane on this path. A client that does not know the keys is unaffected - it sees an ordinary local answer.
 
-Tests: `backend/test_cloud_honesty.py` (the patch round trip on the published base, the cloud lines equal to a local turn's for the same words, the lines landing before the stream ends for a streamed and a whole reply, and the crisis block rebinding the lane), `backend/test_wellbeing.py` (the pasted/share/voice-unverified cases and the fast path's refusal).
+Tests: `backend/test_cloud_honesty.py` (the patch round trip on the published base, the cloud lines equal to a local turn's for the same words, the lines landing before the stream ends for a streamed and a whole reply, and the crisis block rebinding the lane), `backend/test_hud_crisis_route.py` (the 2026-11-20 block lifted out of the patch stack and executed: `crisis` and `cloud_refused: "crisis"` on a crisis turn, including one the taint gate held; no key on a tainted non-crisis turn, a non-crisis private turn or an ordinary one; and a picked cloud lane still refused and rebound), `backend/test_wellbeing.py` (the pasted/share/voice-unverified cases and the fast path's refusal).
 
 ## 146. App control on the phone: one allow-list, ONE card, ONE atomic step (backend half, added 2026-10-19)
 

@@ -21364,3 +21364,31 @@ owner's original file (`tools/check_patch_original_text.py` measures 0,
 of the patch stack and executed against the real `jarvis_router`); the router's
 own half stays `backend/test_router_strikes.py`.
 
+**A crisis turn says WHY it stayed here (2026-11-20).**
+`crisis-route.patch`, ONE hunk in `jarvis_hud.py`, paired with the shipped
+`backend/rebuilt/jarvis_router.py`. The measured gap: a crisis turn already
+never leaves this PC - the crisis words are private terms, so
+`jarvis_router.choose()` answers `gate: "taint"` and the HUD answers the turn
+locally - but that was the ONLY thing an app could read. `cloud_refused:
+"crisis"`, which cloud-honesty.patch sends when a cloud lane was PICKED by
+hand, could never be observed on the automatic path: the header said "taint"
+and nothing said the turn had been heading for a cloud lane, or why it was
+not. The 2026-11-19 external review's ruling 5.2: keep the taint gate exactly
+as it is and evaluate `jarvis_wellbeing.crisis_in_turn` independently, so
+`X-Jarvis-Route` carries `crisis: true` and `cloud_refused: "crisis"` whenever
+a crisis turn is detected - even when taint also fired. TWO ADDED header keys
+and nothing else: no gate is skipped or loosened, the decision, its gate and
+the lane do not move, and nothing is sent to a cloud lane on this path. It
+sits in the one place the crisis rule is already evaluated (cloud-honesty's
+own block), so the calm panel and the route header still come from the same
+words; `wellbeing: "crisis"` is unchanged, and a picked cloud lane is still
+rebound to this PC as cloud-honesty.patch does. ONE hunk in `jarvis_hud.py`:
+no install block, no route, no gate row, no tier line, and it sits immediately
+before `plugin-loader.patch` (which must stay the last entry), with context
+earlier patches write, so the stack walk invents no line of the owner's
+original file. Proved by `backend/test_hud_crisis_route.py` (26 checks: the
+shipping block lifted out of the patch stack and executed against the real
+`jarvis_wellbeing` and the real router's decisions, including a
+hand-picked cloud lane still refused and rebound); documented under
+`docs/JARVIS-API.md` section 145.2.
+
