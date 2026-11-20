@@ -51,6 +51,22 @@ def kt(s) -> str:
 #: exactly as the contract wrote it.
 _PC_ALREADY_SAID = re.compile(r"(?i)\bon (?:the|your) pc\b|\bpc:")
 
+#: A copy that names a DEFAULT is not naming the current value. But read on the
+#: phone, whose screen has no control for that PC-only setting and no route that
+#: could read it, "on by default" was read as the setting's state - the same
+#: words-with-no-reader shape as the desktop Wi-Fi row this audit was about
+#: (PHONE-STATE-DRIFT.md section 4.1: "A default is not a state"). The four rows
+#: that said it are wifi-auto-reconnect, voicestudio, product-check and
+#: vault-organizer. The phone keeps the default (it is true of the product) and
+#: says plainly that it cannot check the value; the desktop page's own copy of
+#: the contract words is untouched, because there the control really is.
+_DEFAULT_CLAIM = re.compile(r"(?i)\b(?:on|off) by default\b")
+
+_NOT_READABLE = (
+    " The phone cannot see its current setting, so the PC's own screen is the "
+    "one to check."
+)
+
 
 def phone_why(f: dict) -> str:
     """The row's words as the PHONE may show them.
@@ -67,8 +83,13 @@ def phone_why(f: dict) -> str:
     where they ARE this app's place.
     """
     why = str(f.get("where") or "")
-    if str(f.get("surface") or "") == "desktop" and not _PC_ALREADY_SAID.search(why):
-        return "On your PC: " + why
+    desktop = str(f.get("surface") or "") == "desktop"
+    if desktop and not _PC_ALREADY_SAID.search(why):
+        why = "On your PC: " + why
+    if desktop and _DEFAULT_CLAIM.search(why):
+        # The phone has no control and no read for this setting: saying what it
+        # is by default is fine, saying it as if it were the value now is not.
+        why = why + _NOT_READABLE
     return why
 
 

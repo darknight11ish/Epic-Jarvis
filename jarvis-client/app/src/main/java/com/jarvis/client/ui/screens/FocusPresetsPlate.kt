@@ -47,11 +47,13 @@ import kotlinx.coroutines.launch
  *    setups plate in the same section.
  *
  * Nothing auto-applies: each button posts the contract's one apply action; the
- * list is re-read afterwards. A local preset switches at once (the owner's own
- * reversible pick, 2026-11-09); Coding and the Cloud row still raise the
- * existing approval card (tier "ask"). Every press is disabled while the link
- * is stale (rule 4), and a pending preset shows the PC's "being prepared"
- * words and no button.
+ * list is re-read afterwards. EVERY row this list draws is a local preset, and
+ * the PC's own apply route applies one with NO approval card - the heavy ones
+ * included since 2026-11-16. The Cloud row is the only preset whose own pick
+ * still raises one card; the PC sends it as a separate `cloud_preset` row, which
+ * this list does not draw, so no row here can claim a card that never comes.
+ * Every press is disabled while the link is stale (rule 4), and a pending
+ * preset shows the PC's "being prepared" words and no button.
  */
 @Composable
 fun FocusPresetChip(link: LinkState, stale: Boolean) {
@@ -141,20 +143,18 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     // What a preset changes, and the one rule the rows cannot show: picking a
     // local row applies it straight away with NO card - every row since
     // 2026-11-16, the heavy ones included - and only the same preset asked for
-    // in chat still raises its card. Everything else the old paragraph said is
-    // drawn on the row itself, or is said by the PC when the button is pressed
-    // (the audit of 2026-11-16, finding 5): a heavy preset's cost - the other
-    // models paused - sits on its own row above the button, and each row's
-    // model line names its model and card. The old "Fast uses the 2080 SUPER"
-    // sentence was a hand-typed copy of the Fast row's own model line, so it is
-    // gone with the rest.
+    // in chat still raises its card. The words live in net/FocusPresets.kt
+    // (HOW_PICKING_WORKS) so FocusPresetsTest can hold them against the PC's own
+    // rule; no preset id is typed here, so this sentence cannot drift from a
+    // hand-typed list the way the old "Coding and Medical raise one card" did.
+    // Everything else the old paragraph said is drawn on the row itself, or is
+    // said by the PC when the button is pressed (the audit of 2026-11-16,
+    // finding 5): a heavy preset's cost - the other models paused - sits on its
+    // own row above the button, and each row's model line names its model and
+    // card. The old "Fast uses the 2080 SUPER" sentence was a hand-typed copy of
+    // the Fast row's own model line, so it is gone with the rest.
     Text(
-        "Presets choose the local model and card for the work you are about to do. " +
-            "Picking one applies the change straight away, with no approval card: the " +
-            "old model stops first, and cold loads on this PC measured about 12 " +
-            "seconds to about a minute. A heavy preset also fills all three cards " +
-            "while it runs - its row says what that costs. Asking for the same " +
-            "preset in chat still asks you first.",
+        FocusPresets.HOW_PICKING_WORKS,
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
     )
@@ -256,9 +256,14 @@ private fun FocusPresetList(
         var show by remember { mutableStateOf(false) }
         val helper = FocusPresets.helperLine(p)
         val hasDetail = p.what.isNotBlank() || helper != null || p.cost.isNotBlank() || p.worse.isNotBlank()
+        // The mark says what the PC's own lane says: "Current" only while the
+        // saved preset's lane IS the lane its chat uses; when the PC restarted
+        // and reconciled onto another lane, the row says that instead. The
+        // 2026-11-18 audit named this: a "Current" badge beside a different
+        // running model is the same lie as an unread switch drawn as off.
         val title = buildString {
             append(p.title)
-            if (view.chosen == p.id) append(" - ").append(FocusPresets.CHOSEN)
+            FocusPresets.rowMark(view, p)?.let { append(" - ").append(it) }
         }
         Text(title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
         if (p.focus.isNotBlank()) {
@@ -316,6 +321,29 @@ private fun FocusPresetList(
                 onClick = { onUse(p.id) },
             )
         }
+    }
+    // BOTH halves of "which preset" are drawn under the rows: what the PC saved
+    // as picked (the marks above), and what its chat is really on now, in its
+    // own words. The desktop draws the same lane line, so this is parity, not a
+    // new claim - and when the two disagree, the second line says the picked
+    // preset is not the one running. A PC that sends no lane draws neither
+    // sentence: nothing is guessed from silence.
+    FocusPresets.runningLine(view)?.let {
+        Gap(4)
+        Text(
+            it,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+            modifier = Modifier.liveStatus(),
+        )
+    }
+    FocusPresets.chosenElsewhereLine(view)?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.warnInk,
+            modifier = Modifier.liveStatus(),
+        )
     }
     notice?.let { /* drawn by the caller, under the list */ }
     Gap(4)

@@ -109,7 +109,7 @@ await check("what the PC allows: an older PC (no flow block) allows nothing", as
   assert.equal(F.flowFromStatus({ gate: {} }).bargeIn, false);
   const on = { flow: { available: true, barge_in: { enabled: true, available: true, why: "" },
     moment: { enabled: true, ready: true, key: "k1" } } };
-  assert.deepEqual(F.flowFromStatus(on), { bargeIn: true, bargeInWhy: "", moment: true, momentReady: true, momentKey: "k1",
+  assert.deepEqual(F.flowFromStatus(on), { available: true, bargeIn: true, bargeInWhy: "", moment: true, momentReady: true, momentKey: "k1",
     afterQuestion: false, cutOff: false });
   const later = F.flowFromStatus({ flow: { ...on.flow, after_question: true, cut_off: true } });
   assert.equal(later.afterQuestion, true);
