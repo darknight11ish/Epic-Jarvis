@@ -169,6 +169,20 @@ def t_the_recorder_cannot_pass_a_false_check():
           row["fail"] == 1 and row["pass"] == 1, row)
 
 
+
+def t_the_stale_cloud_override_is_stamped_and_never_rescues_an_unknown():
+    verdict, sentence = F.stale_decision("FRESH", False)
+    check("a current build is a plain pass", verdict == "pass", (verdict, sentence))
+    verdict, sentence = F.stale_decision("STALE", False)
+    check("a stale build skips the money rows by default", verdict == "skip"
+          and "STALE BUILD" in sentence, (verdict, sentence))
+    verdict, sentence = F.stale_decision("STALE", True)
+    check("--allow-stale-cloud runs them and stamps the sentence",
+          verdict == "override" and "STALE BUILD (override)" in sentence, (verdict, sentence))
+    verdict, sentence = F.stale_decision("UNPROVEN", True)
+    check("an unproven identity is never rescued by the override",
+          verdict == "fail" and "unproven" in sentence, (verdict, sentence))
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

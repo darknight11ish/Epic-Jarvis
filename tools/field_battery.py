@@ -7,6 +7,8 @@ Flags (all optional):
 
     --self-test          run the offline assertion cases and exit (no HUD, no network)
     --section NAME       run one section only (e.g. --section section_project_chat)
+    --allow-stale-cloud  ad-hoc only: run the money rows on a build that is not
+                         main, stamp every line "STALE BUILD (override)", exit 2
 
 No arguments runs every section. It prints one PASS / FAIL / SKIP line per
 section and a final table, and exits 0 ONLY when every section is PASS or SKIP.
@@ -172,6 +174,11 @@ DEFECT_CHECKER = REPO / "tools" / "check_defect_register.py"
 
 
 PORT = 4719
+
+#: Set by --allow-stale-cloud: ad-hoc local testing only. Every line this run
+#: prints carries the override stamp, and the process exits 2, so a stale run can
+#: never be mistaken for a clean post-deploy pass (ruling 5.5, 2026-11-20).
+ALLOW_STALE_CLOUD = {"on": False}
 
 #: Where the phone-facing listener should be, if remote access is configured.
 REMOTE_BIND_FILE = LIVE / "jarvis-framework.toml"
@@ -878,6 +885,25 @@ def section_preflight():
                         f"{len(named)} named lanes answering")
 
 
+
+def stale_decision(state: str, allow_override: bool) -> tuple:
+    """(verdict, stamped sentence) for BUILD's freshness.
+
+    `state` is `decide_freshness`'s own answer ("FRESH"/"STALE"/"UNPROVEN").
+    A stale build SKIPs the cloud rows by default, because they spend money and
+    would describe a build that is not the commit under test. `--allow-stale-cloud`
+    runs them anyway for ad-hoc local testing, and then every sentence carries
+    "STALE BUILD (override)" so the run cannot read as a clean pass.
+    """
+    if state == "FRESH":
+        return "pass", "the deployed build is current"
+    if state == "STALE":
+        if allow_override:
+            return "override", ("STALE BUILD (override) - the cloud and feature "
+                                "rows ran against a build that is not main")
+        return "skip", "STALE BUILD - cloud and feature rows skipped"
+    return "fail", "build identity unproven"
+
 def section_build():
     REC.header("BUILD", "which commit is deployed, and is it the build to test",
                "the live VERSION/SOURCE-COMMIT and main")
@@ -902,15 +928,25 @@ def section_build():
              f"merge during the run can move it for a later row")
     REC.info(f"main: GitHub {str(STATE.get('remote_main') or remote_why or '?')[:12]} / "
              f"this checkout {str(STATE.get('local_main') or '?')[:12]}")
-    if state == "FRESH":
-        REC.ok("the deployed build is current", detail)
+    verdict, stamped = stale_decision(state, ALLOW_STALE_CLOUD["on"])
+    if verdict == "pass":
+        REC.ok(stamped, detail)
         REC.end("PASS", detail)
-    elif state == "STALE":
+    elif verdict == "skip":
         print("\n  *** STALE BUILD - cloud and feature rows skipped ***")
         print(f"      {detail}")
         REC.info("cloud turns will NOT be sent (they would describe the old build)")
         REC.info("feature rows are gated on their own code being in this build")
+        REC.info("--allow-stale-cloud runs them anyway, and stamps every line")
         REC.end("SKIP", f"STALE BUILD - {detail}")
+    elif verdict == "override":
+        STATE["fresh"] = True
+        STATE["stale_override"] = detail
+        print("\n  *** STALE BUILD (override) - cloud and feature rows WILL run ***")
+        print(f"      {detail}")
+        REC.info("this run is NOT a clean post-deploy pass; it exits 2")
+        REC.ok("the deployed build is current - OVERRIDE ACCEPTED", detail)
+        REC.end("PASS", f"STALE BUILD (override): {detail}")
     else:
         REC.fail("the deployed build's freshness can be determined", detail)
         print("\n  *** STALE BUILD - cloud and feature rows skipped (identity unproven) ***")
@@ -3512,7 +3548,7 @@ def section_bounded_cloud():
     REC.end("PASS", "the escalated answer is bounded and a medium question stays local")
 
 
-def main(only=None):
+def main(only=None, allow_stale_cloud=False):
     print("=" * 78)
     print("JARVIS FIELD BATTERY - one run against the DEPLOYED build")
     print("=" * 78)
@@ -3573,7 +3609,14 @@ def main(only=None):
                 REC.end("FAIL", f"the section crashed: {type(exc).__name__}: {exc}")
     if REC.cur is not None:  # a section that forgot to close
         REC.end("FAIL", "the section did not finish")
-    return REC.table()
+    code = REC.table()
+    if allow_stale_cloud and STATE.get("stale_override"):
+        print("\n  RESULT OVERRIDE: STALE BUILD (override) was used - the cloud and")
+        print("  feature rows ran against a build that is not main. This is NOT a")
+        print("  clean post-deploy pass; the exit code is 2 so a script cannot")
+        print("  mistake it for one.")
+        return 2
+    return code
 
 
 if __name__ == "__main__":
@@ -3581,11 +3624,13 @@ if __name__ == "__main__":
     if "--self-test" in argv:
         sys.exit(self_test_github())
     only = None
+    if "--allow-stale-cloud" in argv:
+        ALLOW_STALE_CLOUD["on"] = True
     if "--section" in argv:
         at = argv.index("--section")
         only = argv[at + 1] if at + 1 < len(argv) else ""
         if not only:
             print("--section needs a section name")
             sys.exit(2)
-    sys.exit(main(only))
+    sys.exit(main(only, allow_stale_cloud=ALLOW_STALE_CLOUD["on"]))
 
