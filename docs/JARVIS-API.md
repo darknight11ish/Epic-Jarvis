@@ -19494,6 +19494,78 @@ words.
 yet (their project pickers are the next slice; ARCHITECTURE section 8 records
 the one-sidedness), and no route, no goal schema and no card class is new.
 
+### 88.8 The plan store's import and typed tools (added 2026-11-20)
+
+The owner's accepted plan for the plan store's second half, and the morning
+ruling 5.5: the store PM1 built can now be FILLED from the work that already
+exists on this PC, and the model has typed doors into writing it. Nothing here
+runs anything, nothing invents a date, and no card class is new.
+
+**The import/seed, FIRST because an empty plan store was the measured
+failure.** `project_seed_plan` reads the two stores that already hold the
+owner's work **read-only** and proposes rows for `milestones`/`work_items`:
+
+- a goal's plan steps from `goals.db` (`jarvis_goals`), for a goal linked to
+  exactly one project;
+- each project's open items from its named list on the one scheduler
+  (`schedule.db`, `jarvis_schedule.todos()`).
+
+ONE `change_own_config` card shows every row it would save; **a refused card
+writes nothing**, and `dry_run: true` returns the same list and writes nothing
+at all. A second run creates nothing new: every source row has one stable key
+(`goal:<id>`, `goal_step:<goal>:<step>`, `todo:<id>`) written into the
+append-only `project_events` log, and a row already recorded is skipped. The
+import copies the source's own words and changes nothing else: a goal step's
+`by` is a rough label ("before winter"), never a calendar date, so the imported
+item stays **undated** and the label is kept in its detail as words; a
+scheduler to-do that really has its own `due` imports that date unchanged.
+Goals that are drafts, or that no project (or more than one) links, are skipped
+and named with the reason rather than guessed.
+
+**The typed tools** (all in `jarvis_agent.TOOLS`, all proved through the real
+`_one_call`, no new gate action, no new card class):
+
+| Tool | What it writes | Tier |
+|---|---|---|
+| `project_create` | one project (name, coding/life, optional objective and success criteria) | `todo_add` = `auto`; ONE `change_own_config` card after outside text |
+| `work_item_add` | one work item | same |
+| `work_item_update_status` | one work item's status; one event and one undo receipt | same |
+| `work_item_link_dependency` | one typed link; a circle is refused and nothing is written | same |
+| `project_checkpoint_reflect` | one checkpoint/reflection in the append-only event log | same |
+| `project_seed_plan` | the imported rows above | ONE `change_own_config` card, always |
+| `project_decompose_plan` | a whole plan (milestones, items, blocking pairs) on ONE card; runs nothing | ONE `change_own_config` card, always |
+| `project_export_obsidian_hub` | one one-way Markdown hub note | ONE `edit_vault_note` card, raised by the notes editor |
+
+The five owner-direct writes resolve under `todo_add`, the shipped `auto` line
+the goals tools already use, so a clean owner turn is cardless exactly like
+`goal_add`; a turn shaped by outside text (a read, a tainted conversation, a
+pasted/shared/forwarded message, app text) swaps them to ONE
+`change_own_config` card, and a belt refuses them if that line is ever loosened.
+The seed and the decomposed plan are in `NEEDS_A_PERSON`, so a loosened line
+still cannot run them with nobody asked. The hub note is handled before the
+generic gate so the notes editor's own card is the only ask; the File Guardian
+copies an existing note's bytes first and the receipt makes it undoable.
+
+**No date is a parameter of any of these tools.** A due or target date can only
+arrive from the owner's own route/app, or from a source row the import copies
+unchanged. **Undo** is `jarvis_receipts.py`: a status change records one
+receipt and the Undo path puts the old status back exactly once (no second
+receipt of its own).
+
+**Acceptance.** On a store shaped like the owner's own (two coding projects, no
+plan rows) plus a goal with steps and a work-list item that really exist, "what
+should I work on next?" answers the honest empty sentence before the import and
+a REAL plan row after it - proved in `backend/test_projects.py`, along with the
+idempotent/dry-run/card/no-invented-date seed, the one plan card, the circle
+refusals, the tainted-turn asks, the hub export's card and Guardian copy, the
+undo receipt and the registry/tier table.
+
+**Delivery.** The `_TOOL_ACTIONS` rows and the one new `_RISK` row for
+`todo_add` live in the published base (`jarvis-backend/jarvis_gate.py`, an
+`.update` block at the end of the file) and reach a live install through
+`tools/repair_live_backend_gaps.py` (`--only project-tools`), the owner's
+2026-11-14 route. No patch was added and no new action was invented.
+
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §59 on the `claude/jarvis-3d-animal-mascot-8dr0tb` branch; §59 is already Goals on main's side. References that came with that branch were renumbered with it.
@@ -27441,14 +27513,15 @@ From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-
 
 | key | what it holds |
 |---|---|
-| `cloud_refused` | **New, 2026-10-28.** `"crisis"` - this turn was picked or routed for a cloud lane and was answered on this PC instead, because the newest message is a distress message. Absent on every other turn. |
+| `cloud_refused` | **New, 2026-10-28; extended 2026-11-20.** `"crisis"` - this turn was answered on this PC instead of the cloud lane it was headed for, because the newest message is a distress message. Since 2026-11-20 it is also present on the AUTOMATIC path, where the taint gate is what holds the turn: the crisis words are private terms, so the router answers `gate: "taint"` and `cloud_refused: "crisis"` now says plainly that a cloud lane was in play and is not being used because of it. Absent on every other turn. |
+| `crisis` | **New, 2026-11-20 (external review ruling 5.2).** `true` whenever the newest message is a distress message - even when the taint gate also fired, and whether the turn was picked for a cloud lane or held local by the automatic path. It is the ROUTING fact; `wellbeing: "crisis"` (§38.1) stays the calm-panel flag and is still sent. Absent on every other turn. |
 | `lane` | the model that REALLY answered - the local one when `cloud_refused` is present |
 | `where` | `"local"` when `cloud_refused` is present |
-| `reason` | the router's own reason, then `"; answered on this PC: a message like this is never sent to a cloud provider"` |
+| `reason` | the router's own reason. When the turn was PICKED for a cloud lane, cloud-honesty.patch appends `"; answered on this PC: a message like this is never sent to a cloud provider"`; on the automatic path the router's taint reason is left exactly as it was. |
 
-Both apps already draw the calm panel from `"wellbeing": "crisis"` (§38.1) and never read the answer aloud for such a turn; `cloud_refused` is there so a reader can say WHY the badge says Local after a cloud lane was chosen. A client that does not know the key is unaffected - it sees an ordinary local answer.
+Both apps already draw the calm panel from `"wellbeing": "crisis"` (§38.1) and never read the answer aloud for such a turn; `cloud_refused` is there so a reader can say WHY the badge says Local after a cloud lane was chosen, and the 2026-11-20 extension is there so the automatic path can say the same. **The taint gate itself is untouched:** the crisis rule is evaluated independently on its own check, and the change only ADDS header keys - no gate is skipped or loosened, the decision, its gate and the lane do not move, and nothing is sent to a cloud lane on this path. A client that does not know the keys is unaffected - it sees an ordinary local answer.
 
-Tests: `backend/test_cloud_honesty.py` (the patch round trip on the published base, the cloud lines equal to a local turn's for the same words, the lines landing before the stream ends for a streamed and a whole reply, and the crisis block rebinding the lane), `backend/test_wellbeing.py` (the pasted/share/voice-unverified cases and the fast path's refusal).
+Tests: `backend/test_cloud_honesty.py` (the patch round trip on the published base, the cloud lines equal to a local turn's for the same words, the lines landing before the stream ends for a streamed and a whole reply, and the crisis block rebinding the lane), `backend/test_hud_crisis_route.py` (the 2026-11-20 block lifted out of the patch stack and executed: `crisis` and `cloud_refused: "crisis"` on a crisis turn, including one the taint gate held; no key on a tainted non-crisis turn, a non-crisis private turn or an ordinary one; and a picked cloud lane still refused and rebound), `backend/test_wellbeing.py` (the pasted/share/voice-unverified cases and the fast path's refusal).
 
 ## 146. App control on the phone: one allow-list, ONE card, ONE atomic step (backend half, added 2026-10-19)
 

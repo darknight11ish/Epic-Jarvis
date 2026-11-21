@@ -6001,15 +6001,18 @@ def t_the_activity_turn_guard_is_carried_by_its_six_hunks():
             "PATCHES")
         at = patches.index(ACTIVITY_PATCH) if ACTIVITY_PATCH in patches else -1
         # local-model-guard.patch (2026-11-18) is appended after the activity
-        # guard and immediately before the loader; the loader must stay last of
-        # all, and the guard must still be walked before it.
-        check("the stack registers it immediately BEFORE plugin-loader.patch (the "
-              "position the tool walks)",
-              at >= 1 and at + 2 < len(patches)
+        # guard, and router-strikes.patch and crisis-route.patch (2026-11-20)
+        # after that - both are jarvis_hud.py-only patches and touch no
+        # activity-guard line. The loader must stay last of all, and the guard
+        # must still be walked before it.
+        check("the stack registers it after the activity guard and before "
+              "plugin-loader.patch (the position the tool walks)",
+              at >= 1 and at + 3 < len(patches)
               and patches[at + 1] == "local-model-guard.patch"
-              and patches[at + 2] == "plugin-loader.patch"
+              and patches[at + 2] == "router-strikes.patch"
+              and patches[at + 3] == "crisis-route.patch"
               and patches[-1] == "plugin-loader.patch",
-              patches[max(at - 1, 0):at + 3])
+              patches[max(at - 1, 0):at + 4])
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -7059,7 +7062,8 @@ def main():
                t_the_deploy_refuses_on_the_target_shape_and_writes_nothing,
                t_the_target_binding_reader_is_a_static_hasattr,
                t_an_unguarded_call_is_required_and_a_fallback_is_not,
-               t_the_cloud_honesty_patch_is_carried_from_the_live_shape):
+               t_the_cloud_honesty_patch_is_carried_from_the_live_shape,
+               t_the_attached_file_rule_is_decided_by_its_own_probes):
         fn()
     print()
     if FAILED:
@@ -7069,6 +7073,36 @@ def main():
         return 1
     print(f"all {len(PASSED)} checks passed")
     return 0
+
+
+def t_the_attached_file_rule_is_decided_by_its_own_probes():
+    """Measured 2026-11-20: attached-file.patch was a FALSE PRESENT on the live HUD.
+
+    It had no DELTA_TABLE entry, so presence fell back to "any distinctive added
+    line is in the live file" - and its hunks add `import jarvis_agent`, which the
+    live HUD already carries from an earlier patch in the same region. The deploy
+    called the patch present while the live file had NO `_file_turn` at all, so its
+    block (and the file-attachment feature it carries) would never have been
+    deployed. The probe rule decides presence by the block's own definition and
+    call site; this check pins both halves and the two new HUD patches' rules.
+    """
+    entry = R.DELTA_TABLE["attached-file.patch"]["jarvis_hud.py"]
+    check("attached-file.patch has an explicit probe rule",
+          entry.get("hunks") is True and len(entry.get("probes") or ()) == 2, entry)
+    state, why = R.patch_presence("attached-file.patch", "jarvis_hud.py", (),
+                                  "import jarvis_agent\n", state_patches=())
+    check("the coincidental neighbour import alone is ABSENT, not PRESENT",
+          state == R.ABSENT, (state, why))
+    body = ("def _file_turn(body) -> bool:\n    return False\n"
+            "                has_file=_file_turn(body),\n")
+    state, why = R.patch_presence("attached-file.patch", "jarvis_hud.py", (),
+                                  body, state_patches=())
+    check("the block's own helper and call line prove it PRESENT",
+          state == R.PRESENT, (state, why))
+    for name in ("router-strikes.patch", "crisis-route.patch"):
+        entry = R.DELTA_TABLE[name]["jarvis_hud.py"]
+        check(f"{name} is carried by its own hunks with two probes",
+              entry.get("hunks") is True and len(entry.get("probes") or ()) == 2, entry)
 
 
 if __name__ == "__main__":

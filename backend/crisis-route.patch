@@ -1,0 +1,22 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -5425,6 +5425,19 @@
+             _crisis_turn = bool(jarvis_wellbeing.crisis_in_turn(messages))
+             if _crisis_turn:
+                 route_header["wellbeing"] = "crisis"
++                # crisis-route.patch (2026-11-20, ruling 5.2): the taint gate
++                # already keeps a crisis turn on this PC, and that is NOT
++                # weakened here - but the header only said "taint", so an app
++                # could not say WHY the turn stayed local. The crisis rule is
++                # evaluated independently, on its own check: `crisis` says this
++                # IS a crisis turn (even when taint also fired), and
++                # `cloud_refused: "crisis"` says a cloud lane was in play and is
++                # not being used because of it. Two ADDED header keys only: the
++                # decision, its gate and the lane are untouched, and nothing is
++                # sent anywhere on this path.
++                route_header["crisis"] = True
++                if lane != local_model or getattr(decision, "gate", "") == "taint":
++                    route_header["cloud_refused"] = "crisis"
+         except Exception:
+             _crisis_turn = False
+         # Times this answer: first word, total, words and tokens per second.

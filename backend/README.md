@@ -21315,10 +21315,80 @@ relay, where `jarvis_chatbot_api.lane_service()` maps an UNKNOWN lane name to a
 CLOUD provider - a private prompt could have left the PC. The one rewritten
 line is `use_tools = ((lane == local_model or decision.inject_memory) and
 _agent_ok)`; `inject_memory` is the signal because every local decision carries
-it and no cloud decision ever does. It sits immediately before
-`plugin-loader.patch` (which must stay the last entry) and its context is
+it and no cloud decision ever does. It sits before `router-strikes.patch`
+(2026-11-20), which sits immediately before `plugin-loader.patch` (which must
+stay the last entry), and its context is
 chat-stream.patch's own `use_tools` lines and cloud-honesty.patch's crisis
 block, so it invents no line of the owner's original file
 (`tools/check_patch_original_text.py` measures 0). Proved by
 `backend/test_local_model_guard.py`; documented in `docs/JARVIS-API.md`
 section 228.
+
+**The 2-strike coding fallback reaches the HUD (2026-11-20).**
+`router-strikes.patch`, SEVEN hunks in `jarvis_hud.py`, paired with the shipped
+`backend/rebuilt/jarvis_router.py`. The measured defect: #1408 shipped ruling
+6.1's router half - `note_local_failure()`, `local_failure_strikes()`,
+`reset_local_failures()` and `choose(conversation=, coding=)` - and NOTHING
+CALLED IT, so two local failures could not let a coding turn's third attempt
+escalate and the count could never leave zero. This patch is the HUD half, and
+nothing else:
+
+* the RECORDER at the relay's own local-failure points - the generic `except`
+  that ends a turn when the relay gave up, the HTTP refusal that cannot step
+  down (a local 429/500/503), and the local answering loop's returned summary
+  with no `finish_reason` (Ollama down, model missing, a tool-loop bug). A
+  cloud lane is never recorded: only a local attempt that produced no usable
+  answer is evidence about the local model;
+* the CLEAR at the two points a local turn really produced an answer - a
+  plain relay stream that finished normally, and a local turn that returned a
+  `finish_reason` - so a chat that recovers starts over, and a new
+  conversation starts at zero by construction (the router keys the count by
+  conversation id);
+* `conversation=` handed to the ONE `jarvis_router.choose()` call, so the
+  count the router reads is this chat's.
+
+Two module-level helpers hold the recorder and the clear, and a router that
+raises is swallowed: bookkeeping is never the reason a turn fails. The
+router's own gates are unchanged - two failures still cannot lift taint, a
+private turn, a picture, a file, the budget or Lockdown, a non-coding turn
+never gets the fallback, and the cloud still needs the owner's yes / this
+PC's standing switch at gate 6. SEVEN hunks, all in `jarvis_hud.py`: no install
+block, no route, no gate row, no tier line, and no shipped module touched. It
+sits immediately before `plugin-loader.patch` (which must stay the last entry)
+and its context is earlier patches' own output (attached-file.patch's
+`has_file=`, chat-stream.patch's failure wording and `use_tools` lines,
+cloud-honesty.patch's crisis block), so the stack walk invents no line of the
+owner's original file (`tools/check_patch_original_text.py` measures 0,
+`backend/_stack.py`'s RATCHET does not move). Proved by
+`backend/test_hud_router_strikes.py` (24 checks: the shipping blocks lifted out
+of the patch stack and executed against the real `jarvis_router`); the router's
+own half stays `backend/test_router_strikes.py`.
+
+**A crisis turn says WHY it stayed here (2026-11-20).**
+`crisis-route.patch`, ONE hunk in `jarvis_hud.py`, paired with the shipped
+`backend/rebuilt/jarvis_router.py`. The measured gap: a crisis turn already
+never leaves this PC - the crisis words are private terms, so
+`jarvis_router.choose()` answers `gate: "taint"` and the HUD answers the turn
+locally - but that was the ONLY thing an app could read. `cloud_refused:
+"crisis"`, which cloud-honesty.patch sends when a cloud lane was PICKED by
+hand, could never be observed on the automatic path: the header said "taint"
+and nothing said the turn had been heading for a cloud lane, or why it was
+not. The 2026-11-19 external review's ruling 5.2: keep the taint gate exactly
+as it is and evaluate `jarvis_wellbeing.crisis_in_turn` independently, so
+`X-Jarvis-Route` carries `crisis: true` and `cloud_refused: "crisis"` whenever
+a crisis turn is detected - even when taint also fired. TWO ADDED header keys
+and nothing else: no gate is skipped or loosened, the decision, its gate and
+the lane do not move, and nothing is sent to a cloud lane on this path. It
+sits in the one place the crisis rule is already evaluated (cloud-honesty's
+own block), so the calm panel and the route header still come from the same
+words; `wellbeing: "crisis"` is unchanged, and a picked cloud lane is still
+rebound to this PC as cloud-honesty.patch does. ONE hunk in `jarvis_hud.py`:
+no install block, no route, no gate row, no tier line, and it sits immediately
+before `plugin-loader.patch` (which must stay the last entry), with context
+earlier patches write, so the stack walk invents no line of the owner's
+original file. Proved by `backend/test_hud_crisis_route.py` (26 checks: the
+shipping block lifted out of the patch stack and executed against the real
+`jarvis_wellbeing` and the real router's decisions, including a
+hand-picked cloud lane still refused and rebound); documented under
+`docs/JARVIS-API.md` section 145.2.
+

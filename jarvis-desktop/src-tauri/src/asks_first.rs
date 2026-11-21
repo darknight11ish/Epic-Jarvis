@@ -93,8 +93,10 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 74 at
-/// 2026-11-11 (67 at 2026-11-10: 62 at 2026-11-09; Wave 13 added the carded
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 83 at
+/// 2026-11-20 (75 at 2026-11-14 - the plan store's eight typed tools are the
+/// 76th to the 83rd; 74 at 2026-11-11, 67 at 2026-11-10: 62 at 2026-11-09;
+/// Wave 13 added the carded
 /// repository create, wave 14 the cardless `project_read`; Wave 16 added the
 /// read-only PR cockpit, the carded merge and the carded fix-and-push, wave
 /// 16E the two local review gates, and the parity pass the full pull-request
@@ -107,7 +109,7 @@ pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 75] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 83] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -207,6 +209,19 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 75] = [
     "github_pr_review",
     "github_issue_state",
     "approval_policy",
+    // The plan store's eight typed tools (2026-11-20, PM2), in the PC's own
+    // order: the five owner-direct writes (cardless on a clean turn under the
+    // shipped `todo_add` line, ONE card after outside text), the import/seed
+    // and the decomposed plan (ONE card each), and the one-way Obsidian hub
+    // note (the notes editor's own card).
+    "project_create",
+    "project_seed_plan",
+    "project_decompose_plan",
+    "work_item_add",
+    "work_item_update_status",
+    "work_item_link_dependency",
+    "project_checkpoint_reflect",
+    "project_export_obsidian_hub",
 ];
 
 /// The four known tools with no switch of their own, each with the PC's own

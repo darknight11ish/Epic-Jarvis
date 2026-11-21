@@ -1975,6 +1975,286 @@
  {
   "type": "function",
   "function": {
+   "name": "project_create",
+   "description": "Create ONE project on this PC, in the owner's own words: a name, coding or life, and - only when they said them - the objective and what done looks like. Set no date.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "the project's name, in their words"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "coding",
+       "life"
+      ]
+     },
+     "objective": {
+      "type": "string",
+      "description": "optional, in their words: what they want"
+     },
+     "success_criteria": {
+      "type": "string",
+      "description": "optional, in their words: what done looks like"
+     }
+    },
+    "required": [
+     "name",
+     "kind"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "project_seed_plan",
+   "description": "Import the plan the owner already has: goal steps from their goals and open items from each project's work list, as plan rows. ONE approval card shows what would be saved; nothing runs. A second run imports nothing twice. `dry_run` shows the list without writing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "dry_run": {
+      "type": "boolean",
+      "description": "true: show what would be imported, write nothing"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "project_decompose_plan",
+   "description": "Propose a plan for ONE project and save it on one approval card. Nothing runs; no date is set. `blocks` pairs are [first, second].",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string",
+      "description": "its name"
+     },
+     "milestones": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "title"
+       ]
+      }
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string"
+        },
+        "detail": {
+         "type": "string"
+        },
+        "milestone": {
+         "type": "integer",
+         "description": "its number"
+        },
+        "priority": {
+         "type": "integer",
+         "description": "0 first"
+        }
+       },
+       "required": [
+        "title"
+       ]
+      }
+     },
+     "blocks": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "description": "[first, its blocked item]"
+      }
+     }
+    },
+    "required": [
+     "project"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "work_item_add",
+   "description": "Add ONE work item to a project on this PC, in the owner's own words. Optional priority (0 runs first) and milestone. Set no date.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string",
+      "description": "its name, or enough of it"
+     },
+     "title": {
+      "type": "string",
+      "description": "the step, in their words"
+     },
+     "detail": {
+      "type": "string"
+     },
+     "priority": {
+      "type": "integer",
+      "description": "0 runs first"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "backlog",
+       "ready",
+       "in_progress"
+      ]
+     },
+     "milestone": {
+      "type": "string",
+      "description": "a milestone's title in that project"
+     }
+    },
+    "required": [
+     "project",
+     "title"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "work_item_update_status",
+   "description": "Move ONE work item between backlog, ready, in_progress, done and cancelled. Logs one event and keeps one Undo receipt.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "item": {
+      "type": "string",
+      "description": "its title, or enough of it"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "backlog",
+       "ready",
+       "in_progress",
+       "done",
+       "cancelled"
+      ]
+     }
+    },
+    "required": [
+     "item",
+     "status"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "work_item_link_dependency",
+   "description": "Record ONE typed link between two work items: blocks, parent_child, related or discovered_from. A link that would make a circle is refused and nothing is written.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "from": {
+      "type": "string",
+      "description": "the first item's title"
+     },
+     "to": {
+      "type": "string",
+      "description": "the second item's title"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "blocks",
+       "parent_child",
+       "related",
+       "discovered_from"
+      ]
+     }
+    },
+    "required": [
+     "from",
+     "to",
+     "kind"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "project_checkpoint_reflect",
+   "description": "Write one checkpoint or lesson about a project into its event log, in the owner's or Jarvis's own words. Writes no plan row and runs nothing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string",
+      "description": "its name, or enough of it"
+     },
+     "text": {
+      "type": "string",
+      "description": "the checkpoint or lesson"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "checkpoint",
+       "reflection"
+      ]
+     },
+     "item": {
+      "type": "string",
+      "description": "optional work item this is about"
+     }
+    },
+    "required": [
+     "project",
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "project_export_obsidian_hub",
+   "description": "Write ONE read-only Markdown copy of a project into the owner's Obsidian vault, behind its one edit_vault_note card. The project stays in Jarvis's own store; the note is a one-way copy.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string",
+      "description": "its name, or enough of it"
+     }
+    },
+    "required": [
+     "project"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "change_setting",
    "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\", \"turn on the GitHub tools\". \"setting\" is their words for it; \"value\" is on or off, or a named choice such as \"faster\". Its own result says what happened: a loosening waits for one approval card, cosmetic ones at once, and you never change it yourself; never say a setting changed when it did not.",
    "parameters": {
