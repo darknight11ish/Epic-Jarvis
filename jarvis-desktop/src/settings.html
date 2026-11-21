@@ -113,6 +113,27 @@
         <span class="sr-only" id="settings-search-count" role="status" aria-live="polite"></span>
       </section>
 
+      <!-- ── The one quick entry ─────────────────────────────────────────────
+           The owner, 2026-11-21: *"when i search updates in the settings i have
+           to scroll all the way to the bottom of the list to find the update
+           section for jarvis. it should be at the top of the list."* The
+           Updates card is the one place anybody goes looking for by name often
+           (it is the card behind a MISMATCH warning, a tray row and the phone's
+           "Check for new versions"), and it sat second-from-last on this page.
+           So it gets ONE obvious row above the grouped "Jump to:" list, and the
+           search box pins it first for the update words as well
+           (settings-search.js). It is hidden WITH the jump list while a search
+           is on: a map of the whole page over a filtered page points at cards
+           that are not drawn. It adds no setting and writes nothing. A plain
+           div rather than a second nav landmark: the grouped map below already
+           is the page's one navigation landmark, and a test that slices the
+           jump list out of this file ends at the first nav CLOSING TAG -
+           another one above it would silently empty that slice. -->
+      <div class="settings-quick" id="settings-quick" role="navigation"
+           aria-label="Quick entries">
+        <a href="#updates">Updates</a>
+      </div>
+
       <nav class="settings-jump" id="settings-jump" aria-label="Jump to a section">
         <p class="settings-jump-title">Jump to:</p>
         <div class="settings-jump-group">

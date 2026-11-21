@@ -1782,6 +1782,40 @@ fn claim_update_both() -> Option<UpdateBothGuard> {
         .map(|_| UpdateBothGuard)
 }
 
+/// `true` while a BACKEND half is being run on this PC by this app: the
+/// automatic finish at start-up, or an "Update everything" press.
+///
+/// WHY IT IS A SHARED FLAG AND NOT A PAGE'S OWN BIT. The owner's report of
+/// 2026-11-21: the Updates card read the versions in the middle of a run and
+/// said the backend was still 0.2.491, while the run had already written
+/// 0.2.492 - a card opened during a run was reading a moment that was about to
+/// be replaced. `backend_self::read` carries this flag out with the versions, so
+/// the card can say "Finishing the backend half now" instead of drawing a
+/// mismatch that is being fixed at that instant. It is the backend HALF that is
+/// marked, not the whole `update_both` run: the desktop half installs and ends
+/// this process, and nothing can read a card through that.
+static BACKEND_HALF_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Is a backend half running right now? Read by `backend_self::read`.
+pub fn backend_half_running() -> bool {
+    BACKEND_HALF_RUNNING.load(Ordering::SeqCst)
+}
+
+/// Held for one backend-half run; dropping it clears the flag.
+struct BackendHalfRunningGuard;
+
+impl Drop for BackendHalfRunningGuard {
+    fn drop(&mut self) {
+        BACKEND_HALF_RUNNING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Mark a backend half as running for as long as the returned guard lives.
+fn claim_backend_half_running() -> BackendHalfRunningGuard {
+    BACKEND_HALF_RUNNING.store(true, Ordering::SeqCst);
+    BackendHalfRunningGuard
+}
+
 ///
 /// Never automatic: this is a `#[tauri::command]` reachable from the Settings
 /// button, since 2026-10-26 from `run_approved_update` after an answered
@@ -1863,8 +1897,14 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
     // from one the owner turned off on purpose (never re-enabled), and to hand
     // only the former to the additive config step after the run proves itself.
     let previous_release = crate::backend_update::app_commit();
-    let backend =
-        crate::backend_update::run(&app, &mode, &mode_label, previous_release.as_deref()).await;
+    // Marked only around the BACKEND run: a read taken while it works says
+    // "Finishing the backend half now" instead of drawing a mismatch that is
+    // being fixed at that instant (owner's 2026-11-21 report). The mark is
+    // dropped before the desktop half, which is not a backend run.
+    let backend = {
+        let _backend_half = claim_backend_half_running();
+        crate::backend_update::run(&app, &mode, &mode_label, previous_release.as_deref()).await
+    };
     // ONE ENDING RULE FOR BOTH DOORS (2026-11-21). `Run::ending` reads the two
     // versions re-read AFTER the attempt - the same function the automatic
     // finish uses - so a press and a start-up cannot report the same run
@@ -2048,16 +2088,18 @@ pub fn auto_finish_plan(
     }
 }
 
-/// The line said BEFORE the automatic run. Names both versions and what is
-/// about to happen; promises no ending.
+/// The line said BEFORE the automatic run. It says what is happening NOW - the
+/// owner's 2026-11-21 report was a stale MISMATCH still on screen while the
+/// backend half was being finished, so this line replaces that one and carries
+/// the words for it. Names the versions, promises no ending.
 pub fn auto_finish_opening(desktop: &str, backend: Option<&str>) -> String {
-    let older = match backend.map(str::trim).filter(|b| !b.is_empty()) {
-        Some(version) => format!("the backend ({version})"),
+    let installed = match backend.map(str::trim).filter(|b| !b.is_empty()) {
+        Some(version) => format!("the backend is {version}"),
         None => "a backend so old it does not report its version".to_string(),
     };
     format!(
-        "Jarvis Desktop {desktop} is ahead of {older}. Finishing the backend half \
-         automatically now - the same update \"Update everything\" runs, at the default \
+        "Finishing the backend half now. Jarvis Desktop {desktop} is installed and \
+         {installed} - the same update \"Update everything\" runs, at the default \
          pace. This can take several minutes."
     )
 }
@@ -2342,6 +2384,11 @@ async fn finish_backend_half(
     };
     let opening = auto_finish_opening(&sync.desktop, sync.backend.as_deref());
     crate::logfile::log(&format!("[jarvis] {opening}"));
+    // The card (and any Settings window opened while this runs) reads this flag
+    // through `backend_self::read`, so the stale MISMATCH is replaced by
+    // "Finishing the backend half now" rather than staying on screen while the
+    // versions change underneath it.
+    let _backend_half = claim_backend_half_running();
     say_version_line(app, "running", &opening);
 
     // THE SAME runner the button uses, at the default pace. It stops the
@@ -2715,15 +2762,15 @@ pub fn spawn_startup_check(app: &AppHandle) {
 mod tests {
     use super::{
         auto_finish_behind_words, auto_finish_bound_words, auto_finish_failed_words,
-        auto_finish_ok_words, auto_finish_opening, auto_finish_plan, both_updated, chat_facts,
-        claim_update_both, clear_pending, desktop_half_allowed, desktop_half_trace,
-        desktop_install_gate, ending_words, finish, friendly, install_notice_for, is_update_card,
-        local_stamp, mark_launched, previous_desktop_build, read_pending, reconcile,
-        remember_previous_desktop_build, same_version, state_of, step_starting, write_pending,
-        AutoFinish, AutoFinishAttempts, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
-        PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
-        DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL, INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE,
-        STEP_BACKEND, STEP_DESKTOP,
+        auto_finish_ok_words, auto_finish_opening, auto_finish_plan, backend_half_running,
+        both_updated, chat_facts, claim_backend_half_running, claim_update_both, clear_pending,
+        desktop_half_allowed, desktop_half_trace, desktop_install_gate, ending_words, finish,
+        friendly, install_notice_for, is_update_card, local_stamp, mark_launched,
+        previous_desktop_build, read_pending, reconcile, remember_previous_desktop_build,
+        same_version, state_of, step_starting, write_pending, AutoFinish, AutoFinishAttempts,
+        BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf, PendingDesktopInstall, Status,
+        Step, BEFORE_INSTALLER, DESKTOP_HALF, DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL,
+        INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE, STEP_BACKEND, STEP_DESKTOP,
     };
 
     // ---- the four-state truth (Task-50, Wave 12) ---------------------------
@@ -3218,11 +3265,20 @@ mod tests {
     }
 
     #[test]
-    fn the_automatic_opening_names_the_versions_and_promises_no_ending() {
+    fn the_automatic_opening_says_it_is_finishing_now_and_promises_no_ending() {
         let opening = auto_finish_opening("0.2.486", Some("0.2.484"));
         assert!(opening.contains("Jarvis Desktop 0.2.486"), "{opening}");
         assert!(opening.contains("0.2.484"), "{opening}");
-        assert!(opening.contains("automatically now"), "{opening}");
+        // The owner's 2026-11-21 report: the MISMATCH line stayed on screen
+        // while the backend half was being finished. The line said BEFORE the
+        // run carries the in-flight words, so the stale warning is replaced the
+        // moment the run starts.
+        assert!(
+            opening
+                .to_lowercase()
+                .contains("finishing the backend half now"),
+            "{opening}"
+        );
         assert!(opening.contains("Update everything"), "{opening}");
         assert!(opening.contains("default pace"), "{opening}");
         // It says what is happening, never what happened.
@@ -3232,6 +3288,66 @@ mod tests {
         // A backend too old to report a version is still named honestly.
         let old = auto_finish_opening("0.2.486", None);
         assert!(old.contains("does not report its version"), "{old}");
+        assert!(
+            old.to_lowercase()
+                .contains("finishing the backend half now"),
+            "{old}"
+        );
+    }
+
+    /// The Updates card knows a backend half is live because this flag says so.
+    /// A run in flight has to be readable on the OTHER side of the app (the
+    /// Settings card calls `shell_version_sync` while the run is going), which
+    /// is why it is a process flag and not a local in the run's own function.
+    #[test]
+    fn a_backend_half_is_marked_running_only_while_it_really_is() {
+        assert!(!backend_half_running(), "a fresh process claims a run");
+        {
+            let _running = claim_backend_half_running();
+            assert!(
+                backend_half_running(),
+                "a live backend half does not say it is running"
+            );
+            // The card's own read (`backend_self::words_for`) is held by its own
+            // test; this one holds the flag the read is fed from.
+            assert!(
+                crate::backend_self::words_for(
+                    "0.2.492",
+                    Some("0.2.491"),
+                    crate::backend_self::SyncState::BackendOlder,
+                    backend_half_running(),
+                )
+                .to_lowercase()
+                .contains("finishing the backend half now"),
+                "the handshake read during a run would still say MISMATCH"
+            );
+        }
+        assert!(
+            !backend_half_running(),
+            "the flag outlived the run it described"
+        );
+    }
+
+    /// Both doors that run a backend half mark it, and both mark it where the
+    /// card can see it: a press from the page and the automatic finish. Held by
+    /// reading the source, because neither function can be driven in a unit test
+    /// without a PC, a patch stack and a process restart.
+    #[test]
+    fn both_doors_that_run_a_backend_half_mark_it_running() {
+        let source = include_str!("update.rs");
+        for door in ["pub async fn update_both", "async fn finish_backend_half"] {
+            let at = source
+                .find(door)
+                .unwrap_or_else(|| panic!("{door} is gone"));
+            let end = source[at..]
+                .find("\n}\n")
+                .map(|n| at + n)
+                .unwrap_or(source.len());
+            assert!(
+                source[at..end].contains("claim_backend_half_running()"),
+                "{door} runs a backend half without saying it is running"
+            );
+        }
     }
 
     #[test]

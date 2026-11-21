@@ -79,6 +79,49 @@ searched by the words **it** prints, so this is one setting with two honest
 names rather than a gap: typing "chat history" finds it on both. Neither name
 may be changed to match the other without changing what that app really does.
 
+## The update words put the Updates card first (2026-11-21)
+
+The owner, 2026-11-21: *"when i search updates in the settings i have to scroll
+all the way to the bottom of the list to find the update section for jarvis. it
+should be at the top of the list."*
+
+**What was already true, and what was not.** Ranking by the words on the card
+(the 2026-10-27 amendment) already put Updates first for "update" and
+"updates". It did not for the two words a person naturally types for the card:
+**"upgrade"** appears on no card on this page, so it matched nothing at all;
+**"version"** appears on a dozen cards, and About outranked Updates. The owner
+could type the obvious word for the thing and not be shown the thing.
+
+**The rule.** A query made ONLY of update words -
+
+```
+update  updates  upgrade  upgrades  upgraded  upgrading  updater  updaters
+version  versions
+```
+
+- pins the Updates card FIRST in the results, whatever the ordinary ranking
+said, and shows it even when its own text contains none of the query. Any other
+word in the query ("app update", "version history", "backup") turns the pin off
+and the ordinary ranking stands, so no unrelated search is reordered. The card
+was already second-from-last on the page, and the "Jump to:" map is a map, not
+a search result, so this changes only what a search draws and in what order.
+
+**One vocabulary, three surfaces.** `settings-search.js` exports
+`asksForUpdates` and the word list, and:
+
+- the **Settings results** in `settings-search.js` use it to pin;
+- the **app-wide Find list** (`palette.js`, built from the compiled menu
+  catalogue) imports the same rule and pins the same row, because "Find
+  anything" is the other box a person may have called the settings search. It
+  answered "Nothing matches that" for "upgrade" before this;
+- the **one-row quick entry** above the "Jump to:" list (`settings-quick` in
+  `settings.html`) is a plain anchor to `#updates`, for the owner who scans the
+  page instead of typing. It hides WITH the jump list while a search is on: a
+  map of the whole page over a filtered page points at cards that are not drawn.
+
+The pin is a rule about the WORD, not a permanent reordering: with the box empty
+the page is exactly the page it was, and clearing the box restores it.
+
 ## What deliberately does not change
 
 - **No setting is added, removed, renamed, moved or hidden permanently.**

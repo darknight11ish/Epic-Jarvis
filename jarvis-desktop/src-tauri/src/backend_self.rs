@@ -78,6 +78,15 @@ pub struct VersionSync {
     /// `backend.version`, when the backend answered with one.
     pub backend: Option<String>,
     pub state: SyncState,
+    /// `true` while a backend half is being run on this PC by this app - the
+    /// automatic finish at start-up, or an "Update everything" press. The
+    /// Updates card draws its "finishing the backend half now" state from this
+    /// rather than from the stale mismatch: a card opened DURING a run was
+    /// reading the versions the run was in the middle of changing (the owner's
+    /// 2026-11-21 report), and `update.rs` is the one place that knows a run is
+    /// live. It is a fact about the process, not a promise: the versions either
+    /// side of it are still whatever the read really found.
+    pub running: bool,
     /// One plain sentence for the owner. Always says what is true of each half
     /// it knows about, and never says "up to date" unless it is.
     pub words: String,
@@ -183,6 +192,37 @@ pub fn words(desktop: &str, backend: Option<&str>, state: SyncState) -> String {
     }
 }
 
+/// The sentence while a backend half is being finished on this PC.
+///
+/// The owner's report of 2026-11-21: a MISMATCH line stayed on screen after the
+/// backend half had finished, and a card opened during a run was reading the
+/// versions the run was in the middle of changing. So a read taken WHILE the run
+/// is live says what is happening - "Finishing the backend half now" - and names
+/// the two versions it found, without pretending they are the final pair (the
+/// run re-reads them when it ends).
+pub fn finishing_words(desktop: &str, backend: Option<&str>) -> String {
+    let named = backend
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+        .map(|b| format!("the backend is {b}"))
+        .unwrap_or_else(|| "the backend does not report its version".to_string());
+    format!(
+        "Finishing the backend half now - Jarvis Desktop {desktop} is installed and \
+         {named}. The two versions are re-read when the run ends."
+    )
+}
+
+/// The one sentence a [`VersionSync`] carries: the running line while a backend
+/// half is really being run, the plain state sentence otherwise. Pure, so the
+/// "a run in flight says so" rule is a test rather than a comment.
+pub fn words_for(desktop: &str, backend: Option<&str>, state: SyncState, running: bool) -> String {
+    if running && state == SyncState::BackendOlder {
+        finishing_words(desktop, backend)
+    } else {
+        words(desktop, backend, state)
+    }
+}
+
 /// The backend's own version, out of a `/api/self` answer. Tolerant of the
 /// shape because the endpoint is being built beside this code: the contract
 /// wraps a version OBJECT (`version.app_version`), with flat `version`/`app`
@@ -221,12 +261,14 @@ pub fn backend_version(self_doc: &serde_json::Value) -> Option<String> {
 /// backend is down.
 pub async fn read(app: &AppHandle) -> VersionSync {
     let desktop = app.package_info().version.to_string();
+    let running = crate::update::backend_half_running();
     let Ok(base) = commands_base(app) else {
         return VersionSync {
             desktop: desktop.clone(),
             backend: None,
             state: SyncState::Unreachable,
-            words: words(&desktop, None, SyncState::Unreachable),
+            running,
+            words: words_for(&desktop, None, SyncState::Unreachable, running),
         };
     };
     let client = match reqwest::Client::builder()
@@ -242,7 +284,8 @@ pub async fn read(app: &AppHandle) -> VersionSync {
                 desktop: desktop.clone(),
                 backend: None,
                 state: SyncState::Unreachable,
-                words: words(&desktop, None, SyncState::Unreachable),
+                running,
+                words: words_for(&desktop, None, SyncState::Unreachable, running),
             }
         }
     };
@@ -278,10 +321,11 @@ pub async fn read(app: &AppHandle) -> VersionSync {
     };
     let backend = backend.filter(|b| !b.is_empty());
     VersionSync {
-        words: words(&desktop, backend.as_deref(), state),
+        words: words_for(&desktop, backend.as_deref(), state, running),
         desktop,
         backend,
         state,
+        running,
     }
 }
 
@@ -564,6 +608,52 @@ mod tests {
             None
         );
         assert_eq!(backend_version(&serde_json::json!("nonsense")), None);
+    }
+
+    /// The owner's 2026-11-21 report: a MISMATCH line stayed on screen while the
+    /// backend half was being finished, and a card opened during a run read the
+    /// versions that were changing underneath it. A read taken DURING the run
+    /// says so instead; every other state keeps its own sentence.
+    #[test]
+    fn a_run_in_flight_says_finishing_the_backend_half_now_not_a_stale_mismatch() {
+        let running = words_for("0.2.492", Some("0.2.491"), SyncState::BackendOlder, true);
+        assert!(
+            running
+                .to_lowercase()
+                .contains("finishing the backend half now"),
+            "{running}"
+        );
+        assert!(
+            running.contains("0.2.492") && running.contains("0.2.491"),
+            "{running}"
+        );
+        // It is a sentence about what is happening NOW, not a claim about the
+        // end: the run re-reads the two versions when it ends.
+        assert!(running.contains("re-read when the run ends"), "{running}");
+        assert!(!running.contains("MISMATCH"), "{running}");
+        assert!(!running.contains("IN SYNC"), "{running}");
+
+        // The same pair, read when no run is live, is the unchanged mismatch.
+        let idle = words_for("0.2.492", Some("0.2.491"), SyncState::BackendOlder, false);
+        assert!(idle.starts_with("MISMATCH"), "{idle}");
+        assert!(!idle.contains("Finishing"), "{idle}");
+
+        // A run flag never manufactures a sentence about a state that is not
+        // being fixed: equal halves do not become "finishing", and a newer
+        // backend is not being written by this app.
+        for (state, backend, expected) in [
+            (SyncState::InSync, Some("0.2.492"), "IN SYNC"),
+            (
+                SyncState::BackendNewer,
+                Some("0.2.500"),
+                "next desktop release",
+            ),
+        ] {
+            let said = words_for("0.2.492", backend, state, true);
+            assert_eq!(said, words("0.2.492", backend, state));
+            assert!(said.contains(expected), "{said}");
+            assert!(!said.contains("Finishing"), "{said}");
+        }
     }
 
     #[test]

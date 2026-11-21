@@ -577,3 +577,61 @@ injected output - no real hour is ever waited for:
 changes no other setting, touches no network beyond the one local `/api/self`
 read, and never fetches anything from GitHub. It is the owner's own update
 action continuing, not a new one.
+
+### The card says which half is missing, and the HUD's warning clears in place (2026-11-21)
+
+Four owner reports the same morning, ~10:12 PT, while a real update was running.
+They are one rule each, and all of them are words and lifetimes - no new update
+path, no card, no gate:
+
+1. **The card's state is the release check AND the two halves, never either
+   alone.** *"when i go to updates in settings it says none available when i
+   click check for updates"* is true about a NEWER release and was misleading
+   mid-update, when the backend was still behind and the card implied there was
+   nothing to do. `settings.js` now composes the card's one state line from
+   both answers it reads (`updateStateWords`):
+
+   - the two halves equal and a finished check that found nothing newer ->
+     **"Up to date."** followed by the check's own line ("Version X — the newest
+     published. Last checked …"), so the Check button still has its answer on
+     screen;
+   - the backend older (the measured case: Desktop 0.2.492 installed, backend
+     0.2.491) -> **"Jarvis Desktop 0.2.492 is installed; the backend is 0.2.491
+     - press Update everything to finish the backend half."** The check's own
+     line is APPENDED, never substituted, so a no-newer-release answer can never
+     hide a half that still needs finishing;
+   - a backend half running right now -> **"Finishing the backend half now.
+     Jarvis Desktop 0.2.492 is installed; the backend is 0.2.491 - the card
+     updates when it ends."** The "running" fact is the shell's, not the page's
+     guess: `update.rs` marks a live backend half (the press and the automatic
+     finish both take the mark), and `backend_self.rs` carries it out as
+     `VersionSync.running`. Equal halves are never made to say "finishing", and
+     a NEWER backend is not something this app is writing.
+   - "Up to date." is reachable only with a finished check behind it: an equal
+     pair with no check yet still says "Not checked yet".
+
+2. **The HUD's version line is ONE line, rewritten in place.** *"MISMATCH: the
+   backend 0.2.491, but this HUD expects 0.2.492 ... this usually clears on its
+   own" stayed visible after the backend half had finished* - `VERSION` already
+   read 0.2.492 while the banner still said 0.2.491. The handshake line used to
+   be a chat message APPENDED once and only for state `older`, so the run's own
+   later states landed nowhere. `hud_bootstrap.js`'s `handleVersion` now owns one
+   note and:
+   - a mismatch, a run starting, and every ending REWRITE its words - the
+     automatic finish's opening line says **"Finishing the backend half now"**
+     (`auto_finish_opening`), and every ending carries the two versions RE-READ
+     after the attempt, so a bound's honest partial ending replaces the stale
+     0.2.491 rather than living beside it;
+   - an `ok`/`in-sync` read-back REMOVES the note. A warning about a mismatch is
+     not left standing after the mismatch is gone, and no manual restart is
+     needed for that - nor is a second line appended to retell the same story.
+
+Both rules are held by tests: the card's three states are browser checks in
+`jarvis-desktop/tests/updates.mjs` (with the release check and handshake fixtures
+driving the real page), the "a no-newer check does not hide a behind backend"
+case among them; the HUD line's rewrite-then-clear is a check in
+`tests/hud-window.mjs` that feeds the REAL injected bootstrap through its own
+`version` channel; and the Rust words (`backend_self::finishing_words` /
+`words_for`, `update::auto_finish_opening`) plus the running flag are unit tests.
+"Both or neither" is untouched: nothing here installs, approves or starts
+anything.

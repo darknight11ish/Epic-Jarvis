@@ -1868,8 +1868,120 @@ function checkedWords(checkedAt, now = new Date()) {
   return day === today ? time : `${day} ${time}`;
 }
 
+/**
+ * The last answers the two reads gave, so ONE line can be composed from both.
+ *
+ * WHY BOTH. The owner's report of 2026-11-21: *"when i go to updates in
+ * settings it says none available when i click check for updates"* - correct
+ * about a NEWER release, and misleading while the two halves differed, because
+ * the card then implied there was nothing to do. So the card's state line is
+ * the release check AND the version handshake together, never either alone: a
+ * check that finds no newer release must never hide a backend half that still
+ * needs finishing.
+ */
+let lastUpdateStatus = null;
+let lastVersionSync = null;
+
+/**
+ * What the release check alone says - the four states of `update.rs`'s
+ * `Status.state`, in the words this card has always used. Unchanged from
+ * before 2026-11-21; the handshake is laid over it by [`updateStateWords`].
+ */
+function updateCheckWords(status) {
+  const state = updateStateOf(status);
+  const when = checkedWords(status.checked_at);
+  // The time is said only when a check really ran. `up_to_date` without one
+  // cannot happen on the PC (Rust computes both), but if a status ever
+  // arrives that way this page must not invent the time either.
+  const checked = when ? ` Last checked ${when}.` : "";
+  if (state === "update_available" && status.available) {
+    return `Version ${status.available} is available. You are running ${status.current}` +
+      (status.date ? ` · published ${status.date}` : "") + "." + checked;
+  }
+  if (state === "cannot_check") {
+    return status.error
+      ? `Version ${status.current}. ${status.error}${checked}`
+      : `Version ${status.current}. The last check could not run, so whether ` +
+        `this is the newest is unknown.` + checked;
+  }
+  if (state === "up_to_date") {
+    return `Version ${status.current} — the newest published.` + checked;
+  }
+  // `unknown`: no check has run, so the card says exactly that instead of
+  // claiming this build is the newest.
+  return `Version ${status.current}. Not checked yet — press Check now to compare ` +
+    `with the newest release.`;
+}
+
+/**
+ * ONE line for the card's state, from the release check AND the two versions.
+ *
+ * The three states the owner asked for on 2026-11-21 sound like this:
+ *
+ *   - the two halves are equal, and nothing newer is published ->
+ *     **"Up to date."** followed by the check's own line, so the Check button
+ *     still has its answer on screen;
+ *   - the backend is older (the measured case: Desktop 0.2.492 installed,
+ *     backend 0.2.491) -> "Jarvis Desktop 0.2.492 is installed; the backend is
+ *     0.2.491 - press Update everything to finish the backend half." The check's
+ *     own line is APPENDED, never substituted, so a check that found no newer
+ *     release cannot make the card look finished while a half is behind;
+ *   - a backend half is running now -> "Finishing the backend half now. ... - the
+ *     card updates when it ends." (a stale MISMATCH is never left standing).
+ *
+ * A backend that is NEWER, or two version schemes that cannot be compared, are
+ * left to the handshake's own sentence (#update-sync) plus the check's line:
+ * neither is something "Update everything" would fix, so this line does not ask
+ * for it. Pure: the caller stores the two answers and this composes the words.
+ */
+function updateStateWords(status, sync) {
+  const check = updateCheckWords(status);
+  if (!sync || typeof sync !== "object") return check;
+  const older = sync.state === "backend-older";
+  if (!older) {
+    // "Up to date." is a claim about BOTH halves and the check: only the equal
+    // pair with a finished check that found nothing newer may say it.
+    if (sync.state === "in-sync" && updateStateOf(status) === "up_to_date") {
+      return `Up to date. ${check}`;
+    }
+    return check;
+  }
+  const desktop = String(sync.desktop || status.current || "the version this app is running");
+  const backend = String(sync.backend || "an older one");
+  if (sync.running) {
+    return `Finishing the backend half now. Jarvis Desktop ${desktop} is installed; ` +
+      `the backend is ${backend} - the card updates when it ends.`;
+  }
+  return `Jarvis Desktop ${desktop} is installed; the backend is ${backend} - ` +
+    `press Update everything to finish the backend half. ${check}`;
+}
+
+/**
+ * Paint the card's ONE state line, from both reads. Split out so `paintUpdate`
+ * and `paintVersionSync` can land in any order and the last answer always wins,
+ * instead of one read painting over the other's truth.
+ *
+ * It deliberately does NOT touch the buttons: the Install button's visibility is
+ * the release check's answer (`paintUpdate`), and a version-sync repaint after a
+ * finished install must not put the Install button back beside the Restart one.
+ */
+function paintUpdateState() {
+  const status = lastUpdateStatus;
+  if (!status) return;
+  if (!status.supported) {
+    // A Check button that can only ever fail invites someone to keep pressing
+    // it, so say what is actually true about this build instead.
+    dom.updateState.textContent =
+      `Version ${status.current}. This build has no update key, so it cannot ` +
+      `verify a download and will not offer one.`;
+    return;
+  }
+  dom.updateState.textContent = updateStateWords(status, lastVersionSync);
+}
+
 function paintUpdate(status) {
   if (!status) return;
+  lastUpdateStatus = status;
   // About's version, from the same read as everything else here - never a
   // second, separately-maintained copy of the number that could drift from
   // the one actually running.
@@ -1887,50 +1999,24 @@ function paintUpdate(status) {
   dom.updateNotesBody.textContent = notes;
 
   if (!status.supported) {
-    // A Check button that can only ever fail invites someone to keep pressing
-    // it, so say what is actually true about this build instead.
-    dom.updateState.textContent =
-      `Version ${status.current}. This build has no update key, so it cannot ` +
-      `verify a download and will not offer one.`;
     dom.updateCheck.disabled = true;
     dom.updateInstall.hidden = true;
+    paintUpdateState();
     return;
   }
-
   dom.updateCheck.disabled = false;
+  // The Install button is the release check's alone. A version handshake that
+  // arrives later only rewrites the words (paintUpdateState), so a finished
+  // install's "Install" is never put back after the page has swapped it for
+  // Restart.
   const state = updateStateOf(status);
-  const when = checkedWords(status.checked_at);
-  // The time is said only when a check really ran. `up_to_date` without one
-  // cannot happen on the PC (Rust computes both), but if a status ever
-  // arrives that way this page must not invent the time either.
-  const checked = when ? ` Last checked ${when}.` : "";
-
   if (state === "update_available" && status.available) {
-    dom.updateState.textContent =
-      `Version ${status.available} is available. You are running ${status.current}` +
-      (status.date ? ` · published ${status.date}` : "") + "." + checked;
     dom.updateInstall.hidden = false;
     dom.updateInstall.textContent = `Install ${status.available}`;
-    return;
+  } else {
+    dom.updateInstall.hidden = true;
   }
-  dom.updateInstall.hidden = true;
-  if (state === "cannot_check") {
-    dom.updateState.textContent = status.error
-      ? `Version ${status.current}. ${status.error}${checked}`
-      : `Version ${status.current}. The last check could not run, so whether ` +
-        `this is the newest is unknown.` + checked;
-    return;
-  }
-  if (state === "up_to_date") {
-    dom.updateState.textContent =
-      `Version ${status.current} — the newest published.` + checked;
-    return;
-  }
-  // `unknown`: no check has run, so the card says exactly that instead of
-  // claiming this build is the newest.
-  dom.updateState.textContent =
-    `Version ${status.current}. Not checked yet — press Check now to compare ` +
-    `with the newest release.`;
+  paintUpdateState();
 }
 
 async function loadUpdate() {
@@ -1950,6 +2036,7 @@ async function loadUpdate() {
  *  works. */
 function paintVersionSync(sync) {
   if (!dom.updateSync || !sync || typeof sync !== "object") return;
+  lastVersionSync = sync;
   const state = String(sync.state || "");
   dom.updateSync.textContent = String(sync.words || "");
   // "in-sync" is the only state allowed to paint green. Everything else is
@@ -1963,6 +2050,10 @@ function paintVersionSync(sync) {
       : "";
   dom.updateSync.dataset.tone = tone;
   dom.updateSync.hidden = false;
+  // ...and the card's own state line is recomposed from both reads, so a
+  // no-newer-release check cannot hide the backend half this handshake just
+  // reported (the owner's 2026-11-21 complaint).
+  paintUpdateState();
 }
 
 /** Reads the two versions back. Never throws: a backend that is down has its
@@ -1976,10 +2067,14 @@ async function loadVersionSync() {
   try {
     paintVersionSync(await invoke("shell_version_sync"));
   } catch (error) {
+    // The handshake could not answer at all: the card must not keep drawing a
+    // pair from the last answer as if it were current.
+    lastVersionSync = null;
     dom.updateSync.textContent =
       "Could not compare the two versions: " + String((error && error.message) || error);
     dom.updateSync.dataset.tone = "bad";
     dom.updateSync.hidden = false;
+    paintUpdateState();
   }
 }
 

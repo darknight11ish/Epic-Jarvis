@@ -41,8 +41,12 @@ import {
   members,
   titleOf,
 } from "./menu-visibility.js";
+import { asksForUpdates, UPDATE_CARD_ID } from "./settings-search.js";
 
 const APP = "desktop";
+
+/** The catalogue id the update words always mean: `settings.updates`. */
+const UPDATES_MENU_ID = `settings.${UPDATE_CARD_ID}`;
 
 /**
  * The words on the surface. Lower case in the code, sentence case on screen,
@@ -281,6 +285,17 @@ export function scoreItem(item, query) {
  * The rows the search shows, best first. Ties keep catalogue order, so the
  * list never shuffles between two keystrokes.
  *
+ * THE UPDATE ROW IS PINNED FIRST FOR THE UPDATE WORDS (the owner, 2026-11-21:
+ * *"when i search updates in the settings i have to scroll all the way to the
+ * bottom of the list to find the update section for jarvis. it should be at the
+ * top of the list."*). The rule is the Settings search's own
+ * ([`asksForUpdates`], imported rather than copied), so the two boxes cannot
+ * disagree about what "the update card" is: a query made only of update words
+ * puts the Updates row first even when its own title, aliases and description
+ * contain none of the query - "upgrade" found nothing here before this, and
+ * "version" found About first. A query with any other word in it is left to the
+ * ordinary ranking, so no unrelated search is reordered.
+ *
  * @param {Array<object>} items  from {@link buildPalette}
  * @param {string} query
  */
@@ -296,6 +311,18 @@ export function search(items, query) {
     a.score - b.score ||
     a.item.title.length - b.item.title.length ||
     a.index - b.index);
+  if (asksForUpdates(q)) {
+    const at = out.findIndex((row) => row.item.id === UPDATES_MENU_ID);
+    if (at >= 0) {
+      out.unshift(out.splice(at, 1)[0]);
+    } else {
+      // Its own words contain none of the query ("upgrade"), and the row is
+      // still the one the owner means: offer it, first, rather than answering
+      // "nothing matches that" about the card he was looking for.
+      const item = items.find((row) => row.id === UPDATES_MENU_ID);
+      if (item) out.unshift({ item, score: 0, index: items.indexOf(item) });
+    }
+  }
   return out;
 }
 
