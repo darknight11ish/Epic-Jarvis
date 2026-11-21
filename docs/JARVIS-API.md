@@ -19566,6 +19566,83 @@ undo receipt and the registry/tier table.
 `tools/repair_live_backend_gaps.py` (`--only project-tools`), the owner's
 2026-11-14 route. No patch was added and no new action was invented.
 
+### 88.9 The plan store's execution and brief bridges (added 2026-11-20)
+
+The owner-approved PM3 slice (the architecture review's "PM3 - Execution
+Bridge"; `docs/PROJECTS-DESIGN.md`'s own "PM3" build note). It is
+**backend-only**: neither app calls the one new route on this tree, which is
+why `tools/check_parity.py` lists it as backend-only and
+`docs/ARCHITECTURE.md` section 8 records the deferral. Nothing here runs a
+command, adds a model tool, invents a date or adds a card class. The one new
+route is **not** a carded action: it is a read-only catch-up of the owner's
+own PC (every GitHub request it makes is a GET), so it raises no gate card.
+
+**The route.**
+
+```
+POST /api/projects/<project_id>/sync
+```
+
+The body is an optional JSON object (see below).
+
+`{"work_item": "<id or title>", "task": "<jarvis_tasks job id>"}` attaches a
+durable job to one work item first; `{"work_item": ..., "pr": <number>}`
+attaches a GitHub pull request. Either key may be sent, then the project's
+links are read and projected. With no body it only syncs. Answers `200` with
+`{"ok", "project", "linked", "task": {...}, "pr": {...}, "offers": [...]}`;
+an unknown body key shape or an ambiguous work item is the store's usual
+`400` in words, an unknown project `404`.
+
+**What is stored, and what is not.** The read results are a PROJECTION on
+`work_items`: `executor` (`owner` | `jarvis_local` | `jarvis_cloud` |
+`jarvis_job`), `linked_task_id`, `linked_pr_number`, `linked_pr_state`
+(`open` | `merged` | `closed`) and `linked_ci_status` (`green` | `running` |
+`failed` | `unknown`). Every one is NULLABLE, added by the same guarded,
+backed-up ALTER the plan fields use. A work item's own `status` is **never**
+written by a sync: a job's state moves it through the existing status path
+(`in_progress` / `waiting_approval` / `in_review`, one event and one Undo
+receipt per change), and a merged PR only raises an OFFER. The two new work
+item states are `waiting_approval` and `in_review`; neither is ready and
+neither is closed.
+
+**The morning digest.** `jarvis_arbiter.digest()` gains one additive key,
+`projects`, built on read from `jarvis_projects.morning_brief()`: work items
+due within 48 hours (each with its own stored date and an `overdue` flag),
+the top **3** ready items across active projects (the same cap the
+deterministic "what should I work on next?" answer keeps), `in_progress`
+items untouched for **more than 7 days**, and any merged-PR offer. It writes
+nothing and the digest's existing keys are unchanged.
+
+**The daily to-do list.** `GET /api/schedule`'s answer gains
+`project_todos: true` and appends READ-ONLY rows to `todo` for every work
+item due today or earlier that is still open: each row carries
+`source: "project"`, `read_only: true`, its `project`, `project_id`,
+`work_item` and `due_date`, and the SAME `carry` tag a scheduler row gets
+("from yesterday", "from Friday (3d ago)"), built by the scheduler's own
+`carry_words()`. No `schedule.db` row is created and `todos()` is unchanged,
+so the same work item can never be entered twice.
+
+**The hub note.** `project_export_obsidian_hub` still writes ONE
+`edit_vault_note` card and takes ONE File Guardian copy of an existing note;
+the note is rebuilt from the store on every export and never read back, and
+it now also carries the linked repository, each item's executor and PR/CI
+projection, and the merged-PR offers.
+
+**Deliberately deferred: the Run Step dispatch.** `jarvis_tasks.tick()` has
+no production caller and no background step executor by its own 2026-10-18
+audit, and the plan card that would create a job-list job is closed by
+measurement. This slice therefore builds the LINK and its status projection,
+not a runner; `docs/ARCHITECTURE.md` section 8 says the same, and the
+reasoning is in `decisions.d/2026-11-20-the-plan-store-bridges.md`.
+
+**Acceptance** is in `backend/test_projects.py`: a due work item in the daily
+list with its carry tag and no scheduler row; the digest's 48h/3-ready/>7d
+lists; the task link moving the item's status; the PR read on a fake
+transport with no card and no GitHub write; the ready read-out capped at 3;
+`jarvis_undo` restoring a reverted status; the taint rule on every
+owner-direct write; and no invented date anywhere. Each new test was written
+first and failed on the tree it was written against.
+
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §59 on the `claude/jarvis-3d-animal-mascot-8dr0tb` branch; §59 is already Goals on main's side. References that came with that branch were renumbered with it.

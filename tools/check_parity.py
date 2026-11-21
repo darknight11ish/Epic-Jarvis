@@ -1262,6 +1262,16 @@ BACKEND_ONLY = {
     # section 8, "One-sided on purpose", has the row), and this line moves out.
     "/api/projects/{id}/map": "the read-only repository map of one project's folder (JARVIS-API section 188; jarvis_repomap.py): the files, classes, functions and imports inside \"Folders Jarvis may look in\", ranked for the question by a documented deterministic formula and packed to at most 2,000 tokens by the project's own 3-characters-a-token count. It writes nothing at all - no index, no cache, no temp file - runs no program, opens no socket and calls no model, and it lists names and signatures only, never a function's body. No app screen is added in this slice: a map is read by the local model, not drawn for a person, and the owner's path is chat (the existing my_files action `map`), which works from BOTH apps already because the chat turn and the tool run on the PC. Nothing here is pc_only: the route is a plain project read with no card of its own (it rides the existing read_files_readonly line) and adds no gate action.",
 
+    # The plan store's read-only bridge sync (2026-11-20, PM3; JARVIS-API
+    # section 88.9; jarvis_projects.py's own route table, POST
+    # /api/projects/<id>/sync). It reads the linked durable job's own state
+    # and the linked pull request's own state through jarvis_github.py (two
+    # GETs, no GitHub write) and stores a projection - no card. No app calls
+    # it on this tree: the Run Step / Sync button is PM4's screen, on BOTH
+    # apps on this same route when it lands (ARCHITECTURE section 8 records
+    # that deferral). It is backend-only today, not `planned`: no client is
+    # being built against it in this slice, and PM4 owns the screen.
+    "/api/projects/{id}/sync": "The plan store's read-only bridge sync (JARVIS-API section 88.9; jarvis_projects.py, PM3 2026-11-20): POST one project id, with an optional link ({work_item, task} or {work_item, pr}), and the linked durable job's own state and the linked pull request's own state are read and projected onto the work item. Every GitHub request it makes is a GET; nothing is changed on GitHub, no step runs, and no work item STATUS is written by the sync (a job's state moves it through the existing status path, a merged PR only raises an offer). No approval card: it is a read-only catch-up of the owner's own PC, the same shape as the project reads around it. Neither app calls it yet - the Run Step/Sync button is the PM4 screen, on BOTH apps on this same route, and ARCHITECTURE section 8 records that.",
     # The self-benchmark's five phase-1 routes (2026-11-04; jarvis_bench.py,
     # bench.patch, JARVIS-API section 185). BACKEND-ONLY TODAY, and each reason
     # says which lane builds the caller: the project's own phase plan puts the

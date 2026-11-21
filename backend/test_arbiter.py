@@ -40,11 +40,25 @@ class Sandbox(unittest.TestCase):
         AB._inited = False
         AB._last_published.clear()
         os.environ["JARVIS_PRESENCE_FILE"] = str(self.dir / "presence.json")
+        # PM3 (2026-11-20): digest() now carries the project store's morning
+        # brief, so point projects.db at this test's own folder - a unit test
+        # must never read the owner's live projects.db.
+        self._old_projects = os.environ.get("JARVIS_PROJECTS_DB")
+        os.environ["JARVIS_PROJECTS_DB"] = str(self.dir / "projects.db")
+        try:
+            import jarvis_projects as _P
+            _P._reset_for_tests()
+        except Exception:                                 # noqa: BLE001
+            pass
 
     def tearDown(self):
         AB.DB_PATH, AB._CFG_DIR = self._old_db, self._old_cfgdir
         AB._inited = False
         os.environ.pop("JARVIS_PRESENCE_FILE", None)
+        if self._old_projects is None:
+            os.environ.pop("JARVIS_PROJECTS_DB", None)
+        else:
+            os.environ["JARVIS_PROJECTS_DB"] = self._old_projects
         self.tmp.cleanup()
 
     def speak(self, source="test", **kw):

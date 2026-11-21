@@ -102,6 +102,25 @@ anything tries):
     status back; the hub note is ONE notes-editor card with the File Guardian
     copy first; and the acceptance case answers "what should I work on next?"
     from a REAL plan row after the import, not the empty answer;
+  - THE EXECUTION AND BRIEF BRIDGES (2026-11-20, PM3): a work item due today
+    or earlier appears in the one scheduler's daily to-do list with the same
+    carry-over tag a to-do row gets ("from yesterday"), read-only - no
+    schedule.db row is written and a second read is identical; the morning
+    digest (jarvis_arbiter.digest()) lists work due within 48 hours, the top
+    3 ready items and in_progress items untouched for more than seven days,
+    without writing anything; a work item linked to a REAL durable job in
+    jarvis_tasks.py follows the job's own state through the existing status
+    path (queued/running -> in_progress, waiting_approval -> waiting_approval,
+    succeeded -> in_review, a failed job reported and never given a made-up
+    status, a done item never pulled back); a linked PR's state and CI are
+    read through the REAL jarvis_github.py on a fake transport with NO card
+    and no GitHub write, and a merged PR is an OFFER only; the ready read-out
+    the phone and the voice path read is capped at 3; jarvis_undo restores a
+    reverted status; a turn shaped by outside text still forces every
+    owner-direct write to ONE ask card; the bridges add no model tool and no
+    date is ever invented; and the hub note is refreshed from the store, never
+    read back, with the bridge state in it. The Run Step DISPATCH is
+    deliberately deferred - see the decisions fragment and ARCHITECTURE §8;
   - the routes, install() and the patch on the stack of earlier patches;
   - the audit log never carries a name, a note or a number.
 
@@ -134,7 +153,11 @@ require_shipped("jarvis_projects.py", "jarvis_quick.py", "jarvis_schedule.py",
                 "jarvis_agent.py", "jarvis_goals.py", "jarvis_receipts.py",
                 "jarvis_notes_edit.py", "jarvis_file_guardian.py",
                 "jarvis_claims.py", "jarvis_reach.py",
-                "jarvis_tool_profiles.py")
+                "jarvis_tool_profiles.py",
+                # PM3 (2026-11-20): the execution and brief bridges drive the
+                # REAL GitHub reader (with a fake transport), the REAL durable
+                # task list and the REAL morning digest.
+                "jarvis_github.py", "jarvis_tasks.py", "jarvis_arbiter.py")
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-projects-"))
 #: Every project edit in this suite now leaves a receipt. Pointed at this
@@ -145,6 +168,10 @@ os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 #: Project Mode now snapshots its pointer file through the guardian first, so
 #: this suite's copy of the time-machine store lives in its temp folder too.
 os.environ["OPENJARVIS_HOME"] = str(_TMP / "guardian-home")
+#: PM3 (2026-11-20): the durable task list is read by the work-item bridge, so
+#: point its default store at this suite's temporary folder BEFORE anything can
+#: open it - a test run must never touch the owner's real tasks.db.
+os.environ["JARVIS_TASKS_DB"] = str(_TMP / "tasks-default.db")
 _AUDIT = []
 fw = types.ModuleType("jarvis_framework")
 fw.CONFIG_DIR = _TMP
@@ -4006,6 +4033,676 @@ def t_pm2_the_seeded_plan_is_a_real_next_item():
         _pm2_restore_module("jarvis_goals", old_goals)
         _pm2_restore_module("jarvis_schedule", old_sched)
         _pm2_unuse(old_env)
+
+
+# ==========================================================================
+#   PM3 (2026-11-20): the execution and brief bridges
+# ==========================================================================
+# The owner-approved PM3 spec (the architecture review's "PM3 - Execution
+# Bridge", and this repository's docs/PROJECTS-DESIGN.md build notes): the
+# plan store now meets the stores and surfaces that already exist -
+#   * the read-only GitHub reader (`jarvis_github.py`) for a linked PR's own
+#     state and CI, with NO write card;
+#   * the durable task list (`jarvis_tasks.py`), whose job state updates the
+#     linked work item - the link and its projection only, see the deferral
+#     note on `t_pm3_the_task_link_updates_the_work_item_status`;
+#   * the morning digest (`jarvis_arbiter.digest()`): due within 48h, the top
+#     3 ready items, and in_progress items untouched for more than 7 days;
+#   * the daily to-do list (`jarvis_schedule.status()`): a read-only copy of
+#     every work item due today or earlier, with the same carry-over tags;
+#   * the one-way Obsidian hub note (`project_export_obsidian_hub`), now
+#     carrying the link state and the merged-PR offer.
+# Nothing here runs anything: no dispatcher, no runner, no executor.
+# Every check below was written BEFORE the bridge code and failed on the tree
+# it was written against (the new names did not exist yet).
+
+_PM3 = _TMP / "pm3"
+_PM3.mkdir(exist_ok=True)
+_PM3_N = [0]
+#: The fixed moment the PM3 tests live at (a Friday, so "yesterday" and
+#: "Friday (3d ago)" both have a word). Tests that need time to pass move the
+#: store's own clock; nothing sleeps.
+_PM3_NOW = time.mktime(time.strptime("2026-11-20 09:30:00", "%Y-%m-%d %H:%M:%S"))
+
+
+def _pm3_day(offset_days: int) -> str:
+    return time.strftime("%Y-%m-%d", time.localtime(_PM3_NOW + offset_days * 86400))
+
+
+def _pm3_store(*, start=None):
+    """(store, bump, ticks): a fresh projects.db whose clock a test can move."""
+    _PM3_N[0] += 1
+    ticks = [float(_PM3_NOW if start is None else start)]
+
+    def clock():
+        ticks[0] += 1.0
+        return ticks[0]
+
+    def bump(seconds):
+        ticks[0] += float(seconds)
+
+    return P.Projects(_PM3 / f"projects-{_PM3_N[0]}.db", clock=clock), bump, ticks
+
+
+def _pm3_project(store, name="Site", *, repo="darknight11ish/Epic-Jarvis"):
+    project = store.create({"name": name, "kind": "coding"}, here=True)
+    if repo:
+        store.set_plan_fields(project["id"], {"linked_repo": repo})
+    return store.get(project["id"])
+
+
+def _pm3_tasks():
+    """The REAL durable task list on a file of this suite's own."""
+    import jarvis_tasks as T
+    _PM3_N[0] += 1
+    return T, T.Store(_PM3 / f"tasks-{_PM3_N[0]}.db")
+
+
+def _pm3_github_on():
+    """The real GitHub module, told to read with a made-up token."""
+    import jarvis_github as GH
+    old = GH._need_token
+    GH._need_token = lambda: "pm3-test-token-not-logged"
+    return GH, old
+
+
+def _pm3_github_off(GH, old):
+    GH._need_token = old
+
+
+def _pm3_fake_github(*, merged=False, checks=None, fail=False):
+    """(fetch, calls, state): a fake transport that answers GETs only.
+
+    `state` is mutable, so a test moves the pull request on between reads the
+    same way GitHub would. Nothing here can answer a write's response: the
+    bridge never makes one."""
+    calls = []
+    state = {
+        "pr": {"number": 1402, "title": "The plan store's bridges",
+               "state": "closed" if merged else "open", "merged": bool(merged),
+               "head": {"sha": "a" * 40}, "base": {"ref": "main"}},
+        "checks": checks if checks is not None else [
+            {"name": "backend", "status": "completed", "conclusion": "success"}],
+    }
+
+    def fetch(method, url, *, headers=None, body=None, timeout=None):
+        calls.append((method, url, body))
+        if fail:
+            raise OSError("no network in this test")
+        if "/check-runs" in url:
+            return 200, json.dumps({"check_runs": state["checks"]}), {}
+        if "/pulls/" in url:
+            return 200, json.dumps(state["pr"]), {}
+        return 404, json.dumps({"message": "Not Found"}), {}
+    return fetch, calls, state
+
+
+def t_pm3_a_due_work_item_appears_in_the_daily_list():
+    """BRIDGE 4. A work item due today or earlier appears in the Reminders ->
+    Daily to-do list with the SAME carry-over tag a to-do row gets ("from
+    yesterday"), read-only: no schedule.db row is created, repeated reads are
+    identical, and an item with no date, a future date or a closed status
+    never appears. The other three work items in the fixture prove the
+    selection is the store's own dates and never an invented one."""
+    import sqlite3
+    import jarvis_schedule as S
+    s, _bump, _ticks = _pm3_store()
+    project = _pm3_project(s)
+    yesterday = s.add_work_item(project["id"], {"title": "Post the letter",
+                                                "due_date": _pm3_day(-1)})
+    today = s.add_work_item(project["id"], {"title": "File the report",
+                                            "due_date": _pm3_day(0)})
+    future = s.add_work_item(project["id"], {"title": "Next month's plan",
+                                             "due_date": _pm3_day(30)})
+    undated = s.add_work_item(project["id"], {"title": "No date at all"})
+    done = s.add_work_item(project["id"], {"title": "Already done",
+                                           "due_date": _pm3_day(-2),
+                                           "status": "done"})
+    sched = S.Scheduler(_PM3 / f"daily-{_PM3_N[0]}.db", clock=lambda: _PM3_NOW)
+    # The schedule's read door resolves the plan store through jarvis_projects'
+    # own singleton, the way the running backend does - so point it at THIS
+    # test's store, never the owner's real one.
+    old_env = _pm2_use(s)
+    try:
+        shown = sched.status()
+    finally:
+        _pm2_unuse(old_env)
+    rows = {row["id"]: row for row in shown.get("todo") or []}
+    expected = P.daily_row_id(project["id"], yesterday["id"])
+    check("a work item due yesterday appears in the daily to-do list",
+          expected in rows, sorted(rows))
+    if expected in rows:
+        row = rows[expected]
+        check("... as a READ-ONLY projected row, not a scheduler row",
+              row.get("read_only") is True and row.get("source") == "project"
+              and row.get("kind") == "todo" and row.get("state") == "active",
+              {k: row.get(k) for k in ("read_only", "source", "kind", "state")})
+        check("... carrying the SAME carry-over tag a to-do row gets",
+              row.get("carry") == "from yesterday", row.get("carry"))
+        check("... and naming the project and the work item it came from",
+              row.get("project") == "Site"
+              and row.get("work_item") == yesterday["id"], row)
+        check("... with the item's own due date, never an invented one",
+              row.get("due_date") == _pm3_day(-1), row.get("due_date"))
+    today_id = P.daily_row_id(project["id"], today["id"])
+    check("an item due today is on today's list too",
+          today_id in rows and not rows[today_id].get("carry"), rows.get(today_id))
+    check("a future item is NOT on the daily list",
+          P.daily_row_id(project["id"], future["id"]) not in rows)
+    check("an item with no date is never invented onto the list",
+          P.daily_row_id(project["id"], undated["id"]) not in rows)
+    check("a DONE item is not carried over",
+          P.daily_row_id(project["id"], done["id"]) not in rows)
+    check("the read says the projection is there (an additive marker)",
+          shown.get("project_todos") is True, shown.get("project_todos"))
+    # Read-only and no duplicate rows: a second read is identical, and the one
+    # scheduler still holds no to-do row of its own.
+    old_env = _pm2_use(s)
+    try:
+        again = sched.status()
+    finally:
+        _pm2_unuse(old_env)
+    ids = [row["id"] for row in again.get("todo") or []]
+    check("a second read adds nothing (no duplicate rows, no writes)",
+          ids == [row["id"] for row in shown.get("todo") or []]
+          and len(ids) == len(set(ids)), ids)
+    check("... the one scheduler is untouched by the projection",
+          sched.todos() == [])
+    with sqlite3.connect(str(sched.path)) as c:
+        n = c.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    check("... and not one schedule.db row was written", n == 0, n)
+    # The route an app actually reads is the same status(): prove it.
+    old_get = S.get
+    S.get = lambda: sched
+    old_env = _pm2_use(s)
+    try:
+        code, out = S.handle_get()
+    finally:
+        S.get = old_get
+        _pm2_unuse(old_env)
+    check("GET /api/schedule's own answer carries the projected item",
+          code == 200 and any(row["id"] == expected for row in out.get("todo") or []),
+          code)
+    # The item's own date is exactly what the owner gave: no bridge wrote one.
+    stored = {row["id"]: row for row in s.work_items()}
+    check("neither the projection nor the read invented a due date",
+          stored[yesterday["id"]]["due_date"] == _pm3_day(-1)
+          and stored[undated["id"]]["due_date"] is None
+          and stored[future["id"]]["due_date"] == _pm3_day(30),
+          {k: v["due_date"] for k, v in stored.items()})
+
+
+def t_pm3_the_digest_lists_top_three_ready_and_stalled_items():
+    """BRIDGE 3. jarvis_arbiter.digest() surfaces, without writing anything
+    and without a model: (a) work items due within 48 hours, (b) the top 3
+    ready items ACROSS active projects, and (c) in_progress items untouched
+    for more than seven days. The digest's own existing keys keep their
+    meaning - the project brief is one added key."""
+    import jarvis_arbiter as AB
+    s, bump, ticks = _pm3_store()
+    site = _pm3_project(s, "Site")
+    tool = _pm3_project(s, "Tool", repo=None)
+    made = []
+    for n, (project, title) in enumerate([
+            (site, "First"), (tool, "Second"), (site, "Third"),
+            (tool, "Fourth"), (site, "Fifth")]):
+        made.append(s.add_work_item(project["id"], {"title": title,
+                                                    "status": "ready",
+                                                    "priority": n}))
+    stalled = s.add_work_item(site["id"], {"title": "Stuck for a week"})
+    s.set_work_item_status(stalled["id"], "in_progress")
+    due_tomorrow = s.add_work_item(site["id"], {"title": "Due tomorrow",
+                                                "due_date": _pm3_day(1)})
+    far_away = s.add_work_item(site["id"], {"title": "Due next month",
+                                            "due_date": _pm3_day(30)})
+    bump(8 * 86400)               # eight days later: `stalled` is over 7d old
+    # ... while this one was started AFTER the clock moved, so it is not stale.
+    started = s.add_work_item(site["id"], {"title": "Started today"})
+    s.set_work_item_status(started["id"], "in_progress")
+    old_env = _pm2_use(s)
+    try:
+        before = s.path.read_bytes()
+        counts = s.plan_counts()
+        out = AB.digest(now=ticks[0])
+    finally:
+        _pm2_unuse(old_env)
+    brief = out.get("projects") or {}
+    ready = [row["title"] for row in brief.get("ready") or []]
+    check("the digest lists the TOP 3 ready items across active projects",
+          ready == ["First", "Second", "Third"], ready)
+    check("... and no more than three, so a spoken read-out stays short",
+          len(ready) <= 3, len(ready))
+    stalled_titles = [row["title"] for row in brief.get("stalled") or []]
+    check("the digest lists in_progress items untouched for more than 7 days",
+          stalled_titles == ["Stuck for a week"], stalled_titles)
+    check("... and does NOT call an item started today stalled",
+          "Started today" not in stalled_titles, stalled_titles)
+    due = [row["title"] for row in brief.get("due_48h") or []]
+    check("the digest lists work items due within 48 hours",
+          "Due tomorrow" in due and "Due next month" not in due, due)
+    check("the digest's own keys did not change meaning",
+          isinstance(out.get("items"), list) and "note" in out
+          and "budget" in out and out.get("count") is not None, sorted(out))
+    check("a digest read writes nothing: same bytes, same plan counts",
+          s.path.read_bytes() == before and s.plan_counts() == counts)
+    check("the digest says which day it read",
+          str(brief.get("read") or "") == time.strftime(
+              "%Y-%m-%d", time.localtime(ticks[0])), brief.get("read"))
+    # The due list only ever carries dates the store already had.
+    check("no date in the brief was invented",
+          {row["due_date"] for row in brief.get("due_48h") or []}
+          <= {_pm3_day(1)}, brief.get("due_48h"))
+
+
+def t_pm3_the_task_link_updates_the_work_item_status():
+    """BRIDGE 2, the link and its projection. A work item linked to a REAL
+    durable job in jarvis_tasks.py follows that job's own state through the
+    EXISTING status path (one project_event and one receipt per change):
+    queued/running -> in_progress, waiting_approval -> waiting_approval,
+    succeeded -> in_review. A failed or cancelled job is REPORTED, never
+    given a made-up status, and a done item is never pulled back.
+
+    WHAT IS DELIBERATELY NOT HERE (the owner's "no half-built runner" rule):
+    the Run Step DISPATCH that would create such a job is deferred - see the
+    decisions fragment and docs/ARCHITECTURE.md section 8. This test drives
+    the link directly, because the link is the half that can be built
+    honestly today."""
+    import jarvis_tasks as T
+    import jarvis_receipts as R
+    s, _bump, _ticks = _pm3_store()
+    project = _pm3_project(s)
+    item = s.add_work_item(project["id"], {"title": "Write the plan"})
+    T_store, tasks = _pm3_tasks()
+    job = T.JobList(store=tasks).enqueue(
+        "Write the plan", "the plan's first step",
+        [{"tool": "calculator", "args": {"expression": "1 + 1"},
+          "why": "a step that does nothing on this PC"}])
+    linked = s.link_task(item["id"], job.id, task_store=tasks)
+    check("a work item can be linked to a REAL durable job",
+          linked.get("linked_task_id") == job.id, linked.get("linked_task_id"))
+    check("... and the link is in the append-only log",
+          "work_item_link" in [ev["kind"] for ev in s.events()],
+          [ev["kind"] for ev in s.events()])
+    receipts = lambda: [row for row in R.recent()
+                        if row.get("tool_name") == "work_item_status"]
+    before = len(receipts())
+
+    def current():
+        return [row for row in s.work_items() if row["id"] == item["id"]][0]
+
+    out = s.sync_task_status(task_store=tasks)
+    check("a QUEUED jarvis_tasks job moves the linked item to in_progress",
+          current()["status"] == "in_progress" and out["changed"],
+          (current()["status"], out))
+    check("... through the existing status path, so ONE receipt exists",
+          len(receipts()) == before + 1, len(receipts()) - before)
+    done_now = tasks.get_task(job.id)
+    done_now.status = "running"
+    tasks.save(done_now)
+    n = len(receipts())
+    again = s.sync_task_status(task_store=tasks)
+    check("a RUNNING job changes nothing further (no second receipt)",
+          current()["status"] == "in_progress" and len(receipts()) == n
+          and s.sync_task_status(task_store=tasks)["changed"] == [], again)
+    done_now = tasks.get_task(job.id)
+    done_now.status = "waiting_approval"
+    tasks.save(done_now)
+    s.sync_task_status(task_store=tasks)
+    check("a job waiting on a card shows as waiting_approval",
+          current()["status"] == "waiting_approval", current()["status"])
+    done_now = tasks.get_task(job.id)
+    done_now.status = "succeeded"
+    tasks.save(done_now)
+    s.sync_task_status(task_store=tasks)
+    check("a SUCCEEDED job moves the item to in_review, not to done",
+          current()["status"] == "in_review", current()["status"])
+    s.set_work_item_status(item["id"], "done")
+    done_now = tasks.get_task(job.id)
+    done_now.status = "running"
+    tasks.save(done_now)
+    s.sync_task_status(task_store=tasks)
+    check("a DONE work item is never pulled back by the job's state",
+          current()["status"] == "done", current()["status"])
+    locked = s.add_work_item(project["id"], {"title": "A failed job"})
+    failed = T.JobList(store=tasks).enqueue(
+        "A failed job", "",
+        [{"tool": "calculator", "args": {"expression": "2 + 2"}, "why": "a step"}])
+    s.link_task(locked["id"], failed.id, task_store=tasks)
+    bad = tasks.get_task(failed.id)
+    bad.status = "failed"
+    tasks.save(bad)
+    out = s.sync_task_status(task_store=tasks)
+    rows = [row for row in s.work_items() if row["id"] == locked["id"]]
+    check("a FAILED job invents no status: the item is left where it was and "
+          "the answer says why",
+          rows[0]["status"] == "backlog"
+          and any(row.get("item") == locked["id"] and "failed" in str(row.get("why"))
+                  for row in out["skipped"]), (rows[0]["status"], out["skipped"]))
+    before_links = len(s.work_items())
+    said = raises(lambda: s.link_task(locked["id"], "f" * 32, task_store=tasks),
+                  ValueError)
+    check("linking a job id that does not exist is refused in words",
+          "no job" in said.lower(), said)
+    check("... and nothing was written for it", len(s.work_items()) == before_links)
+    check("no bridge step invented a due date",
+          all(row["due_date"] is None for row in s.work_items()))
+
+
+def t_pm3_a_pr_status_syncs_with_no_write_card():
+    """BRIDGE 1. The linked PR's own state and CI are READ from jarvis_github.py
+    and written onto the work item's projection columns - no gate card, no
+    GitHub write (every request is a GET), and the work item's STATUS is never
+    changed by the sync. A merged PR becomes an OFFER, never an automatic
+    'done': the offer is listed, and the move stays the owner's own status
+    path with its normal receipt and Undo."""
+    GH, old_token = _pm3_github_on()
+    try:
+        s, _bump, _ticks = _pm3_store()
+        project = _pm3_project(s)
+        item = s.add_work_item(project["id"], {"title": "Ship the bridge",
+                                               "status": "in_progress"})
+        s.link_pr(item["id"], 1402)
+        fetch, calls, state = _pm3_fake_github(checks=[
+            {"name": "backend", "status": "completed", "conclusion": "failure"}])
+        cards = _PmChecker()
+
+        def gate_if_asked(action, detail, prompt):
+            cards(action, detail, prompt)
+            raise AssertionError("the read-only PR sync raised a gate card")
+
+        real_gate = P._gate
+        P._gate = gate_if_asked
+        try:
+            out = s.sync_prs(fetch=fetch)
+        finally:
+            P._gate = real_gate
+        row = [r for r in s.work_items() if r["id"] == item["id"]][0]
+        check("a linked PR's own state syncs onto the work item",
+              row.get("linked_pr_number") == 1402
+              and row.get("linked_pr_state") == "open", row.get("linked_pr_state"))
+        check("... and its CI status, read from the checks on its head commit",
+              row.get("linked_ci_status") == "failed", row.get("linked_ci_status"))
+        check("the sync raises NO write card", cards.calls == [], cards.calls)
+        check("... and sends no write: every GitHub request was a GET",
+              bool(calls) and all(method == "GET" for method, _url, _body in calls),
+              [(method, url) for method, url, _body in calls])
+        check("... and never changes the item's own status",
+              row["status"] == "in_progress" and not out.get("offers"), row)
+        events = len(s.events())
+        s.sync_prs(fetch=fetch)
+        check("a second sync of the same state writes no second event",
+              len(s.events()) == events, len(s.events()) - events)
+        # GitHub marks the pull request merged: that is an OFFER.
+        state["pr"]["state"] = "closed"
+        state["pr"]["merged"] = True
+        state["checks"] = [{"name": "backend", "status": "completed",
+                            "conclusion": "success"}]
+        out = s.sync_prs(fetch=fetch)
+        row = [r for r in s.work_items() if r["id"] == item["id"]][0]
+        check("a MERGED PR is projected as merged, with green checks",
+              row.get("linked_pr_state") == "merged"
+              and row.get("linked_ci_status") == "green",
+              (row.get("linked_pr_state"), row.get("linked_ci_status")))
+        check("... and it OFFERS the move to done, without doing it",
+              row["status"] == "in_progress"
+              and [o["item"] for o in out.get("offers") or []] == [item["id"]],
+              (row["status"], out.get("offers")))
+        offers = s.pr_merged_offers()
+        check("the offer is a read the apps and the brief can list",
+              [o["item"] for o in offers] == [item["id"]]
+              and offers[0].get("pr") == 1402, offers)
+        n = len([ev for ev in s.events() if ev["kind"] == "pr_merged_offer"])
+        s.sync_prs(fetch=fetch)
+        check("... and the same merged PR offers only once",
+              len([ev for ev in s.events()
+                   if ev["kind"] == "pr_merged_offer"]) == n == 1, n)
+        # A failing transport is a plain sentence and changes nothing.
+        before = (row.get("linked_pr_state"), len(s.events()))
+        bad_fetch, _calls, _state = _pm3_fake_github(fail=True)
+        bad = s.sync_prs(fetch=bad_fetch)
+        after_row = [r for r in s.work_items() if r["id"] == item["id"]][0]
+        check("a GitHub that cannot answer is SAID, and the projection stays",
+              bad.get("errors") and (after_row.get("linked_pr_state"),
+                                     len(s.events())) == before,
+              (bad.get("errors"), after_row.get("linked_pr_state")))
+        # The production door is the project store's own POST route: the same
+        # read through the same store, and the same no-card rule.
+        code, posted = P.handle_post(
+            f"/api/projects/{project['id']}/sync", {}, store=s, fetch=fetch)
+        row = [r for r in s.work_items() if r["id"] == item["id"]][0]
+        check("GET.. POST /api/projects/<id>/sync is the app's door to the sync",
+              code == 200 and posted.get("ok") is True
+              and row.get("linked_pr_state") == "merged", (code, posted))
+        check("the bridge route is in the project store's route table",
+              P.parse_route(f"/api/projects/{project['id']}/sync") ==
+              ("sync", project["id"])
+              and P.parse_route(f"/api/projects/{project['id']}/sync/more") is None
+              and P.parse_route(f"/api/projects/{project['id']}/run") is None)
+    finally:
+        _pm3_github_off(GH, old_token)
+
+
+def t_pm3_undo_restores_a_reverted_work_status():
+    """BRIDGE acceptance. Moving a merged PR's work item to done - the offer's
+    own move, made through the EXISTING status path - leaves one jarvis_undo
+    receipt, and that Undo really puts the old status back, exactly once."""
+    import jarvis_receipts as R
+    s, _bump, _ticks = _pm3_store()
+    project = _pm3_project(s)
+    item = s.add_work_item(project["id"], {"title": "Merged and ready",
+                                           "status": "in_progress"})
+    s.link_pr(item["id"], 77)
+    # The receipt's Undo runs through jarvis_projects' own singleton (the same
+    # store the running backend uses), so point it at this test's store.
+    old_env = _pm2_use(s)
+    try:
+        before = {row["receipt_id"] for row in R.recent()}
+        moved = s.set_work_item_status(item["id"], "done")
+        new = [row for row in R.recent() if row["receipt_id"] not in before]
+        check("the offer's move uses the existing status path and makes a receipt",
+              moved["status"] == "done" and len(new) == 1, (moved["status"], new))
+    finally:
+        _pm2_unuse(old_env)
+    rid = new[0]["receipt_id"] if new else ""
+    if rid:
+        old_env = _pm2_use(s)
+        try:
+            got = R.undo(rid)
+        finally:
+            _pm2_unuse(old_env)
+        row = [r for r in s.work_items() if r["id"] == item["id"]][0]
+        check("jarvis_undo restores the work item's previous status",
+              got.get("ok") is True and row["status"] == "in_progress",
+              (got, row["status"]))
+        check("... and a second Undo refuses, applying nothing",
+              R.undo(rid).get("ok") is False)
+        check("... the events record both moves and invent no fourth one",
+              [ev["detail"].get("to") for ev in s.events()
+               if ev["kind"] == "work_item_status"] == ["done", "in_progress"],
+              [ev["detail"] for ev in s.events()
+               if ev["kind"] == "work_item_status"])
+
+
+def t_pm3_the_ready_readout_is_capped_at_three():
+    """BRIDGE acceptance, the surface rule: "what should I work on next?" - the
+    one deterministic answer the phone and the voice path read - names at most
+    THREE ready items, however many are ready, and the brief's own ready list
+    is capped the same way so the two can never disagree about how long the
+    answer is."""
+    s, _bump, _ticks = _pm3_store()
+    project = _pm3_project(s)
+    for n, title in enumerate(["One", "Two", "Three", "Four", "Five"]):
+        s.add_work_item(project["id"], {"title": title, "status": "ready",
+                                        "priority": n})
+    old_env = _pm2_use(s)
+    try:
+        answer = Q.answer("what should I work on next?", sched=_PmSched([]),
+                          now=_PM3_NOW)
+        brief = s.morning_brief(now=_PM3_NOW)
+    finally:
+        _pm2_unuse(old_env)
+    said = str(answer.reply) if answer is not None else ""
+    shown = [title for title in ("One", "Two", "Three", "Four", "Five")
+             if f'"{title}"' in said]
+    check("the phone/voice ready answer names at most three items",
+          len(shown) == 3, (shown, said[:400]))
+    check("... and names the first three by priority, not a random three",
+          shown == ["One", "Two", "Three"], shown)
+    check("... because the quick path's own cap is three",
+          Q._MAX_NEXT_ITEMS == 3, Q._MAX_NEXT_ITEMS)
+    check("the morning brief's ready list is capped the same way",
+          len(brief.get("ready") or []) == 3,
+          [row["title"] for row in brief.get("ready") or []])
+
+
+def t_pm3_taint_asks_and_no_date_is_ever_invented():
+    """The two rules the bridges must not weaken. (1) TAINT: a turn shaped by
+    outside text forces EVERY owner-direct project write to ONE
+    change_own_config card, and a no writes nothing - the five PM2 writes, on
+    the tree that now carries the bridges. (2) NO INVENTED DATE: the bridges
+    add no tool, take no date, and the rows they move keep exactly the dates
+    the owner gave (often none)."""
+    AG = _pm2_agent()
+    s, project, _other = _pm2_owner_store()
+    old_env = _pm2_use(s)
+    try:
+        s.add_work_item(project["id"], {"title": "First"})
+        s.add_work_item(project["id"], {"title": "Second"})
+        cases = [
+            ("work_item_add", {"project": "Site", "title": "Tainted add"}),
+            ("work_item_update_status", {"item": "First", "status": "in_progress"}),
+            ("work_item_link_dependency", {"from": "First", "to": "Second",
+                                           "kind": "blocks"}),
+            ("project_checkpoint_reflect", {"project": "Site", "text": "a lesson"}),
+            ("project_create", {"name": "Tainted project", "kind": "life"}),
+        ]
+        before = (s.plan_counts(), len(s.events()), len(s.list()))
+        for tool, args in cases:
+            no = _PmChecker(allowed=False, outcome="denied")
+            res, _steps = _pm2_call(tool, args, no,
+                                    watch=AG._TurnWatch(tainted=True))
+            check(f"an outside-text turn forces {tool} to ONE ask card",
+                  len(no.calls) == 1 and no.calls[0][0] == "change_own_config",
+                  (tool, no.calls))
+            check(f"... and {tool} writes nothing when the card is refused",
+                  res.get("ok") is False, res)
+        check("... so the whole store is unchanged after the five noes",
+              (s.plan_counts(), len(s.events()), len(s.list())) == before,
+              (s.plan_counts(), before))
+        check("the bridges add NO model tool: the plan tools are still the eight",
+              AG.PROJECT_TOOLS == {
+                  "project_create", "work_item_add", "work_item_update_status",
+                  "work_item_link_dependency", "project_checkpoint_reflect",
+                  "project_seed_plan", "project_decompose_plan",
+                  "project_export_obsidian_hub"}, sorted(AG.PROJECT_TOOLS))
+        check("... and no plan tool accepts a due or target date",
+              all("due_date" not in ((AG.TOOLS[name].parameters or {}).get("properties") or {})
+                  and "target_date" not in ((AG.TOOLS[name].parameters or {})
+                                            .get("properties") or {})
+                  for name in AG.PROJECT_TOOLS),
+              {name: sorted(((AG.TOOLS[name].parameters or {}).get("properties") or {}))
+               for name in AG.PROJECT_TOOLS})
+        # NO DATE INVENTED: the owner gave one date; every bridge keeps it and
+        # leaves every other row undated.
+        dated = s.add_work_item(project["id"], {"title": "Dated by the owner",
+                                                "due_date": _pm3_day(1)})
+        undated = s.add_work_item(project["id"], {"title": "Undated by design"})
+        s.link_pr(undated["id"], 1402)
+        fetch, _calls, _state = _pm3_fake_github(merged=True)
+        s.sync_prs(fetch=fetch)
+        T, tasks = _pm3_tasks()
+        job = T.JobList(store=tasks).enqueue(
+            "Undated by design", "",
+            [{"tool": "calculator", "args": {"expression": "1"}, "why": "a step"}])
+        s.link_task(undated["id"], job.id, task_store=tasks)
+        s.sync_task_status(task_store=tasks)
+        rows = {row["id"]: row for row in s.work_items()}
+        check("the owner's one date is exactly what every bridge keeps",
+              rows[dated["id"]]["due_date"] == _pm3_day(1), rows[dated["id"]])
+        check("no bridge ever adds a date to an undated item",
+              rows[undated["id"]]["due_date"] is None, rows[undated["id"]])
+        brief = s.morning_brief(now=_PM3_NOW)
+        check("the brief lists only dates the store already holds",
+              {row["due_date"] for row in brief["due_48h"]}
+              <= {_pm3_day(1)}, brief["due_48h"])
+        check("... and its due list never gains a date the owner did not give",
+              all(row["due_date"] == _pm3_day(1)
+                  for row in brief["due_48h"]), brief["due_48h"])
+        check("the daily projection never invents a date either",
+              all(row["due_date"] <= _pm3_day(0)
+                  for row in s.daily_projection(now=_PM3_NOW)),
+              [row["due_date"] for row in s.daily_projection(now=_PM3_NOW)])
+    finally:
+        _pm2_unuse(old_env)
+
+
+def t_pm3_the_hub_export_stays_one_way_and_carries_the_bridge():
+    """BRIDGE 5. The hub note is refreshed FROM the store on every export and
+    never read back: a hand edit is replaced, not imported; it carries the
+    link state (repository, PR state/CI, executor) and the merged-PR offer.
+    Still ONE edit_vault_note card and one File Guardian copy per export."""
+    GH, old_token = _pm3_github_on()
+    s, _bump, _ticks = _pm3_store()
+    project = _pm3_project(s, "Bridge")
+    item = s.add_work_item(project["id"], {"title": "Ship the bridge",
+                                           "status": "in_progress",
+                                           "executor": "jarvis_local"})
+    s.link_pr(item["id"], 1402)
+    fetch, _calls, _state = _pm3_fake_github(merged=True)
+    s.sync_prs(fetch=fetch)
+    old_env = _pm2_use(s)
+    old_vault = os.environ.get("JARVIS_OBSIDIAN_VAULT")
+    os.environ["JARVIS_OBSIDIAN_VAULT"] = str(_PM2_VAULT)
+    try:
+        events_before = len(s.events())
+        counts_before = s.plan_counts()
+        cards = _PmChecker()
+        res, _steps = _pm2_call("project_export_obsidian_hub",
+                                {"project": "Bridge"}, cards)
+        note_path = _PM2_VAULT / "Projects" / "Bridge.md"
+        check("the export raises exactly ONE notes-editor card",
+              len(cards.calls) == 1
+              and cards.calls[0][0] == "edit_vault_note", cards.calls[:1])
+        text = note_path.read_text(encoding="utf-8") if note_path.is_file() else ""
+        check("the hub note says it is a one-way copy", P.HUB_NOTE_WORDS in text,
+              text[:200])
+        check("... carries the linked repository and PR state",
+              "darknight11ish/Epic-Jarvis" in text and "1402" in text
+              and "merged" in text, text[:900])
+        check("... carries the executor that would run it",
+              "jarvis_local" in text, text[:900])
+        check("... and lists the merged PR's offer to move it to done",
+              "Ship the bridge" in text and "offer" in text.lower(), text[:900])
+        check("... while the store itself is NOT changed by an export",
+              s.plan_counts() == counts_before
+              and len(s.events()) == events_before)
+        # One-way, never read back: a hand edit is replaced on the next export.
+        note_path.write_text("# Hand edited by the owner\n", encoding="utf-8")
+        cards2 = _PmChecker()
+        res2, _steps2 = _pm2_call("project_export_obsidian_hub",
+                                  {"project": "Bridge"}, cards2)
+        text2 = note_path.read_text(encoding="utf-8")
+        check("a second export asks its ONE card again and REPLACES the note",
+              len(cards2.calls) == 1 and res2.get("replaced") is True
+              and "Hand edited" not in text2, (cards2.calls[:1], res2.get("state")))
+        check("... and the hand edit was never read back into the store",
+              s.plan_counts() == counts_before
+              and len(s.events()) == events_before, s.plan_counts())
+        try:
+            import jarvis_file_guardian as GU
+            rows = GU.rows()
+            check("... with a File Guardian copy taken of the replaced note",
+                  bool(rows) and str(rows[-1].get("path", "")).endswith("Bridge.md"),
+                  rows[-1:])
+        except Exception:                                 # noqa: BLE001
+            skip("the File Guardian is not in this tree, so its copy was not proved")
+    finally:
+        if old_vault is None:
+            os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+        else:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = old_vault
+        _pm2_unuse(old_env)
+        _pm3_github_off(GH, old_token)
 
 
 def main():

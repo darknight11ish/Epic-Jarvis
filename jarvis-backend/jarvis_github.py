@@ -5101,6 +5101,82 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
 
 
 # --------------------------------------------------------------------------
+#   One pull request's own state, for the projects store's READ-ONLY sync
+#   (PM3, 2026-11-20)
+# --------------------------------------------------------------------------
+
+
+def pull_request_state(repo: str, number, *,
+                       fetch: Optional[Callable] = None) -> dict:
+    """READ one pull request's own state and CI. Reads only: no card, no write.
+
+    This is the seam `jarvis_projects.sync_prs()` calls to keep a linked work
+    item's GitHub projection honest. It makes exactly two GETs - the pull
+    request itself, then the check runs on its head commit - through this
+    module's own token and transport, and there is no write path from here: no
+    POST is built, nothing is sent to GitHub to change anything, and a read
+    needs no approval card (the same `github_inspect` read the model's tools
+    make; this one is for the store's projection, not a card).
+
+    Returns `{"ok": True, "repo", "number", "state": "open"|"merged"|"closed",
+    "merged", "draft", "ci": "green"|"running"|"failed"|"unknown", "ci_words",
+    "head", "base"}` or `{"ok": False, "error": <plain sentence>}`. A CI word
+    is decided by `_check_verdict`, the SAME judgement the CI answer and the
+    cockpit make, so the three can never disagree about one commit.
+    """
+    try:
+        repo = _check_repo(repo, read=True)
+        number = _check_number(number, "pull request")
+    except GitHubError as exc:
+        return {"ok": False, "error": str(exc), "repo": str(repo or "")}
+    try:
+        token = _need_token()
+    except GitHubError as exc:
+        return {"ok": False, "error": str(exc), "repo": repo}
+    fetch = fetch or _default_fetch_full
+    headers = _headers(token)
+    doc, err = _read(fetch, f"{_repo_path(repo)}/pulls/{number}", headers, token)
+    if err:
+        return {"ok": False, "error": err, "repo": repo, "number": int(number)}
+    if not isinstance(doc, dict):
+        return {"ok": False, "error": _unreadable(), "repo": repo,
+                "number": int(number)}
+    merged = doc.get("merged") is True
+    state_word = str(doc.get("state") or "").strip().lower()
+    state = "merged" if merged else ("closed" if state_word == "closed" else "open")
+    head = doc.get("head") if isinstance(doc.get("head"), dict) else {}
+    sha = str(head.get("sha") or "").strip()
+    base = doc.get("base") if isinstance(doc.get("base"), dict) else {}
+    result = {"ok": True, "repo": repo, "number": int(number),
+              "state": state, "merged": merged,
+              "draft": doc.get("draft") is True,
+              "title": _clean_github_text(doc.get("title"), wrap=False),
+              "head": sha, "base": str(base.get("ref") or ""),
+              "ci": "unknown", "ci_words": ""}
+    if not sha:
+        result["ci_words"] = ("GitHub did not name the head commit, so its checks "
+                              "could not be read.")
+        return result
+    runs, run_err = _check_runs(fetch, headers, token, repo, sha)
+    if run_err:
+        result["ci_words"] = run_err
+        return result
+    failed, running = _scan_checks(runs)
+    if failed:
+        result["ci"] = "failed"
+        result["ci_words"] = "failed on that commit: " + _scan_names(failed, running)
+    elif running:
+        result["ci"] = "running"
+        result["ci_words"] = "still running: " + _scan_running(running)
+    elif runs:
+        result["ci"] = "green"
+        result["ci_words"] = "every check on that commit finished cleanly"
+    else:
+        result["ci_words"] = "GitHub reports no checks on that commit."
+    return result
+
+
+# --------------------------------------------------------------------------
 #   The merge, pinned to the head commit the card showed (2026-11-10)
 # --------------------------------------------------------------------------
 

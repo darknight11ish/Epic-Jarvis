@@ -2,7 +2,9 @@
 
 Status: **build steps 1 and 2 built on the backend, step 3 - the
 screens in both apps - built (2026-09-28), and step 4's first slice - a chat
-that belongs to a project - built (2026-11-19); see "Build notes" at the end.**
+that belongs to a project - built (2026-11-19); the plan store's execution and
+brief bridges are built on the backend (2026-11-20, PM3 - see its build
+note); see "Build notes" at the end.**
 For the owner's decision "Projects,
 like Claude's Projects and more" (`CLAUDE.md`, 2026-09-28): both coding and
 life projects, and Jarvis does real work on the PC with a card for every
@@ -451,4 +453,64 @@ lane adds **no** schema and **no** route.
 which project an answer belonged to (or carries nothing when none did), and
 the pickers on both apps are the next slice - recorded in
 `docs/ARCHITECTURE.md` section 8.
+
+### PM3 (2026-11-20): the execution and brief bridges
+
+The plan store's third slice (the architecture review's PM3; the owner's
+brief sets its four bridges and the hub note). It is backend-only: no screen
+on either app calls it yet, and that is recorded in
+`docs/ARCHITECTURE.md` section 8 and classified by `tools/check_parity.py`.
+Nothing here runs anything, invents a date, adds a model tool or adds a card
+class; `docs/JARVIS-API.md` section 88.9 is the route-level contract.
+
+**What each bridge is, and where it lives:**
+
+1. **A software project's linked PR, read only** (`linked_repo` on the
+   project, `linked_pr_number` on the work item). `POST
+   /api/projects/<id>/sync` calls the new
+   `jarvis_github.pull_request_state()` - two GETs, through the module's own
+   token and transport - and stores the result as a PROJECTION on the item
+   (`linked_pr_state`, `linked_ci_status`). There is no card and no GitHub
+   write; a work item's STATUS is never changed by the sync. A merged PR is
+   an **offer** the digest and the hub note surface; the move to `done` is
+   the existing status path, with its normal receipt and Undo.
+2. **A linked durable job** (`executor`, `linked_task_id`). A work item can
+   be linked to a real `jarvis_tasks.py` job, and `sync_task_status()` reads
+   that job's own state and moves the item through the EXISTING status path:
+   `queued`/`running` -> `in_progress`, `waiting_approval` ->
+   `waiting_approval`, `succeeded` -> `in_review` (never straight to `done`);
+   a failed or blocked job is reported, never given a made-up status, and a
+   done item is never pulled back. **The Run Step DISPATCH itself is
+   deliberately deferred** - the reasons are in `decisions.d/` and
+   `docs/ARCHITECTURE.md` section 8: `jarvis_tasks.tick()` has no production
+   caller and no background step executor by its own audit, so wiring it with
+   a stand-in runner would be a half-built runner. The link is the half that
+   can be built honestly today, and it is what PM4's button would write.
+3. **The morning brief** (`jarvis_arbiter.digest()`). The digest gains ONE
+   key, `projects`, built when the digest is read (pull, not push):
+   `jarvis_projects.morning_brief()` returns work items due within 48 hours,
+   the top 3 ready items across active projects, `in_progress` items
+   untouched for more than 7 days and any merged-PR offer. Read-only: it
+   writes nothing, and the existing digest keys keep their exact shape.
+4. **The daily to-do list** (`jarvis_schedule.status()`). Any work item due
+   today or earlier, still open, appears in the daily list with the SAME
+   carry-over tag a scheduler row gets (`from yesterday`, `from Friday (3d
+   ago)`, ...) - built by the scheduler's own `carry_words()`, so the two can
+   never word it differently. It is a READ-ONLY projection: no schedule.db
+   row is created, the item is not moved or copied, and `todos()` (the
+   scheduler's own rows) is untouched. `project_todos: true` is the additive
+   marker a newer UI reads.
+5. **The one-way hub note** extends PM2's export: the note is rebuilt from
+   the store on every export and never read back, and it now carries the
+   linked repository, each item's executor and PR/CI projection, and the
+   merged-PR offers. Still ONE `edit_vault_note` card and one File Guardian
+   copy per export.
+
+**Deliberately not built, and why.** The Run Step dispatch (above). Also no
+new model tool: the bridges are reached by the project store's own route and
+by the two reads that already serve the PC (the digest and the schedule
+read), so the five owner-direct tools and their taint rules are exactly as
+PM2 left them. A work item still gets a date only from the owner's own route
+or app, or from a source row the import copies unchanged; the bridges read
+that date and never write one.
 
