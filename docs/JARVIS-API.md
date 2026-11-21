@@ -41335,3 +41335,86 @@ clean-exit removal, the carrier's five entries, and one structural check that no
 `.patch` in `backend/` carries the change. `backend/test_field_battery.py` adds
 the PREFLIGHT field cases; `tools/field_battery.py --self-test` is unchanged.
 
+---
+
+## 231. Cleaning up duplicate or inactive devices: a dry run, then ONE card (added 2026-11-21)
+
+**The ruling.** Gemini's 5.6 (2026-11-21): *"Concurrent multi-device polling is
+expected and supported. Offer an owner-card-approved, dry-run-first 'Clean up
+duplicate/inactive devices' button in Settings → Devices (preserving devices
+active within 30 days) — never auto-prune pairing data."* A phone that polls
+for months leaves a trail of pairing rows behind it (90 stale rows were measured
+in the owner's registry), and the answer is a button that SHOWS what would go
+and asks the owner, never a background prune.
+
+**The backend half, and where the button is.** This section documents the
+backend and its card only: `POST /api/devices/cleanup` in
+`backend/jarvis_devices.py` (`cleanup()`), installed by the module's own
+`install()` - no new patch. The desktop Settings, Devices button that calls it
+is a separate lane (the same ruling, and the same contract); when it lands that
+lane reclassifies the route in `tools/check_parity.py`, which is why the route is
+`planned` here. The phone's Settings, Devices screen owns its own copy of the
+button in its own PR.
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/devices/cleanup` | `{"dry_run": true}` and nothing else | **200** `{"ok": true, "dry_run": true, "total": N, "keep_active_30d": N, "would_remove": [{"name": "<shown name>", "last_seen_days": D}], "kept_last_active": true}`, and **writes nothing** and raises **no card**. `total` is every paired device (this PC is not in the registry and is not counted), `keep_active_30d` is how many of those are kept because they were used in the last 30 days, and `would_remove` is the plan, oldest first, named with `shown` (`row_shown`, the label else the name the phone sent) - never a key, a hash or a device id. `kept_last_active` is the ruling's promise, not a measurement: the newest device is never in `would_remove`. **400** `{"reason": "bad_request"}` for any other body; **503** while the device list cannot be read. |
+| `POST /api/devices/cleanup` | `{"dry_run": false}` and nothing else | The real run. **202** `{"ok": true, "waiting": true, "message"}` while ONE `devices_cleanup` card waits (tier `ask`, so a person answers on the PC) - a second call while it waits answers the same 202 and raises no second card. Nothing is removed, written or copied while the card waits. **200** `{"ok": true, "removed": N, "kept": N}` from the first call **after** the card was answered: exactly the rows the dry run listed (re-planned at approval time, so a device that checked in while the card was open is kept), a copy of the registry written first, then the rows removed the way Remove removes one. **200** `{"ok": false, "removed": 0, "kept": N, "denied": true, "error"}` when the owner said no; `"timed_out": true` when nobody answered; `"refused": true` with the gate's own `error` sentence for a refusal. A real run with nothing to remove answers **200** `{"ok": true, "removed": 0, "kept": N}` without a card. **503** when `devices_cleanup` is not set to `"ask"` in `jarvis-framework.toml` - the route refuses any other tier rather than take a looser line as consent. |
+
+**The three promises, and why they are in one function.** The dry run and the
+real run are built by the same `_cleanup_plan()`, so the list the owner is shown
+and the rows the approved run removes cannot drift apart:
+
+1. **A device used in the last 30 days is kept.** "Used" is the newest of its
+   written `last_seen`, a sighting this process is holding before writing it, and
+   the moment it was paired - a phone paired two minutes ago is used, even if it
+   has not polled yet.
+2. **The last active device is kept** - the newest sighting on the list - so a
+   cleanup can never empty the list and lock the owner out of the phone in his
+   hand.
+3. **The device making the request is kept**, so pressing the button on a phone
+   can never remove that phone mid-request.
+
+The plan is never "remove everything stale": `Remove` already removes one device
+on purpose, and the one route that could remove many is this one, so it carries
+the three promises above rather than a rule of its own.
+
+**The copy, before the write.** The registry is
+`<settings folder>/devices/registry.json`. Before anything is removed, the whole
+file is copied beside it as `registry.json.before-cleanup-<stamp>`. The copy is
+written with the registry lock held and BEFORE the new registry replaces the old
+one, so a wrong yes can be put back by hand; a copy that cannot be written means
+nothing is removed (the answer is **503** and the registry is byte-for-byte
+unchanged). A removed row is removed the way `POST /api/devices/remove` removes
+one - the row stays for the history, its `token_sha256`, `approval_key` and
+`label` go, and its open connections stop at their next write - so the device
+pairs again with the QR code, exactly as any removed device does.
+
+**The card and the gate rows.** The action is `devices_cleanup`, tier `"ask"`
+in both shipped settings copies, and its card is
+`jarvis_card_words.TITLES["devices_cleanup"]` ("clean up duplicate or inactive
+devices") with the short summary beside it. The card's own text lists every row
+that would go, the number, and the three promises above, so the owner approves
+the exact change he was shown. Both gate rows live at the **end of the published
+base** `jarvis-backend/jarvis_gate.py` (`_RISK.update` and a
+`_NO_RULE_FROM_DENIAL` line; "yes", "local" - a copy is kept, the newest device
+is kept, and a removed device pairs again), never in a patch; `tools/
+repair_live_backend_gaps.py`'s `devices-cleanup` repair carries the same two
+rows to an install that predates them. A denial answers that one cleanup card
+and is not a standing rule.
+
+**Audit and events.** `devices.cleaned` with `{removed, kept, backup}` (counts
+and the copy's file name - never a key, a label or an address), and a
+`devices` event so both apps re-read the list. The card's outcome
+(`devices.cleanup_card`) is audited with the outcome word only.
+
+**Proof.** `backend/test_devices.py`: the dry run's list, its 200/contract
+shape and that it writes nothing and raises no card; the 30-day-active rule
+(including the exact boundary and a freshly-paired device); the last-active and
+requesting-device promises; the real run raising exactly ONE card and writing
+nothing until it is approved; the approved run removing exactly the listed rows
+with the copy proven to exist at the moment of the write; a denial and a
+refusal changing nothing and saying so; the gate rows, title, summary, "What
+asks first" page and both shipped settings copies; the parity classification and
+this section; and the two module copies being byte-identical.
+

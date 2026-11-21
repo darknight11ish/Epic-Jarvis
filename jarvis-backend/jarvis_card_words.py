@@ -315,6 +315,10 @@ TITLES = {
     # action's name only, never the payload, so the phone's name is on the
     # card's text instead.
     "register_approval_key": "let a phone approve risky actions with its fingerprint or PIN",
+    # Cleaning up the device list (Gemini's ruling 5.6, 2026-11-21): ONE card
+    # per cleanup, and the card's own text lists the rows that would go. The
+    # phrase says what goes, never how many - the number is the payload.
+    "devices_cleanup": "clean up duplicate or inactive devices",
     # --- the app builder (docs/APP-BUILDER-DESIGN.md)
     "app_merge_change": "add its change to one of your apps",
     # The app builder's last two steps (2026-10-30, the owner's question "can
@@ -575,6 +579,8 @@ SUMMARY = {
     "pair_device": "connect a new device",
     "unretire_shared_key": "let the old shared key work again",
     "register_approval_key": "let a phone approve with its fingerprint",
+    # Gemini's ruling 5.6 (2026-11-21): one card per device-list cleanup.
+    "devices_cleanup": "clean up inactive devices",
     # --- the app builder
     "app_merge_change": "add its change to one of your apps",
     "app_build_android": "build its Android app",

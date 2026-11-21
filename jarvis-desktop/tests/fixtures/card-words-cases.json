@@ -151,6 +151,10 @@
       "title": "Jarvis wants to update Jarvis itself - the backend first, then this app"
     },
     {
+      "action": "devices_cleanup",
+      "title": "Jarvis wants to clean up duplicate or inactive devices"
+    },
+    {
       "action": "docker_service_start",
       "title": "Jarvis wants to start one of the containers it uses on this PC"
     },
@@ -1017,6 +1021,18 @@
       "notice": {
         "title": "Jarvis wants to update Jarvis itself - the backend first, then this app",
         "summary": "Jarvis wants to update Jarvis, then restart it.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "devices_cleanup",
+      "notice": {
+        "title": "Jarvis wants to clean up duplicate or inactive devices",
+        "summary": "Jarvis wants to clean up inactive devices.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

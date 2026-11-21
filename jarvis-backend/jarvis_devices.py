@@ -50,6 +50,15 @@ WHAT THIS MODULE DOES
      tablet` prints it ONCE and stores only its SHA-256 (no route - a
      terminal on this PC is the only way, so no second remote way to make a
      credential exists; the pairing card still gates remote devices).
+  8. Cleaning up duplicate/inactive devices (2026-11-21, Gemini's ruling
+     5.6): concurrent multi-device polling is expected, so the same phone
+     used for months leaves a trail of pairing rows. `POST
+     /api/devices/cleanup {"dry_run": true}` shows what would go and writes
+     NOTHING; `{"dry_run": false}` raises ONE `devices_cleanup` card and
+     removes the rows only after the owner approves it. Never automatic: a
+     device used in the last 30 days, the newest device and the device making
+     the request are never removed, and the registry is copied before it
+     changes.
 
 THE OLD SHARED KEY IS A BOOTSTRAP, NOT A FALLBACK (2026-10-05)
 
@@ -1913,6 +1922,9 @@ def _reset_for_tests() -> None:
         _AK_KEY.clear()
         _AK_WITHDRAWN.clear()
         _NONCES.clear()
+    with _CL_LOCK:
+        _CL.clear()
+        _CL_RESULT.clear()
     with _REG_LOCK:
         _CACHE.update(stamp=None, doc=None, why="")
 
@@ -2558,6 +2570,381 @@ def shared(body, *, you: str, here: bool, gate: Optional[Callable] = None,
 
 
 # ---------------------------------------------------------------------------
+# Cleaning up duplicate/inactive devices (Gemini's ruling 5.6, 2026-11-21)
+# ---------------------------------------------------------------------------
+#
+# THE RULING, in its own words: concurrent multi-device polling is expected
+# and supported, so the same phone used over months can leave a trail of
+# pairing rows behind it (90 stale rows were measured in the owner's registry).
+# What it asks for is an OWNER-CARD-APPROVED, DRY-RUN-FIRST "Clean up
+# duplicate/inactive devices" action in Settings, Devices - and NEVER an
+# automatic prune.
+#
+# So there are two one-way doors here, and they are one function:
+#
+#   * POST /api/devices/cleanup {"dry_run": true} answers 200 with the plan
+#     and writes NOTHING and raises NO card. It is what the button shows
+#     before anybody can approve anything;
+#   * {"dry_run": false} raises ONE `devices_cleanup` card (tier "ask") and
+#     returns 202 while it waits. Nothing is removed until the owner approves
+#     it, and the first call after the card is answered collects the result
+#     (200, the counts). A denied or timed-out card changes nothing and says
+#     so; a refusal answers with the reason the gate itself gave.
+#
+# THE THREE PROMISES, kept by BOTH the dry run and the real run (they are
+# computed by one function, `_cleanup_plan`, so they cannot drift apart):
+#
+#   1. Any device used in the last 30 days is kept - the ruling's own number.
+#      A device that was just paired counts as used, so a fresh row is never
+#      cleaned up before it has had a chance to poll.
+#   2. The LAST ACTIVE device (the one with the newest sighting) is kept, so
+#      a cleanup can never empty the list - and never locks the owner out of
+#      the phone he is holding.
+#   3. The device MAKING THE REQUEST is kept, so pressing the button on a
+#      phone can never remove that phone mid-request.
+#
+# A removed row is removed exactly the way Remove removes one: the row stays
+# for the history, its key hash, approval key and label go. A copy of the
+# registry is written beside it BEFORE anything changes
+# (`registry.json.before-cleanup-<stamp>`), so even a wrong yes can be put
+# back by hand, and a removed device pairs again with the QR code.
+#
+# WHY THE ANSWER IS COLLECTED BY A SECOND CALL. The owner answers the card on
+# the PC, not while this request is open: the request that raises the card
+# answers 202 (exactly as /api/pair/claim does), and the client asks again to
+# hear the outcome. A finished answer waits for the NEXT call only, and only
+# for CLEANUP_RESULT_SECONDS - so a later press raises a fresh card instead of
+# replaying an old report.
+
+CLEANUP_ACTION = "devices_cleanup"
+CLEANUP_ROUTE = "/api/devices/cleanup"
+
+#: A device may be this many days quiet before it counts as inactive.
+ACTIVE_DAYS = 30
+ACTIVE_SECONDS = ACTIVE_DAYS * 24 * 60 * 60
+#: How long one finished run's answer waits for the client to collect it.
+CLEANUP_RESULT_SECONDS = 120
+
+CLEANUP_WORDS = {
+    "bad_request": 'need {"dry_run": true} or {"dry_run": false} and nothing else',
+    "waiting": ("Waiting for your approval on this PC. Nothing is removed unless you "
+                "approve the card."),
+    "denied": ("You said no on the card, so nothing was removed. The device list is "
+               "unchanged."),
+    "timed_out": ("Nobody answered the card in time, so nothing was removed. The device "
+                  "list is unchanged."),
+    "refused": ("The cleanup could not be approved, so nothing was removed. The device "
+                "list is unchanged."),
+    "replaced": ("A newer cleanup request took the card's place, so nothing was removed. "
+                 "The device list is unchanged."),
+    "tier": (f"{CLEANUP_ACTION} is not set to \"ask\" in jarvis-framework.toml, so the "
+             f"cleanup cannot ask you first, and nothing was removed."),
+}
+
+#: What the `devices_cleanup` card says. {n} is how many rows would go and
+#: {rows} is the list, one row per line, exactly as the dry run showed them.
+CLEANUP_CARD_TEXT = "\n".join([
+    "Clean up duplicate or inactive devices?",
+    "",
+    "Jarvis would remove these {n} device rows that have not been used in "
+    f"{ACTIVE_DAYS} days:",
+    "{rows}",
+    "",
+    "It keeps every device used in the last 30 days, the newest device on the list, and "
+    "the device asking now - so this cannot lock a phone out.",
+    "The device list is copied to a file on this PC first, so it can be put back by hand, "
+    "and a removed device pairs again with the QR code.",
+    "",
+    "If you say no: the device list is unchanged.",
+])
+
+_CL_LOCK = threading.Lock()
+_CL: dict = {}             # {"id", "since"} while a devices_cleanup card waits
+_CL_RESULT: dict = {}      # {"at", "status", "body"} - one answer, collected once
+
+
+def _number(value) -> Optional[int]:
+    """An int from the registry, or None. A bool is not a time, and a
+    hand-edited string is not one either."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def _last_activity(row: dict, seen: dict) -> Optional[int]:
+    """When this device was last used: the newest of its written sighting,
+    this process's own (not yet written) sighting, and the moment it was
+    paired - the same merge `devices_view` shows the owner. None when the row
+    carries no time at all (an unreadable hand edit, which is never removed)."""
+    moments = [_number(row.get("last_seen")), _number(seen.get(row.get("id"))),
+               _number(row.get("created"))]
+    moments = [m for m in moments if m is not None]
+    return max(moments) if moments else None
+
+
+def _live_rows(doc: dict) -> list:
+    """The rows the device list shows: paired, not removed, holding a key."""
+    return [r for r in doc.get("devices", ())
+            if isinstance(r, dict) and not r.get("removed") and r.get("token_sha256")]
+
+
+def _cleanup_plan(doc: dict, you: str, now: float) -> dict:
+    """What a cleanup would keep and what it would remove, right now.
+
+    ONE function for the dry run and for the real run, so the list the owner
+    is shown and the rows the approved run removes are the ruling's list: a
+    device used in the last ACTIVE_DAYS days is never in `planned`, the last
+    active device is never in it, and the device making the request is never
+    in it.
+    """
+    with _SEEN_LOCK:
+        seen = dict(_SEEN)
+    entries = []
+    for row in _live_rows(doc):
+        last = _last_activity(row, seen)
+        entries.append({"row": row, "id": str(row.get("id") or ""), "last": last,
+                        "active": last is None or (now - last) <= ACTIVE_SECONDS})
+    newest = max(entries, key=lambda e: (e["last"] if e["last"] is not None else -1,
+                                         _number(e["row"].get("created")) or 0),
+                 default=None)
+    planned = []
+    active_kept = 0
+    for e in entries:
+        if e["active"]:
+            active_kept += 1
+            continue
+        if e["id"] == you:
+            continue                       # never the device making the request
+        if newest is not None and e["id"] == newest["id"]:
+            continue                       # never the last active device
+        planned.append({"row": e["row"], "id": e["id"],
+                        "days": int(max(0, now - (e["last"] if e["last"] is not None
+                                                 else now)) // 86400)})
+    planned.sort(key=lambda e: (-e["days"], e["id"]))    # oldest (worst) first
+    return {"total": len(entries), "keep_active_30d": active_kept,
+            "planned": planned,
+            "last_active": newest["id"] if newest is not None else None}
+
+
+def _cleanup_answer(plan: dict) -> dict:
+    """The dry run's answer - the exact contract the Settings button reads."""
+    return {"ok": True, "dry_run": True,
+            "total": plan["total"],
+            "keep_active_30d": plan["keep_active_30d"],
+            "would_remove": [{"name": row_shown(e["row"]),
+                              "last_seen_days": e["days"]} for e in plan["planned"]],
+            "kept_last_active": True}
+
+
+def _cleanup_card(plan: dict) -> tuple:
+    """(text, detail) for the devices_cleanup card, built in ONE place."""
+    shown = [f"  - {row_shown(e['row'])} (last seen {e['days']} days ago)"
+             for e in plan["planned"][:12]]
+    more = len(plan["planned"]) - len(shown)
+    if more > 0:
+        shown.append(f"  ... and {more} more")
+    text = CLEANUP_CARD_TEXT.format(n=len(plan["planned"]), rows="\n".join(shown))
+    detail = {"text": text,
+              "what": "remove duplicate or inactive devices from the device list",
+              "leaves_this_pc": False,
+              "count": len(plan["planned"]),
+              "devices": [row_shown(e["row"]) for e in plan["planned"][:12]]}
+    return text, detail
+
+
+def _copy_registry_before_cleanup(now: float) -> Optional[str]:
+    """Write the device list beside itself and return the copy's name.
+
+    Called with `_REG_LOCK` held and BEFORE the registry is changed - the
+    caller's own ordering is the promise. None when there is no registry file
+    yet (there is then nothing to lose, and no row to remove either)."""
+    p = registry_path()
+    try:
+        data = p.read_bytes()
+    except FileNotFoundError:
+        return None
+    stamp = f"{int(now)}-{secrets.token_hex(3)}"
+    aside = p.with_name(f"{p.name}.before-cleanup-{stamp}")
+    aside.write_bytes(data)
+    return aside.name
+
+
+def _apply_cleanup(you: str, now: float) -> tuple:
+    """Remove the rows `_cleanup_plan` names, registry untouched if it fails."""
+    holder: dict = {}
+
+    def change(doc):
+        plan = _cleanup_plan(doc, you, now)      # re-planned under the lock
+        holder["kept"] = plan["total"]
+        if not plan["planned"]:
+            return
+        holder["backup"] = _copy_registry_before_cleanup(now)
+        gone = {e["id"] for e in plan["planned"]}
+        for row in doc.get("devices", ()):
+            if not isinstance(row, dict) or row.get("id") not in gone:
+                continue
+            row["removed"] = int(now)
+            row["token_sha256"] = ""
+            row["approval_key"] = None
+            row["label"] = None
+        holder["removed"] = len(gone)
+        holder["ids"] = sorted(gone)
+
+    try:
+        _mutate(change)
+    except Broken:
+        return 503, {"ok": False, "error": DEVICES_WORDS["registry_unreadable"]}
+    except OSError as exc:
+        return 503, {"ok": False, "error": f"The device list could not be written "
+                                           f"({type(exc).__name__})."}
+    removed = int(holder.get("removed", 0))
+    for device_id in holder.get("ids", ()):
+        with _SEEN_LOCK:
+            _SEEN.pop(device_id, None)
+        _forget_signing(device_id)
+    kept = int(holder.get("kept", 0)) - removed
+    if removed:
+        _audit("devices.cleaned", {"removed": removed, "kept": kept,
+                                   "backup": holder.get("backup") or ""})
+        _publish("devices", {})
+    return 200, {"ok": True, "removed": removed, "kept": kept}
+
+
+def _cleanup_finish(pid: str, status: int, body: dict) -> bool:
+    """Record ONE run's answer for the next call to collect, and let the slot
+    go so the next cleanup raises a fresh card.
+
+    True only when this run still owned the slot. A run that was replaced must
+    never publish its answer over the newer run's - so the slot check and the
+    result write happen under the one lock, and the answer is written only by
+    the owner.
+    """
+    with _CL_LOCK:
+        if _CL.get("id") != pid:
+            return False
+        _CL.clear()
+        _CL_RESULT.clear()
+        _CL_RESULT.update(at=_wall(), status=int(status), body=dict(body))
+    return True
+
+
+def _cleanup_decide(pid: str, you: str, gate: Callable, tier_of: Callable,
+                    plan: dict) -> None:
+    """Raise the devices_cleanup card and wait for it (its own thread)."""
+    v = None
+    text, detail = _cleanup_card(plan)
+    try:
+        if tier_of(CLEANUP_ACTION) != "ask":
+            raise LookupError("tier")
+        v = gate(CLEANUP_ACTION, detail, text)
+        outcome, why = _verdict(v, CLEANUP_ACTION, tier_of)
+    except LookupError:
+        outcome, why = "refused", CLEANUP_WORDS["tier"]
+    except Exception as exc:
+        outcome, why = "refused", f"the approval gate failed ({type(exc).__name__})"
+    with _CL_LOCK:
+        current = _CL.get("id") == pid
+    if not current:
+        _take_off(getattr(v, "request_id", None),
+                  "the device-cleanup request it asked about was replaced")
+        return _cleanup_finish(pid, 200, {"ok": False, "removed": 0, "kept": 0,
+                                          "refused": True,
+                                          "error": CLEANUP_WORDS["replaced"]})
+    if outcome != "approved":
+        doc, unreadable = load()
+        body = {"ok": False, "removed": 0,
+                "kept": 0 if unreadable else len(_live_rows(doc))}
+        if outcome == "denied":
+            body.update(denied=True, error=CLEANUP_WORDS["denied"])
+        elif outcome == "timed_out":
+            body.update(timed_out=True, error=CLEANUP_WORDS["timed_out"])
+        else:
+            body.update(refused=True, error=why or CLEANUP_WORDS["refused"])
+        _audit("devices.cleanup_card", {"outcome": outcome})
+        return _cleanup_finish(pid, 200, body)
+    status, body = _apply_cleanup(you, _wall())
+    if status != 200:
+        _audit("devices.cleanup_card", {"outcome": "failed", "status": status})
+    return _cleanup_finish(pid, status, body)
+
+
+def cleanup(body, *, you: str, gate: Optional[Callable] = None,
+            tier_of: Optional[Callable] = None,
+            spawn: Optional[Callable] = None) -> tuple:
+    """POST /api/devices/cleanup {"dry_run": true|false} - (http code, body).
+
+    The dry run answers 200 and changes nothing (no card, no write). The real
+    run raises ONE `devices_cleanup` card at tier "ask" and answers 202 while
+    it waits; the next call collects 200 with the counts once the owner has
+    answered, or the card's own refusal words when the owner said no. The
+    device making the request (`you`) is never in the plan.
+    """
+    if not isinstance(body, dict) or set(body) != {"dry_run"} \
+            or not isinstance(body["dry_run"], bool):
+        return 400, {"ok": False, "reason": "bad_request",
+                     "error": CLEANUP_WORDS["bad_request"]}
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    doc, why = load()
+    if why:
+        return 503, {"ok": False, "error": DEVICES_WORDS["registry_unreadable"]}
+    now = _wall()
+    plan = _cleanup_plan(doc, you, now)
+    if body["dry_run"]:
+        return 200, _cleanup_answer(plan)
+    waiting = {"ok": True, "waiting": True, "message": CLEANUP_WORDS["waiting"]}
+    with _CL_LOCK:
+        if _CL:
+            return 202, waiting
+        if _CL_RESULT:
+            fresh = now - float(_CL_RESULT.get("at") or 0) <= CLEANUP_RESULT_SECONDS
+            result = dict(_CL_RESULT) if fresh else None
+            _CL_RESULT.clear()
+            if result is not None:
+                return int(result.get("status") or 200), dict(result.get("body") or {})
+    if not plan["planned"]:
+        # Nothing to remove: no card for an empty list, just the honest zero.
+        return 200, {"ok": True, "removed": 0, "kept": plan["total"]}
+    tier = tier_of(CLEANUP_ACTION)
+    if tier != "ask":
+        # Same shape as every other carded route here: anything but a person's
+        # yes switches the action off rather than turning it cardless.
+        return 503, {"ok": False, "error": (
+            f"{CLEANUP_ACTION} is tier {tier!r} in jarvis-framework.toml; removing "
+            f"devices needs a person to say yes, so it must be 'ask'")}
+    pid = secrets.token_hex(8)
+    with _CL_LOCK:
+        if _CL:
+            return 202, waiting
+        _CL.update(id=pid, since=now)
+
+    def run() -> None:
+        """The card, in its own thread: it must never leave the slot held.
+
+        `_cleanup_decide` handles the gate and the registry's own failures; this
+        is the belt that turns anything it did not foresee into an answer rather
+        than a request that waits for ever.
+        """
+        try:
+            _cleanup_decide(pid, you, gate, tier_of, plan)
+        except Exception:
+            _cleanup_finish(pid, 503, {
+                "ok": False, "removed": 0,
+                "error": "The cleanup could not run, so nothing was removed. "
+                         "The device list is unchanged."})
+
+    try:
+        spawn(run)
+    except Exception:
+        with _CL_LOCK:
+            if _CL.get("id") == pid:
+                _CL.clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, waiting
+
+
+# ---------------------------------------------------------------------------
 # Phase 2: a fingerprint-signed yes from the phone (design section 11)
 # ---------------------------------------------------------------------------
 #
@@ -2992,8 +3379,8 @@ WEB_LOGOUT_ROUTE = "/api/devices/web-logout"
 GET_ROUTES = ("/api/pair/session", "/api/devices")
 POST_ROUTES = ("/api/pair/start", "/api/pair/cancel", "/api/pair/claim", "/api/pair/collect",
                "/api/devices/remove", "/api/devices/label", "/api/devices/shared",
-               "/api/devices/approval-key", "/api/approve/challenge",
-               WEB_SESSION_ROUTE, WEB_LOGOUT_ROUTE)
+               CLEANUP_ROUTE, "/api/devices/approval-key",
+               "/api/approve/challenge", WEB_SESSION_ROUTE, WEB_LOGOUT_ROUTE)
 #: The only routes in Jarvis that take no key: the phone has none yet, and
 #: clearing your own browser cookie must work even after the key was revoked.
 KEYLESS = ("/api/pair/claim", "/api/pair/collect", WEB_LOGOUT_ROUTE)
@@ -3221,6 +3608,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                         self._jarvis_guard_device = None
                 elif route == "/api/devices/label":
                     code, out = label(body, you=you)
+                elif route == CLEANUP_ROUTE:
+                    code, out = cleanup(body, you=you)
                 elif route == WEB_SESSION_ROUTE:
                     code, out, extra = web_session(
                         you=you, peer=peer, local=local,

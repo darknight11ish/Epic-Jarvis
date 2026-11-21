@@ -5508,6 +5508,30 @@ what is missing is only the Settings screen agreeing about who turned it off.
   wire format and the permission gate are shared by both apps, so nothing here
   is a second path, and `tools/check_parity.py` classifies nothing new (no
   route).
+
+- **The device list's cleanup is the backend half, and the Settings button that
+  calls it is a separate lane - one-sided for now** (2026-11-21, Gemini's ruling
+  5.6; `backend/jarvis_devices.py` `cleanup()`, `backend/test_devices.py`,
+  `JARVIS-API.md` section 231). The ruling is that concurrent multi-device
+  polling is expected, so a phone that polls for months leaves a trail of
+  pairing rows, and the owner needs an owner-card-approved, dry-run-first "Clean
+  up duplicate/inactive devices" action - never an automatic prune. This slice
+  is the backend and the card: `POST /api/devices/cleanup {"dry_run": true}`
+  answers 200 with the plan and writes nothing and raises no card;
+  `{"dry_run": false}` raises ONE `devices_cleanup` card at tier "ask" and
+  answers 202 while it waits, and a later call collects 200 with the counts. A
+  device used in the last 30 days, the newest device and the device making the
+  request are never removed, a copy of the registry is written beside it first,
+  and a removed row is removed exactly the way Remove removes one. **What is
+  deliberately NOT here:** the desktop Settings, Devices button (and, later, the
+  phone's Devices screen) is its own lane, so no app calls the route on this
+  tree - `tools/check_parity.py` classifies it `planned` and names that lane in
+  `PENDING_CLIENTS`, and the moment either app calls it the checker fails until
+  the entry is reclassified. **NOT-TESTABLE until the button lands:** no real
+  owner has run the dry run or answered the card from a screen, so the field
+  test - press the button, compare the list with the device list, approve, see
+  the rows go and the `registry.json.before-cleanup-<stamp>` copy land - is owed
+  rather than implied.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
