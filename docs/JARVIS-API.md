@@ -19652,80 +19652,38 @@ for its board (the board itself is that page's, not this route's). Nothing here
 runs anything, reads GitHub, adds a model tool, invents a date or adds a card
 class.
 
-**Routes.**
+**The contract is frozen in §88.12 (ruling 5.3, 2026-11-21).** That section is
+now the contract both apps build against: the four PM4 routes, each request and
+response key, the error statuses, the export's 202/200 answers and the
+read-only/cardless/owner-direct statements. This section is the build record -
+what the phone slice is, what it deliberately is not, and the tests that prove
+it. The work-item states are the store's **seven**
+(`backlog`, `ready`, `in_progress`, `waiting_approval`, `in_review`, `done`,
+`cancelled`): an earlier version of this section said five, the pre-PM3 count,
+which was never the code's (corrected 2026-11-21 under ruling 5.3).
 
-| Route | Method | Body | Answers |
-|---|---|---|---|
-| `/api/projects/<id>/plan` | GET | - | **200** the plan view below; **404** an unknown project, in the store's usual words |
-| `/api/projects/<id>/work_items` | POST | one work item the owner typed: `{"title"}` and **nothing else** (Quick Add sends exactly the owner's words; any other field - `due_date` included - is refused, so this door can never date a task or set its state) | **200** `{"ok": true, "item": work_item, "message": "Added \"...\"."}`; **400** the store's own refusal in words (a missing title, any other field) |
-| `/api/projects/<id>/work_items/<wid>/status` | POST | `{"status": "done"}` (one of the store's five states) | **200** `{"ok": true, "changed": bool, "item": work_item, "message"}`; **404** an unknown project or an item that is not in that project, in the store's own sentence ("There is no work item with that id."); **400** a status outside the five |
-
-**The plan read** (`GET /api/projects/<id>/plan`) is the one read the phone's
-Projects screen and the desktop's PM4 page build from. It is additive: the
-frozen `GET /api/projects/<id>` view of §88.2 is untouched (PM2's "no shape
-change" note stands), and this route serves the plan store's own read:
-
-```
-{"ok": true, "available": true,
- "objective": null | "the owner's words",
- "success_criteria": null | str,
- "status": null | "planned" | "active" | "paused" | "done" | "archived",
- "target_date": null | "YYYY-MM-DD",
- "linked_repo": null | str, "linked_note_path": null | str, "slug": null | str,
- "counts": {"milestones", "work_items", "ready", "blocked", "edges", "events": int},
- "milestones": [{"id", "title", "status", "due_date": null | "YYYY-MM-DD",
-                 "position", "counts": {"work_items", "done"}}],
- "work_items": [{"id", "project", "milestone", "title", "detail", "status",
-                 "priority": null | int, "due_date": null | "YYYY-MM-DD",
-                 "created", "changed", "blocked_by": [{"id", "title", "status"}],
-                 "ready": bool, "executor", "linked_task_id",
-                 "linked_pr_number", "linked_pr_state", "linked_ci_status"}],
- "ready": ["<work item id>", ...],
- "events": [{"id", "at", "kind", "subject", "detail"}]}
-```
-
-Every value is the store's own: a missing date is `null` and is NEVER filled in
-(the anti-hallucination rule, §88.7), a milestone's progress is its own items
-(`work_items` and `done`), and a project with no plan rows reads as the honest
-empty - `objective: null`, empty lists, zero counts - never a made-up row.
-`ready` is `ready_next()`'s own order for this project (priority, then due date,
-then written order), capped at **20** ids; `counts.ready` is the TRUE total, so
-a screen can say "there is more" without a second read. `events` is the
-append-only log's newest **100** rows, newest first. **The read writes
-nothing:** no row, no event, no receipt, no GitHub read - it is in the same
-card-free read tier as `GET /api/projects/<id>` beside it, and it does not
-create `projects.db` when there is none (that is the same 404 as an unknown
-project).
-
-**The two writes** are the owner's own taps on their own rows, like ticking a
-to-do:
-
-- `POST .../work_items` goes through the store's existing `add_work_item`: one
-  `work_item_added` event in the same transaction. **Only the typed words are
-  accepted** - the body is `{"title"}` and any other field (`due_date` included)
-  is refused `400` and writes nothing, so a work item's date or state never comes
-  from this door; a date only ever comes from the owner's own dedicated edit or
-  from a source row an import copies unchanged. The phone's Quick Add sends
-  exactly the owner's typed words as `title`.
-- `POST .../work_items/<wid>/status` goes through the store's EXISTING status
-  path, `set_work_item_status`: it appends the one `work_item_status` event and
-  records the normal one-click `jarvis_undo` receipt, exactly as the same change
-  from a typed tool does. There is no second write and no second receipt, and a
-  second tap on an already-done item is `changed: false` with no event.
+**What the phone builds from the read.** The Projects screen lists each
+project's plan words and counts; the **Next 3 ready tasks** are the store's own
+`ready_next()` order (the route sends up to 20 ids; the phone caps the READOUT
+at 3, the same cap the deterministic "what should I work on next?" answer, the
+morning brief and the spoken answer keep, so the screen and the voice can never
+disagree about how long the list is). A tap marks one item Done with its normal
+event and `jarvis_undo` receipt, and Quick Add saves exactly the owner's typed
+words as a title. The phone may summarize the plan in substance; it never
+weakens a safety rule and never speaks for the PC's permissions.
 
 **What asks first is unchanged and this does not speak for it.** Neither write
 raises a card - the owner is writing down their own task - and neither adds a
 card class, a gate row or a new permission. The phone holds both writes on a
 stale link (rule 4) like every other project change, and the PC's own project
 rules (Shareable ON asks, taking off Jarvis's own private mark asks) are
-untouched. The phone may summarize the plan in substance; it never weakens a
-safety rule and never speaks for the PC's permissions.
+untouched.
 
 **What is deliberately not here:** no Run Step dispatch (still deferred, §88.9),
-no GitHub read or sync on this route, no bulk status change, no date invented,
+no GitHub read or sync on these routes, no bulk status change, no date invented,
 no Kanban editor, and no change to the frozen §88.2 shapes. `docs/ARCHITECTURE.md`
-section 8 records the phone-first order; both apps call the three routes (the
-desktop's PM4 plan board is the second caller), so `tools/check_parity.py`
+section 8 records the phone-first order; both apps call the three shared routes
+(the desktop's PM4 plan board is the second caller), so `tools/check_parity.py`
 classifies all three `ported`.
 
 **Acceptance.** `backend/test_projects.py`'s `t_pm4_*` tests prove the shape and
@@ -19745,43 +19703,18 @@ the spoken answer's 3-item cap.
 PM4, the desktop half of the project-management wave (the owner-approved PM4
 spec: `docs/PROJECTS-DESIGN.md`'s build notes). The plan read and the two
 work-item writes the desktop consumes are documented in section 88.10, added by
-the phone half in the same wave; this section is the one route the desktop half
-ADDS. No other route, no card class and no gate action are added by it.
+the phone half in the same wave; this section is the build record for the one
+route the desktop half ADDS. Its frozen contract - the exact 202/200 answers and
+their keys - is section 88.12. No other route, no card class and no gate action
+are added by it.
 
-**The route.**
-
-```
-POST /api/projects/<project_id>/export
-```
-
-No body field is read. It calls the SAME `jarvis_projects.export_hub()` the PM2
-chat tool `project_export_obsidian_hub` calls, so the vault write is the notes
-editor's own: ONE `edit_vault_note` card, the File Guardian copy of the old
-bytes first when an existing hub note is replaced, and the notes editor's own
-undo receipt for a brand-new one. `export_hub` raises the notes editor with
-provenance `model`, which keeps its ONE-card path whatever the owner-direct rule
-says, and the route passes no gate check of its own - so the only thing that can
-allow the write is that card. The note is rebuilt from the store on every export
-and never read back; JSON stays the write master (PM2, section 88.8).
-
-**Answers.**
-
-- 202 `{"ok": true, "state": "waiting", "waiting": true, "path": "...",
-  "receipt": "", "snapshot": "", "job": "<notes-editor job id>",
-  "message": "Waiting for your approval. ..."}` while the card is still up.
-- 200 once it ended: `{"ok": true, "state": "saved", "waiting": false,
-  "created": true|false, "replaced": true|false, "path": "...",
-  "receipt": "<the notes editor's own undo receipt, when it made one>",
-  "snapshot": "<its File Guardian snapshot id, when it replaced a note>",
-  "job": "...", "message": "..."}`.
-- A card that said no, timed out or failed is 200 with `"ok": false`, the notes
-  editor's own `"state"` (`denied` / `timed_out` / `failed`) and `"error"` in its
-  own words - never a new sentence that hides it - and nothing was written: no
-  byte, no File Guardian copy. No Obsidian vault configured, a protected or
-  hidden path and a too-large note are answered the same way, in the editor's
-  words.
-- An unknown project is the store's 404 (`"no such project, benchmark or
-  number"`). `GET` on the path answers 405: POST only.
+**What the button does.** The desktop's Projects page's Export button posts the
+route; it calls the SAME `jarvis_projects.export_hub()` the PM2 chat tool
+`project_export_obsidian_hub` calls, so the vault write is the notes editor's
+own: ONE `edit_vault_note` card, the File Guardian copy of the old bytes first
+when an existing hub note is replaced, and the notes editor's own undo receipt
+for a brand-new one. The note is rebuilt from the store on every export and
+never read back; JSON stays the write master (PM2, section 88.8).
 
 **Who calls it, and `tools/check_parity.py`.** The desktop's Export button is
 the only caller (`brain/projects.rs` `projects_write` action `export_hub`; the
@@ -19789,12 +19722,175 @@ card itself is drawn by the PC in the Jarvis bar, as every `edit_vault_note`
 card is). The phone deliberately has no export button in this slice - it can
 ask Jarvis in chat, which already works from both apps - so the route is
 classified `deliberate` in `tools/check_parity.py`, and
-`docs/ARCHITECTURE.md` section 8 records the one-sided decision. The acceptance
-is in `backend/test_projects.py`
+`docs/ARCHITECTURE.md` section 8 records the one-sided decision.
+
+**Acceptance.** The acceptance is in `backend/test_projects.py`
 (`t_pm4_the_export_route_is_the_one_existing_card`): one card and only that
 class, a NO writes nothing and takes no copy, a YES returns the path and the
 editor's receipt, a waiting card answers 202, and an unknown project is the
 404.
+
+### 88.12 The PM4 route contract (FROZEN, 2026-11-21)
+
+**THIS SECTION IS THE FROZEN CONTRACT.** Ruling 5.3 (Gemini, 2026-11-21) froze
+the four PM4 routes both apps now depend on, now that they are implemented and
+live-verified on `main`: `GET /api/projects/<id>/plan`, the two work-item write
+doors `POST /api/projects/<id>/work_items` and
+`POST /api/projects/<id>/work_items/<wid>/status`, and
+`POST /api/projects/<id>/export`. Neither app needs to read
+`backend/jarvis_projects.py` to call one of them. Everything here is a route, a
+request key, a response key, a status code or a value - nothing here is advice,
+and a route or a key outside this page is not part of the contract. **A change
+to any of these four routes is a contract change: it is
+written in this section first**, then in `tools/check_parity.py` and the code -
+never the other way round. Sections 88.10 and 88.11 are now the build record: how the phone half
+and the desktop half arrived, what each deliberately does not do, and the tests
+that prove it.
+
+None of the four adds a gate action, a card class or a new permission, and none
+changes the frozen `GET /api/projects/<id>` shapes of section 88.2.
+
+**The four routes, at a glance.**
+
+| Route | Method | Called by | Card |
+|---|---|---|---|
+| `/api/projects/<id>/plan` | GET | the phone's Projects screen and the desktop's plan board | none - a read |
+| `/api/projects/<id>/work_items` | POST | both apps' Quick Add | none (cardless) |
+| `/api/projects/<id>/work_items/<wid>/status` | POST | both apps' Done tap | none (cardless) |
+| `/api/projects/<id>/export` | POST | the desktop's Export button only | ONE `edit_vault_note` card (the notes editor's own) |
+
+**Read-only, cardless and owner-direct.** The plan read is READ-ONLY: it
+never creates `projects.db` when the store is absent (that is the same 404 as
+an unknown project), and it writes no row, event or receipt and makes no GitHub
+read. The two work-item writes are CARDLESS and OWNER-DIRECT: they are the
+owner writing down and ticking their own rows, the same `todo_add` owner-direct
+tier the typed plan tools use (section 88.8). Each goes through the store's
+existing door - Quick Add through `add_work_item` (one `work_item_added` event),
+the status tap through `set_work_item_status` (one `work_item_status` event and
+the normal one-click `jarvis_undo` receipt) - so there is no second write and no
+second receipt. The export is the one carded route here and its card is the
+notes editor's own (below). Both apps hold both writes on a stale link (rule
+4), like every other project change. Every route takes a JSON object body (or
+no body); a body that is not a JSON object is answered 400 by the shared route
+wrapper before the route sees it.
+
+**The plan read: `GET /api/projects/<id>/plan`.** One read-only answer:
+
+```json
+{"ok": true, "available": true,
+ "objective": null | "the owner's words",
+ "success_criteria": null | str,
+ "status": null | "planned" | "active" | "paused" | "done" | "archived",
+ "target_date": null | "YYYY-MM-DD",
+ "linked_repo": null | str, "linked_note_path": null | str, "slug": null | str,
+ "counts": {"milestones", "work_items", "ready", "blocked", "edges", "events": int},
+ "milestones": [{"id", "title", "status", "due_date": null | "YYYY-MM-DD",
+                 "position", "counts": {"work_items", "done"}}],
+ "work_items": [{"id", "project", "project_name", "milestone", "title", "detail",
+                 "status", "priority": null | int, "due_date": null | "YYYY-MM-DD",
+                 "created", "changed", "blocked_by": [{"id", "title", "status"}],
+                 "ready": bool, "executor", "linked_task_id",
+                 "linked_pr_number", "linked_pr_state", "linked_ci_status"}],
+ "ready": ["<work item id>", ...],
+ "events": [{"id", "project", "at", "kind", "subject", "detail"}]}
+```
+
+The exact key lists are:
+
+- **top-level keys:** `ok`, `available`, `objective`, `success_criteria`, `status`, `target_date`, `linked_repo`, `linked_note_path`, `slug`, `counts`, `milestones`, `work_items`, `ready`, `events`.
+- **counts keys:** `milestones`, `work_items`, `ready`, `blocked`, `edges`, `events`.
+- **milestone keys:** `id`, `title`, `status`, `due_date`, `position`, `counts`.
+- **work item keys:** `id`, `project`, `project_name`, `milestone`, `title`, `detail`, `status`, `priority`, `due_date`, `created`, `changed`, `blocked_by`, `ready`, `executor`, `linked_task_id`, `linked_pr_number`, `linked_pr_state`, `linked_ci_status`.
+- **blocked_by keys:** `id`, `title`, `status`.
+- **event keys:** `id`, `project`, `at`, `kind`, `subject`, `detail`.
+- **work-item statuses:** `backlog`, `ready`, `in_progress`, `waiting_approval`, `in_review`, `done`, `cancelled`.
+- **project statuses:** `planned`, `active`, `paused`, `done`, `archived`.
+- **executor values:** `owner`, `jarvis_local`, `jarvis_cloud`, `jarvis_job`.
+
+Every value is the store's own: a missing `due_date` is `null` and is NEVER
+filled in (the anti-hallucination rule, section 88.7), a milestone's `counts`
+are its own work items, and a project with no plan rows reads as the honest
+empty (`objective: null`, empty lists, zero counts) - never a made-up row.
+`ready` is `ready_next()`'s own order for this project and is capped at 20 ids;
+`counts.ready` is the TRUE total, so a screen can say "there is more" without a
+second read. `events` is the append-only log's newest 100 rows, newest first.
+Answers: 200 the view above; 404 an unknown project, and a POST to this path is
+a wrong method (404).
+
+**Quick Add: `POST /api/projects/<id>/work_items`.** Request:
+
+- **add request keys:** `title` - the owner's typed words, and **nothing else**. Any other key, a due date included, is refused 400 and writes nothing, so a date or a state never comes from this door.
+
+Answers:
+
+- **add answer keys:** `ok`, `item`, `message`.
+- `item` is the full work-item view above, and `message` is `Added "<the title>".`.
+- 400 the store's own refusal in words (a missing title, any other field); 404 an unknown project; 405 for a GET.
+
+**The status tap: `POST /api/projects/<id>/work_items/<wid>/status`.** Request:
+
+- **status request keys:** `status` - one of the seven work-item statuses listed above.
+
+Answers:
+
+- **status answer keys:** `ok`, `changed`, `item`, `message`.
+- `changed` is false when the item is already in that state (no event, no receipt).
+- 400 a status outside the seven, in the store's words; 404 an unknown project or an item that is not in that project (`There is no work item with that id.`); 405 for a GET.
+
+**The export: `POST /api/projects/<id>/export`.** No body field is read. It
+calls the SAME `jarvis_projects.export_hub()` the PM2 chat tool
+`project_export_obsidian_hub` calls, so the vault write is the notes editor's
+own: ONE `edit_vault_note` card, the File Guardian copy of the old bytes first
+when an existing hub note is replaced, and the editor's own undo receipt for a
+brand-new one. The card cannot be skipped from this route: `export_hub` raises
+the notes editor with provenance `model`, which keeps its ONE-card path
+whatever the owner-direct rule says, and the route passes no gate check of its
+own - so the only thing that can allow the write is that card. The note is
+rebuilt from the store on every export and never read back; JSON stays the
+write master (PM2, section 88.8). Answers, all carrying the keys below:
+
+- **export answer keys:** `ok`, `state`, `waiting`, `created`, `replaced`, `path`, `receipt`, `snapshot`, `job`, `message`.
+- 202 while the card is still waiting: `state: "waiting"`, `waiting: true`,
+  `created`/`replaced` false, and `job` is the notes editor's own job id.
+- 200 once it ended: `state: "saved"`, `waiting: false`, and `created` /
+  `replaced` / `path` / `receipt` / `snapshot` carry what the editor did.
+- The refused answer adds the `error` key and nothing else changes: a card
+  that said no, timed out or failed is 200 with `ok: false`, the notes
+  editor's own `state` (`denied` / `timed_out` / `failed`) and its own words in
+  `message` and `error` - never a new sentence that hides it. Nothing was
+  written: no byte, no File Guardian copy. No Obsidian vault configured, a
+  protected or hidden path and a too-large note are answered the same way, in
+  the editor's words.
+- 404 an unknown project; 405 for a GET.
+
+**Status codes.**
+
+| Route | Success | Bad request | Not found | Wrong method |
+|---|---|---|---|---|
+| `/api/projects/<id>/plan` | `200` | - | `404` | `404` |
+| `/api/projects/<id>/work_items` | `200` | `400` | `404` | `405` |
+| `/api/projects/<id>/work_items/<wid>/status` | `200` | `400` | `404` | `405` |
+| `/api/projects/<id>/export` | `202`, `200` | - | `404` | `405` |
+
+**Who calls each one, and why the freeze.** Both apps call the plan read and
+the two work-item writes - the phone's PM4 Projects screen and the desktop's
+PM4 plan board are the two callers - so `tools/check_parity.py` classifies all
+three `ported`. The export is the desktop's alone; the phone deliberately has
+no export button in this slice (it can ask Jarvis in chat, which already works
+from both apps), so the route stays `deliberate` there, with its reason written
+down, and `docs/ARCHITECTURE.md` section 8 records the one-sided decision. The
+freeze is ruling 5.3 (2026-11-21): the four routes are implemented and
+live-verified on `main`, and both apps now depend on them, so they are contract
+rather than build notes.
+
+**Acceptance.** `backend/test_api_doc.py` pins this section: the four routes,
+each key list, each status list and the two parity classifications, all read
+from the real answer and the real classifier (`_pm4_answer`, `CLASSIFICATION`);
+`backend/test_projects.py` proves the routes against a real SQLite store (the
+honest empty, the bounds and true totals, the read writing nothing, the one
+status path with its undo receipt, the export's single card and its 202/200
+answers). Each of those was written first and failed on the provisional tree it
+was written against.
 
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 
