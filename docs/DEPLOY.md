@@ -497,6 +497,23 @@ longer claim a reconcile over a patch whose hunks are absent.
   a step here: the deploy is still the route that carries the repo's bytes and
   writes the source commit, and a `VERSION` the in-app half moved without a
   matching `SOURCE-COMMIT` is what the preflight's WARN is for.
+- **The in-app backend half now falls back to THIS deploy on a deploy-managed
+  install (2026-11-21, measured).** The owner's PC is one: its live files came
+  from this tool, so the patch stack's hunks refuse them - measured
+  2026-11-21 00:25 PT as "51 patch(es) will not apply to your files as they are"
+  with nothing changed. When `tools/update_backend.py` sees exactly that
+  transcript (and never on a guess: the stack must say the patches will not
+  apply AND that no file was changed, and there must be no half-updated
+  warning), it calls this tool's `run_deploy(..., apply=True)` in-process on the
+  same backend folder, at this checkout's `HEAD`, instead of stopping the
+  backend half. It then proves the result itself: the live files against the
+  repository, and `VERSION` against the installed desktop's FileVersion. It
+  passes a `skip_probes` reason - the desktop stops the supervised backend
+  before the half runs, so the routes cannot answer, and the app restarts it and
+  reads both versions back afterwards - and this tool prints that skip as a
+  NOT-a-pass line. This tool's own refusal is reported verbatim by the in-app
+  half; the app never picks this route on the hope that it will work. See
+  `docs/ONE-UPDATE-FOR-BOTH.md` section 9.
 - `jarvis-backend/` is never copied over the live folder - it is a snapshot of
   the published base, not the runtime tree.
 - A patch with **no** `DELTA_TABLE` entry is still judged by "any one pre-image-absent

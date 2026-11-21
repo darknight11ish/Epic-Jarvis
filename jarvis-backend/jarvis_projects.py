@@ -311,6 +311,20 @@ STALLED_DAYS = 7
 BRIEF_DUE_MAX = 12
 BRIEF_STALLED_MAX = 12
 DAILY_MAX = 60
+#: The plan read (PM4, 2026-11-21: `GET /api/projects/<id>/plan`). `ready` is
+#: the store's own order (`ready_next()`), capped here so one read can never be
+#: a second listing of every item; `counts.ready` is the TRUE total, so a caller
+#: that needs to say "there is more" can, without a second read. `events` is the
+#: append-only log's newest rows, newest first, bounded the same way.
+PLAN_READY_MAX = 20
+PLAN_EVENTS_MAX = 100
+#: The fields the app's Quick Add door takes - the owner's typed words, and
+#: NOTHING else. Deliberately no `due_date` (a date reaches a work item only
+#: from the owner's own dedicated edit or from a source row an import copies
+#: unchanged - the anti-hallucination rule, JARVIS-API 88.7 - so a task typed
+#: into a quick box can never date itself), and no status/priority either: the
+#: store's own defaults are the honest answer for a task just written down.
+APP_ADD_FIELDS = frozenset({"title"})
 #: A work item's own refusals for the two links, in plain words.
 LINK_NO_TASK = "There is no job with that id in the task list."
 LINK_NO_PR = "A pull request number is a whole number from 1."
@@ -379,6 +393,13 @@ APP_AND_FOLDER_WORDS = "A project has a folder or an app, not both."
 
 class NoSuchApp(LookupError):
     """An app folder that does not exist (a 404 with its own sentence)."""
+
+
+class WorkItemGone(LookupError):
+    """A work item that is not in the project the route named (a 404 with its
+    own sentence). Its own class rather than a bare KeyError because the generic
+    404 wording names projects, benchmarks and numbers, and a tap on a task
+    deserves the store's own "There is no work item with that id."."""
 
 
 class Unavailable(Exception):
@@ -2375,8 +2396,14 @@ class Projects:
         with self._lock, self._db() as c:
             return [self._milestone_view(r) for r in c.execute(sql, args).fetchall()]
 
-    def events(self, project_id: Optional[str] = None, limit: int = 50) -> list:
-        """The append-only log, oldest first. Read-only; there is no setter."""
+    def events(self, project_id: Optional[str] = None, limit: int = 50, *,
+               newest: bool = False) -> list:
+        """The append-only log, oldest first. Read-only; there is no setter.
+
+        `newest=True` takes the NEWEST `limit` rows instead of the first ones
+        (still returned oldest-first inside that window, so a caller can reverse
+        it into a display order). The default is the old answer exactly, so
+        every caller written before PM4 keeps its behaviour."""
         if not self.exists():
             return []
         sql = "SELECT * FROM project_events"
@@ -2386,10 +2413,12 @@ class Projects:
                 raise KeyError(project_id)
             sql += " WHERE project = ?"
             args.append(project_id)
-        sql += " ORDER BY rowid LIMIT ?"
+        sql += " ORDER BY rowid DESC LIMIT ?" if newest else " ORDER BY rowid LIMIT ?"
         args.append(max(1, int(limit)))
         with self._lock, self._db() as c:
             rows = c.execute(sql, args).fetchall()
+        if newest:
+            rows = list(reversed(rows))
         return [{"id": r["id"], "project": r["project"], "at": r["at"],
                  "kind": r["kind"], "subject": r["subject"],
                  "detail": json.loads(r["detail"] or "{}")} for r in rows]
@@ -4967,7 +4996,7 @@ def _snapshot_mode_file(path: Path) -> dict:
             roots=[str(path.parent)])
     except Exception as exc:                                # noqa: BLE001
         return {"ok": False,
-                "error": f"guardian_unavailable ({type(exc).__name__})",
+                "error": "the file guardian is not available",
                 "words": "The time machine could not save a copy of the Project "
                          "Mode file."}
 
@@ -5664,6 +5693,9 @@ def parse_route(route: str) -> Optional[tuple]:
         ("result_delete", pid, bid, rid)            .../benchmarks/<bid>/results/<rid>/delete
         ("facts", pid)                              /api/projects/<pid>/facts
         ("fact_forget", pid, fid)                   .../facts/<fid>/forget
+        ("plan", pid)                               /api/projects/<pid>/plan        (GET)
+        ("work_items", pid)                         /api/projects/<pid>/work_items  (POST)
+        ("work_item_status", pid, wid)              .../work_items/<wid>/status     (POST)
         ("export", pid)                             /api/projects/<pid>/export
                                                     (PM4, 2026-11-21: POST only)
     """
@@ -5684,15 +5716,23 @@ def parse_route(route: str) -> Optional[tuple]:
     if len(p) == 1:
         return ("project", pid)
     if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks", "facts",
-                                "sync"):
+                                "sync", "plan", "work_items"):
         return ({"delete": "project_delete", "shareable": "shareable",
                  "benchmarks": "benchmarks", "facts": "facts",
                  # PM3 (2026-11-20): the read-only bridge sync - POST only.
-                 "sync": "sync"}[p[1]], pid)
+                 "sync": "sync",
+                 # PM4 (2026-11-21): the plan read (GET) and one new work item
+                 # (POST). The read is the phone's and the desktop's one source
+                 # for objective, milestones, work items, ready order and events.
+                 "plan": "plan", "work_items": "work_items"}[p[1]], pid)
     if len(p) == 2 and p[1] == "export":
         # PM4 (2026-11-21, desktop half): the one-click hub-note door. POST
         # only, and it is the notes editor's own card that decides it.
         return ("export", pid)
+    if len(p) == 4 and p[1] == "work_items" and p[2] and p[3] == "status":
+        # PM4: ONE status change through the store's own existing path, with its
+        # receipt/Undo. Never a second write route.
+        return ("work_item_status", pid, p[2])
     if len(p) == 4 and p[1] == "facts" and p[2] and p[3] == "forget":
         # One fact per request, exactly as the memory routes are: there is no
         # list form of Forget (jarvis_memory's own "used" note says the same).
@@ -5718,6 +5758,8 @@ def _err(exc) -> tuple:
     """(status, body) for the plain exceptions the store raises - never a
     stack trace reaching an app."""
     if isinstance(exc, NoSuchApp):
+        return 404, {"ok": False, "error": _sentence(exc)}
+    if isinstance(exc, WorkItemGone):
         return 404, {"ok": False, "error": _sentence(exc)}
     if isinstance(exc, FactGone):
         # 404 for a fact that is not there (or that this project does not
@@ -5755,6 +5797,11 @@ def handle_get(route: str, query: str = "", *, store: Optional[Projects] = None)
                          "unlinked_apps": store.unlinked_apps()}
         if hit[0] == "project":
             return 200, {"ok": True, "project": store.get(hit[1])}
+        if hit[0] == "plan":
+            # PM4 (2026-11-21): the plan store's ONE read for an app's Projects
+            # screen - objective, milestones with progress, the work items as
+            # stored, the ready order and the newest events. Read-only.
+            return 200, plan_read(hit[1], store=store)
         if hit[0] == "facts":
             # The LABELS only. `words_route` is where the words come from -
             # jarvis_memory's own existing read, which is the one place that
@@ -5829,6 +5876,14 @@ def handle_post(route: str, body, *, here: bool = False,
             # note. The ONE card is the notes editor's own; this route raises
             # no card of its own and writes nothing it decides.
             return request_export_hub(hit[1], store=store)
+        if kind == "work_items":
+            # PM4: one work item the owner typed (Quick Add). No card and no
+            # invented date - the store's own door decides every field.
+            return 200, add_work_item_from_app(hit[1], body, store=store)
+        if kind == "work_item_status":
+            # PM4: one status change (a tap on "Done"), through the EXISTING
+            # status path, so its event and its receipt/Undo are the normal ones.
+            return 200, change_work_item_status(hit[1], hit[2], body, store=store)
         if kind == "shareable":
             return request_shareable(hit[1], body, store=store, **card)
         if kind == "auto_route":
@@ -6031,3 +6086,131 @@ def request_export_hub(project_id: str, *, store: Optional[Projects] = None,
                  "message": str(out.get("message") or ""),
                  "error": str(out.get("error") or out.get("message")
                               or "The note was not written.")}
+
+
+# --------------------------------------------------------------------------
+#   PM4 (2026-11-21): the plan read and the phone's two writes
+# --------------------------------------------------------------------------
+def plan_read(project_id: str, *, store: Optional[Projects] = None) -> dict:
+    """`GET /api/projects/<pid>/plan`: ONE read-only answer for the plan store.
+
+    PM4 (2026-11-21): the phone's Projects screen and the desktop's Projects
+    page read the SAME answer - the project's own plan words, its milestones
+    with their progress counts, its work items as they are stored, the ready
+    items in the store's own order, and the newest events. It changes NO shape
+    of `GET /api/projects/<id>`: that view is the two apps' frozen step-3
+    contract (JARVIS-API 88.6) and is left exactly as it is.
+
+    Every value comes from the store as it is: a missing `due_date` is null
+    and is never filled in, and a project with no plan rows reads as the
+    honest empty (`objective: null`, empty lists), never as a made-up row.
+    Nothing here writes: no row, no event, no receipt, no GitHub read - the
+    read is the same card-free read tier as the project view beside it.
+
+    `ready` is the store's own `ready_next()` order for this project, capped
+    at `PLAN_READY_MAX` ids; `counts.ready` is the true total, so "there are
+    more" can be said without a second read. `events` is the append-only log's
+    newest `PLAN_EVENTS_MAX` rows, newest first.
+    """
+    store = store or get()
+    if not store.exists():
+        # A READ must not create projects.db. The other project reads open the
+        # schema because they answer for a store that exists; here a missing
+        # store is the same 404 as an unknown project, and nothing is created.
+        raise KeyError(project_id)
+    state = store.plan_state(project_id)          # KeyError -> the route's 404
+    items = store.work_items(project_id)
+    milestones = store.milestones(project_id)
+    ready = store.ready_next(project_id=project_id, limit=PLAN_READY_MAX)
+    events = store.events(project_id, limit=PLAN_EVENTS_MAX, newest=True)
+    counts = {key: int(state.get(key) or 0) for key in
+              ("milestones", "work_items", "ready", "blocked", "edges", "events")}
+    # A milestone's progress is its own work items: how many belong to it, and
+    # how many of those are done. An item with no milestone is project-level
+    # work and belongs to no bar; it is still counted in `counts.work_items`.
+    total = {}
+    done = {}
+    for item in items:
+        mid = item.get("milestone")
+        if not mid:
+            continue
+        total[mid] = total.get(mid, 0) + 1
+        if item.get("status") == "done":
+            done[mid] = done.get(mid, 0) + 1
+    return {
+        "ok": True, "available": True,
+        "objective": state.get("objective"),
+        "success_criteria": state.get("success_criteria"),
+        "status": state.get("status"),
+        "target_date": state.get("target_date"),
+        "linked_repo": state.get("linked_repo"),
+        "linked_note_path": state.get("linked_note_path"),
+        "slug": state.get("slug"),
+        "counts": counts,
+        "milestones": [
+            {"id": m["id"], "title": m["title"], "status": m["status"],
+             "due_date": m["due_date"], "position": m["position"],
+             "counts": {"work_items": total.get(m["id"], 0),
+                        "done": done.get(m["id"], 0)}}
+            for m in milestones],
+        "work_items": items,
+        "ready": [row["id"] for row in ready],
+        "events": list(reversed(events)),
+    }
+
+
+def add_work_item_from_app(project_id: str, body, *,
+                           store: Optional[Projects] = None) -> dict:
+    """`POST /api/projects/<pid>/work_items`: ONE work item, the owner's own row.
+
+    No card, like a project note or a benchmark: the owner is writing down their
+    own thing, and the plan store's own door (`add_work_item`) decides every
+    field's rule, appends the one `work_item_added` event in the same
+    transaction and invents NO date. The door accepts only [APP_ADD_FIELDS] -
+    the owner's typed words as a `title`, and nothing else - so a task typed
+    into the phone's Quick Add box can only ever be the words it was given,
+    undated, as `addBody` in net/ProjectPlan.kt sends them."""
+    store = store or get()
+    if not isinstance(body, dict):
+        raise ValueError("send a JSON object")
+    unknown = sorted(set(body) - APP_ADD_FIELDS)
+    if unknown:
+        raise ValueError("a task added from here is a title and nothing else - "
+                         "a date is never set from here")
+    item = store.add_work_item(project_id, body)
+    return {"ok": True, "item": item,
+            "message": f'Added "{item["title"]}".'}
+
+
+def change_work_item_status(project_id: str, item_id: str, body, *,
+                            store: Optional[Projects] = None) -> dict:
+    """`POST /api/projects/<pid>/work_items/<wid>/status`: ONE status change.
+
+    It goes through the store's EXISTING status path
+    (`set_work_item_status`), so it appends the one `work_item_status` event and
+    records the one-click receipt/Undo exactly as the same change from the
+    desktop or a typed tool does - there is no second write and no second
+    receipt. No card (the owner's own tap), no date, and nothing is changed when
+    the item is already in that state."""
+    store = store or get()
+    if not isinstance(body, dict):
+        raise ValueError("send a JSON object")
+    status = str(body.get("status") or "")
+    if status not in WORK_STATUSES:
+        raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
+    with store._lock, store._db() as c:
+        store._project_row(c, project_id)          # KeyError -> the route's 404
+        if not isinstance(item_id, str) or not _ID.fullmatch(item_id):
+            raise WorkItemGone(WORK_NOT_FOUND)
+        try:
+            row = store._work_row(c, item_id)
+        except KeyError:
+            raise WorkItemGone(WORK_NOT_FOUND) from None
+        if row["project"] != project_id:
+            raise WorkItemGone(WORK_NOT_FOUND)
+        before = row["status"]
+    item = store.set_work_item_status(item_id, status)
+    changed = before != item["status"]
+    return {"ok": True, "changed": changed, "item": item,
+            "message": (f'Moved "{item["title"]}" to {status}.' if changed
+                        else f'"{item["title"]}" was already {status}.')}

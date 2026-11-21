@@ -66,6 +66,7 @@ from _where import REPO  # noqa: E402
 
 sys.path.insert(0, str(REPO / "tools"))
 import update_backend as U  # noqa: E402
+import reconcile_live_backend as R  # noqa: E402
 
 #: The suite drives every update flow with a FAKE runner and must run on a PC
 #: with no PowerShell at all. Give the tool the shell name those fake flows
@@ -1886,6 +1887,500 @@ def t_an_unexpected_lock_error_never_stops_the_update():
 
 
 # ==========================================================================
+#   The route is chosen with evidence: the deploy-managed install (2026-11-21)
+# ==========================================================================
+#
+# Measured on the owner's own PC, 2026-11-21 00:25-00:28 PT, the real end-to-end
+# test. Desktop 0.2.487 was installed by its installer; the next start detected
+# BackendOlder and ran the automatic finish. The backend half was the patch
+# stack - and this install's live files come from tools/reconcile_live_backend.py
+# (the published base plus the HUD deltas), not from a full apply-patches.ps1
+# run. The stack rehearsed on a copy, refused 51 of its 160 patches
+# ("51 patch(es) will not apply to your files as they are"), changed nothing,
+# and the automatic finish reported the backend half failed even though the
+# deploy tool - run by hand - finished the same update with 0 refusals.
+#
+# These checks hold the whole rule: the measured case finishes via the deploy
+# route (VERSION written, the same suites run, the report naming BOTH routes);
+# a deploy-tool refusal is reported verbatim and claims nothing; a patched
+# install never takes the deploy route; a refusal for another reason is not
+# routed around; and the lock, pace, safe second pass and timings still hold.
+
+#: The patch program's real refusal shape, abridged to the lines the tool
+#: reads. This is the transcript the owner's automatic finish wrote.
+_MEASURED_REFUSAL = [
+    "Rehearsing all 160 on a copy first.",
+    "  ok           a.patch",
+    "  FAIL         b.patch",
+    "51 patch(es) will not apply. NOTHING HAS BEEN CHANGED.",
+    "(The rehearsal ran on a copy. Your backend files were not changed - not "
+    "even their line endings.)",
+    "51 patch(es) will not apply to your files as they are: b.patch. "
+    "Nothing was changed.",
+    "What to do: read the problem list above, fix the first one, run the",
+    "same command again. If it is not clear, send back the log file.",
+    " DONE WITH PROBLEMS - do not trust this update yet",
+    "None of your backend files were changed by this run.",
+]
+
+
+def _refusal_then_suites(repo: Path, backend: Path, *, suites_fail_first=False):
+    """A patch-stack refusal, then the normal parallel/safe suite runs."""
+    def handler(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            state["patcher_calls"] = state.get("patcher_calls", 0) + 1
+            for line in _MEASURED_REFUSAL:
+                on_line(line)
+            state["after_patch"] = {name: (backend / name).read_bytes()
+                                    for name in OLD}
+            return 1
+        state["suite_calls"] = state.get("suite_calls", 0) + 1
+        jobs = _jobs_of(cmd)
+        state.setdefault("suite_jobs", []).append(jobs)
+        if suites_fail_first and state["suite_calls"] == 1 and jobs > 1:
+            on_line("ok    test_a.py                       0.1s")
+            on_line("FAIL  test_b.py                       0.1s  "
+                    "(exit 1)  2 passed, 0 skipped, 1 failed")
+            on_line("2 passed, 0 skipped, 1 failed")
+            return 1
+        names = U.suite_names(repo)
+        for name in names:
+            on_line(f"ok    {name:<34} 0.1s")
+        on_line(f"{len(names)} passed, 0 skipped, 0 failed")
+        return 0
+
+    return handler
+
+
+def _deploy_ok(backend: Path, *, version="0.2.487", ref="a" * 40, calls=None,
+               writes=True):
+    """A successful deploy route: writes the release's bytes and VERSION.
+
+    Returns the same report shape `U.deploy_route` does, so the state machine is
+    driven exactly as the real one drives it.
+    """
+    def deploy(repo_arg, backend_arg, *, say):
+        if calls is not None:
+            calls.append({"repo": str(repo_arg), "backend": str(backend_arg)})
+        if writes:
+            for name, content in NEW.items():
+                (Path(backend_arg) / name).write_bytes(content)
+            (Path(backend_arg) / "VERSION").write_bytes(version.encode())
+        say("RESULT: PASS - backend reconciled; restart Jarvis and read the "
+            "start-up banner.")
+        return {"ok": True, "code": 0, "ref": ref, "version": version,
+                "desktop_version": version, "why": "",
+                "lines": ["RESULT: PASS"]}
+
+    return deploy
+
+
+def _deploy_refused(why, *, lines=None):
+    """A deploy route that refused: its own words, no write, nothing claimed."""
+    def deploy(repo_arg, backend_arg, *, say):
+        said = list(lines or [why])
+        for line in said:
+            say(line)
+        return {"ok": False, "code": 2, "ref": "", "version": "",
+                "desktop_version": "", "why": why, "lines": said}
+
+    return deploy
+
+
+def t_the_patch_refusal_is_recognised_only_from_its_measured_shape():
+    got = U.patch_refusal(_MEASURED_REFUSAL)
+    check("the measured transcript IS the deploy-managed refusal shape",
+          got["refused"] is True and got["count"] == 51
+          and got["nothing_changed"] is True and got["half_updated"] is False,
+          got)
+    check("... and its one sentence names the count and the install type",
+          "51 hunk(s)" in U.refusal_route_words(got)
+          and "deployed install" in U.refusal_route_words(got),
+          U.refusal_route_words(got))
+    # The same words WITH the half-updated warning is the one shape that must
+    # never be routed around: the files really were changed.
+    half = list(_MEASURED_REFUSAL) + [
+        "Some of your backend files WERE changed before this went wrong, and the",
+        "patched files may be HALF updated.",
+    ]
+    check("a half-updated patch run is never treated as the deploy-managed shape",
+          U.patch_refusal(half)["refused"] is False, U.patch_refusal(half))
+    # A refusal for another reason is not evidence for the deploy route.
+    other = ["Jarvis looks like it is still running (pid 42). Close it, then "
+             "run this again (or add -Force).",
+             " DONE WITH PROBLEMS - do not trust this update yet",
+             "None of your backend files were changed by this run."]
+    check("a refusal for another reason keeps today's behaviour",
+          U.patch_refusal(other)["refused"] is False
+          and U.patch_refusal(other)["count"] is None, U.patch_refusal(other))
+    check("a clean patcher run is not a refusal",
+          U.patch_refusal(["DONE - no problems, but NOT fully proven"])["refused"]
+          is False)
+    check("a refusal without a printed count says so rather than inventing one",
+          "refused to apply" in U.refusal_route_words({"count": None}),
+          U.refusal_route_words({"count": None}))
+    check("the deploy tool's own REFUSED line is quoted verbatim",
+          U.deploy_failure_words(["a line", "REFUSED: the working tree is at "
+                                  "HEAD x but --ref y is z"], 2)
+          == "REFUSED: the working tree is at HEAD x but --ref y is z",
+          U.deploy_failure_words(["REFUSED: nope"], 2))
+    check("... and a failed apply's RESULT line is quoted too",
+          U.deploy_failure_words(["a line", "RESULT: FAIL - the live folder was "
+                                  "rolled back"], 1).startswith("RESULT: FAIL"),
+          U.deploy_failure_words(["RESULT: FAIL - x"], 1))
+
+
+def t_the_measured_deployed_install_finishes_by_the_deploy_route():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    deploys = []
+    said = []
+    code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend, calls=deploys))
+    patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
+    suites = [cmd for cmd in fake.calls if not _is_patcher(cmd)]
+    tail = "\n".join(said)
+    check("the measured deploy-managed install finishes: the backend half succeeds",
+          code == 0 and "ALL DONE - the backend is patched and proven" in tail,
+          (code, said[-6:]))
+    check("... the patch program is tried ONCE and not run again on the safe pass",
+          len(patchers) == 1, len(patchers))
+    check("... the deploy route is called ONCE, on the SAME backend folder the "
+          "patch program was given",
+          len(deploys) == 1 and deploys[0]["backend"] == str(backend)
+          and deploys[0]["repo"] == str(repo), deploys)
+    check("... it changed nothing before the deploy, so nothing was restored over it",
+          fake.state["after_patch"] == {name: OLD[name] for name in OLD}
+          and (backend / "one.py").read_bytes() == NEW["one.py"],
+          fake.state["after_patch"])
+    check("... VERSION is written from the installed desktop, as the deploy proved",
+          (backend / "VERSION").read_text(encoding="utf-8").strip() == "0.2.487",
+          (backend / "VERSION").read_text(encoding="utf-8"))
+    check("... the SAME proof suites run against the live folder at the chosen pace",
+          len(suites) == 1 and _jobs_of(suites[0]) == 14
+          and "--backend-path" in suites[0], [_jobs_of(cmd) for cmd in suites])
+    check("... the report names BOTH routes and why the second one ran",
+          "the patch stack refused 51 hunk(s) on a deployed install" in tail
+          and "deploy route carried the update" in tail
+          and "reconcile_live_backend.py" in tail, said[-8:])
+    check("... the ROUTE line is printed last, so the card's own tail holds it",
+          [line for line in said if line.startswith(U.ROUTE_PREFIX)][-1]
+          .startswith(U.ROUTE_PREFIX + "the patch stack refused 51 hunk(s)"),
+          said[-3:])
+    check("... exactly ONE ROUTE line: the report, not a running commentary",
+          sum(1 for line in said if line.startswith(U.ROUTE_PREFIX)) == 1,
+          [line for line in said if line.startswith(U.ROUTE_PREFIX)])
+    check("... and a proven deploy-route update never reads as problems",
+          tail.rfind("ALL DONE - the backend is patched and proven")
+          > tail.rfind("DONE WITH PROBLEMS"), said[-4:])
+    stored = U.pace_timings(U.load_timings(root / "timings.json"), "responsive")
+    check("... the deploy phase's time is recorded as the patch phase's time",
+          stored["patch_seconds"] is not None and stored["suites"] != {}, stored)
+
+
+def t_a_patched_install_never_takes_the_deploy_route():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    deploys = []
+    said = []
+    code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend, calls=deploys))
+    check("an install the patch stack can apply is UNCHANGED: no deploy route",
+          code == 0 and deploys == [], (code, deploys))
+    check("... and no ROUTE line is printed for it",
+          not any(line.startswith(U.ROUTE_PREFIX) for line in said),
+          [line for line in said if "ROUTE" in line])
+
+
+def t_a_refusal_for_another_reason_is_not_routed_around():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+
+    def handler(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            on_line("Jarvis looks like it is still running (pid 42). Close it, "
+                    "then run this again (or add -Force).")
+            on_line(" DONE WITH PROBLEMS - do not trust this update yet")
+            on_line("None of your backend files were changed by this run.")
+            return 1
+        for name in U.suite_names(repo):
+            on_line(f"ok    {name:<34} 0.1s")
+        on_line("3 passed, 0 skipped, 0 failed")
+        return 0
+
+    deploys = []
+    said = []
+    code = U.update(repo, backend, "responsive", run=FakeRun(handler),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend, calls=deploys))
+    check("a refusal the deploy route is not evidence for is reported, not routed",
+          code == 1 and deploys == [], (code, deploys))
+    check("... with the patch program's own final line and no ROUTE claim",
+          any("DONE WITH PROBLEMS" in line for line in said)
+          and not any(line.startswith(U.ROUTE_PREFIX) for line in said),
+          said[-4:])
+
+
+def t_a_deploy_route_refusal_is_reported_verbatim_and_claims_nothing():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    refused_line = ("REFUSED: the working tree is at HEAD attacker but --ref "
+                    "deadbeef is other, so this tool will not run from a "
+                    "different commit")
+    said = []
+    code = U.update(repo, backend, "responsive",
+                    run=FakeRun(_refusal_then_suites(repo, backend)),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    deploy=_deploy_refused(refused_line))
+    tail = "\n".join(said)
+    check("a deploy-tool refusal is an honest failure, never a claimed update",
+          code == 1 and "ALL DONE" not in tail
+          and "DONE WITH PROBLEMS" in tail, (code, said[-5:]))
+    check("... the deploy tool's refusal is reported VERBATIM",
+          refused_line in tail, [line for line in said if "REFUSED" in line])
+    check("... the ROUTE line names both routes and that the deploy did not finish",
+          any(line.startswith(U.ROUTE_PREFIX)
+              and "the patch stack refused 51 hunk(s)" in line
+              and "deploy route did not finish" in line for line in said),
+          [line for line in said if line.startswith(U.ROUTE_PREFIX)])
+    check("... nothing is written, no VERSION is claimed, and no suite passes for it",
+          not (backend / "VERSION").exists()
+          and all((backend / name).read_bytes() == OLD[name] for name in OLD),
+          {name: (backend / name).read_bytes() for name in OLD})
+    for forbidden in ("both halves now match", "the two halves now match",
+                      "now match", "IN SYNC"):
+        check(f"... and it never says {forbidden!r}",
+              forbidden not in tail)
+
+
+def _deploy_fake_repo(root: Path, *, script: str):
+    """A temporary repository + live folder the REAL deploy tool can deploy.
+
+    `repo/.git` only satisfies the deploy tool's "is this a repository" check:
+    every blob is supplied by the injected `show`/`resolve_shas` seams, so no
+    git object store and no network are needed. The live folder's five patched
+    base files are the repository's PUBLISHED BASE copies (`jarvis-backend/`),
+    so the deploy tool's literal HUD deltas are already present - the same state
+    the owner's deploy-managed install is in, and the state the deploy tool plans
+    no delta for.
+    """
+    repo, backend = _make_repo(root)
+    (repo / ".git").mkdir()
+    base = HERE.parent / "jarvis-backend"
+    for name in R.PATCHED_FILES:
+        source = base / name
+        target = backend / name
+        if source.is_file():
+            shutil.copyfile(source, target)
+        else:                       # a clone without the published base
+            target.write_text(f"# live {name}\n", encoding="utf-8")
+    (repo / "scripts" / "apply-patches.ps1").write_text(script, encoding="utf-8")
+    return repo, backend
+
+
+_DEPLOY_SHIFTED = ("--- a/other.txt\n+++ b/other.txt\n@@ -1 +1 @@\n-old\n"
+                   "+new\n")
+_DEPLOY_BESIDE = {"requirements.lock": b"locked\n",
+                  "quiz_grader_cases.json": b"{}\n"}
+
+
+def _deploy_show(script: str):
+    """The ref's blobs for the real deploy tool, served without git."""
+    blobs = dict(NEW)
+    blobs.update(_DEPLOY_BESIDE)
+    blobs["other.patch"] = _DEPLOY_SHIFTED.encode()
+
+    def show(repo, ref, path):
+        if path == "scripts/apply-patches.ps1":
+            return script.encode()
+        if path in blobs:
+            return blobs[path]
+        raise R.Refused(f"the fixture has no blob for {path}")
+
+    return show
+
+
+_DEPLOY_SCRIPT = ('$SHIPPED = @(\n  "one.py"\n  "two.py"\n  "jarvis_hud.html"\n'
+                  ')\n\n$PATCHES = @(\n  "other.patch"\n)\n')
+_DEPLOY_SCRIPT_NO_PATCHES = '$SHIPPED = @(\n  "one.py"\n)\n'
+
+
+def t_the_deploy_route_really_runs_reconcile_and_proves_its_result():
+    root = _make_root()
+    repo, backend = _deploy_fake_repo(root, script=_DEPLOY_SCRIPT)
+    ref = "a" * 40
+    said = []
+    report = U.deploy_route(
+        repo, backend, say=said.append, module=R, ref=ref,
+        show=_deploy_show(_DEPLOY_SCRIPT),
+        resolve_shas=lambda repo_arg, ref_arg: (ref_arg, ref_arg),
+        version_reader=lambda path: "0.2.487", skip_plugins=True,
+        lane_preflight=lambda: None)
+    tail = "\n".join(said)
+    check("the deploy route runs reconcile's own --apply and succeeds",
+          report["ok"] is True and report["code"] == 0, report)
+    check("... the live folder really holds the ref's bytes",
+          (backend / "one.py").read_bytes() == NEW["one.py"]
+          and (backend / "two.py").read_bytes() == NEW["two.py"]
+          and (backend / "jarvis_hud.html").read_bytes() == NEW["jarvis_hud.html"],
+          (backend / "one.py").read_bytes())
+    check("... the shared VERSION marker was written from the installed desktop",
+          (backend / "VERSION").read_text(encoding="utf-8") == "0.2.487"
+          and report["version"] == "0.2.487", report["version"])
+    check("... SOURCE-COMMIT names the deployed commit beside it",
+          json.loads((backend / "SOURCE-COMMIT").read_text(encoding="utf-8")
+                     )["commit"] == ref
+          and report["ref"] == ref, report["ref"])
+    check("... the deploy tool's own RESULT: PASS is in the report",
+          "RESULT: PASS" in tail, said[-6:])
+    check("... the route probes are skipped FOR A STATED REASON, never silently",
+          "ROUTE PROBES:" in tail
+          and "the backend is stopped for this update" in tail
+          and "NOT a route pass" in tail, said[-8:])
+
+
+def t_the_deploy_route_never_claims_a_marker_it_could_not_prove():
+    # The bytes deploy fine; the marker does not match the installed desktop
+    # afterwards. That is an honest failure, never "both halves match".
+    root = _make_root()
+    repo, backend = _deploy_fake_repo(root, script=_DEPLOY_SCRIPT)
+    readings = iter(["0.2.487", "0.2.488"])
+    said = []
+    report = U.deploy_route(
+        repo, backend, say=said.append, module=R, ref="a" * 40,
+        show=_deploy_show(_DEPLOY_SCRIPT),
+        resolve_shas=lambda repo_arg, ref_arg: (ref_arg, ref_arg),
+        version_reader=lambda path: next(readings), skip_plugins=True,
+        lane_preflight=lambda: None)
+    check("a VERSION that does not equal the installed desktop is a FAILURE",
+          report["ok"] is False and "0.2.487" in report["why"]
+          and "0.2.488" in report["why"], report)
+    check("... and it says the two halves are not proved to match",
+          "not proved to match" in report["why"], report["why"])
+
+    # The deploy tool refuses before writing: nothing is deployed and the
+    # refusal is the tool's own sentence, captured verbatim.
+    root2 = _make_root()
+    repo2, backend2 = _deploy_fake_repo(root2, script=_DEPLOY_SCRIPT_NO_PATCHES)
+    before = {name: (backend2 / name).read_bytes() for name in R.PATCHED_FILES}
+    said2 = []
+    report2 = U.deploy_route(
+        repo2, backend2, say=said2.append, module=R, ref="a" * 40,
+        show=_deploy_show(_DEPLOY_SCRIPT_NO_PATCHES),
+        resolve_shas=lambda repo_arg, ref_arg: (ref_arg, ref_arg),
+        version_reader=lambda path: "0.2.487", skip_plugins=True,
+        lane_preflight=lambda: None)
+    check("a deploy-tool refusal is a failure with the tool's own REFUSED line",
+          report2["ok"] is False and report2["why"].startswith("REFUSED:")
+          and "PATCHES" in report2["why"], report2)
+    check("... and a refusal writes nothing and claims no marker",
+          before == {name: (backend2 / name).read_bytes()
+                     for name in R.PATCHED_FILES}
+          and not (backend2 / "VERSION").exists(), report2["lines"][-3:])
+    check("... with the refusal quoted verbatim in its output",
+          any(line.startswith("REFUSED:") for line in report2["lines"])
+          and report2["why"] in report2["lines"], report2["lines"][-3:])
+
+
+def t_the_deploy_route_keeps_the_lock_pace_and_timings():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    timings = root / "timings.json"
+    lock = timings.with_name(U.LOCK_NAME)
+    seen = {}
+
+    def deploy(repo_arg, backend_arg, *, say):
+        seen["lock_held_during_deploy"] = lock.is_file()
+        for name, content in NEW.items():
+            (Path(backend_arg) / name).write_bytes(content)
+        (Path(backend_arg) / "VERSION").write_bytes(b"0.2.487")
+        return {"ok": True, "code": 0, "ref": "b" * 40, "version": "0.2.487",
+                "desktop_version": "0.2.487", "why": "", "lines": []}
+
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    said = []
+    code = U.update(repo, backend, "safe", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=timings, deploy=deploy)
+    check("the deploy route runs INSIDE the update lock, and the lock is released",
+          code == 0 and seen.get("lock_held_during_deploy") is True
+          and not lock.exists(), (code, seen, lock.exists()))
+    check("... the chosen pace is what the proof suites use (safe = one worker)",
+          fake.state.get("suite_jobs") == [1], fake.state.get("suite_jobs"))
+    stored = U.pace_timings(U.load_timings(timings), "safe")
+    check("... and the deploy phase's own time is recorded for that pace",
+          stored["patch_seconds"] is not None and stored["suites"] != {}, stored)
+
+
+def t_the_deploy_route_s_safe_second_pass_does_not_undo_the_deploy():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    deploys = []
+    fake = FakeRun(_refusal_then_suites(repo, backend, suites_fail_first=True))
+    said = []
+    code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend, calls=deploys))
+    tail = "\n".join(said)
+    check("a failed quick check on the deploy route falls back to one worker",
+          code == 0 and "ALL DONE" in tail
+          and fake.state.get("suite_jobs") == [14, 1],
+          (code, fake.state.get("suite_jobs"), said[-5:]))
+    check("... the patch stack is NOT run again (it refused once, and would again)",
+          fake.state.get("patcher_calls") == 1, fake.state.get("patcher_calls"))
+    check("... the deploy is NOT repeated, because it already proved the bytes",
+          len(deploys) == 1, deploys)
+    check("... the fallback says nothing is put back, because the files are proved",
+          any("nothing is put back" in line for line in said),
+          [line for line in said if "safe way" in line][:2])
+    check("... and the live files are still the deploy's bytes, never a backup's",
+          (backend / "one.py").read_bytes() == NEW["one.py"],
+          (backend / "one.py").read_bytes())
+
+
+def t_an_unproven_deploy_route_update_is_not_reported_as_proved():
+    """A deploy that carried the files, on a run whose checks skipped: partial."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+
+    def handler(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            for line in _MEASURED_REFUSAL:
+                on_line(line)
+            return 1
+        for name in U.suite_names(repo):
+            if name == "test_b.py":
+                on_line("skip  test_b.py  it opens a real, VISIBLE browser window "
+                        "(a support chat); set "
+                        "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 to run it")
+            else:
+                on_line(f"ok    {name:<34} 0.1s")
+        on_line("2 passed, 0 skipped, 0 failed")
+        return 0
+
+    said = []
+    code = U.update(repo, backend, "responsive", run=FakeRun(handler),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend))
+    tail = "\n".join(said)
+    check("a deploy-route update with a skipped check is NOT reported as proved",
+          code == 0 and "NOT fully proven" in tail and "ALL DONE" not in tail,
+          (code, said[-5:]))
+    check("... and its ROUTE line says the checks did not prove the whole update",
+          any(line.startswith(U.ROUTE_PREFIX)
+              and "did not prove the whole update" in line for line in said)
+          and not any(line.startswith(U.ROUTE_PREFIX)
+                      and "are the proof" in line for line in said),
+          [line for line in said if line.startswith(U.ROUTE_PREFIX)])
+
+
+# ==========================================================================
 #   The release's own files reach this PC (2026-11-21, off-peak field test)
 # ==========================================================================
 #
@@ -2217,6 +2712,32 @@ def t_both_release_file_steps_run_only_after_a_proven_update():
 # ==========================================================================
 #   The suite's own runner
 # ==========================================================================
+
+
+def t_the_deploy_tool_loads_with_its_dataclasses():
+    """MEASURED 2026-11-21 02:52 on the owner's PC: the deploy route could never start.
+
+    `load_deploy_tool()` executed `tools/reconcile_live_backend.py` through
+    importlib WITHOUT registering it in `sys.modules`. Python 3.12's
+    `dataclasses` resolves `KW_ONLY` through
+    `sys.modules[cls.__module__].__dict__`, so the first `@dataclass`
+    (`ShippedAction`) raised `AttributeError: 'NoneType' object has no attribute
+    '__dict__'` - and the in-app auto-finish could only report "the deploy route
+    itself failed". The file's own CLI imports it normally, so only this dynamic
+    path was broken; the lane's tests faked the module and missed it.
+    """
+    import sys as _sys
+    # A fresh load, exactly the app's first load: drop any copy another suite
+    # test already put in sys.modules, and this loader's own cache.
+    _sys.modules.pop("reconcile_live_backend", None)
+    U._DEPLOY_MODULE = None
+    mod = U.load_deploy_tool()
+    check("load_deploy_tool() returns the deploy module", mod is not None)
+    check("... and it is registered in sys.modules (what dataclasses needs)",
+          _sys.modules.get(mod.__name__) is mod, mod.__name__)
+    check("... so a real dataclass in it can be built",
+          bool(mod.DeltaAction("p", "jarvis_hud.py", "insert")))
+    check("... and the deploy entry point is callable", callable(mod.run_deploy))
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

@@ -175,6 +175,37 @@ WORDS = {
 }
 
 
+#: The phone's own sentences for the PM4 ready list, the Quick Add box and the
+#: spoken summary (net/ProjectPlan.kt). `{name}`, `{title}`, `{project}`,
+#: `{items}` and `{n}` are filled in by the app. Kept apart from `words` on
+#: purpose: `words` is the list both apps say word for word, and the desktop's
+#: Projects page has its own board words; the phone's `ProjectPlanTest` checks
+#: this map against the phone's copy, so the two cannot drift.
+PLAN_WORDS = {
+    "ready_title": "Next 3 ready tasks",
+    "ready_under": "Up to 3 you can start now, across your projects.",
+    "ready_empty": "Nothing is ready to work on right now.",
+    "ready_more": "And {n} more ready on your PC.",
+    "ready_missing": ("Your PC's Jarvis does not have the project plan read yet - "
+                      "run apply-patches.ps1 on the PC."),
+    "ready_unreadable": "Couldn't read what's ready: {why}",
+    "done": "Done",
+    "done_said": "Marked done.",
+    "done_row": "Mark {title} in {project} done",
+    "quick_title": "Quick add a task",
+    "quick_placeholder": "The task, in your words",
+    "quick_under": "It is saved exactly as you type it, with no date added.",
+    "quick_to": "Add to: {name}",
+    "quick_add": "Add",
+    "quick_said": "Added.",
+    "quick_blank": "Type the task first.",
+    "speech_ready": "Ready now: {items}.",
+    "speech_item": "{title} in {project}",
+    "speech_none": "Nothing is ready to work on right now.",
+    "speech_more": " And {n} more.",
+}
+
+
 def chart_scale(values, target=None):
     """Where the chart's bottom and top are: every value and the target fit,
     with a tenth of the range spare above and below. One value (or all the
@@ -578,6 +609,71 @@ def _goal_cases() -> dict:
     return out
 
 
+def _plan_cases() -> tuple:
+    """PM4 (2026-11-21): `GET /api/projects/<id>/plan` and the phone's two
+    writes, from a REAL run - the phone's and the desktop's one read for
+    objective, milestones, work items, the ready order and the events, plus
+    the answers to a "Done" tap and a Quick Add.
+
+    Returns (cases, posts): `cases["plan_full"]` is a project with a plan,
+    `cases["plan_empty"]` a project with none (the honest empty); `posts` holds
+    one status change, the same change again (nothing moved), one Quick Add and
+    the two refusals, in the PC's own words. Ids and the clock are counted and
+    fixed, so the file only changes when a real answer does."""
+    s = _store()
+    pid = s.create({"name": "Kitchen", "kind": "life"}, here=True)["id"]
+    s.set_plan_fields(pid, {
+        "objective": "Repaint the kitchen before winter",
+        "success_criteria": "Walls done and the shelves back up",
+        "status": "active",
+        "target_date": "2026-12-01",
+        "linked_repo": "owner/kitchen",
+        "linked_note_path": "Notes/Kitchen.md",
+    })
+    prepare = s.add_milestone(pid, {"title": "Prepare", "status": "done"})
+    paint = s.add_milestone(pid, {"title": "Paint", "status": "active"})
+    buy = s.add_work_item(pid, {"title": "Buy paint", "status": "ready",
+                                "priority": 0, "milestone": paint["id"],
+                                "due_date": "2026-11-25"})
+    tape = s.add_work_item(pid, {"title": "Tape the edges", "status": "ready",
+                                 "priority": 1, "milestone": paint["id"]})
+    walls = s.add_work_item(pid, {"title": "Paint the walls", "status": "ready",
+                                  "milestone": paint["id"]})
+    s.add_edge("blocks", tape["id"], walls["id"])
+    s.add_work_item(pid, {"title": "Clear the counters", "status": "done",
+                          "milestone": prepare["id"]})
+    code, full = P.handle_get(f"/api/projects/{pid}/plan", "", store=s)
+    if code != 200:                                   # a generator bug, not a case
+        raise SystemExit(f"plan read failed: {code} {full}")
+    empty_pid = s.create({"name": "Empty", "kind": "life"}, here=True)["id"]
+    code, empty = P.handle_get(f"/api/projects/{empty_pid}/plan", "", store=s)
+    if code != 200:
+        raise SystemExit(f"empty plan read failed: {code} {empty}")
+    posts = {}
+    code, body = P.handle_post(f"/api/projects/{pid}/work_items/{buy['id']}/status",
+                               {"status": "done"}, store=s)
+    posts["work_item_status"] = {"status": code, "body": body}
+    code, body = P.handle_post(f"/api/projects/{pid}/work_items/{buy['id']}/status",
+                               {"status": "done"}, store=s)
+    posts["work_item_status_again"] = {"status": code, "body": body}
+    code, body = P.handle_post(f"/api/projects/{pid}/work_items",
+                               {"title": "Buy a brush"}, store=s)
+    posts["quick_add"] = {"status": code, "body": body}
+    code, body = P.handle_post(f"/api/projects/{pid}/work_items",
+                               {"title": "  "}, store=s)
+    posts["quick_add_blank"] = {"status": code, "body": body}
+    # This door takes the owner's words only: a date is refused, and nothing is
+    # written (the anti-hallucination rule - a task typed in never dates itself).
+    code, body = P.handle_post(f"/api/projects/{pid}/work_items",
+                               {"title": "Dated task", "due_date": "2026-12-01"},
+                               store=s)
+    posts["quick_add_date"] = {"status": code, "body": body}
+    code, body = P.handle_post(
+        f"/api/projects/{pid}/work_items/{'a' * 32}/status", {"status": "done"}, store=s)
+    posts["work_item_status_unknown"] = {"status": code, "body": body}
+    return ({"plan_full": full, "plan_empty": empty}, posts)
+
+
 def cases() -> dict:
     s = _store()
     out, posts = {}, {}
@@ -677,6 +773,10 @@ def cases() -> dict:
     out.update(app_out)
     posts.update(app_posts)
 
+    plan_out, plan_posts = _plan_cases()
+    out.update(plan_out)
+    posts.update(plan_posts)
+
     numbers = [{"value": v, "unit": u, "text": P._with_unit(v, u)}
                for v, u in ((5, "km"), (72.5, "kg"), (10000, "steps"), (200, "$"), (12.5, "%"),
                             (0.125, ""), (26.75, "min"), (-3, "°C"), (21.1, "km"), (1e6, ""))]
@@ -719,6 +819,15 @@ def cases() -> dict:
                            "blocks": A.MAX_BLOCKS_CHARS, "card_diff": W.MAX_CARD_DIFF_CHARS},
             "app_merge_card": merge_card,
             "unmark_card": P.unmark_card("5k time", "Half marathon", "money", "min"),
+            # PM4: the phone's ready list, its Quick Add and the read's bounds.
+            # `ready_cap` is the presentation rule: the PC's own deterministic
+            # "what should I work on next" answer names at most 3 too
+            # (jarvis_quick._MAX_NEXT_ITEMS, pinned by backend/test_projects.py),
+            # and the phone's screen and spoken summary must say the same.
+            "plan_words": dict(PLAN_WORDS),
+            "plan_limits": {"ready_cap": 3, "listed_ready_max": P.PLAN_READY_MAX,
+                            "events_max": P.PLAN_EVENTS_MAX,
+                            "work_title": P.MAX_WORK_TITLE},
             "limits": {"projects": P.MAX_PROJECTS, "name": P.MAX_NAME,
                        "instructions": P.MAX_INSTRUCTIONS, "notes": P.MAX_NOTES,
                        "note": P.MAX_NOTE, "benchmarks": P.MAX_BENCHMARKS,

@@ -3005,10 +3005,9 @@ backend routes, in both directions; the rest are listed here only.
   the store's own `set_work_item_status` - one event and one Undo receipt, a
   blocked move refused in the PC's words, never a silent move), a quick add
   (`POST .../work_items`, title only - a typed task never dates itself) and
-  the one-click hub note. **The phone half is its own pull request (#1436)
-  against the same plan read and the same two plan writes**, so those are
-  `todo` in `tools/check_parity.py` on this tree and become `ported` when both
-  halves have landed - a merge-order fact lead owns, not a one-sided decision.
+  the one-click hub note. **Both halves call the same plan read and the same
+  two plan writes** (the phone's #1436 and this desktop page), so all three are
+  `ported` in `tools/check_parity.py` - not a one-sided decision.
   **The export route is different on purpose:** `POST /api/projects/<id>/export`
   is the desktop Export button's door to the PM2 hub note (ONE
   `edit_vault_note` card raised by the notes editor, no new card class); the
@@ -5458,6 +5457,35 @@ what is missing is only the Settings screen agreeing about who turned it off.
   nothing ran - the half-built runner the owner's brief forbids. So the link,
   the projection and the status receipt are built; the dispatch waits for a
   real executor, and the decision fragment records the evidence.
+- **The phone draws the PM4 Projects screen first, and the desktop page reads
+  the same plan read (2026-11-21, PM4)**. The phone half is the concise surface
+  the owner approved: a clean Projects list, the **Next 3 ready tasks** with a
+  Done tap, and Quick Add - deliberately NOT the desktop's multi-column Kanban.
+  It reads `GET /api/projects/<id>/plan` (JARVIS-API §88.10), the ONE additive
+  read for the plan store's objective, milestones, work items, ready order and
+  events; the frozen §88.2 project shapes are unchanged. The desktop's PM4 page
+  (the other half of the same wave) reads this same route and calls the same two
+  write doors, so `tools/check_parity.py` carries all three in `CLASSIFICATION`
+  as **`ported`** - both apps call them, and neither half is a missing screen.
+  **What the phone may and may not do here is the rule, not a smaller copy of
+  it:** it may summarize the plan in substance, but it never weakens a safety
+  rule and never speaks for the PC's permissions. So the screen shows the PC's
+  own ready order and caps the readout at 3 (the same cap the deterministic
+  "what should I work on next" answer and the morning brief keep,
+  `jarvis_quick._MAX_NEXT_ITEMS`/`jarvis_projects.BRIEF_READY_MAX`), and its
+  two writes are the store's EXISTING doors - `add_work_item` and
+  `set_work_item_status` (one event and one `jarvis_undo` receipt, no second
+  write) - reached by two thin routes, not a phone-only shortcut and not a new
+  card class. Neither write invents a date, and neither asks a question the PC
+  would have asked: they are the owner's own taps on their own rows, and both
+  are held on a stale link like every other project change (rule 4). What stays
+  the PC's is unchanged: choosing a coding project's folder, writing a
+  benchmark's command, the 1-click Obsidian export (that page's own
+  `edit_vault_note` card, PM4 desktop), and every "what asks first" rule.
+  NOT-TESTABLE on this desk: the Compose screen drawing on a real phone - the
+  JVM suite proves the parsers, the cap, the single request per tap against the
+  real answers, and source-pins the screen's calls; only a device shows the
+  drawn list.
 - **A recording can be attached in the phone's chat, and the desktop's attach
   row still offers documents only - one-sided on purpose** (2026-11-18; the
   owner's report that an `.m4a` voice memo could not be attached from the app's

@@ -95,18 +95,40 @@ ETA", and the safe pass is what the update is judged by. A failure in `safe`
 mode itself is reported and not re-run, because re-running the same checks the
 same way is not a second opinion.
 
+STEP 1's ROUTE IS CHOSEN WITH EVIDENCE (2026-11-21)
+
+`scripts/apply-patches.ps1` is the route for a normally patched install, and it
+stays the default. But some installs are DEPLOY-MANAGED: their live files come
+from `tools/reconcile_live_backend.py` (the published base plus the HUD deltas),
+so the full patch stack rejects a few dozen of its hunks. Measured on the
+owner's own PC at 2026-11-21 00:25-00:28 PT: the automatic finish ran, the stack
+rehearsed on a copy and printed "51 patch(es) will not apply to your files as
+they are" / "None of your backend files were changed by this run.", and the
+backend half was reported as failed even though the deploy tool - run by hand -
+finished the same update with 0 refusals. When that exact refusal shape is in
+the transcript (`patch_refusal`), the same run continues with the deploy tool's
+own `--apply` (`deploy_route`), verifies the live files and the `VERSION` marker
+against the installed desktop, and runs the SAME suites at the chosen pace. Any
+other refusal keeps the old behaviour; the deploy tool's own refusal is reported
+verbatim and never becomes a claim. The `ROUTE:` lines say which route carried
+the update and why.
+
 WHAT IT WRITES, AND WHAT IT DOES NOT
 
 - Writes: the patcher's own `_jarvis-backup-*` folders (by the patcher), its
   own logs (by the patcher), `update-timings.json` beside them, and the
   `update-in-progress.lock` in the folder Jarvis keeps its own data in (it is
   removed when the update ends; a crash leaves it to the dead-pid rule).
+  On the deploy route the write is the deploy tool's own: its
+  `_jarvis-deploy-backup-tool-*` folders and journal, the `$SHIPPED` modules,
+  the HUD deltas and the release markers `VERSION` and `SOURCE-COMMIT`.
   Nothing else, nowhere else.
 - Does NOT write: `scripts/apply-patches.ps1` or any other repository file,
   the desktop app's settings, or anything else in the owner's
   `~/.openjarvis`.
-- Does NOT talk to the network. The only process it starts are PowerShell (the
-  patcher) and Python (`run_suites.py`).
+- Does NOT talk to the network. The only processes it starts are PowerShell
+  (the patcher, and the deploy tool's own read of the installed desktop's
+  FileVersion) and Python (`run_suites.py`).
 
 THE EVENTS
 
@@ -145,6 +167,13 @@ PATCHER_REL = Path("scripts") / "apply-patches.ps1"
 SUITES_REL = Path("backend") / "run_suites.py"
 WHERE_REL = Path("backend") / "_where.py"
 BASE_REL = Path("jarvis-backend")
+#: The report prefix for the line that names WHICH route carried the backend
+#: half's files and WHY (2026-11-21). Rust keeps these lines verbatim and shows
+#: them on the card, so the owner is never told a route he cannot check.
+ROUTE_PREFIX = "ROUTE: "
+#: The deploy tool that is the route on a deploy-managed install. It is in the
+#: same folder as this tool, and is called in-process rather than reimplemented.
+DEPLOY_TOOL_REL = Path("tools") / "reconcile_live_backend.py"
 
 #: The opt-in the four visible-browser suites and run_suites.py share. It is
 #: named in the skip note so an intentional opt-out is never described as a
@@ -1425,6 +1454,60 @@ def patcher_result(exit_code, lines) -> dict:
     }
 
 
+#: The patch program's own words when its rehearsal or apply refused the stack.
+#: Both spellings are here because the script has used both, and a refusal is
+#: only ever recognised from the program's OWN sentence.
+_REFUSAL_PHRASES = ("will not apply", "does not apply")
+#: `51 patch(es) will not apply to your files as they are` - the count the card
+#: names. Read, never invented: a transcript without it says so.
+_REFUSAL_COUNT = re.compile(r"(\d+)\s+patch\(es\)\s+will\s+not\s+apply",
+                            re.IGNORECASE)
+
+
+def patch_refusal(lines) -> dict:
+    """What the patcher's own transcript proves about a refused patch stack.
+
+    THE ROUTE SWITCH IS EVIDENCE, NEVER A GUESS (measured 2026-11-21 00:25 PT).
+    On a deploy-managed install the live files come from
+    `tools/reconcile_live_backend.py`, not from a full `apply-patches.ps1` run,
+    so the 160-patch stack rehearses on a copy, refuses a few dozen hunks and
+    changes nothing - and the deploy tool IS the route that works there. But
+    only THAT shape switches the run to the deploy route: the transcript must
+    say, in the patch program's own words, that the patches will not apply AND
+    that no backend file was changed, and it must not carry the half-updated
+    warning. A refusal for another reason - Jarvis still running, a missing
+    file, a patch that failed part-way - is not evidence that the deploy route
+    is the right answer, so it keeps today's behaviour and changes nothing.
+    """
+    text = "\n".join(lines)
+    lower = text.lower()
+    half_updated = ("half updated" in lower
+                    or "were changed before this went wrong" in lower)
+    nothing_changed = "none of your backend files were changed" in lower
+    refused = any(phrase in lower for phrase in _REFUSAL_PHRASES)
+    match = _REFUSAL_COUNT.search(text)
+    return {
+        "refused": refused and nothing_changed and not half_updated,
+        "half_updated": half_updated,
+        "nothing_changed": nothing_changed,
+        "count": int(match.group(1)) if match else None,
+    }
+
+
+def refusal_route_words(refusal: dict) -> str:
+    """The half of the `ROUTE:` sentence that says which route refused.
+
+    The measured sentence this is taken from: *"the patch stack refused 51
+    hunks on a deployed install; the deploy route carried the update"*. The
+    count is used only when the patch program printed one; otherwise the words
+    say the stack refused without a number, never a made-up count.
+    """
+    count = refusal.get("count")
+    if count:
+        return f"the patch stack refused {count} hunk(s) on a deployed install"
+    return "the patch stack refused to apply on a deployed install"
+
+
 def suite_result(exit_code, lines) -> dict:
     """What the suite run says, in counts. An unreadable answer is ambiguous.
 
@@ -1471,6 +1554,221 @@ def suite_result(exit_code, lines) -> dict:
         "unproven": unproven,
         "summary": summary,
     }
+
+
+# ---------------------------------------------------------------------------
+#   The deploy route: the backend half of a deploy-managed install
+# ---------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (measured on the owner's PC, 2026-11-21 00:25-00:28 PT, the
+# real end-to-end test). Desktop 0.2.487 was installed by its installer; the
+# next start detected BackendOlder and ran the automatic finish. The backend
+# half was the patch stack - and on THAT PC the live files come from
+# `tools/reconcile_live_backend.py` (the published base plus the HUD deltas),
+# not from a full `apply-patches.ps1` run. The stack rehearsed on a copy,
+# refused 51 of its 160 patches ("51 patch(es) will not apply to your files as
+# they are"), changed nothing, and the automatic finish read that as a broken
+# backend half. The owner finished the same update by hand with
+# `python -B tools/reconcile_live_backend.py --backend-path <live> --apply`
+# (VERSION 0.2.487 written from the installed desktop, 0 refusals), and the app
+# then said IN SYNC. So the deploy tool is the route that works on that PC.
+#
+# THE ROUTE IS CHOSEN WITH EVIDENCE, NEVER A GUESS. `apply-patches.ps1` stays
+# the default for a patched install; only `patch_refusal`'s measured shape
+# switches the run. The deploy tool's own refusal is reported VERBATIM and
+# nothing is claimed: this tool never picks the deploy route on a hope that it
+# will work. Everything reconcile does on `--apply` is reused (its planning,
+# backup, rehearsal and release markers), not reimplemented here.
+
+#: The deploy tool, imported once. Its own module is loaded from this file's
+#: folder so the import cannot pick up another copy on `sys.path` and cannot
+#: depend on the caller's working directory.
+_DEPLOY_MODULE = None
+
+
+def load_deploy_tool():
+    """This checkout's `tools/reconcile_live_backend.py`, as a module.
+
+    A refusal rather than an exception when the file is missing: an older
+    program folder still patches the backend, and a card must say what is
+    missing in words rather than show a traceback.
+    """
+    global _DEPLOY_MODULE
+    if _DEPLOY_MODULE is not None:
+        return _DEPLOY_MODULE
+    import importlib.util
+    path = Path(__file__).resolve().parent / DEPLOY_TOOL_REL.name
+    if not path.is_file():
+        raise UpdateRefused(
+            "no_deploy_tool",
+            f"{path} is missing, so the deploy route cannot run on this PC. "
+            "The patch program refused the stack and this fallback is not in "
+            "this program folder (git pull gets it).")
+    spec = importlib.util.spec_from_file_location("reconcile_live_backend", path)
+    if spec is None or spec.loader is None:       # pragma: no cover - loader shape
+        raise UpdateRefused(
+            "no_deploy_tool",
+            f"{path} could not be loaded as a Python module, so the deploy "
+            "route cannot run on this PC.")
+    module = importlib.util.module_from_spec(spec)
+    # MEASURED 2026-11-21 02:52 on the owner's PC: the deploy route could never
+    # start. Python 3.12's `dataclasses` resolves `KW_ONLY` through
+    # `sys.modules[cls.__module__].__dict__`, and a module executed WITHOUT
+    # being registered in `sys.modules` therefore raises
+    # "'NoneType' object has no attribute '__dict__'" at its first `@dataclass`
+    # (`ShippedAction` at reconcile line 2296) - inside this loader, where the
+    # in-app auto-finish only ever saw "the deploy route itself failed". The
+    # file's own CLI imports it normally, so only this dynamic path was broken.
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(spec.name, None)
+        raise
+    _DEPLOY_MODULE = module
+    return module
+
+
+def _read_text(path) -> str:
+    """One small file's stripped text, or "" when it cannot be read."""
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+
+def _installed_desktop_version(module, version_reader=None, desktop_exe=None) -> str:
+    """The installed desktop's FileVersion, read the same way the deploy reads it.
+
+    This is the value `VERSION` must hold: the deploy tool's own rule is the
+    installed desktop's version, never this repository's root `VERSION`. An
+    unreadable one is "" (reported), never a guess.
+    """
+    reader = version_reader or module.read_desktop_version
+    try:
+        exe = module.desktop_exe_path(desktop_exe)
+        return str(reader(exe) or "").strip()
+    except Exception:                             # noqa: BLE001 - never a crash
+        return ""
+
+
+def deploy_failure_words(lines, code) -> str:
+    """The deploy tool's OWN refusal/verdict line, verbatim - never paraphrased.
+
+    A refusal is printed by the tool as `REFUSED: ...`; a write that did not
+    verify ends with `RESULT: FAIL ...`. Both are quoted exactly, because the
+    card's promise is that a refusal the deploy tool made is reported in the
+    words that tool used. Only when neither line is there does this say which
+    exit code came back.
+    """
+    for line in lines:
+        text = str(line or "").strip()
+        if text.startswith("REFUSED:"):
+            return text
+    for line in reversed(lines):
+        text = str(line or "").strip()
+        if text.startswith("RESULT: FAIL"):
+            return text
+    return f"the deploy tool exited with code {code} and printed no verdict"
+
+
+def deploy_route(repo, backend, *, say=print, module=None, version_reader=None,
+                 desktop_exe=None, skip_plugins=False, show=None,
+                 resolve_shas=None, plugin_runner=None, probe_client=None,
+                 token_reader=None, stamp=None, ref=None,
+                 lane_preflight=None) -> dict:
+    """Run the deploy tool's own `--apply` on this folder, then prove its result.
+
+    THE WHOLE JOB THE PATCH ROUTE DID. The update lock is already held by the
+    caller; this starts nothing else and stops nothing (the desktop stopped the
+    backend before the run, exactly as for the patcher). The deploy writes the
+    `$SHIPPED` modules, the HUD deltas and the release markers (`VERSION` from
+    the installed desktop, `SOURCE-COMMIT` from the deployed commit) itself, and
+    this function verifies the marker on disk against the installed desktop
+    afterwards - a marker that could not be read or does not match is a failure,
+    never a claim.
+
+    The bytes carried are `HEAD`: the patcher applies the working tree, a clean
+    checkout's working tree IS `HEAD`, and `HEAD` is the only ref the deploy
+    tool's own worktree guard accepts without an override. The commit is read
+    from git, never guessed, so `SOURCE-COMMIT` names a real commit.
+
+    THE ROUTE PROBES ARE SKIPPED, FOR A STATED REASON. The desktop stops the
+    supervised backend before the backend half runs, so there is no server for
+    the routes to answer - the app restarts it and reads both versions back
+    itself, which is the stronger end-to-end proof. The deploy tool prints the
+    skip with its reason, and its own "this is NOT a route pass" rule is kept.
+
+    Returns a dict: `ok`, `code`, `ref`, `version`, `desktop_version`, `why`,
+    `lines`. `lines` are the deploy tool's own output lines; `why` is the
+    deploy tool's own refusal sentence when it made one.
+
+    `ref` is a test seam only: `None` reads this checkout's `HEAD` (the
+    production path), while the suite passes a commit because its temporary
+    fixture repository has no git object store.
+    """
+    module = module or load_deploy_tool()
+    repo = Path(repo)
+    backend = Path(backend)
+    if not ref:
+        try:
+            ref = module.git_rev_parse(repo, "HEAD")
+        except module.Refused as exc:
+            return {"ok": False, "code": None, "ref": "", "version": "",
+                    "desktop_version": "",
+                    "why": f"the deploy route could not read the commit this program "
+                           f"folder is on ({exc})",
+                    "lines": []}
+    lines = []
+
+    def tell(line: str) -> None:
+        lines.append(line)
+        say(line)
+
+    skip_reason = ("the backend is stopped for this update, so the live routes "
+                   "cannot answer; the app restarts it and reads both versions "
+                   "back afterwards")
+    try:
+        code = module.run_deploy(
+            repo, backend, apply=True, ref=ref, skip_plugins=skip_plugins,
+            out=tell, desktop_exe=desktop_exe, version_reader=version_reader,
+            show=show, resolve_shas=resolve_shas, probe_client=probe_client,
+            token_reader=token_reader, plugin_runner=plugin_runner,
+            stamp=stamp, skip_probes=skip_reason, lane_preflight=lane_preflight)
+    except module.Refused as exc:
+        tell(f"REFUSED: {exc}")
+        return {"ok": False, "code": 2, "ref": ref, "version": "",
+                "desktop_version": "",
+                "why": f"REFUSED: {exc}", "lines": lines}
+    except Exception as exc:                      # noqa: BLE001 - never a crash
+        return {"ok": False, "code": None, "ref": ref, "version": "",
+                "desktop_version": "",
+                "why": f"the deploy route itself failed ({type(exc).__name__}: {exc})",
+                "lines": lines}
+
+    version = _read_text(backend / "VERSION")
+    desktop_version = _installed_desktop_version(module, version_reader, desktop_exe)
+    report = {"ok": False, "code": code, "ref": ref, "version": version,
+              "desktop_version": desktop_version,
+              "why": deploy_failure_words(lines, code), "lines": lines}
+    if code != 0:
+        return report
+    # SUCCESS IS THE SAME PROOF AS TODAY, read back: the bytes are proved by the
+    # caller's `verify_live_files`, and the shared marker must equal the version
+    # of the desktop that is installed - the number the HUD compares.
+    if not desktop_version:
+        report["why"] = ("the deploy wrote the files, but the installed desktop's "
+                         "version could not be read, so the release marker cannot be "
+                         "proved and the two halves are not claimed to match")
+        return report
+    if version != desktop_version:
+        report["why"] = (f"the deploy wrote the files, but VERSION reads {version!r} "
+                         f"and the installed desktop is {desktop_version!r}, so the "
+                         f"two halves are not proved to match")
+        return report
+    report["ok"] = True
+    report["why"] = ""
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -1591,16 +1889,42 @@ def _fallback_words(restore: dict) -> str:
             "trusting the result.")
 
 
+def _deploy_safe_words() -> str:
+    """The fallback sentence for the deploy route: checks again, files untouched.
+
+    The patch route's fallback puts every file back from the backup before the
+    safe pass, because a failed patch may have left a half-written file. The
+    deploy route does not need that - it proved the live files are exactly this
+    repository's bytes before the checks ran - and putting a backup back would
+    UNDO the very deploy that carried the update. So the same safe second
+    opinion (one worker) is run against the same, already-proven files, and the
+    sentence says exactly that rather than borrowing the patch route's words.
+    """
+    return ("quick check hit a problem - re-running the safe way, new ETA. "
+            "Second pass (safe mode) started. The deploy route already proved the "
+            "live files are this repository's own bytes, so nothing is put back; "
+            "only the checks run again, one at a time.")
+
+
 def update(repo, backend, mode: str, *, requested_workers=None, timings_path=None,
            say=print, run=_run, clock=time.time, lock_file=None,
            previous_release=None,
-           tool_defaults=None, beside_files=None) -> int:
+           tool_defaults=None, beside_files=None, deploy=None) -> int:
     """Run one backend update at `mode`'s pace; return 0 only when it proved it.
 
     The whole state machine is in `_update_locked`, so the fallback can be
     driven end to end with a fake runner: patch, verify, test; if a quick mode
     cannot prove itself, restore the newest backup and do the same three steps
     with one worker, and judge the update by that second pass.
+
+    THE ROUTE IS CHOSEN WITH EVIDENCE. `apply-patches.ps1` is the default, and a
+    patched install never takes any other route. When its transcript is the
+    deploy-managed refusal (`patch_refusal`), the same run continues with
+    `deploy_route` - `tools/reconcile_live_backend.py --apply` - which is the
+    route that works on a PC whose live files are deploy-managed (measured
+    2026-11-21 00:25 PT). A deploy-tool refusal is reported verbatim and nothing
+    is claimed; `deploy` is injectable so both outcomes are tests rather than
+    hopes.
 
     THE EXCLUSIVE LOCK is taken HERE, before a file is patched and before the
     suites start, and released on every way out (the `finally`); the suites this
@@ -1659,6 +1983,7 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
                               previous_release=previous_release,
                               tool_defaults=tool_defaults,
                               beside_files=beside_files,
+                              deploy=deploy,
                               lock_file=target if taken.get("ok") else None)
     finally:
         if taken.get("ok"):
@@ -1671,11 +1996,12 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
 def _update_locked(repo, backend, mode: str, *, requested_workers,
                    timings_path=None, say=print, run=_run, clock=time.time,
                    lock_file=None, previous_release=None,
-                   tool_defaults=None, beside_files=None) -> int:
+                   tool_defaults=None, beside_files=None, deploy=None) -> int:
     """The update itself. The lock is already held by `update()`; `lock_file`
     is refreshed as suites finish (the heartbeat) and released by the caller."""
     tool_defaults = tool_defaults or enable_new_tool_defaults
     beside_files = beside_files or deliver_visual_spec
+    deploy = deploy or deploy_route
     repo = Path(repo)
     backend = Path(backend)
     spec = mode_spec(mode)                 # unknown mode: refused here, first
@@ -1705,6 +2031,14 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
     attempt_mode = mode
     attempt_number = 0
     fell_back = False
+    #: What carried this update's files: "patch" (the default, a patched
+    #: install) or "deploy" (the measured fallback for a deployed install). The
+    #: safe second pass re-runs the checks without re-running the route.
+    route = "patch"
+    deploy_words = ""             # the ROUTE sentence, once the deploy route ran
+    deploy_seconds = 0.0          # the deploy phase's own time, recorded as the
+                                  # patch phase's time for the next estimate
+    deployed = {}                 # the deploy report (version/ref), once it ran
     while True:
         attempt_number += 1
         workers = workers_for(attempt_mode, requested_workers)
@@ -1740,70 +2074,166 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                       patchSeconds=patch_est, suiteSeconds=suite_est,
                       patchShare=round(this_share, 4), fraction=0.0)
 
-        # ---- 1. patch ----------------------------------------------------
-        patch_start = clock()
-        counter = _PatchCounter()
-        patch_lines = []
-        last_patch_event = [None]
-        # S1: the patch phase can run for a long time before the first suite
-        # finishes, so its own progress lines heartbeat the lock (bounded, not
-        # one file write per printed line).
-        last_heartbeat = [patch_start]
+        # ---- 1. the route: patch, or the deploy fallback -----------------
+        if route == "deploy" and fell_back:
+            # The safe second pass after the deploy route: the bytes were
+            # already proved (the deploy's own step-1 compare, then
+            # `verify_live_files`), so re-running the patch stack - which
+            # refused once - would only repeat the refusal, and restoring a
+            # backup would undo the deploy. Only the checks run again.
+            patch_seconds = deploy_seconds
+        else:
+            patch_start = clock()
+            counter = _PatchCounter()
+            patch_lines = []
+            last_patch_event = [None]
+            # S1: the patch phase can run for a long time before the first suite
+            # finishes, so its own progress lines heartbeat the lock (bounded, not
+            # one file write per printed line).
+            last_heartbeat = [patch_start]
 
-        def on_patch(line: str) -> None:
-            patch_lines.append(line)
-            say(line)
-            counter.feed(line)
-            if (lock_file is not None
-                    and clock() - last_heartbeat[0] >= LOCK_PATCH_HEARTBEAT_SECONDS):
+            def on_patch(line: str) -> None:
+                patch_lines.append(line)
+                say(line)
+                counter.feed(line)
+                if (lock_file is not None
+                        and clock() - last_heartbeat[0] >= LOCK_PATCH_HEARTBEAT_SECONDS):
+                    refresh_lock(path=lock_file, now=clock())
+                    last_heartbeat[0] = clock()
+                patch_estimate = (attempt_timings.get("patch_seconds")
+                                  or PLACEHOLDER_PATCH_SECONDS)
+                remaining = None
+                if counter.total:
+                    done = min(counter.done, counter.total)
+                    remaining = max(0.0, patch_estimate * (counter.total - done) / counter.total)
+                key = (counter.phase, counter.done, counter.total, counter.failed)
+                if key == last_patch_event[0]:
+                    return                     # nothing new to say
+                last_patch_event[0] = key
+                emit_progress(
+                    "patching", done=counter.done, total=counter.total,
+                    failed=counter.failed,
+                    etaSeconds=None if remaining is None else int(round(remaining)),
+                    measured=attempt_timings.get("patch_seconds") is not None,
+                    fraction=phase_fraction("patching", patch_share=this_share,
+                                            patch_done=counter.done,
+                                            patch_total=counter.total),
+                )
+
+            exit_code = _call(run, patcher_command(repo, backend), repo, on_patch)
+            patch_seconds = max(0.0, clock() - patch_start)
+            if lock_file is not None:
+                # The patch phase can be minutes long; put a fresh heartbeat down
+                # before the suite phase so a slow patch never looks abandoned.
                 refresh_lock(path=lock_file, now=clock())
-                last_heartbeat[0] = clock()
-            patch_estimate = (attempt_timings.get("patch_seconds")
-                              or PLACEHOLDER_PATCH_SECONDS)
-            remaining = None
-            if counter.total:
-                done = min(counter.done, counter.total)
-                remaining = max(0.0, patch_estimate * (counter.total - done) / counter.total)
-            key = (counter.phase, counter.done, counter.total, counter.failed)
-            if key == last_patch_event[0]:
-                return                     # nothing new to say
-            last_patch_event[0] = key
-            emit_progress(
-                "patching", done=counter.done, total=counter.total,
-                failed=counter.failed,
-                etaSeconds=None if remaining is None else int(round(remaining)),
-                measured=attempt_timings.get("patch_seconds") is not None,
-                fraction=phase_fraction("patching", patch_share=this_share,
-                                        patch_done=counter.done,
-                                        patch_total=counter.total),
-            )
+            verdict = patcher_result(exit_code, patch_lines)
+            if not verdict["ok"]:
+                refusal = patch_refusal(patch_lines)
+                if refusal["refused"]:
+                    # ---- 1b. the deploy route -----------------------------
+                    # The patch stack refused to APPLY and changed nothing.
+                    # `patch_refusal` says why only THAT shape switches; here
+                    # the same update continues with the deploy tool's own
+                    # `--apply`, whose refusal (if it makes one) is reported
+                    # verbatim and claims nothing.
+                    route = "deploy"
+                    deploy_words = refusal_route_words(refusal)
+                    say("")
+                    # A STATUS line, not the report: the ONE `ROUTE:` line that
+                    # names what happened is printed with the ending, so Rust's
+                    # tail and the card carry one audit sentence, not a running
+                    # commentary.
+                    say(f"NOTE  {deploy_words}; the deploy route is running "
+                        "(tools\\reconcile_live_backend.py --apply) on the same "
+                        f"backend folder ({backend}).")
+                    emit_progress(
+                        "patching", done=0, total=None, failed=0,
+                        note="the patch stack refused; the deploy route is carrying "
+                             "the update",
+                        measured=measured_now,
+                        fraction=phase_fraction("patching", patch_share=this_share,
+                                                patch_done=0, patch_total=None))
+                    last_deploy_beat = [clock()]
 
-        exit_code = _call(run, patcher_command(repo, backend), repo, on_patch)
-        patch_seconds = max(0.0, clock() - patch_start)
-        if lock_file is not None:
-            # The patch phase can be minutes long; put a fresh heartbeat down
-            # before the suite phase so a slow patch never looks abandoned.
-            refresh_lock(path=lock_file, now=clock())
-        verdict = patcher_result(exit_code, patch_lines)
-        if not verdict["ok"]:
-            came_back = None
-            if verdict["half_updated"] or verdict["touched_nothing"]:
-                came_back = restore_backup(backend)
-                if came_back.get("ok"):
-                    say(f"The patch program did not finish; {came_back['restored']} file(s) "
-                        f"were put back from {came_back['folders'][0] if came_back['folders'] else 'the backup'}.")
-            emit_progress("done", verdict="problems", fallback=fell_back,
-                          note="the patch program did not finish; nothing is claimed as updated",
-                          restored=bool(came_back and came_back.get("ok")),
-                          fraction=None)
-            say("")
-            say("DONE WITH PROBLEMS - do not trust this update yet")
-            return 1
+                    def on_deploy(line: str) -> None:
+                        say(line)
+                        if (lock_file is not None
+                                and clock() - last_deploy_beat[0]
+                                >= LOCK_PATCH_HEARTBEAT_SECONDS):
+                            refresh_lock(path=lock_file, now=clock())
+                            last_deploy_beat[0] = clock()
+
+                    deploy_start = clock()
+                    try:
+                        deployed = deploy(repo, backend, say=on_deploy)
+                    except UpdateRefused as exc:
+                        deployed = {"ok": False, "why": exc.message, "lines": []}
+                    except Exception as exc:       # noqa: BLE001 - never a crash
+                        deployed = {
+                            "ok": False,
+                            "why": f"the deploy route itself failed "
+                                   f"({type(exc).__name__}: {exc})",
+                            "lines": [],
+                        }
+                    deploy_seconds = max(0.0, clock() - deploy_start)
+                    patch_seconds = deploy_seconds
+                    if lock_file is not None:
+                        refresh_lock(path=lock_file, now=clock())
+                    if not deployed.get("ok"):
+                        why = deployed.get("why") or "it printed no verdict"
+                        emit_progress(
+                            "done", verdict="problems", fallback=fell_back,
+                            note="the deploy route did not finish either; nothing "
+                                 "is claimed as updated",
+                            fraction=None)
+                        say("")
+                        say(ROUTE_PREFIX + f"{deploy_words}; the deploy route did "
+                            f"not finish: {why}")
+                        if deployed.get("lines"):
+                            say("  the deploy tool's own report is above, verbatim.")
+                        say("DONE WITH PROBLEMS - do not trust this update yet")
+                        return 1
+                    # The deploy tool's own `RESULT: PASS` line is above; the
+                    # ONE `ROUTE:` sentence for this update is printed with the
+                    # ending, after the live files and the suites have proved it.
+                else:
+                    # Any other refusal keeps today's behaviour exactly: put
+                    # back what the run touched, claim nothing.
+                    came_back = None
+                    if verdict["half_updated"] or verdict["touched_nothing"]:
+                        came_back = restore_backup(backend)
+                        if came_back.get("ok"):
+                            say(f"The patch program did not finish; "
+                                f"{came_back['restored']} file(s) were put back from "
+                                f"{came_back['folders'][0] if came_back['folders'] else 'the backup'}.")
+                    emit_progress("done", verdict="problems", fallback=fell_back,
+                                  note="the patch program did not finish; nothing is "
+                                       "claimed as updated",
+                                  restored=bool(came_back and came_back.get("ok")),
+                                  fraction=None)
+                    say("")
+                    say("DONE WITH PROBLEMS - do not trust this update yet")
+                    return 1
 
         # ---- 2. verify the live files -----------------------------------
         emit_progress("verifying", measured=measured_now,
                       fraction=phase_fraction("verifying", patch_share=this_share))
         problems = verify_live_files(repo, backend)
+        if problems and route == "deploy":
+            # The deploy route compared and wrote these bytes itself, so a
+            # mismatch now is not a half-applied patch to restore - it is the
+            # honest failure it looks like, and it is never claimed as updated.
+            emit_progress("done", verdict="problems", fallback=fell_back,
+                          note="the deploy route finished, but the live files do not "
+                               "match this repository: "
+                               + ", ".join(p["file"] for p in problems[:8]),
+                          fraction=None)
+            say("")
+            say(ROUTE_PREFIX + f"{deploy_words}; the deploy route finished, but the "
+                "live backend files still do not match this repository: "
+                + ", ".join(p["file"] for p in problems[:8]))
+            say("DONE WITH PROBLEMS - do not trust this update yet")
+            return 1
         if problems and attempt_mode != "safe":
             fell_back = True
             pass_label = "second pass (safe mode)"
@@ -1872,16 +2302,24 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             if attempt_mode != "safe":
                 fell_back = True
                 pass_label = "second pass (safe mode)"
-                restore = restore_backup(backend)
                 reason = ("worker_ambiguous" if result["ambiguous"]
                           else "suite_failed")
+                if route == "deploy":
+                    # The deploy route's safe second opinion: the files are
+                    # already proved to be this repository's own bytes, so a
+                    # backup restore would UNDO the deploy; only the checks run
+                    # again, one at a time.
+                    note = _deploy_safe_words()
+                else:
+                    restore = restore_backup(backend)
+                    note = _fallback_words(restore)
                 pass_max[0] = 0.0     # the safe pass is a new, labelled pass
                 emit_progress("fallback", reason=reason,
-                              note=_fallback_words(restore),
+                              note=note,
                               failed=len(result["failed_names"]),
                               files=result["failed_names"][:8],
                               fraction=0.0)
-                say(_fallback_words(restore))
+                say(note)
                 attempt_mode = "safe"
                 continue
             save_timings(path, mode=attempt_mode, patch_seconds=patch_seconds, durations=durations)
@@ -1891,6 +2329,10 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                           note="the safe pass did not prove this update either",
                           fraction=None)
             say("")
+            if route == "deploy":
+                say(ROUTE_PREFIX + f"{deploy_words}; the deploy route carried the "
+                    "files, but the checks did not prove the update, so the two "
+                    "halves are not claimed to match.")
             say("DONE WITH PROBLEMS - do not trust this update yet")
             return 1
 
@@ -1940,6 +2382,19 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                     say(TOOL_DEFAULTS_PREFIX + "NOT DONE: the release's own files "
                         f"step failed ({type(exc).__name__}: {exc}); the backend "
                         "update itself is unaffected")
+        if route == "deploy":
+            # The card's audit of WHICH route ran and WHY, printed LAST so it is
+            # inside the desktop's own tail window (`backend_update::route_lines`)
+            # and shown verbatim. A deploy-route update is never reported in the
+            # patch route's clothes: the refusal that switched it is named, and
+            # so are the bytes and marker the deploy actually proved.
+            say("")
+            proof = ("and the checks above are the proof" if not unproven
+                     else "but the checks did not prove the whole update")
+            say(ROUTE_PREFIX + f"{deploy_words}; the deploy route carried the update - "
+                f"the live backend now holds this repository's bytes at commit "
+                f"{str(deployed.get('ref') or '')[:12]} and VERSION "
+                f"{deployed.get('version') or '(not read)'}, {proof}.")
         return 0
 
 
