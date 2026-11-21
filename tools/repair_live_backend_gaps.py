@@ -1299,7 +1299,64 @@ PROJECT_GATE_ROWS = Repair(
 )
 
 
+#: Gemini's ruling 5.6 (2026-11-21): the device list's "Clean up duplicate or
+#: inactive devices" action (`devices_cleanup`, `jarvis_devices.py`).
+#:
+#: WHY IT IS NEEDED ON A LIVE INSTALL AT ALL. The route refuses any tier but
+#: "ask", so the card is raised whether or not the gate's table knows the
+#: action. With NO `_RISK` row, though, the card takes the unclassified
+#: fallback: `risk_for()` answers ("no", "outbound") - permanent and able to
+#: leave this PC - and `check()` treats it as risky, so approving the owner's
+#: own cleanup would demand Windows Hello. Neither is true of a registry row:
+#: nothing leaves this PC, a copy of the device list is written beside it
+#: before anything changes, and a removed device pairs again with the QR code.
+#: The published base has the `("yes", "local")` row and the denial row in an
+#: end-of-file `_RISK.update` / `_NO_RULE_FROM_DENIAL` block.
+#:
+#: WHY THE ROWS SIT INSIDE THE LITERALS HERE. This is the LIVE file, which no
+#: patch is applied to afterwards, so the owner's 2026-11-14 rule (a base file
+#: gets a `<table>.update` block at its end) does not apply to this write - the
+#: same shape `note-edit` and `project-tools` above use. The published base
+#: carries the same row and the same denial membership at the end of the file.
+DEVICES_CLEANUP_GATE_ROWS = Repair(
+    name="devices-cleanup",
+    filename="jarvis_gate.py",
+    probes=('"devices_cleanup": ("yes", "local"',
+            '"devices_cleanup",'),
+    pieces=(
+        Piece(
+            anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+            replace_with=(
+                "_RISK: dict[str, tuple[str, str, str]] = {\n"
+                "    # tools/repair_live_backend_gaps.py (2026-11-21): the device\n"
+                "    # list's cleanup action (jarvis_devices.py, Gemini's ruling\n"
+                "    # 5.6). Local and reversible: a copy of the device list is\n"
+                "    # written first, the newest device and every device used in\n"
+                "    # the last 30 days are never removed, and a removed device\n"
+                "    # pairs again with the QR code. Copied from\n"
+                "    # jarvis-backend/jarvis_gate.py byte for byte.\n"
+                '    "devices_cleanup": ("yes", "local", "removes the device-list rows of duplicate or inactive devices - nothing leaves this PC, a copy of the device list is written beside it before anything changes, every device used in the last 30 days and the newest device are never removed, and a removed device pairs again with the QR code"),\n'
+            ),
+        ),
+        Piece(
+            anchor="_NO_RULE_FROM_DENIAL = frozenset({\n",
+            replace_with=(
+                "_NO_RULE_FROM_DENIAL = frozenset({\n"
+                "    # tools/repair_live_backend_gaps.py (2026-11-21): the device\n"
+                "    # list's cleanup acts only on tier \"ask\" - ONE card per run,\n"
+                "    # so a denial answers that one run and never becomes a\n"
+                "    # standing rule. Copied from jarvis-backend/jarvis_gate.py.\n"
+                '    "devices_cleanup",\n'
+            ),
+        ),
+    ),
+    why="without the row the cleanup card takes the unclassified fallback and "
+        "demands Windows Hello for a local, reversible change",
+)
+
+
 REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK, PROJECT_GATE_ROWS,
+                              DEVICES_CLEANUP_GATE_ROWS,
                               GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
                               UNKNOWN_RISK)}
 

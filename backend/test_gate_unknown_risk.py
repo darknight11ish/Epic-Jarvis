@@ -277,6 +277,33 @@ def _risk_rows(source: str) -> set:
     return set()
 
 
+def _updated_risk_rows(source: str) -> set:
+    """The keys added by module-level `_RISK.update({...})` calls, read with
+    `ast`.
+
+    The published base carries every feature row added after the `_RISK`
+    literal in one of these blocks - the end-of-file region no patch's hunk
+    claims - so a row that must NOT be a patch edit is proved by being in one,
+    not by being the last thing in the file. That distinction matters: a later
+    feature's block is appended after it by design (the device-list cleanup's
+    rows are the newest, 2026-11-21), and a check written as "it is after the
+    last `_NO_RULE_FROM_DENIAL` union" turns red on an unrelated feature.
+    """
+    rows = set()
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if not (isinstance(call.func, ast.Attribute) and call.func.attr == "update"
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "_RISK" and call.args):
+            continue
+        if isinstance(call.args[0], ast.Dict):
+            rows |= {k.value for k in call.args[0].keys
+                     if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    return rows
+
+
 def _tiers_from_shipped() -> dict:
     import tomllib
     cfg = tomllib.loads(SHIPPED_TOML.read_text(encoding="utf-8"))
@@ -482,14 +509,20 @@ def t_the_warning_says_what_happens_and_what_is_not_known():
           "given the worst case" in body, body)
     check("... and never claims the action itself is permanent or can leave",
           "treated as permanent" not in body, body)
-    # The reword is a BASE end-of-file override, not an edit to the patch: the
-    # patch still adds the old constant (so the patch still reverses out of the
-    # base), and the last assignment wins at import.
+    # The reword is a BASE override AFTER the patch's own constant, not an edit
+    # to the patch: the patch still adds the old sentence (so it still reverses
+    # out of the base), and the later assignment wins at import. Read by
+    # occurrence count and file order, never by "it is the last block": every
+    # new base block is appended after it by design, and an unrelated feature
+    # must not turn this check red (2026-11-21, the device-list cleanup's rows
+    # are the newest block after it).
     src = BASE_GATE.read_text(encoding="utf-8")
     check("the reword is a base end-of-file override, not a patch edit",
           src.count("UNCLASSIFIED_WARNING = (") == 2
           and src.rindex("UNCLASSIFIED_WARNING = (")
-          > src.rindex("_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {"),
+          > src.index("UNCLASSIFIED_WARNING = (")
+          and all(WARNING not in p.read_text(encoding="utf-8")
+                  for p in HERE.glob("*.patch")),
           src.count("UNCLASSIFIED_WARNING = ("))
     # The gate still RECORDS the worst case, so nothing about approval changed.
     check("the risk record is still the fail-closed one",
@@ -527,15 +560,19 @@ def t_the_notes_editor_action_has_its_own_row():
     n = G.notice_for({"action": "edit_vault_note"})
     check("... and its card does not carry the unclassified line",
           WARNING not in n["body"] and "Unclassified action" not in n["body"], n)
-    # The row is a deliberate, placed decision, not a fallback.
+    # The row is a deliberate, placed decision, not a fallback. It is proved by
+    # being added in a module-level `_RISK.update({...})` block (the end-of-file
+    # region no patch's hunk claims) rather than by being the last block in the
+    # file: a later feature appends its own block after it by design.
     src = BASE_GATE.read_text(encoding="utf-8")
     check("the row is NOT inside the _RISK literal",
           "edit_vault_note" not in _risk_rows(src), sorted(_risk_rows(src))[:5])
-    check("... it is an end-of-file `_RISK.update({...})` block, the region no "
-          "patch's hunk claims",
-          '"edit_vault_note": ("yes", "local"' in src
-          and src.index('"edit_vault_note":')
-          > src.rindex("_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {"))
+    check("... it is a `_RISK.update({...})` block, the region no patch's hunk "
+          "claims, not a patch edit",
+          "edit_vault_note" in _updated_risk_rows(src)
+          and all('"edit_vault_note": ("yes", "local"'
+                  not in p.read_text(encoding="utf-8")
+                  for p in HERE.glob("*.patch")))
     # The shipped tier is untouched by the row: it still asks.
     tiers = _tiers_from_shipped()
     check("... and the shipped tier is still ask (the row loosens nothing)",

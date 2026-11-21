@@ -834,6 +834,11 @@ HARD_LIMITS = frozenset({
     "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key",
+    # Cleaning up duplicate/inactive devices (jarvis_devices.py, Gemini's
+    # ruling 5.6, 2026-11-21): the route refuses any tier but "ask", so this
+    # page must name it - removing pairing rows must never become a standing
+    # yes. It is a one-off action the owner starts from Settings, Devices.
+    "devices_cleanup",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
     # The owner's uncensored opt-ins (jarvis_optin_models.py, the owner's OWN
@@ -884,6 +889,9 @@ MUST_ASK = frozenset({
     "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
+    # Gemini's ruling 5.6 (2026-11-21): the device-list cleanup route refuses
+    # any tier but "ask" rather than take a looser line as consent.
+    "devices_cleanup",
     "app_build_android", "app_install_android",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
@@ -1090,6 +1098,11 @@ GROUPS = (
                                 "docker_service_start", "docker_service_stop",
                                 "app_merge_change", "pair_device", "unretire_shared_key",
                                 "register_approval_key",
+                                # Cleaning up the device list (Gemini's ruling
+                                # 5.6, 2026-11-21): the owner starts it with
+                                # the button in Settings, Devices; it always
+                                # asks, and the card lists the rows that go.
+                                "devices_cleanup",
                                 # The app builder's last two steps (2026-10-30):
                                 # ONE card each, on this PC only, and the card
                                 # carries the exact command it will run.

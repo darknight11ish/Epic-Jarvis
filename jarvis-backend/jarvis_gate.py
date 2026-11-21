@@ -3522,3 +3522,37 @@ _TOOL_ACTIONS.update({
 _RISK.update({
     "todo_add": ("yes", "local", "adds ONE row to your own to-do list or project plan on this PC; nothing existing is changed or deleted, the row can be moved or removed again, and nothing is sent anywhere"),
 })
+
+
+# --------------------------------------------------------------------------
+#   Cleaning up duplicate/inactive devices (jarvis_devices.py, 2026-11-21)
+# --------------------------------------------------------------------------
+# THE ROWS ARE HERE, AT THE END OF THE FILE, for the reason the blocks above
+# give: almost every line inside `_RISK`, `_TOOL_ACTIONS` and
+# `_NO_RULE_FROM_DENIAL` is some earlier patch's hunk context, and the very end
+# of this file is the one region no earlier patch's hunk claims. Both updates
+# run at import, before any `check()` call, so the gate sees the rows exactly
+# as if they sat inside the literals.
+#
+# WHY. `devices_cleanup` is the action behind Settings, Devices, "Clean up
+# duplicate or inactive devices" (Gemini's ruling 5.6, 2026-11-21: concurrent
+# multi-device polling is expected and supported, so a long-used phone leaves
+# a trail of pairing rows that the owner needs a way to tidy - by hand, never
+# automatically). The route itself refuses any tier but "ask", so this row
+# loosens NOTHING; what it changes is that the card stops taking the gate's
+# unclassified fallback, which would have told the owner the cleanup was
+# permanent and could leave this PC. Neither is true: the registry is a file
+# in this PC's own settings folder, a copy of it is written beside it before
+# anything changes, and a removed device pairs again with the QR code - so
+# "yes" and "local", the pair the other device cards already carry.
+#
+# WHAT THE MODULE KEEPS AND THIS TABLE CANNOT: a device used in the last 30
+# days is never removed, neither is the newest device on the list, nor the
+# device making the request - so a cleanup can never lock the owner's own
+# phone out.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "devices_cleanup",  # jarvis_devices.py acts only on tier "ask": ONE card per cleanup run, and a denial answers that one run, not a standing rule (2026-11-21)
+}
+_RISK.update({
+    "devices_cleanup": ("yes", "local", "removes the device-list rows of duplicate or inactive devices - nothing leaves this PC, a copy of the device list is written beside it before anything changes, every device used in the last 30 days and the newest device are never removed, and a removed device pairs again with the QR code"),
+})
