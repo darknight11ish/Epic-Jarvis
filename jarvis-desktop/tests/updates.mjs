@@ -35,11 +35,12 @@ const calls = (page) => page.evaluate(() => window.__calls.map((c) => c[0]));
 
 const FOUND = { available: "0.2.0", notes: "Fixed the thing.", date: "2026-09-20" };
 
-/* The desktop-only fallback (2026-11-03). The Install button now runs BOTH
- * halves; on a PC where the backend half cannot run at all it still installs
- * Jarvis Desktop alone, and it must say the backend was NOT updated. Every test
- * that drives the desktop download/progress/restart path therefore opens a PC
- * with the backend half blocked - the path those tests were written for. */
+/* BOTH OR NEITHER (the owner's standing rule, stated 2026-11-20 21:12 PT).
+ * When the backend half cannot run, the Install press installs NOTHING: it says
+ * in one plain line which folder/thing is missing, and it never claims Jarvis
+ * was updated. Every test that drives the desktop download/progress/restart
+ * path therefore opens a PC whose backend half CAN run - the only state in
+ * which the desktop may be installed at all. */
 const BLOCKED = { where: { blocked: "The backend folder could not be found." } };
 
 /* ── The rule ────────────────────────────────────────────────────────────── */
@@ -82,21 +83,55 @@ await check("CONTROL: the button runs BOTH halves, so the negatives mean somethi
   assert.match(status, /backend/i, `the ending did not name the backend half: "${status}"`);
 });
 
-await check("CONTROL: on a PC whose backend half cannot run, the desktop installs alone and says so", async () => {
-  // The one honest exception: the desktop half still installs where the
-  // backend half cannot run at all, and the card must say the backend was NOT
-  // updated instead of painting a half-updated machine as done.
+await check("the update button installs nothing when the backend cannot run", async () => {
+  // The owner's standing rule, 2026-11-20 21:12 PT: "when I update Jarvis the
+  // HUD and backend should always update at the same time." This press must
+  // therefore do NOTHING when the backend half cannot run - no desktop-only
+  // install, no claim that anything was updated - and must say in one plain
+  // line which folder/thing is missing.
   const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.locator("#update-install").click();
   await page.waitForTimeout(400);
   const seen = await calls(page);
   const status = await page.locator("#update-status").innerText();
   const tone = await page.locator("#update-status").getAttribute("data-tone");
+  const installHidden = await page.locator("#update-install").isHidden();
+  const restartHidden = await page.locator("#update-restart").isHidden();
   await page.close();
-  assert.ok(seen.includes("__installed"), "the Install button does not install");
-  assert.ok(!seen.includes("__updatedBoth"), "update_both ran with the backend half blocked");
-  assert.match(status, /BACKEND was NOT updated/i, `the fallback read as a clean update: "${status}"`);
-  assert.equal(tone, "bad", "a half-updated PC was painted as a good state");
+  assert.ok(!seen.includes("__installed"),
+    "the desktop-only install ran while the backend half could not run");
+  assert.ok(!seen.includes("__updatedBoth"),
+    "update_both ran with the backend half blocked");
+  assert.match(status, /NOT installed/i, `the refusal does not say nothing was installed: "${status}"`);
+  assert.match(status, /backend folder could not be found/i,
+    `the refusal does not name what is missing: "${status}"`);
+  assert.match(status, /both halves/i, `the refusal does not say the update moves both: "${status}"`);
+  assert.doesNotMatch(status, /installed on the desktop/i,
+    `a half-updated PC reads as updated: "${status}"`);
+  assert.equal(tone, "bad", "installing nothing was painted as a good state");
+  assert.equal(installHidden, false,
+    "the Install button disappeared even though nothing was installed");
+  assert.equal(restartHidden, true,
+    "a Restart button appeared after an install that never happened");
+});
+
+await check("CONTROL: the same both-or-neither gate is in Rust before any download", () => {
+  // The page is a second witness; the guard that cannot be bypassed is
+  // `update.rs`'s `install_update`, which asks the pure gate before a byte is
+  // downloaded or anything stopped. The pure rule itself is a Rust unit test
+  // (`the_both_or_neither_gate_allows_a_desktop_install_only_with_a_runnable_backend`).
+  const rust = read("src-tauri/src/update.rs");
+  const install = rust.slice(rust.indexOf("pub async fn install_update"),
+                             rust.indexOf("pub fn desktop_install_gate"));
+  assert.notEqual(install.length, 0, "there is no install_update command");
+  const gateAt = install.indexOf("desktop_install_gate(here.blocked.as_deref())");
+  const downloadAt = install.indexOf("prepare_desktop_half");
+  assert.ok(gateAt >= 0, "install_update never asks the both-or-neither gate");
+  assert.ok(downloadAt >= 0, "install_update never prepares the desktop package");
+  assert.ok(gateAt < downloadAt,
+    "install_update downloads/stops before asking whether the backend half can run");
+  assert.ok(!install.includes("update.install("),
+    "install_update installs outside the ordered prepare/install split");
 });
 
 await check("CONTROL: Rust keeps checking and installing as separate commands", async () => {
@@ -242,15 +277,46 @@ await check("the two versions are read back and said as IN SYNC", async () => {
   assert.equal(tone, "ok", "in sync was not painted as the one good state");
 });
 
-await check("a backend behind the desktop reads as a MISMATCH with what to do", async () => {
+await check("CONTROL: a desktop-only update finishes its backend half automatically, once", () => {
+  // Rule 2 of the owner's standing rule: the Windows installer path cannot be
+  // hooked, so the next start finishes the backend half by itself. The decision,
+  // the once-per-mismatch record and the SAME backend runner are Rust; this
+  // holds the wiring no browser test can reach.
+  const rust = read("src-tauri/src/update.rs");
+  const self = read("src-tauri/src/backend_self.rs");
+  assert.match(rust, /pub fn auto_finish_plan\(/,
+    "update.rs has no automatic-finish decision");
+  assert.match(rust, /AutoFinish::Blocked\(/,
+    "the automatic finish has no honest blocked answer");
+  assert.match(rust, /AUTO_FINISH_ATTEMPTS\.claim\(/,
+    "the automatic finish has no once-per-mismatch record");
+  assert.match(rust, /crate::backend_update::run\(app, "responsive", &label\)/,
+    "the automatic finish does not run the SAME backend half at the default pace");
+  // It must never touch the desktop install: it runs because the desktop was
+  // ALREADY installed by the Windows installer.
+  const start = rust.indexOf("pub async fn finish_backend_if_desktop_ahead");
+  const end = rust.indexOf("/// The update a chat message asked for");
+  assert.ok(start >= 0 && end > start, "update.rs has no automatic-finish block");
+  const automatic = rust.slice(start, end);
+  assert.ok(!/install_now\(|install_update\(|prepare_desktop_half\(/.test(automatic),
+    "the automatic backend finish can install the desktop half");
+  assert.match(self,
+    /crate::update::finish_backend_if_desktop_ahead\(&handle, &sync\)\.await/,
+    "the startup handshake never asks for the automatic finish");
+});
+
+await check("a backend behind the desktop reads as a MISMATCH that finishes automatically", async () => {
   const page = await open({
     update: { ...K.UPDATE_NONE, ...FOUND },
     versionSync: {
-      desktop: "0.2.0",
-      backend: "0.1.0",
+      desktop: "0.2.486",
+      backend: "0.2.484",
       state: "backend-older",
-      words: "MISMATCH: the backend 0.1.0, but this HUD expects 0.2.0. " +
-        "Finish the backend update - Settings, then Updates.",
+      words: "MISMATCH: the backend 0.2.484, but this HUD expects 0.2.486. The update " +
+        "runs both halves - Jarvis finishes the backend half automatically after a " +
+        "desktop-only update, so this usually clears on its own. If it does not, Finish " +
+        "the backend update - Settings, then Updates, and press Update everything there " +
+        "(that one press updates both halves).",
     },
   });
   await page.waitForTimeout(400);
@@ -258,8 +324,64 @@ await check("a backend behind the desktop reads as a MISMATCH with what to do", 
   const tone = await page.locator("#update-sync").getAttribute("data-tone");
   await page.close();
   assert.match(sync, /MISMATCH/, `said "${sync}"`);
-  assert.match(sync, /Finish the backend update/, "the mismatch does not say what to do");
+  assert.match(sync, /Update everything/, "the mismatch no longer names the button that exists");
+  assert.match(sync, /both halves/i, "the mismatch does not say the update runs both halves");
+  assert.match(sync, /finishes the backend half automatically/i,
+    "the mismatch does not say a desktop-only update finishes automatically");
+  assert.match(sync, /0\.2\.484/, `said "${sync}"`);
+  assert.match(sync, /0\.2\.486/, `said "${sync}"`);
   assert.equal(tone, "bad", "a mismatched pair was painted as fine");
+});
+
+await check("the card's three version states each say the truth, and never each other's", async () => {
+  // Rule 4 of the 2026-11-20 work: both equal (in sync), backend behind
+  // (updating/finishing automatically), backend newer (safe, the next desktop
+  // release gets them in step). The words are `backend_self.rs`'s, so a Rust
+  // test holds their truth; this holds that the card draws each one as itself.
+  const readSync = async (versionSync) => {
+    const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, versionSync });
+    await page.waitForTimeout(300);
+    const said = await page.locator("#update-sync").innerText();
+    const tone = await page.locator("#update-sync").getAttribute("data-tone");
+    const hidden = await page.locator("#update-sync").isHidden();
+    await page.close();
+    return { said, tone, hidden };
+  };
+  const inSync = await readSync({
+    desktop: "0.2.486", backend: "0.2.486", state: "in-sync",
+    words: "Jarvis Desktop 0.2.486 and the backend 0.2.486 - IN SYNC.",
+  });
+  assert.equal(inSync.hidden, false, "the equal state never showed");
+  assert.match(inSync.said, /IN SYNC/, `said "${inSync.said}"`);
+  assert.equal(inSync.tone, "ok", "the one good state was not painted green");
+
+  const behind = await readSync({
+    desktop: "0.2.486", backend: "0.2.484", state: "backend-older",
+    words: "MISMATCH: the backend 0.2.484, but this HUD expects 0.2.486. The update " +
+      "runs both halves - Jarvis finishes the backend half automatically after a " +
+      "desktop-only update. Finish the backend update by pressing Update everything " +
+      "in Settings, then Updates.",
+  });
+  assert.match(behind.said, /MISMATCH/, `said "${behind.said}"`);
+  assert.match(behind.said, /Update everything/, `said "${behind.said}"`);
+
+  const newer = await readSync({
+    desktop: "0.2.486", backend: "0.2.490", state: "backend-newer",
+    words: "The backend 0.2.490 is newer than Jarvis Desktop 0.2.486. That is safe - " +
+      "the HUD keeps working and adds nothing it does not know - and the next desktop " +
+      "release is what gets the two in step.",
+  });
+  assert.match(newer.said, /safe/i, `said "${newer.said}"`);
+  assert.match(newer.said, /next desktop release/i,
+    `the newer state does not say what closes the gap: "${newer.said}"`);
+  assert.doesNotMatch(newer.said, /MISMATCH/, `the safe state reads as a failure: "${newer.said}"`);
+  assert.notEqual(newer.tone, "bad", "a newer backend was painted as a failure");
+  // Three states, three sentences, and only the equal one claims IN SYNC.
+  assert.notEqual(inSync.said, behind.said);
+  assert.notEqual(inSync.said, newer.said);
+  assert.notEqual(behind.said, newer.said);
+  assert.doesNotMatch(behind.said, /IN SYNC/);
+  assert.doesNotMatch(newer.said, /IN SYNC/);
 });
 
 await check("a backend that is unreachable is said, and the card still works", async () => {
@@ -364,10 +486,11 @@ await check("the update endpoint is the desktop's own rolling release, and the w
 });
 
 await check("a failed install is reported, not swallowed", async () => {
+  // The both-halves run itself failing (a signature that does not verify, a
+  // PC that would not start the patcher) must be said, not swallowed.
   const page = await open({
     update: { ...K.UPDATE_NONE, ...FOUND },
-    updateBoth: BLOCKED,
-    installFails: "signature verification failed",
+    updateBoth: { fails: "signature verification failed" },
   });
   await page.locator("#update-install").click();
   await page.waitForTimeout(300);
@@ -389,8 +512,11 @@ await check("the progress bar is hidden until a download starts", async () => {
 });
 
 await check("a progress event with a total paints a percentage", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
-  await page.locator("#update-install").click();
+  // The progress bar is a renderer of Rust's own download events, so it is fed
+  // one directly here: `install_update` is the only command that emits these,
+  // and it is reachable only on a PC whose backend half can run.
+  const page = await open();
+  await page.waitForTimeout(200);
   // Exact multiples of a MiB, so the rendered text has no rounding to guess at.
   const mib = 1024 * 1024;
   await page.evaluate(
@@ -411,8 +537,8 @@ await check("a progress event with a total paints a percentage", async () => {
 });
 
 await check("a progress event with no total says so instead of guessing", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
-  await page.locator("#update-install").click();
+  const page = await open();
+  await page.waitForTimeout(200);
   await page.evaluate(() => window.__emit("update-progress", { downloaded: 500_000, total: null }));
   await page.waitForTimeout(100);
   const indeterminate = await page.evaluate(() =>
@@ -424,9 +550,9 @@ await check("a progress event with no total says so instead of guessing", async 
 });
 
 await check("a finished install swaps Install for Restart, not back to a status line alone", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
   await page.locator("#update-install").click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   const installHidden = await page.locator("#update-install").isHidden();
   const restartHidden = await page.locator("#update-restart").isHidden();
   const progressHidden = await page.evaluate(() => document.getElementById("update-progress").hidden);
@@ -437,9 +563,9 @@ await check("a finished install swaps Install for Restart, not back to a status 
 });
 
 await check("pressing Restart calls the one command that can restart the app", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
   await page.locator("#update-install").click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   await page.locator("#update-restart").click();
   await page.waitForTimeout(100);
   const seen = await calls(page);
@@ -450,11 +576,10 @@ await check("pressing Restart calls the one command that can restart the app", a
 await check("a restart that could not even be requested is reported, not silent", async () => {
   const page = await open({
     update: { ...K.UPDATE_NONE, ...FOUND },
-    updateBoth: BLOCKED,
     restartFails: "no window left to restart from",
   });
   await page.locator("#update-install").click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   await page.locator("#update-restart").click();
   await page.waitForTimeout(100);
   const status = await page.locator("#update-status").innerText();

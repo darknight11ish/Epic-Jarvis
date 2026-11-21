@@ -54,6 +54,15 @@ calls one cannot.
    running, and Jarvis was stopped for step 2, so the card offers the same
    Restart button the desktop-only install already offered.
 
+**Both or neither (the owner's standing rule, stated 2026-11-20 21:12 PT).**
+*"when I update Jarvis the HUD and backend should always update at the same
+time."* The in-app action therefore installs nothing when the backend half
+cannot run: it says in one plain line which folder or program is missing, and it
+never claims Jarvis was updated. The Windows installer path cannot be hooked
+(the updater runs it and exits the process), so a desktop-only update can still
+happen - and **section 9** is what finishes its backend half automatically on
+the next start.
+
 ### Why that order, and not the other one
 
 - **The backend half needs a process stopped, and this half is the one that can
@@ -148,10 +157,14 @@ folder this app already starts Jarvis from.
 2. **No tunnel.** Nothing here opens one.
 3. **No key is involved.** The paths are not secrets, and no token is read,
    logged or written by this feature.
-4. **Never automatic.** No timer, no startup path and no setting can start it:
-   `update_both` is reachable only from its own button, behind a question. A
-   test asserts the page invokes it exactly once and only after
-   `window.confirm`.
+4. **It does not act on its own; only a desktop-only update is finished.** No
+   timer, no page and no setting can start `update_both`: it is reachable only
+   from its own button, behind a question (a test asserts the page invokes it
+   exactly once and only after `window.confirm`). The ONE automatic path is the
+   owner's own update action continuing: when the Windows installer has already
+   moved the desktop alone, the next start finishes the backend half by itself
+   (section 9) - once per mismatch, never when the halves are equal or the
+   backend is newer. It raises no card and approves nothing.
 5. **Non-commercial.** Untouched.
 
 ## 5. Why the phone has nothing

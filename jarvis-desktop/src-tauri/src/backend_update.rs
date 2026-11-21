@@ -594,6 +594,50 @@ pub fn repo_commit(repo: Option<&str>) -> Option<String> {
     normalise_commit(text.trim())
 }
 
+/// Is the Jarvis program folder at, or after, the commit this build came from?
+///
+/// `Some(true)` only when git PROVES that this executable's build commit is an
+/// ancestor (or the same commit) of the folder's `HEAD` - the condition under
+/// which a backend patched from that folder can honestly be called the same
+/// release this desktop runs, or a newer one. `Some(false)` when git proves it
+/// is not, and `None` when the question could not be answered at all (no
+/// folder, no commit recorded in this build, not a git checkout, git missing).
+///
+/// **Why this check exists rather than a plain write.** The backend's `VERSION`
+/// file is the shared release marker the HUD compares. Writing the desktop's
+/// version into it while the program folder is BEHIND this build would hide a
+/// real difference: the backend would be older than the desktop and the HUD
+/// would paint the two as in step. That is the dangerous direction this
+/// feature exists to end, so the marker is only moved when the folder really
+/// holds this build's commit or later. Nothing is guessed, and the folder is
+/// not fetched: a read of the refs already on this PC, never the network.
+pub fn repo_is_at_least_build(repo: Option<&str>, build_commit: Option<&str>) -> Option<bool> {
+    let repo = repo.map(str::trim).filter(|r| !r.is_empty())?;
+    let build = normalise_commit(build_commit?)?;
+    let mut command = std::process::Command::new("git");
+    command
+        .arg("-C")
+        .arg(repo)
+        .arg("merge-base")
+        .arg("--is-ancestor")
+        .arg(&build)
+        .arg("HEAD")
+        .stdin(std::process::Stdio::null());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = crate::commands::run_with_deadline(
+        "checking whether the backend folder holds this build's commit",
+        command,
+        GIT_LIMIT,
+    )?
+    .ok()?;
+    Some(output.status.success())
+}
+
 /// A commit as this module shows it: lower-case hex, twelve characters.
 ///
 /// `None` for anything that is not a commit — an error message, an empty
@@ -825,6 +869,134 @@ fn where_the_log_is(log_dir: &Option<String>) -> String {
     log_dir
         .clone()
         .unwrap_or_else(|| "the run's own printout, above".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// The release marker the HUD compares - moved only when git proves it is safe
+// ---------------------------------------------------------------------------
+//
+// MEASURED 2026-11-20, the owner's own words: *"when I update Jarvis the HUD and
+// backend should always update at the same time."* The HUD decides that with
+// ONE number: `GET /api/self`'s `version.app_version`, which is the bare
+// contents of the `VERSION` file beside the backend (`jarvis_self_portrait.
+// _app_version`). The deploy tool is the only writer of that file today, and it
+// writes the INSTALLED desktop exe's version - never this repository's root
+// `VERSION`, which is the 0.2.0 project-format marker.
+//
+// The in-app backend half patches the live folder but used to leave that file
+// alone, so a press that moved both halves still left the HUD saying MISMATCH
+// until a deploy ran by hand - the exact half-update this feature exists to end.
+// [`write_release_marker`] is that missing step, and it is deliberately NOT a
+// second copy of the deploy tool: it writes one file, in one format, with the
+// deployed-in-exe version the app already knows it is running.
+//
+// It is called only after the patcher proved itself AND only when
+// [`repo_is_at_least_build`] says the patched bytes really are this build's
+// commit or later. Anything unprovable leaves the marker untouched and the HUD's
+// mismatch in place, which is the truthful answer.
+
+/// The file the HUD's comparison reads: `<backend>/VERSION`, a bare version.
+pub const VERSION_NAME: &str = "VERSION";
+
+/// What happened when the release marker was considered.
+///
+/// Its own type rather than a bool, because "already right" and "written now"
+/// are both fine, while "this build has no release number" and "the write
+/// failed" are two different sentences and neither may read as a success.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarkerEnding {
+    /// The file already held the version this app runs.
+    Already(String),
+    /// The file was written, atomically, with it.
+    Written(String),
+    /// This app's own version is not a release number, so nothing was invented.
+    NotARelease,
+    /// The write itself failed. The backend half is untouched by that.
+    Failed(String),
+}
+
+impl MarkerEnding {
+    /// True for the two endings in whose company the marker really names the
+    /// version this desktop runs.
+    pub fn in_step(&self) -> bool {
+        matches!(self, MarkerEnding::Already(_) | MarkerEnding::Written(_))
+    }
+}
+
+/// The shape the marker file may hold: exactly three numeric parts, `0.2.486`.
+///
+/// Taken from THIS app's own version, so it is the same value the updater wrote
+/// into the desktop's executable. `None` for a development build's `0.2.0`-style
+/// project number would be wrong to reject - it is still three parts - so this
+/// only refuses what is not a release-shaped number at all (a suffix, a build
+/// id, an empty string), and the deployment identity is the caller's.
+pub fn release_marker(version: &str) -> Option<String> {
+    let version = version.trim();
+    let parts: Vec<&str> = version.split('.').collect();
+    if parts.len() != 3
+        || parts
+            .iter()
+            .any(|part| part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return None;
+    }
+    Some(version.to_string())
+}
+
+/// Writes `<backend>/VERSION` with `version`, atomically and without a trailing
+/// newline - the same bytes `tools/reconcile_live_backend.py` writes for the
+/// same file, so every reader (this module, the HUD, the deploy tool) agrees.
+///
+/// Never panics and never half-writes: the new text goes to a temporary file in
+/// the same folder and is renamed over the old one. A failure says why; it does
+/// not fall back to a truncated write.
+pub fn write_release_marker(backend: &Path, version: &str) -> MarkerEnding {
+    let Some(value) = release_marker(version) else {
+        return MarkerEnding::NotARelease;
+    };
+    let path = backend.join(VERSION_NAME);
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        if existing.trim() == value {
+            return MarkerEnding::Already(value);
+        }
+    }
+    let temporary = backend.join(format!(
+        "{VERSION_NAME}.tmp-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_nanos())
+            .unwrap_or(0)
+    ));
+    if let Err(err) = std::fs::write(&temporary, value.as_bytes()) {
+        let _ = std::fs::remove_file(&temporary);
+        return MarkerEnding::Failed(err.to_string());
+    }
+    if let Err(err) = std::fs::rename(&temporary, &path) {
+        let _ = std::fs::remove_file(&temporary);
+        return MarkerEnding::Failed(err.to_string());
+    }
+    MarkerEnding::Written(value)
+}
+
+/// One plain sentence for the card, in the run's own report. Never says the two
+/// halves are in step unless the marker really holds this build's version.
+pub fn marker_words(ending: &MarkerEnding) -> String {
+    match ending {
+        MarkerEnding::Already(version) | MarkerEnding::Written(version) => format!(
+            "The backend's VERSION file now says {version}, the version this app runs, \
+             so the HUD compares the two halves against the same number."
+        ),
+        MarkerEnding::NotARelease => "The backend was patched and proved, but its VERSION \
+             file was left alone: this build's own version is not a release number to \
+             report, and the HUD keeps showing the backend's old version rather than a \
+             made-up one."
+            .to_string(),
+        MarkerEnding::Failed(why) => format!(
+            "The backend was patched and proved, but its VERSION file could not be \
+             written ({why}), so the HUD keeps showing the old backend version."
+        ),
+    }
 }
 
 /// One finished attempt at the backend half.
@@ -1282,11 +1454,12 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_folder, folder_of_hud, halves_line, known_mode, normalise_commit, parse_mode_plan,
-        parse_update_lock, read_verdict, refuse, repo_commit, setting_text, start_blocked_words,
-        tail_of, tool_args, unknown_mode_words, update_lock_is_valid, update_running_words,
-        ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
-        LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS,
+        backend_folder, folder_of_hud, halves_line, known_mode, marker_words, normalise_commit,
+        parse_mode_plan, parse_update_lock, read_verdict, refuse, release_marker, repo_commit,
+        repo_is_at_least_build, setting_text, start_blocked_words, tail_of, tool_args,
+        unknown_mode_words, update_lock_is_valid, update_running_words, write_release_marker,
+        MarkerEnding, ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
+        LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, VERSION_NAME,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
@@ -1794,5 +1967,140 @@ mod tests {
         // Pure: this must not spawn `git` for a folder the owner never named.
         assert_eq!(repo_commit(None), None);
         assert_eq!(repo_commit(Some("   ")), None);
+    }
+
+    // ---- the release marker the HUD compares (2026-11-20) ------------------
+
+    fn marker_folder(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "jarvis-marker-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the test's own temporary folder");
+        dir
+    }
+
+    #[test]
+    fn the_release_marker_is_three_numeric_parts_and_nothing_else() {
+        assert_eq!(release_marker("0.2.486").as_deref(), Some("0.2.486"));
+        assert_eq!(release_marker(" 0.2.486\n").as_deref(), Some("0.2.486"));
+        assert_eq!(release_marker("0.2.0").as_deref(), Some("0.2.0"));
+        // Not a release number: a suffix, a build id, a short form, an empty
+        // string. None of these may be written over the shared marker.
+        for junk in [
+            "",
+            " ",
+            "0.2",
+            "0.2.486-beta.1",
+            "0.2.486+abc",
+            "main",
+            "v0.2.486",
+        ] {
+            assert_eq!(release_marker(junk), None, "accepted {junk:?}");
+        }
+    }
+
+    #[test]
+    fn the_marker_is_written_as_the_bare_version_with_no_newline() {
+        let dir = marker_folder("write");
+        std::fs::write(dir.join(VERSION_NAME), "0.2.484").expect("the old marker");
+        let ending = write_release_marker(&dir, "0.2.486");
+        assert_eq!(ending, MarkerEnding::Written("0.2.486".to_string()));
+        // The deploy tool writes these exact bytes ("7 bytes for 0.2.433"), and
+        // every reader parses a bare version - a newline is a different file.
+        assert_eq!(
+            std::fs::read(dir.join(VERSION_NAME)).expect("the marker reads"),
+            b"0.2.486"
+        );
+        // A second write of the same value is not a write at all.
+        assert_eq!(
+            write_release_marker(&dir, "0.2.486"),
+            MarkerEnding::Already("0.2.486".to_string())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_version_that_is_not_a_release_number_never_touches_the_marker() {
+        let dir = marker_folder("junk");
+        std::fs::write(dir.join(VERSION_NAME), "0.2.484").expect("the old marker");
+        assert_eq!(
+            write_release_marker(&dir, "0.2.486-dev"),
+            MarkerEnding::NotARelease
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join(VERSION_NAME)).expect("the marker reads"),
+            "0.2.484"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_write_that_fails_says_why_and_leaves_no_half_written_marker() {
+        let dir = marker_folder("fail");
+        let missing = dir.join("no-such-backend-folder");
+        let ending = write_release_marker(&missing, "0.2.486");
+        assert!(matches!(ending, MarkerEnding::Failed(_)), "{ending:?}");
+        assert!(
+            !missing.join(VERSION_NAME).exists(),
+            "a failed write left a marker behind"
+        );
+        // Nothing is left in the folder it could write to as a temporary either.
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .expect("the test folder")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_marker_words_say_in_step_only_when_the_marker_really_holds_it() {
+        for ending in [
+            MarkerEnding::Already("0.2.486".to_string()),
+            MarkerEnding::Written("0.2.486".to_string()),
+        ] {
+            assert!(ending.in_step(), "{ending:?}");
+            let said = marker_words(&ending);
+            assert!(said.contains("0.2.486"), "{said}");
+            assert!(said.contains("same number"), "{said}");
+        }
+        for ending in [
+            MarkerEnding::NotARelease,
+            MarkerEnding::Failed("access denied".to_string()),
+        ] {
+            assert!(!ending.in_step(), "{ending:?}");
+            let said = marker_words(&ending);
+            // The one failure the owner must never read as a clean update.
+            assert!(said.contains("keeps showing"), "{said}");
+            assert!(!said.contains("same number"), "{said}");
+            assert!(!said.contains("in step"), "{said}");
+        }
+        // A failed write carries the PC's own reason, not a swallowed one.
+        assert!(
+            marker_words(&MarkerEnding::Failed("access denied".to_string()))
+                .contains("access denied")
+        );
+    }
+
+    #[test]
+    fn a_folder_that_cannot_be_proved_to_hold_this_build_is_never_claimed_to() {
+        // The dangerous direction: a stale program folder must never be called
+        // this build's release. Everything unprovable is `None`, which the
+        // callers read as "do not write the marker".
+        let commit = Some("1ba56874b3a6");
+        assert_eq!(repo_is_at_least_build(None, commit), None);
+        assert_eq!(repo_is_at_least_build(Some("   "), commit), None);
+        assert_eq!(repo_is_at_least_build(Some(r"C:\nowhere"), None), None);
+        assert_eq!(
+            repo_is_at_least_build(Some(r"C:\nowhere"), Some("not-a-commit")),
+            None
+        );
     }
 }
