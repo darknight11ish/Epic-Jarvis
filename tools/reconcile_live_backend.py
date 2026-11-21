@@ -4325,7 +4325,20 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
                plugin_runner: Optional[Callable] = None,
                stamp: Optional[str] = None,
                allow_lane_launcher_mismatch: bool = False,
-               lane_preflight: Optional[Callable] = None) -> int:
+               lane_preflight: Optional[Callable] = None,
+               skip_probes: Optional[str] = None) -> int:
+    """Deploy the ref's backend onto `live`; returns 0 only when it passed.
+
+    `skip_probes` is the caller's own reason for not running the route probes:
+    `None` runs them (the default, and the only behaviour the CLI has), while a
+    non-empty string SKIPS them and prints that reason verbatim. The in-app
+    backend half is the case: the desktop stops the supervised backend before
+    the half runs, so there is no server for the routes to answer, and the app
+    restarts it and reads both versions back itself. The skip is printed as a
+    NOT-a-pass line - a caller that skips the probes must prove the result by
+    its own means, and the in-app half does (the live files' bytes against the
+    repository, and `VERSION` against the installed desktop).
+    """
     out = out or print
     repo = Path(repo)
     live = Path(live)
@@ -4636,10 +4649,18 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     # 8. Route probes against the live server. The probe runs only after a
     # COMPLETE write; a probe failure keeps the new files and names the recovery
     # point instead of pretending the deploy is atomic with a running server.
+    # `skip_probes` is a caller's stated reason, never a silent pass (see the
+    # docstring): the in-app backend half runs with the server stopped.
     out("")
+    probe_failures = 0
     out("ROUTE PROBES:")
-    probe_failures = run_probes(live, base_url, client=probe_client,
-                                token_reader=token_reader, out=out)
+    if skip_probes:
+        out(f"SKIP  {skip_probes}")
+        out("      This is NOT a route pass: whoever skipped them must prove the "
+            "result by its own means.")
+    else:
+        probe_failures = run_probes(live, base_url, client=probe_client,
+                                    token_reader=token_reader, out=out)
     out("")
     if probe_failures:
         if has_writes:
