@@ -307,10 +307,19 @@ pub fn start_blocked_words(lock: Option<&UpdateLock>) -> Option<String> {
 /// The bound measures progress, not just the wall clock (fixed 2026-11-21;
 /// before this a single one-hour wall clock killed a healthy run). A run that
 /// keeps printing is alive: every new byte the child writes resets this clock.
-/// The suite phase prints one line per finished suite, and the tool's own
-/// PRINTs are line-buffered, so a healthy sweep never looks quiet for long.
-/// Fifteen minutes is far above the slowest real gap and far below "nothing is
-/// going to happen again".
+///
+/// ONE PROOF SUITE CAN BE SILENT FOR MORE THAN FIFTEEN MINUTES between suite
+/// boundaries (measured on the owner's PC, 2026-11-21: the auto-finish for
+/// desktop 0.2.491 ran its proof stage for 48m 10s before this bound ended that
+/// HEALTHY run; `test_live_settings_parity.py` was one long suite and the
+/// previous full run took ~48-57 minutes). "The child printed nothing" is
+/// therefore NOT evidence of a stall, and raising this limit would not be the
+/// fix: `tools/update_backend.py` heartbeats the proof stage instead, printing
+/// its own `PROOF:` line at least every five minutes while the suites child is
+/// quiet (`PROOF_HEARTBEAT_SECONDS = 300.0`). So fifteen minutes of silence now
+/// means the HEARTBEAT AND the child's output both stopped - a real hang, which
+/// is exactly what a bound should catch. The heartbeat is pinned against this
+/// constant by `the_proof_stage_heartbeats_well_inside_the_silence_bound`.
 const SCRIPT_SILENCE_LIMIT: Duration = Duration::from_secs(15 * 60);
 /// The absolute wall-clock ceiling, well above the measured worst case.
 ///
@@ -1716,6 +1725,12 @@ fn run_script(
     // [`SCRIPT_HARD_CEILING`] that no real run can reach. `RunWatch` is pure and
     // takes the beat and the log's size, so both bounds are tests with an
     // injected clock and injected output, never an hour-long wait.
+    //
+    // A SILENT SUITE IS NOT A STALL (measured the same day, 48m 10s in): one
+    // proof suite can print nothing for more than fifteen minutes, so the tool
+    // now heartbeats the proof stage into this log every five minutes while its
+    // child is quiet (`tools/update_backend.py`). The silence stretch therefore
+    // only runs out when the tool's own heartbeat stops too - a real hang.
     let mut watch = RunWatch::over(log_len(&capture).unwrap_or(0));
     let mut last_beat = Instant::now();
     let mut bound: Option<RunBound> = None;
@@ -2265,13 +2280,20 @@ mod tests {
 
     // ---- the bound measures progress, not just the wall clock (2026-11-21) --
     //
-    // THE MEASURED FAILURE. The owner's PC, 2026-11-21: the auto-finish's deploy
-    // route wrote VERSION 0.2.488 and SOURCE-COMMIT d7003442e at 11:08:54Z, its
-    // proof suites legitimately ran ~57+ minutes against the live folder, and at
-    // 12:08:54Z - exactly one wall-clock hour after the start - a healthy run
-    // was killed and reported as a half that "did not finish". Every test below
-    // drives the bound with injected beats and injected log sizes, so neither
-    // the progress rule nor the endings need a real hour's wait.
+    // THE MEASURED FAILURES, both on the owner's PC on 2026-11-21, hours apart.
+    // The auto-finish's deploy route wrote VERSION 0.2.488 and SOURCE-COMMIT
+    // d7003442e at 11:08:54Z, its proof suites legitimately ran ~57+ minutes
+    // against the live folder, and at 12:08:54Z - exactly one wall-clock hour
+    // after the start - a healthy run was killed and reported as a half that
+    // "did not finish". Then the fix for that (this progress bound) was itself
+    // measured against a healthy run: the auto-finish for desktop 0.2.491 ran
+    // its proof stage for 48m 10s, one suite printed nothing for over fifteen
+    // minutes, and the silence bound ended it at 07:55 PT - the run was fine;
+    // the restart logged IN SYNC. So the tool now heartbeats the proof stage
+    // (`PROOF_HEARTBEAT_SECONDS = 300.0` in `tools/update_backend.py`), and the
+    // silence stretch only runs out when that heartbeat stops too. Every test
+    // below drives the bound with injected beats and injected log sizes, so
+    // neither the progress rule nor the endings need a real hour's wait.
 
     #[test]
     fn the_bound_extends_while_the_run_keeps_printing() {
@@ -2374,6 +2396,107 @@ mod tests {
         assert!(
             SCRIPT_HARD_CEILING > Duration::from_secs(2 * 60 * 60),
             "the ceiling is below the measured 2h8m full run"
+        );
+    }
+
+    #[test]
+    fn the_silence_bound_fires_only_when_the_heartbeats_stop_too() {
+        // THE MEASURED 48m 10s ENDING, as the rule. The auto-finish for desktop
+        // 0.2.491 ran a HEALTHY proof stage: one suite printed nothing for more
+        // than fifteen minutes, and on that day that was read as a stall. With
+        // the tool's five-minute proof heartbeat the same run is alive; the
+        // silence bound only fires when the heartbeat STOPS as well, which is a
+        // real hang.
+        let mut watch = RunWatch::over(0);
+        let mut len = 0u64;
+        // 45 minutes of a silent child and one heartbeat every five minutes.
+        for beat in 1..=9 {
+            len += 80;
+            assert_eq!(
+                watch.observe(Duration::from_secs(5 * 60), Some(len)),
+                None,
+                "the healthy proof stage was ended after {beat} heartbeats - \
+                 the measured healthy run reached 48m 10s"
+            );
+        }
+        // 48m 10s exactly: the last thing in the log is a heartbeat. The run is
+        // exactly as healthy as the measured one that was killed.
+        len += 80;
+        assert_eq!(
+            watch.observe(Duration::from_secs(3 * 60 + 10), Some(len)),
+            None,
+            "the run was ended at the measured 48m 10s"
+        );
+        assert_eq!(watch.ran, Duration::from_secs(48 * 60 + 10));
+        // THE HEARTBEAT STOPS TOO. Now it really is silent: the full stretch is
+        // still given the benefit of the doubt, and the very next second ends
+        // it - not a moment earlier.
+        assert_eq!(
+            watch.observe(Duration::from_secs(14 * 60 + 59), Some(len)),
+            None,
+            "the run was ended before the FULL silence stretch with no heartbeat"
+        );
+        let ended = watch
+            .observe(Duration::from_secs(1), Some(len))
+            .expect("the silence bound never fired after the heartbeats stopped");
+        match ended {
+            RunBound::Silence { ran, silent } => {
+                assert_eq!(silent, SCRIPT_SILENCE_LIMIT, "{silent:?}");
+                assert_eq!(
+                    ran,
+                    Duration::from_secs(48 * 60 + 10) + SCRIPT_SILENCE_LIMIT
+                );
+            }
+            other => panic!("the wrong bound ended a heartbeat-less run: {other:?}"),
+        }
+        // The ending still says WHICH bound it was and after how long, so a
+        // heartbeat-era ending the owner can act on.
+        let clause = ended.clause();
+        assert!(clause.contains("silence bound"), "{clause}");
+        assert!(clause.contains("no new output arrived for 15m"), "{clause}");
+        assert!(clause.contains("1h 3m"), "{clause}");
+    }
+
+    #[test]
+    fn the_proof_stage_heartbeats_well_inside_the_silence_bound() {
+        // THE OTHER HALF OF THIS BOUND lives in the Python tool, like the
+        // `--restore-lane` interface pinned further below: while a proof suite
+        // is silent the tool prints its own `PROOF:` line, so this silence bound
+        // can never end a healthy run. This reads the tool's own text and pins
+        // BOTH numbers - an interval slower than the bound would be no fix.
+        let tool = include_str!("../../../tools/update_backend.py");
+        for expected in [
+            "PROOF_HEARTBEAT_PREFIX = \"PROOF: \"",
+            "PROOF_HEARTBEAT_SECONDS = 300.0",
+            "PROOF_HEARTBEAT_DETAIL = \"checking the backend against the live folder\"",
+            "still running - ",
+        ] {
+            assert!(
+                tool.contains(expected),
+                "{expected:?} is missing from tools/update_backend.py"
+            );
+        }
+        let line = tool
+            .lines()
+            .find(|line| line.starts_with("PROOF_HEARTBEAT_SECONDS = "))
+            .expect("the tool has no proof heartbeat interval");
+        let seconds: f64 = line
+            .trim_start_matches("PROOF_HEARTBEAT_SECONDS = ")
+            .trim()
+            .parse()
+            .expect("the proof heartbeat interval is not a number");
+        assert!(seconds > 0.0, "{seconds}");
+        assert!(
+            SCRIPT_SILENCE_LIMIT.as_secs_f64() >= 3.0 * seconds,
+            "the proof heartbeat ({seconds}s) is not well inside the {}s silence \
+             bound - a healthy proof stage could still be ended",
+            SCRIPT_SILENCE_LIMIT.as_secs()
+        );
+        // The heartbeat belongs to the PROOF child: the tool chooses it off the
+        // suites command, and the suites command is `backend/run_suites.py`.
+        assert!(
+            tool.contains("def _is_proof_stage(argv)") && tool.contains("name == SUITES_REL.name"),
+            "the tool no longer ties the proof heartbeat to the suites child"
         );
     }
 
@@ -2689,6 +2812,53 @@ mod tests {
         assert!(
             production.contains(".arg(\"--restore-lane\")"),
             "the app never runs the tool's --restore-lane mode"
+        );
+    }
+
+    #[test]
+    fn a_heartbeat_era_bound_ending_still_restores_the_model_lane() {
+        // THE TWO 2026-11-21 FIXES MEET HERE. The proof stage now heartbeats, so
+        // a bound ending is rarer - but when the heartbeat stops too, this app
+        // still owns the kill, and the lane's restore must still run from the
+        // record the tool wrote BEFORE the suites. The heartbeat must never be
+        // an argument for dropping that ordering: a run that is ended 48m 10s
+        // into a heartbeat-era proof stage is exactly when suite 12 might have
+        // a different model loaded on the owner's everyday lane.
+        let src = include_str!("backend_update.rs");
+        let production = &src[..src.find("#[cfg(test)]").expect("no test module")];
+        let restore = production
+            .find("restore_lane_if_recorded(")
+            .expect("run_script never restores the model lane");
+        let bound = production
+            .find("if let Some(hit) = bound {")
+            .expect("run_script has no bound ending");
+        assert!(
+            restore < bound,
+            "a bound ending still returns before the model lane is restored"
+        );
+        assert!(
+            production.contains(".arg(\"--restore-lane\")"),
+            "the app never runs the tool's --restore-lane mode"
+        );
+        // AND THE TOOL STILL WRITES THE RECORD AT THE RIGHT MOMENT, even though
+        // the proof stage now prints heartbeats: record -> suites -> restore.
+        let tool = include_str!("../../../tools/update_backend.py");
+        let record = tool
+            .find("lane_record = record_lane_state(backend)")
+            .expect("the tool no longer records the model lane");
+        let suites = tool
+            .find("_call(run, suites_command(")
+            .expect("the tool no longer runs the proof suites through the runner");
+        let restore_after = tool
+            .find("restore_lane_after_suites(backend, lane_record")
+            .expect("the tool no longer restores the model lane after the suites");
+        assert!(
+            record < suites,
+            "the lane is recorded AFTER the proof suites start"
+        );
+        assert!(
+            suites < restore_after,
+            "the lane is restored before the suites can end"
         );
     }
 

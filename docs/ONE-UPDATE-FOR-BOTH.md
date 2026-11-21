@@ -489,7 +489,9 @@ injected output - no real hour is ever waited for:
    everything" press and by the automatic finish, so a click cannot be killed at
    one hour while the run is healthy. For this to work the run's own log must
    really grow line by line, so `tools/update_backend.py` line-buffers its
-   stdout and gives a Python child `PYTHONUNBUFFERED=1`.
+   stdout and gives a Python child `PYTHONUNBUFFERED=1` - and, because one
+   proof suite can print nothing for longer than the silence stretch, the tool
+   heartbeats the proof stage itself (rule 6).
 2. **On any ending, the two versions are re-read and what is true is reported.**
    `Run::ending` reads `<backend>/VERSION` before and after the attempt and
    compares it with the installed desktop's own version. A run a bound ended
@@ -540,6 +542,36 @@ injected output - no real hour is ever waited for:
    record once the lane is back; a failed restore leaves it for that one
    retry, and the app always removes it afterwards so a stale record can never
    override a model the owner picks later).
+6. **The proof stage says it is alive, so only true silence is a stall.**
+   Measured on the same PC the same day, an hour after the run above: the
+   automatic finish for desktop **0.2.491** started at **07:07 PT**. The deploy
+   route carried the file half (`VERSION 0.2.491` at 07:11), delivered the look
+   spec, recorded the everyday lane's model, and then the proof suites ran. At
+   **07:55:57Z = 07:55 PT - 48m 10s in - the silence bound ended that healthy
+   run**: *"The patch run was ended by the silence bound after 48m 10s (no new
+   output arrived for 15m) ... The full check did not finish within the bound ...
+   Restart Jarvis and it will read IN SYNC."* The backend half had genuinely
+   succeeded (the restart logged *"Jarvis Desktop 0.2.491 and the backend
+   0.2.491 - IN SYNC"*), and the lane restore line worked (`LANE: ... warmed
+   the recorded qwen3.5:9b at 196608`). The only fault was that **one proof
+   suite can print nothing for more than fifteen minutes between suite
+   boundaries** (`test_live_settings_parity.py` was one; the previous full run
+   took ~48-57 minutes), so "no output" was read as a stall. The ruling: **the
+   heartbeat is the fix, not a weaker bound.** While the suites child is quiet,
+   `tools/update_backend.py` prints its own line at least every five minutes -
+   *"PROOF: still running - 24m 05s elapsed, checking the backend against the
+   live folder"* - and every real child line still flows through unchanged and
+   restarts that clock. The 15-minute silence bound and the 3-hour ceiling are
+   unchanged; the silence stretch now means the **heartbeat AND the child's
+   output** both stopped, which is a real hang, so a healthy proof stage can
+   never be pre-empted by it. The heartbeat interval is pinned against the
+   Rust silence bound by tests on both sides (the tool tests drive the injected
+   clock and scripted child output; a Rust test reads the tool's own
+   `PROOF_HEARTBEAT_SECONDS` and checks it is at least three times inside the
+   bound). The honest ending is unchanged: marker == installed desktop -> files
+   and version are updated, restart will read IN SYNC; unchanged or unreadable
+   -> exactly what the marker says. No card or gate changed, and "both or
+   neither" is untouched.
 
 **What this deliberately does not do:** it raises no card, approves nothing,
 changes no other setting, touches no network beyond the one local `/api/self`

@@ -1059,6 +1059,212 @@ def t_the_chosen_shell_and_its_environment_are_what_run_receives():
 
 
 # --------------------------------------------------------------------------
+#   The proof stage's own sign of life (measured 2026-11-21)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED FAILURE. The owner's PC, 2026-11-21: the automatic finish for
+# desktop 0.2.491 started at 07:07 PT, the deploy route carried the file half
+# (VERSION 0.2.491 at 07:11), delivered the look spec and recorded the everyday
+# lane's model, and then the proof suites ran. At 07:55 PT - 48m 10s in - the
+# desktop's 15-minute silence bound ended that HEALTHY run, because ONE proof
+# suite can print nothing between suite boundaries (`test_live_settings_parity.py`
+# was one; the previous full run took ~48-57 minutes). "No output" was read as a
+# stall. The fix is the heartbeat below; the silence bound keeps its 15 minutes
+# and now means "the heartbeat AND the child both stopped", which is a real hang.
+# Every test here drives the injected clock and scripted child output - no real
+# five-minute wait is ever paid.
+
+
+def t_the_proof_stage_says_it_is_alive_at_least_every_five_minutes():
+    check("the heartbeat is every five minutes - a third of the app's 15-minute "
+          "silence bound, so it can never be late enough to trip it",
+          U.PROOF_HEARTBEAT_SECONDS == 300.0, U.PROOF_HEARTBEAT_SECONDS)
+    check("... and the bound it exists for is still the app's own 15 minutes",
+          300.0 < 15 * 60, U.PROOF_HEARTBEAT_SECONDS)
+
+    said = []
+    beat = U._ProofHeartbeat(said.append, started=1000.0)
+    check("nothing is printed before the first five quiet minutes",
+          beat.beat(1299.0) is None and said == [], said)
+    line = beat.beat(1300.0)
+    check("... at five quiet minutes the proof stage says it is still running, "
+          "in the one measured shape",
+          line == "PROOF: still running - 5m 00s elapsed, checking the backend "
+                  "against the live folder", line)
+    check("... and the line is on the run's own output", said == [line], said)
+
+    # The measured run, to the minute: 48m 10s of a proof stage. A minute at a
+    # time is exactly what the runner's quiet poll checks, and the rule the
+    # app's bound depends on is that no two of the tool's own lines are ever
+    # five minutes apart.
+    run_said = []
+    run_beat = U._ProofHeartbeat(run_said.append, started=1000.0)
+    minutes = []
+    for minute in range(1, 49):
+        if run_beat.beat(1000.0 + minute * 60.0) is not None:
+            minutes.append(minute)
+    check("a 48-minute proof stage is heartbeated about every five minutes",
+          minutes == [5, 10, 15, 20, 25, 30, 35, 40, 45], minutes)
+    check("... so the log grew at least once every five minutes, never the "
+          "fifteen the app calls a stall",
+          all(later - earlier <= 5 for earlier, later in zip([0] + minutes, minutes)),
+          minutes)
+    check("... and the elapsed clock in the line is the RUN's, not the interval's",
+          run_said[-1].startswith("PROOF: still running - 45m 00s elapsed"),
+          run_said[-1])
+
+
+def t_a_real_child_line_restarts_the_heartbeat_clock():
+    # Real suite output is progress of its own: a suite that finishes must not
+    # be followed by a heartbeat three minutes later claiming the same quiet
+    # stretch, and the elapsed time stays the run's from its start.
+    said = []
+    beat = U._ProofHeartbeat(said.append, started=0.0)
+    beat.saw_output(240.0)          # a suite finished four minutes in
+    check("a real child line restarts the five-minute clock",
+          beat.beat(539.0) is None and said == [], said)
+    check("... so the next heartbeat is five minutes after the suite line, not "
+          "after the last heartbeat",
+          beat.beat(540.0) is not None
+          and said == ["PROOF: still running - 9m 00s elapsed, checking the "
+                       "backend against the live folder"], said)
+    check("... and a quiet poll with no heartbeat prints nothing at all",
+          beat.beat(541.0) is None)
+
+
+def t_a_quiet_child_is_heartbeated_by_the_runner_loop():
+    # `follow_child` is the loop the real pipe reader (`_follow_pipe`) runs:
+    # scripted child output plus a fake clock, so "silent for 24 minutes" is a
+    # test rather than an afternoon.
+    class Ticker:
+        def __init__(self):
+            self.t = 0.0
+
+        def __call__(self):
+            self.t += 60.0          # each poll is one minute of quiet child
+            return self.t
+
+    clock = Ticker()
+    script = ([U._QUIET] * 6
+              + ["ok    test_live_settings_parity.py      1.2s"]
+              + [U._QUIET] * 24
+              + [U._ENDED])
+    said = []
+    beat = U._ProofHeartbeat(said.append, started=0.0)
+    U.follow_child(lambda: script.pop(0), said.append, beat, clock=clock)
+    heartbeat_lines = [line for line in said
+                       if line.startswith(U.PROOF_HEARTBEAT_PREFIX)]
+    child_lines = [line for line in said
+                   if not line.startswith(U.PROOF_HEARTBEAT_PREFIX)]
+    check("the child's own output flows through unchanged and in order",
+          child_lines == ["ok    test_live_settings_parity.py      1.2s"],
+          child_lines)
+    check("... and the 24 quiet minutes around it are heartbeated every five",
+          [line.split(" elapsed")[0] for line in heartbeat_lines]
+          == ["PROOF: still running - 5m 00s",
+              "PROOF: still running - 12m 00s",
+              "PROOF: still running - 17m 00s",
+              "PROOF: still running - 22m 00s",
+              "PROOF: still running - 27m 00s"], heartbeat_lines)
+    check("... each heartbeat is the one documented line, not a raw count",
+          all(line.endswith(", checking the backend against the live folder")
+              for line in heartbeat_lines), heartbeat_lines)
+    # Without a heartbeat the same loop is exactly the old reader: every child
+    # line, and silence while the child says nothing.
+    quiet = [U._QUIET, "one line", U._ENDED]
+    plain = []
+    U.follow_child(lambda: quiet.pop(0), plain.append, None, clock=clock)
+    check("without a heartbeat the loop is the old reader: lines only",
+          plain == ["one line"], plain)
+
+
+def t_only_the_proof_suites_child_gets_the_heartbeat():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    check("the suites command is the proof stage",
+          U._is_proof_stage(U.suites_command(repo, 14, backend)) is True,
+          U.suites_command(repo, 14, backend))
+    check("... and the patcher is NOT - its own progress lines already arrive "
+          "per patch, so it needs no second kind of output",
+          U._is_proof_stage(U.patcher_command(repo, backend)) is False,
+          U.patcher_command(repo, backend))
+    check("... nor is the release's additive tool writer",
+          U._is_proof_stage([sys.executable, "-B",
+                             str(repo / U.NEW_TOOLS_TOOL_REL), "--add", "x",
+                             "--apply"]) is False)
+
+
+def t_the_real_runner_wires_the_heartbeat_to_the_proof_child():
+    # The real `_run` builds the heartbeat for the suites child and for nothing
+    # else, and hands every real child line to the same callback unchanged.
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    built, saw = [], []
+
+    class RecordingHeartbeat:
+        def __init__(self, say, started, *, interval=U.PROOF_HEARTBEAT_SECONDS):
+            built.append((say, started, interval))
+
+        def saw_output(self, now):
+            saw.append(now)
+
+        def beat(self, now):
+            saw.append(("beat", now))
+
+    class FakeProc:
+        def __init__(self, lines):
+            self.stdout = iter(lines)
+
+        def wait(self):
+            return 0
+
+    real_popen, real_heartbeat = U.subprocess.Popen, U._ProofHeartbeat
+    U._ProofHeartbeat = RecordingHeartbeat
+    U.subprocess.Popen = lambda argv, **kwargs: FakeProc(
+        ["ok    test_a.py                       0.1s\n", "2 passed, 0 skipped, 0 failed\n"])
+    got, patcher_got = [], []
+    try:
+        code = U._run(U.suites_command(repo, 14, backend), ".", got.append)
+        suites_built, suites_saw = list(built), list(saw)
+        built.clear()
+        patcher_code = U._run(U.patcher_command(repo, backend), ".", patcher_got.append)
+        patcher_built = list(built)
+    finally:
+        U.subprocess.Popen, U._ProofHeartbeat = real_popen, real_heartbeat
+    check("the real runner builds a heartbeat for the proof child",
+          len(suites_built) == 1 and suites_built[0][0] is print
+          and suites_built[0][2] == U.PROOF_HEARTBEAT_SECONDS, suites_built)
+    check("... and does not build one for the patcher",
+          patcher_built == [], patcher_built)
+    check("... the child's lines still reach the runner's callback unchanged",
+          got == ["ok    test_a.py                       0.1s",
+                  "2 passed, 0 skipped, 0 failed"]
+          and patcher_got == list(got), (got, patcher_got))
+    check("... every child line is progress that resets the heartbeat clock",
+          len(suites_saw) == 2 and not any(isinstance(item, tuple)
+                                           for item in suites_saw), suites_saw)
+    check("... and both children ran to their end",
+          code == 0 and patcher_code == 0, (code, patcher_code))
+    check("the five-minute interval is well inside the app's own 15-minute "
+          "silence bound (backend_update.rs's SCRIPT_SILENCE_LIMIT)",
+          U.PROOF_HEARTBEAT_SECONDS * 3 <= 15 * 60, U.PROOF_HEARTBEAT_SECONDS)
+
+
+def t_the_heartbeat_words_are_the_owner_s_clock():
+    check("whole minutes and zero-padded seconds, as the owner reads a clock",
+          [U.elapsed_words(0), U.elapsed_words(5), U.elapsed_words(65),
+           U.elapsed_words(24 * 60 + 5), U.elapsed_words(60 * 60 + 7 * 60)]
+          == ["0m 00s", "0m 05s", "1m 05s", "24m 05s", "1h 07m"],
+          [U.elapsed_words(24 * 60 + 5), U.elapsed_words(60 * 60 + 7 * 60)])
+    check("... and the measured ending's own number is written as 48m 10s",
+          "48m 10s" in U.proof_heartbeat_words(48 * 60 + 10),
+          U.proof_heartbeat_words(48 * 60 + 10))
+    check("... with the one prefix the app's log and tail carry",
+          U.proof_heartbeat_words(0).startswith("PROOF: still running - "),
+          U.proof_heartbeat_words(0))
+
+
+# --------------------------------------------------------------------------
 #   Refusals before anything runs, and the --modes-json answer
 # --------------------------------------------------------------------------
 
