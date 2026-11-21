@@ -2104,14 +2104,18 @@ pub fn auto_finish_failed_words(
     detail: &str,
     log_dir: Option<&str>,
 ) -> String {
-    let still = match backend.map(str::trim).filter(|version| !version.is_empty()) {
-        Some(version) => format!("the backend is still {version}, so the two halves still differ"),
-        None => "the two halves still differ".to_string(),
+    let mut words = match backend.map(str::trim).filter(|version| !version.is_empty()) {
+        Some(version) => format!(
+            "Jarvis Desktop {desktop} is installed; the backend half is the one that did \
+             not finish. The backend is still {version}, so the two halves still differ. \
+             Press \"Update everything\" to try the backend half again."
+        ),
+        None => format!(
+            "Jarvis Desktop {desktop} is installed; the backend half is the one that did \
+             not finish, so the two halves still differ. Press \"Update everything\" to \
+             try the backend half again."
+        ),
     };
-    let mut words = format!(
-        "Jarvis Desktop {desktop} is installed; the backend half is the one that did not \
-         finish, so {still}. Press \"Update everything\" to try the backend half again."
-    );
     let detail = detail.trim();
     let detail = detail
         .strip_prefix("The backend half did not finish.")
