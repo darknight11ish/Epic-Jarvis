@@ -712,6 +712,35 @@ def _rank(row: dict) -> tuple:
             row["created"])
 
 
+def _projects_brief(now: Optional[float] = None) -> dict:
+    """The project store's own contribution to the digest (PM3, 2026-11-20).
+
+    PULL, not push: this is built when the digest is read, it speaks nothing
+    itself, and `jarvis_projects.morning_brief()` writes nothing - it is one
+    read of the plan rows. The digest therefore carries, as ONE added key:
+    work items due within 48 hours, the top 3 ready items across active
+    projects, in_progress items untouched for more than seven days, and any
+    merged-PR offer (which is still only an offer - the move to done is the
+    owner's own status change). A store that cannot be read says so in one
+    sentence rather than turning the whole digest into an error.
+    """
+    empty = {"available": False, "read": _today(now), "due_48h": [],
+             "ready": [], "stalled": [], "offers": [],
+             "counts": {"due_48h": 0, "ready": 0, "stalled": 0, "offers": 0},
+             "error": ""}
+    try:
+        import jarvis_projects
+        brief = jarvis_projects.get().morning_brief(now=now)
+    except Exception as exc:                 # noqa: BLE001 - the digest survives
+        empty["error"] = (f"the project store could not be read "
+                          f"({type(exc).__name__})")
+        return empty
+    if not isinstance(brief, dict):
+        empty["error"] = "the project store answered in a shape Jarvis does not read"
+        return empty
+    return brief
+
+
 def digest(limit: int = 50, now: Optional[float] = None) -> dict:
     """Everything waiting, ranked, with nothing resolvable from here.
 
@@ -742,8 +771,12 @@ def digest(limit: int = 50, now: Optional[float] = None) -> dict:
         items.append(item)
     return {"items": items, "count": len(rows), "shown": len(items),
             "budget": budget(now), "hour": _digest_hour(),
+            # PM3 (2026-11-20): the project half of the morning brief. One
+            # added key; the items above keep their exact shape and meaning.
+            "projects": _projects_brief(now),
             "note": ("Approvals open their own card. There is no approve-all, "
-                     "here or anywhere else.")}
+                     "here or anywhere else. The project list is a read of "
+                     "projects.db: nothing in it has been changed.")}
 
 
 def _digest_hour() -> int:

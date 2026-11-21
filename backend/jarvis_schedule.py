@@ -2037,6 +2037,54 @@ def _todo_days(items: list, now: float) -> list:
     return out
 
 
+def _project_todos(now: float) -> list:
+    """The plan store's work items due today or earlier, as READ-ONLY rows.
+
+    PM3 (2026-11-20), the owner-approved daily to-do bridge: a work item with a
+    due date on the plan store appears in Reminders -> Daily to-do, so it is
+    never typed in twice. `jarvis_projects.daily_projection()` owns the
+    selection and the dates; this function only gives each row the shape a
+    to-do row has - including the SAME `carry` tag `carry_words()` builds for
+    the scheduler's own rows, so a work item due yesterday reads "from
+    yesterday" and a 3-day-old one never does.
+
+    NOTHING is written: no schedule.db row is created, no item is moved or
+    copied, and two reads return the same list. A projects.db that is absent
+    or unreadable contributes nothing (an honest empty list, not an error:
+    every other to-do keeps working).
+    """
+    try:
+        import jarvis_projects as PJ
+        rows = PJ.get().daily_projection(now)
+    except Exception:                        # noqa: BLE001 - module absent
+        return []
+    out = []
+    for row in rows or ():
+        if not isinstance(row, dict):
+            continue
+        entry = {
+            "id": str(row.get("id") or ""), "kind": "todo",
+            "text": str(row.get("title") or ""), "state": "active",
+            "due": None, "created": float(row.get("created") or 0.0),
+            "source": "project", "repeats": False,
+            "list": "", "rank": None,
+            "created_date": str(row.get("due_date") or ""),
+            "project": str(row.get("project_name") or ""),
+            "project_id": str(row.get("project_id") or ""),
+            "work_item": str(row.get("work_item") or ""),
+            "due_date": str(row.get("due_date") or ""),
+            "executor": str(row.get("executor") or "owner"),
+            "status": str(row.get("status") or ""),
+            "read_only": True,
+            "lock_screen": "Jarvis: a work item is due.",
+        }
+        carry = carry_words(entry["created_date"], now)
+        if carry:
+            entry["carry"] = carry
+        out.append(entry)
+    return out
+
+
 # --------------------------------------------------------------------------
 #   Named lists
 # --------------------------------------------------------------------------
@@ -4791,6 +4839,12 @@ class Scheduler:
     def status(self) -> dict:
         now = self.now()
         todo = self.todos()
+        # PM3 (2026-11-20): the READ-ONLY project projection joins the daily
+        # list and nothing else. `todos()` itself - the scheduler's own rows -
+        # is unchanged, so nothing can mistake a projected row for a stored
+        # one; `read_only` and `source` on each projected row say which it is.
+        project_todo = _project_todos(now)
+        daily = todo + project_todo
         return {# Phase 2 (2026-10-22): ONE additive boolean capability marker -
                 # a newer UI hides edit/move/reorder controls when it is absent
                 # (an older backend), and every old client ignores it.
@@ -4819,7 +4873,13 @@ class Scheduler:
                 # every old client ignores the key. The same contract `phase2`
                 # and `actions` have.
                 "steps": True, "now": now, "tz": _tz_name(now),
-                "jobs": self.listed(), "todo": todo,
+                # PM3 (2026-11-20), the daily to-do bridge: ONE additive
+                # marker, for the same reason as `phase2`/`actions`/`steps` -
+                # a newer UI can label the projected rows (which are
+                # `read_only` and cannot be edited or ticked here) and every
+                # old client ignores the key.
+                "project_todos": True,
+                "jobs": self.listed(), "todo": daily,
                 # The to-do list's own day (2026-11-02): which mode is in
                 # force, the two modes in the owner's words for the Settings
                 # switch, and - for the day-labelled one - the same open items
@@ -4829,7 +4889,7 @@ class Scheduler:
                 # each item. An app from before this ignores all three keys.
                 "todo_mode": self.todo_mode(),
                 "todo_modes": [dict(m) for m in TODO_MODE_WORDS],
-                "todo_days": _todo_days(todo, now),
+                "todo_days": _todo_days(daily, now),
                 # 2026-09-25: what went off in the last hour (Snooze), and
                 # the named lists. An app from before them ignores both.
                 "went_off": self.went_off(now), "lists": self.lists(),

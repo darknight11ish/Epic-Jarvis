@@ -5409,6 +5409,26 @@ what is missing is only the Settings screen agreeing about who turned it off.
   the phone, approve with a fingerprint, watch the PC update and come back - is
   owed, and JARVIS-API §226.5 says so rather than implying it happened.
 
+- **The plan store's bridge sync has no app caller yet, and the Run Step
+  DISPATCH is deliberately not built - both one-sided, said plainly** (2026-11-20,
+  PM3; JARVIS-API §88.9, `decisions.d/2026-11-20-the-plan-store-bridges.md`).
+  The backend half is built and tested: `POST /api/projects/<id>/sync` reads a
+  linked PR's own state and CI through `jarvis_github.py` (two GETs, no GitHub
+  write, **no card**) and reads a linked `jarvis_tasks.py` job's own state,
+  projecting both onto the work item; the digest gains its project section and
+  the daily to-do list its read-only work-item rows. Neither app calls the
+  route yet - the Run Step / Sync button is PM4's screen, and when it lands it
+  goes on BOTH apps on this same route, which is why `tools/check_parity.py`
+  lists it as backend-only rather than `planned`. **What PM3 does NOT ship is
+  the dispatch that would create a durable job from a work item.** That is not
+  an oversight: `jarvis_tasks.JobList.tick()` has no production caller and no
+  background step executor (its own "WHO TICKS IT" audit above and §10), the
+  plan card that would create a job-list job is closed by measurement (12.5%
+  against a 90% bar), and `jarvis_jobs.py`'s ticker only runs its own closed
+  handler registry. Giving either a stand-in runner would move rows while
+  nothing ran - the half-built runner the owner's brief forbids. So the link,
+  the projection and the status receipt are built; the dispatch waits for a
+  real executor, and the decision fragment records the evidence.
 - **A recording can be attached in the phone's chat, and the desktop's attach
   row still offers documents only - one-sided on purpose** (2026-11-18; the
   owner's report that an `.m4a` voice memo could not be attached from the app's
@@ -5741,7 +5761,12 @@ they landed):
   pins the caller contract, proves nothing in the module starts itself, and
   proves two ticks - sequential or overlapping - cannot run a step twice; the
   module's own "WHO TICKS IT" docstring carries the same decision for the next
-  reader.)
+  reader.) **PM3 (2026-11-20) did not change that decision:** it built the
+  work-item LINK and the read-only status projection from a job's own state
+  (queued/running -> in_progress, waiting_approval -> waiting_approval,
+  succeeded -> in_review, never straight to done), and left the dispatch that
+  would create such a job for the day a real background executor exists -
+  JARVIS-API §88.9 and section 8's one-sided row say the same.
 
   **Which jobs may run while nobody is there, by name.** A call to
   `jarvis_jobs.create()` is an owner-present call, and the `caps` it writes on

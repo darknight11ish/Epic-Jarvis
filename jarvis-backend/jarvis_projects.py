@@ -121,6 +121,26 @@ chose (2026-09-24). The "are you sure?" question before a Forget is the APP's
 and stays - forgetting cannot be undone. There is NO approval card: the
 owner's own tap on a fact they can see, the same shape as /api/memory/forget
 and /api/memory/shared.
+
+PM3 (2026-11-20): THE EXECUTION AND BRIEF BRIDGES
+The plan store now meets the surfaces that already exist (the architecture
+review's "PM3 - Execution Bridge"; docs/PROJECTS-DESIGN.md's build note):
+  * a linked GitHub pull request's own state and CI, read through
+    jarvis_github.py and stored as a PROJECTION (no card, no GitHub write);
+    a merged PR is an OFFER to move the item to done, never an automatic
+    write, and the move stays the existing status path with its receipt/Undo;
+  * a linked jarvis_tasks.py durable job's own state, projected onto the item
+    through the SAME status path (in_review, never straight to done). The Run
+    Step DISPATCH itself is deliberately deferred - no production executor
+    exists to hand jarvis_tasks.tick(), and a stand-in runner would move rows
+    while nothing ran (docs/ARCHITECTURE.md section 8, and the decision
+    fragment);
+  * a morning brief (due within 48h, top 3 ready, stalled in_progress >7d,
+    offers) read by jarvis_arbiter.digest();
+  * a read-only daily to-do projection read by jarvis_schedule.status().
+No model tool, no card class and no due date is added by any of it: the
+bridges are reached by one route (POST <PATH>/<id>/sync) and by those two
+reads. See docs/JARVIS-API.md section 88.9.
 """
 from __future__ import annotations
 
@@ -198,7 +218,13 @@ MAX_PRIORITY = 9
 MAX_EVENT_SUBJECT = 80
 #: The states one work item may be in. A step is READY when it has not been
 #: started or finished and nothing open blocks it (`ready_next()`).
-WORK_STATUSES = ("backlog", "ready", "in_progress", "done", "cancelled")
+#: PM3 (2026-11-20) added the two states a linked durable job passes through:
+#: `waiting_approval` (the job is waiting on its own card) and `in_review` (the
+#: job finished and the owner decides). Neither is READY and neither is CLOSED,
+#: so an item in one of them still counts as work and still blocks what it
+#: blocks - only `done`/`cancelled` close anything.
+WORK_STATUSES = ("backlog", "ready", "in_progress", "waiting_approval",
+                 "in_review", "done", "cancelled")
 READY_STATUSES = ("backlog", "ready")
 #: A work item in one of these states is never started again, and a blocker in
 #: one of them no longer blocks (it is met, not waiting).
@@ -254,6 +280,65 @@ SEED_NOTHING = ("Nothing to import: no goal's step or work-list item can be "
                 "attached to a project yet.")
 SEED_ALL_DONE = "Everything from your goals and work lists is already in the plan."
 
+#: ---- PM3 (2026-11-20): the execution and brief bridges -------------------
+#: The owner-approved PM3 spec (the architecture review's "PM3 - Execution
+#: Bridge"; docs/PROJECTS-DESIGN.md's build notes): the plan store now meets
+#: the surfaces that already exist - the read-only GitHub reader, the durable
+#: `jarvis_tasks.py` job list, the morning digest, the daily to-do list and the
+#: one-way hub note. **This file still RUNS nothing.** The Run Step dispatch
+#: ("start this work item as a durable job") is deliberately deferred: the
+#: only real step executor in this product belongs to a chat turn, and
+#: `jarvis_tasks.tick()` has no production caller by its own audit - building
+#: a background runner here would be the half-built runner the owner's brief
+#: forbids. What IS built is the LINK, and the status projection below.
+#: The executor values a work item can carry (the review's `executor` column):
+#: the owner does it, or one of the three ways Jarvis may. Nothing here starts
+#: any of them.
+EXECUTORS = ("owner", "jarvis_local", "jarvis_cloud", "jarvis_job")
+#: A linked GitHub PR's read-only projection. `merged` is the state whose
+#: OFFER is surfaced - never an automatic status write.
+PR_STATES = ("open", "merged", "closed")
+CI_STATES = ("green", "running", "failed", "unknown")
+#: The numbers the owner-approved brief names: the top THREE ready items (the
+#: same cap the spoken/phone answer already keeps, `jarvis_quick.
+#: _MAX_NEXT_ITEMS`), work due within 48 hours, and an in_progress item
+#: untouched for more than seven days.
+BRIEF_READY_MAX = 3
+DUE_SOON_HOURS = 48
+STALLED_DAYS = 7
+#: Caps so the morning brief and the daily projection stay small reads, never
+#: a second listing of the whole store.
+BRIEF_DUE_MAX = 12
+BRIEF_STALLED_MAX = 12
+DAILY_MAX = 60
+#: A work item's own refusals for the two links, in plain words.
+LINK_NO_TASK = "There is no job with that id in the task list."
+LINK_NO_PR = "A pull request number is a whole number from 1."
+#: What the merged-PR offer says. It is an offer: the move to done is the
+#: owner's own status change and keeps its normal receipt and Undo.
+PR_MERGED_OFFER_WORDS = ("Pull request #{pr} was merged. Move \"{title}\" to done? "
+                         "Nothing has changed yet - say done, or tap it, and the "
+                         "usual Undo is in your receipts.")
+#: What a durable job's own state means for the work item linked to it. A
+#: finished job goes to `in_review`, NEVER to `done`: the owner decides.
+TASK_STATE_TO_WORK = {"queued": "in_progress", "running": "in_progress",
+                      "waiting_approval": "waiting_approval",
+                      "waiting_input": "waiting_approval",
+                      "succeeded": "in_review"}
+#: The columns PM3 adds to `work_items` and the SQLite type each needs on an
+#: older projects.db. All NULLABLE on purpose - the same migration rule the
+#: plan's project columns keep: `ALTER TABLE ... ADD COLUMN x TEXT NOT NULL`
+#: with no default raises, and a failed ALTER is an availability failure.
+_WORK_COLUMNS = (
+    ("executor", "TEXT"),
+    ("linked_task_id", "TEXT"),
+    ("linked_pr_number", "INTEGER"),
+    ("linked_pr_state", "TEXT"),
+    ("linked_ci_status", "TEXT"),
+)
+#: The names only, for `_missing_schema()` and the guarded ALTER below.
+WORK_COLUMNS = tuple(name for name, _type in _WORK_COLUMNS)
+
 #: The card this module raises: turning Shareable ON, and taking an
 #: automatic private mark off a benchmark. The same action "Folders Jarvis
 #: may look in" raises, so the gate needs no new line.
@@ -279,6 +364,10 @@ MEMORY_UNAVAILABLE = ("The memory layer is not importable here, so a project's f
                       "cannot be worked out.")
 
 _ID = re.compile(r"[0-9a-f]{32}")
+#: A durable job's id, as `jarvis_tasks.py` writes it: `uuid4().hex` for a job
+#: the owner started, or a sha256 hex for one built from a plan key (64). Both
+#: are lowercase hex and nothing else, so a raw string is never put in SQL.
+_TASK_ID = re.compile(r"[0-9a-f]{32}|[0-9a-f]{64}")
 #: A memory fact id as it arrives: a number in a body, the same digits as
 #: text in a path (`.../facts/7/forget`). At most 18 digits, so an id cannot
 #: be a number SQLite would have to round.
@@ -849,7 +938,15 @@ CREATE TABLE IF NOT EXISTS work_items (
     priority INTEGER,
     due_date TEXT,
     created REAL NOT NULL,
-    changed REAL NOT NULL
+    changed REAL NOT NULL,
+    -- PM3 (2026-11-20), appended so a migrated file and a new file have the
+    -- same column order. All NULLABLE: an older projects.db gains them with
+    -- the guarded ALTER below and nothing it already holds changes.
+    executor TEXT,
+    linked_task_id TEXT,
+    linked_pr_number INTEGER,
+    linked_pr_state TEXT,
+    linked_ci_status TEXT
 );
 CREATE INDEX IF NOT EXISTS work_items_by_project ON work_items (project, status, priority);
 CREATE TABLE IF NOT EXISTS work_edges (
@@ -902,6 +999,10 @@ _SCHEMA_TRIGGERS = ("project_events_append_only",)
 _SCHEMA_OLD_COLUMNS = {
     "projects": ("app", "auto_route_cloud") + PLAN_COLUMNS,
     "benchmarks": ("auto_cleared",),
+    # PM3 (2026-11-20): the work-item link/projection columns. An old file
+    # that already has `work_items` (a PM1/PM2 install) gains them, and the
+    # pre-migration backup runs first exactly as it does for the plan columns.
+    "work_items": WORK_COLUMNS,
 }
 
 
@@ -1039,6 +1140,15 @@ class Projects:
             for column in PLAN_COLUMNS:
                 if column not in pcols:
                     c.execute(f"ALTER TABLE projects ADD COLUMN {column} TEXT")
+            # PM3 (2026-11-20): the work-item bridge columns. The table itself
+            # either was just created with them (a new or PM1 file) or came
+            # from a build that had it without them; either way each missing
+            # one is a NULLABLE ALTER, and a file that already has them gets
+            # nothing - so a second open leaves no schema churn at all.
+            wcols = {r[1] for r in c.execute("PRAGMA table_info(work_items)").fetchall()}
+            for column, kind in _WORK_COLUMNS:
+                if column not in wcols:
+                    c.execute(f"ALTER TABLE work_items ADD COLUMN {column} {kind}")
             # One project per app folder. After the column exists, so an old
             # file gets the column first.
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS projects_by_app ON projects (app) "
@@ -1979,6 +2089,13 @@ class Projects:
             "created": r["created"], "changed": r["changed"],
             "blocked_by": blockers,
             "ready": bool(r["status"] in READY_STATUSES and not blockers and project_open),
+            # PM3 (2026-11-20): who would do it, and what it is linked to.
+            # Read-only facts: nothing in this module acts on any of them.
+            "executor": (r["executor"] or "owner"),
+            "linked_task_id": r["linked_task_id"],
+            "linked_pr_number": r["linked_pr_number"],
+            "linked_pr_state": (r["linked_pr_state"] or ""),
+            "linked_ci_status": (r["linked_ci_status"] or ""),
         }
 
     def _milestone_view(self, r) -> dict:
@@ -2053,6 +2170,11 @@ class Projects:
         status = str(body.get("status") or "backlog")
         if status not in WORK_STATUSES:
             raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
+        # WHO WOULD DO IT (PM3): a value from the review's own column, default
+        # "owner". It is a label, never a trigger: nothing here starts a job.
+        executor = str(body.get("executor") or "owner").strip().lower()
+        if executor not in EXECUTORS:
+            raise ValueError("an executor is " + ", ".join(EXECUTORS))
         priority = _clean_priority(body.get("priority"))
         due_date = _clean_date(body.get("due_date"))
         milestone = body.get("milestone")
@@ -2068,9 +2190,10 @@ class Projects:
                                  (milestone, project_id)).fetchone():
                     raise ValueError("that milestone is not in this project")
             c.execute("INSERT INTO work_items (id, project, milestone, title, detail, status, "
-                      "priority, due_date, created, changed) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      "priority, due_date, executor, created, changed) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                       (wid, project_id, milestone, title, detail, status, priority,
-                       due_date, now, now))
+                       due_date, executor, now, now))
             c.execute("UPDATE projects SET changed = ? WHERE id = ?", (now, project_id))
             self._event(c, project_id, "work_item_added", wid, {"status": status})
             view = self._work_view(c, self._work_row(c, wid))
@@ -2529,9 +2652,14 @@ class Projects:
                 if row["status"] not in MILESTONE_STATUSES:
                     problem("unknown-milestone-status", id=row["id"],
                             status=row["status"])
-            for row in c.execute("SELECT id, status FROM work_items").fetchall():
+            for row in c.execute("SELECT id, status, executor FROM work_items").fetchall():
                 if row["status"] not in WORK_STATUSES:
                     problem("unknown-work-status", id=row["id"], status=row["status"])
+                # PM3 (2026-11-20): the executor is a label, and an unknown one
+                # would make the app draw a "Jarvis does it" it cannot run.
+                if row["executor"] is not None and row["executor"] not in EXECUTORS:
+                    problem("unknown-executor", id=row["id"],
+                            executor=row["executor"])
             for row in c.execute("SELECT id, status FROM projects "
                                  "WHERE status IS NOT NULL").fetchall():
                 if row["status"] not in PROJECT_STATUSES:
@@ -3059,6 +3187,377 @@ class Projects:
         raise ValueError(f'more than one work item matches "{_clip(text, 60)}": '
                          f'{names} - say which one')
 
+    # ---- PM3 (2026-11-20): the execution and brief bridges --------------------
+    # The store's own reads and writes for the bridges. A bridge write is ONE
+    # row plus ONE append-only event, exactly like the plan writes above; a
+    # bridge READ creates nothing. Nothing in this section runs a command,
+    # opens a socket or raises a card: the GitHub read arrives through the
+    # caller's injected `fetch` (jarvis_github.py's own seam), the job state
+    # comes from jarvis_tasks.py's own store read, and the brief and the daily
+    # list are projections over rows the owner already has.
+
+    def _open_project_ids(self) -> set:
+        """The ids of projects that still offer work (not done/archived)."""
+        if not self.exists():
+            return set()
+        with self._lock, self._db() as c:
+            return {r["id"] for r in c.execute("SELECT id, status FROM projects")
+                    if r["status"] is None or r["status"] not in CLOSED_PROJECT_STATUSES}
+
+    def link_task(self, item_id: str, task_id=None, *, task_store=None) -> dict:
+        """Attach (or clear) the durable `jarvis_tasks.py` job this item follows.
+
+        NO RUN HAPPENS HERE. This is the link the deferred Run Step dispatch
+        would write (docs/ARCHITECTURE.md section 8); what this PR proves is
+        that once such a link exists, the job's own state is projected onto the
+        work item by `sync_task_status()` below, through the existing status
+        path and its receipt. A task id that is not in the task list is refused
+        in words when the list is readable; when the task list is not shipped
+        here the id is kept as given (the store never depends on it)."""
+        tid = None if task_id in (None, "") else str(task_id).strip()
+        if tid is not None:
+            if not _TASK_ID.fullmatch(tid):
+                raise ValueError("a job id is 32 or 64 lowercase hex characters.")
+            tasks = task_store if task_store is not None else _tasks_store()
+            if tasks is not None and tasks.get_task(tid) is None:
+                raise ValueError(LINK_NO_TASK)
+        now = self.clock()
+        with self._lock, self._db() as c:
+            row = self._work_row(c, item_id)
+            c.execute("UPDATE work_items SET linked_task_id = ?, changed = ? WHERE id = ?",
+                      (tid, now, item_id))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                      (now, row["project"]))
+            self._event(c, row["project"], "work_item_link", item_id,
+                        {"task": tid or ""})
+            view = self._work_view(c, self._work_row(c, item_id))
+        _audit("projects.work.link_task", {"item": item_id, "linked": bool(tid)})
+        return view
+
+    def link_pr(self, item_id: str, number=None) -> dict:
+        """Attach (or clear) the GitHub pull request this item follows.
+
+        A NUMBER ONLY: the state and the CI status are never typed in, they
+        are read later by `sync_prs()` and stored as a projection. Clearing the
+        link clears the projection with it, so a stale "merged" can never
+        outlive the link that justified it."""
+        pr = None
+        if number not in (None, ""):
+            if isinstance(number, bool):
+                raise ValueError(LINK_NO_PR)
+            text = str(number).strip().lstrip("#").strip()
+            if not text.isdigit() or int(text) < 1 or int(text) > 10 ** 12:
+                raise ValueError(LINK_NO_PR)
+            pr = int(text)
+        now = self.clock()
+        with self._lock, self._db() as c:
+            row = self._work_row(c, item_id)
+            c.execute("UPDATE work_items SET linked_pr_number = ?, "
+                      "linked_pr_state = NULL, linked_ci_status = NULL, "
+                      "changed = ? WHERE id = ?", (pr, now, item_id))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                      (now, row["project"]))
+            self._event(c, row["project"], "work_item_link", item_id,
+                        {"pr": pr or 0})
+            view = self._work_view(c, self._work_row(c, item_id))
+        _audit("projects.work.link_pr", {"item": item_id, "linked": pr is not None})
+        return view
+
+    def sync_task_status(self, project_id: Optional[str] = None, *,
+                         task_store=None) -> dict:
+        """Project every linked durable job's own state onto its work item.
+
+        READ-ONLY toward the task list, and read-only toward GitHub; the only
+        write is the work item's own status through `set_work_item_status()`,
+        which is the EXISTING path: one `project_events` row and one Undo
+        receipt per real change. A job's state maps as
+        `TASK_STATE_TO_WORK` says - a finished job goes to `in_review`, never
+        to `done` - and a job that failed, was cancelled or went blocked is
+        REPORTED, never given a made-up status. A closed work item is never
+        pulled back open. Nothing runs."""
+        out: dict = {"read": 0, "linked": 0, "changed": [], "unchanged": 0,
+                     "skipped": []}
+        if not self.exists():
+            return out
+        if project_id is not None and (not isinstance(project_id, str)
+                                       or not _ID.fullmatch(project_id)):
+            raise KeyError(project_id)
+        items = [i for i in self.work_items(project_id) if i.get("linked_task_id")]
+        out["linked"] = len(items)
+        if not items:
+            return out
+        tasks = task_store if task_store is not None else _tasks_store()
+        if tasks is None:
+            out["skipped"].append({"why": "the task list is not available here"})
+            return out
+        for item in items:
+            task = tasks.get_task(item["linked_task_id"])
+            if task is None:
+                out["skipped"].append({"item": item["id"], "task": item["linked_task_id"],
+                                       "why": "the linked job is not in the task list"})
+                continue
+            out["read"] += 1
+            target = TASK_STATE_TO_WORK.get(str(task.status))
+            if target is None:
+                out["skipped"].append({
+                    "item": item["id"], "task": task.id, "state": str(task.status),
+                    "why": f"a {task.status} job does not move the work item - "
+                           f"it stays {item['status']}"})
+                continue
+            if item["status"] in CLOSED_STATUSES:
+                out["skipped"].append({"item": item["id"], "task": task.id,
+                                       "state": str(task.status),
+                                       "why": "the work item is already closed"})
+                continue
+            if item["status"] == target:
+                out["unchanged"] += 1
+                continue
+            try:
+                view = self.set_work_item_status(item["id"], target)
+            except (KeyError, ValueError) as exc:
+                out["skipped"].append({"item": item["id"], "task": task.id,
+                                       "why": str(exc)[:200]})
+                continue
+            out["changed"].append({"item": item["id"], "task": task.id,
+                                   "from": item["status"], "to": view["status"]})
+        _audit("projects.work.sync_task", {"linked": out["linked"],
+                                           "read": out["read"],
+                                           "changed": len(out["changed"])})
+        return out
+
+    def _record_pr_state(self, item: dict, repo: str, got: dict) -> tuple:
+        """Store ONE read PR state as a projection, and offer a merge once.
+
+        Returns (changed, offer). An OFFER is appended to the append-only log
+        the FIRST time a linked, still-open work item's PR is seen merged; the
+        work item's STATUS is never written here. The same merged PR seen again
+        writes nothing."""
+        state = str(got.get("state") or "")
+        ci = str(got.get("ci") or "unknown")
+        if state not in PR_STATES:
+            return False, None
+        if ci not in CI_STATES:
+            ci = "unknown"
+        offer = None
+        changed = False
+        now = self.clock()
+        with self._lock, self._db() as c:
+            row = self._work_row(c, item["id"])
+            if (row["linked_pr_state"], row["linked_ci_status"]) != (state, ci):
+                c.execute("UPDATE work_items SET linked_pr_state = ?, "
+                          "linked_ci_status = ?, changed = ? WHERE id = ?",
+                          (state, ci, now, item["id"]))
+                self._event(c, row["project"], "pr_synced", item["id"],
+                            {"pr": int(row["linked_pr_number"] or 0),
+                             "state": state, "ci": ci})
+                changed = True
+            if state == "merged" and row["status"] not in CLOSED_STATUSES:
+                detail = json.dumps({"pr": int(row["linked_pr_number"] or 0)},
+                                    sort_keys=True)
+                already = c.execute(
+                    "SELECT 1 FROM project_events WHERE kind = 'pr_merged_offer' "
+                    "AND subject = ? AND detail = ?",
+                    (item["id"], detail)).fetchone()
+                if not already:
+                    self._event(c, row["project"], "pr_merged_offer", item["id"],
+                                {"pr": int(row["linked_pr_number"] or 0)})
+                offer = {"item": item["id"], "project": row["project"],
+                         "project_name": item.get("project_name") or "",
+                         "title": row["title"],
+                         "pr": int(row["linked_pr_number"] or 0), "ci": ci,
+                         "repo": repo,
+                         "message": PR_MERGED_OFFER_WORDS.format(
+                             pr=int(row["linked_pr_number"] or 0), title=row["title"])}
+        return changed, offer
+
+    def sync_prs(self, project_id: Optional[str] = None, *, fetch=None,
+                 github=None) -> dict:
+        """Read each linked pull request's own state and CI, and store the
+        projection. NO CARD, NO GITHUB WRITE, NO STATUS CHANGE.
+
+        The read is `jarvis_github.pull_request_state()` (README only: every
+        request it makes is a GET on api.github.com through the module's own
+        token and transport), and the offer a merged PR creates is surfaced by
+        `pr_merged_offers()` - the move to done stays the owner's own status
+        change with its normal receipt and Undo. A project with no
+        `linked_repo` is named in `errors` and skipped; a read that fails
+        changes nothing and is returned in plain words."""
+        out: dict = {"read": 0, "linked": 0, "synced": [], "offers": [],
+                     "errors": []}
+        if not self.exists():
+            return out
+        if project_id is not None and (not isinstance(project_id, str)
+                                       or not _ID.fullmatch(project_id)):
+            raise KeyError(project_id)
+        items = [i for i in self.work_items(project_id) if i.get("linked_pr_number")]
+        out["linked"] = len(items)
+        if not items:
+            return out
+        reader = github if github is not None else _github_module()
+        if reader is None:
+            out["errors"].append({"why": "the GitHub reader is not available here"})
+            return out
+        repos: dict = {}
+        for item in items:
+            if item["project"] not in repos:
+                try:
+                    repos[item["project"]] = str(
+                        (self.plan_state(item["project"]) or {}).get("linked_repo")
+                        or "").strip()
+                except Exception:                       # noqa: BLE001
+                    repos[item["project"]] = ""
+            repo = repos[item["project"]]
+            if not repo:
+                out["errors"].append({
+                    "item": item["id"],
+                    "why": "this project has no linked repository, so its PR "
+                           "cannot be read"})
+                continue
+            try:
+                got = reader.pull_request_state(repo, item["linked_pr_number"],
+                                                fetch=fetch)
+            except Exception as exc:                    # noqa: BLE001
+                got = {"ok": False, "error": f"the GitHub reader raised "
+                                             f"{type(exc).__name__}"}
+            if not got.get("ok"):
+                out["errors"].append({"item": item["id"], "repo": repo,
+                                      "why": str(got.get("error")
+                                                 or "GitHub could not be read")})
+                continue
+            out["read"] += 1
+            changed, offer = self._record_pr_state(item, repo, got)
+            if changed:
+                out["synced"].append({"item": item["id"],
+                                      "pr": int(item["linked_pr_number"]),
+                                      "state": str(got.get("state") or ""),
+                                      "ci": str(got.get("ci") or "unknown")})
+            if offer is not None:
+                out["offers"].append(offer)
+        _audit("projects.work.sync_pr", {"linked": out["linked"],
+                                         "read": out["read"],
+                                         "synced": len(out["synced"]),
+                                         "offers": len(out["offers"])})
+        return out
+
+    def pr_merged_offers(self) -> list:
+        """Every OPEN work item whose linked PR is known to be merged.
+
+        Read-only: this is the OFFER the digest and the hub note surface. The
+        move to done is the existing status path and its Undo receipt."""
+        if not self.exists():
+            return []
+        open_projects = self._open_project_ids()
+        out = []
+        for item in self.work_items():
+            if (item.get("linked_pr_state") != "merged"
+                    or item["status"] in CLOSED_STATUSES
+                    or item["project"] not in open_projects):
+                continue
+            out.append({"item": item["id"], "project": item["project"],
+                        "project_name": item["project_name"],
+                        "title": item["title"],
+                        "pr": item.get("linked_pr_number"),
+                        "ci": item.get("linked_ci_status") or "",
+                        "executor": item.get("executor") or "owner",
+                        "message": PR_MERGED_OFFER_WORDS.format(
+                            pr=item.get("linked_pr_number"),
+                            title=item["title"])})
+        return out
+
+    def morning_brief(self, now: Optional[float] = None) -> dict:
+        """The project half of the morning digest: (a) work due within 48
+        hours, (b) the top 3 ready items across ACTIVE projects, (c) stalled
+        `in_progress` items untouched for more than seven days - and any
+        merged-PR OFFER. Read-only: nothing is written, nothing is spoken and
+        nothing is created; `available` is False only when the store cannot be
+        read at all. The digest itself decides what to do with it."""
+        now = float(now if now is not None else self.clock())
+        read = time.strftime("%Y-%m-%d", time.localtime(now))
+        out: dict = {"available": True, "read": read, "due_48h": [], "ready": [],
+                     "stalled": [], "offers": [],
+                     "counts": {"due_48h": 0, "ready": 0, "stalled": 0,
+                                "offers": 0}}
+        if not self.exists():
+            return out
+        open_projects = self._open_project_ids()
+        horizon = time.strftime("%Y-%m-%d",
+                                time.localtime(now + DUE_SOON_HOURS * 3600))
+        items = [i for i in self.work_items() if i["project"] in open_projects]
+        due, stalled = [], []
+        for item in items:
+            if item["status"] in CLOSED_STATUSES:
+                continue
+            if item["due_date"] and item["due_date"] <= horizon:
+                due.append({"item": item["id"], "project": item["project"],
+                            "project_name": item["project_name"],
+                            "title": item["title"],
+                            "due_date": item["due_date"],
+                            "overdue": item["due_date"] < read,
+                            "status": item["status"],
+                            "created": item["created"]})
+            if (item["status"] == "in_progress"
+                    and float(item["changed"]) < now - STALLED_DAYS * 86400):
+                stalled.append({"item": item["id"], "project": item["project"],
+                                "project_name": item["project_name"],
+                                "title": item["title"],
+                                "changed": item["changed"],
+                                "untouched_days": int(max(0.0, now
+                                                          - float(item["changed"]))
+                                                      // 86400)})
+        due.sort(key=lambda row: (row["due_date"], row["created"], row["item"]))
+        stalled.sort(key=lambda row: (row["changed"], row["item"]))
+        ready = []
+        for row in self.ready_next(limit=BRIEF_READY_MAX):
+            ready.append({"item": row["id"], "title": row["title"],
+                          "project": row["project"],
+                          "project_name": row["project_name"],
+                          "priority": row["priority"],
+                          "due_date": row["due_date"],
+                          "executor": row.get("executor") or "owner",
+                          "status": row["status"]})
+        offers = self.pr_merged_offers()
+        out["due_48h"], out["stalled"] = due[:BRIEF_DUE_MAX], stalled[:BRIEF_STALLED_MAX]
+        out["ready"], out["offers"] = ready, offers
+        out["counts"] = {"due_48h": len(due), "ready": len(ready),
+                         "stalled": len(stalled), "offers": len(offers),
+                         "stalled_shown": len(out["stalled"])}
+        return out
+
+    def daily_projection(self, now: Optional[float] = None) -> list:
+        """Work items that belong on TODAY's to-do list: due today or earlier,
+        still open, in a project that still offers work.
+
+        Read-only: this returns rows; it writes nothing and creates no
+        scheduler row. `jarvis_schedule.py` adds them to the daily list it
+        already serves, with the SAME carry-over tag it gives its own rows -
+        so a work item is never typed into the scheduler twice."""
+        now = float(now if now is not None else self.clock())
+        today = time.strftime("%Y-%m-%d", time.localtime(now))
+        if not self.exists():
+            return []
+        open_projects = self._open_project_ids()
+        rows = []
+        for item in self.work_items():
+            if (not item["due_date"] or item["due_date"] > today
+                    or item["status"] in CLOSED_STATUSES
+                    or item["project"] not in open_projects):
+                continue
+            rows.append({"id": daily_row_id(item["project"], item["id"]),
+                         "work_item": item["id"],
+                         "project_id": item["project"],
+                         "project_name": item["project_name"],
+                         "title": item["title"],
+                         "due_date": item["due_date"],
+                         "status": item["status"],
+                         "priority": item["priority"],
+                         "executor": item.get("executor") or "owner",
+                         "created": item["created"]})
+        rows.sort(key=lambda row: (row["due_date"],
+                                   row["priority"] is None,
+                                   row["priority"] if row["priority"] is not None else 0,
+                                   row["created"], row["work_item"]))
+        return rows[:DAILY_MAX]
+
     def record_checkpoint(self, project_id: str, text, *,
                           kind: str = "checkpoint",
                           item_id: Optional[str] = None) -> dict:
@@ -3121,7 +3620,25 @@ class Projects:
         if state.get("target_date"):
             # Only a date the owner himself gave; the export never adds one.
             lines.append(f"**Target date:** {state['target_date']}")
-        if status or state.get("target_date"):
+        repo = str(state.get("linked_repo") or "").strip()
+        if repo:
+            # PM3 (2026-11-20): the one repository this project is linked to.
+            # Nothing is written on GitHub by an export; the note only says
+            # what the store already holds.
+            lines.append(f"**Repository:** {_clip(repo, 300)}")
+        if status or state.get("target_date") or repo:
+            lines.append("")
+        # The merged-PR OFFER (PM3): shown, never acted on by the export. The
+        # move to done is the owner's own status change and its Undo receipt.
+        offers = self.pr_merged_offers() if self.exists() else []
+        offers = [o for o in offers if o["project"] == project_id]
+        if offers:
+            lines += ["## Offered", "",
+                      "These pull requests were merged; the note does not move the "
+                      "work - say done (or leave it), and Undo is in the receipts.", ""]
+            for offer in offers[:10]:
+                lines.append(f"- PR #{offer['pr']} merged - move "
+                             f"\"{_clip(offer['title'], MAX_WORK_TITLE)}\" to done?")
             lines.append("")
         if milestones:
             lines += ["## Milestones", ""]
@@ -3141,6 +3658,16 @@ class Projects:
                 tail = ""
                 if item["due_date"]:
                     tail = f" (due {item['due_date']})"
+                # PM3 (2026-11-20): who would do it, and the READ-ONLY link
+                # state. No number is ever copied from a benchmark; a PR's
+                # number and checks are GitHub's own facts, read once.
+                if item.get("executor") and item["executor"] != "owner":
+                    tail += f" [{item['executor']}]"
+                if item.get("linked_pr_number"):
+                    pr_state = item.get("linked_pr_state") or "not synced"
+                    ci = (f"; checks {item['linked_ci_status']}"
+                          if item.get("linked_ci_status") else "")
+                    tail += f" (PR #{item['linked_pr_number']}: {pr_state}{ci})"
                 blockers = item.get("blocked_by") or []
                 blocked = ""
                 if blockers:
@@ -3259,6 +3786,87 @@ class Projects:
             return
         with self._lock, self._db() as c:
             self._drop_axes(c, "goal", [goal_ref])
+
+
+# --------------------------------------------------------------------------
+#   PM3 (2026-11-20): the bridges' own helpers, and the app's one sync door
+# --------------------------------------------------------------------------
+
+
+def daily_row_id(project_id: str, item_id: str) -> str:
+    """The id a projected work item carries on the daily to-do list.
+
+    A stable, prefixed id - `project:<project>:work:<item>` - so a projection
+    can never collide with a scheduler row's own id, and a client can tell a
+    projected row from a real one without a second field to trust."""
+    return f"project:{project_id}:work:{item_id}"
+
+
+def _tasks_store():
+    """The durable job list, or None when jarvis_tasks.py is not shipped here."""
+    try:
+        import jarvis_tasks
+        return jarvis_tasks.Store()
+    except Exception:                        # noqa: BLE001 - module absent
+        return None
+
+
+def _github_module():
+    """The read-only GitHub reader, or None when jarvis_github.py is not here."""
+    try:
+        import jarvis_github
+        return jarvis_github
+    except Exception:                        # noqa: BLE001 - module absent
+        return None
+
+
+def sync_project(project_id: str, body=None, *, store: Optional[Projects] = None,
+                 fetch=None, github=None, task_store=None) -> dict:
+    """`POST /api/projects/<pid>/sync`: the app's one read-only bridge door.
+
+    The body may attach a link first - `{"work_item": <id or title>, "task":
+    <job id>}` or `{"work_item": ..., "pr": <number>}` - and then the project's
+    linked durable jobs and linked pull requests are read and projected.
+
+    NO CARD and NO model turn: this is the owner's own app asking his own PC to
+    catch up with the job list and with GitHub. Nothing is changed on GitHub
+    (every request the reader makes is a GET), nothing is run, and a work
+    item's STATUS is never changed here: the job's own state moves it through
+    the existing status path (with its receipt), and a merged PR only produces
+    an OFFER."""
+    store = store or get()
+    project = store.get(project_id)          # KeyError -> the route's 404
+    body = body if isinstance(body, dict) else {}
+    linked = None
+    target = body.get("work_item")
+    if target not in (None, ""):
+        item = store.find_work_item(target)
+        if item["project"] != project_id:
+            raise ValueError("that work item is not in this project")
+        if "task" in body:
+            linked = store.link_task(item["id"], body.get("task"),
+                                     task_store=task_store)
+        if "pr" in body:
+            linked = store.link_pr(item["id"], body.get("pr"))
+    try:
+        task_out = store.sync_task_status(project_id, task_store=task_store)
+    except Exception as exc:                 # noqa: BLE001 - the turn survives
+        task_out = {"read": 0, "linked": 0, "changed": [],
+                    "skipped": [{"why": f"the task list could not be read "
+                                        f"({type(exc).__name__})"}]}
+    repo = str((store.plan_state(project_id) or {}).get("linked_repo") or "").strip()
+    if repo:
+        pr_out = store.sync_prs(project_id, fetch=fetch, github=github)
+    else:
+        pr_out = {"read": 0, "linked": 0, "synced": [], "offers": [],
+                  "errors": [], "project": project_id,
+                  "message": "No linked repository, so no GitHub read was made."}
+    return {"ok": True, "project": project["name"], "linked": linked,
+            "task": task_out, "pr": pr_out,
+            "offers": pr_out.get("offers") or [],
+            "message": ("Read-only sync: the linked job's state and the linked "
+                        "pull request's own state. Nothing was changed on "
+                        "GitHub and nothing ran.")}
 
 
 def _list_title(key: Optional[str]) -> str:
@@ -5067,9 +5675,12 @@ def parse_route(route: str) -> Optional[tuple]:
     pid = p[0]
     if len(p) == 1:
         return ("project", pid)
-    if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks", "facts"):
+    if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks", "facts",
+                                "sync"):
         return ({"delete": "project_delete", "shareable": "shareable",
-                 "benchmarks": "benchmarks", "facts": "facts"}[p[1]], pid)
+                 "benchmarks": "benchmarks", "facts": "facts",
+                 # PM3 (2026-11-20): the read-only bridge sync - POST only.
+                 "sync": "sync"}[p[1]], pid)
     if len(p) == 4 and p[1] == "facts" and p[2] and p[3] == "forget":
         # One fact per request, exactly as the memory routes are: there is no
         # list form of Forget (jarvis_memory's own "used" note says the same).
@@ -5194,6 +5805,13 @@ def handle_post(route: str, body, *, here: bool = False,
             if gone.get("app"):
                 out["app_kept"] = gone["app"]
             return 200, out
+        if kind == "sync":
+            # PM3 (2026-11-20): read the linked job's state and the linked
+            # PR's own state. No card: a read-only catch-up of the owner's own
+            # PC, exactly like the projects reads around it.
+            extra = {name: card.get(name) for name in
+                     ("fetch", "github", "task_store") if name in card}
+            return 200, sync_project(hit[1], body, store=store, **extra)
         if kind == "shareable":
             return request_shareable(hit[1], body, store=store, **card)
         if kind == "auto_route":
