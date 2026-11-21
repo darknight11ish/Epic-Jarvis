@@ -265,6 +265,45 @@ def t_a_head_commit_in_a_cockpit_row_is_not_an_invented_pr():
           F.invented_pr_numbers(bad, [1400, 1401]) == [9999],
           F.invented_pr_numbers(bad, [1400, 1401]))
 
+
+def t_the_pm4_plan_rows_read_the_counts_they_carry():
+    """The battery's PM4 rows: the plan answer's own counts and bounds.
+
+    MEASURED 2026-11-21: the PM4 routes are live (plan 200 with 14 keys, export
+    GET 405), so the battery owes them a row. The helper is pure so the row's
+    refusal shapes can be fed directly - a section that can only ever PASS is
+    not a check.
+    """
+    honest = {
+        "objective": None, "milestones": [], "work_items": [], "ready": [], "events": [],
+        "counts": {"milestones": 0, "work_items": 0, "ready": 0, "blocked": 0,
+                   "edges": 0, "events": 0},
+    }
+    ok, why = F._plan_shape_ok(honest)
+    check("an honest empty plan passes the counts row", ok, why)
+    liar = dict(honest, work_items=[{"id": "w1", "title": "a row"}],
+                counts=dict(honest["counts"], work_items=0))
+    check("a count smaller than the rows it describes fails",
+          not F._plan_shape_ok(liar)[0])
+    ghost = dict(honest, ready=["not-an-item"],
+                 counts=dict(honest["counts"], ready=1))
+    check("a ready list naming an item the plan does not hold fails",
+          not F._plan_shape_ok(ghost)[0])
+    many = dict(honest, events=[{}] * 101, counts=dict(honest["counts"], events=101))
+    check("the route's 100-event bound is read", not F._plan_shape_ok(many)[0])
+    no_counts = {key: value for key, value in honest.items() if key != "counts"}
+    check("a plan without counts is not read as a plan", not F._plan_shape_ok(no_counts)[0])
+
+
+def t_the_pm4_section_is_registered_in_the_battery():
+    """A section that exists but never runs is not a field test."""
+    check("the PM4 section exists", callable(getattr(F, "section_pm4", None)))
+    source = (HERE.parent / "tools" / "field_battery.py").read_text(encoding="utf-8")
+    after_main = source.split("def main(")[1] if "def main(" in source else ""
+    check("... and main() runs it", "section_pm4," in after_main)
+    check("... and it is named in the section list alphabetically-ish region",
+          "section_pm4" in source, "the file does not mention it")
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

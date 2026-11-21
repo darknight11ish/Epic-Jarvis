@@ -3726,6 +3726,94 @@ def section_project_chat():
     REC.end("PASS", "by id and by name, an unknown id refused, and no project unchanged")
 
 
+#: PM4 (2026-11-21): the plan read and the export door both apps share. These
+#: rows are READ-ONLY: the plan read writes nothing, and the export door is
+#: proven POST-only by a GET (405) and by POSTing an id that is not a project
+#: (404) - never by raising the owner's export card on a real project.
+_PM4_PLAN_KEYS = ("objective", "milestones", "work_items", "ready", "events", "counts")
+
+
+def _plan_shape_ok(plan):
+    """(ok, why) for an `/api/projects/<id>/plan` answer's own counts and bounds.
+
+    The answer carries `counts` as the store's TRUE totals while the lists may be
+    bounded (`ready` at 20, `events` at the newest 100), so a count is never
+    required to equal a list length - only to be at least it. A list that names
+    something the plan does not hold is a refusal.
+    """
+    if not isinstance(plan, dict):
+        return False, f"not a JSON object ({type(plan).__name__})"
+    missing = [key for key in _PM4_PLAN_KEYS if key not in plan]
+    if missing:
+        return False, f"missing key(s): {missing}"
+    counts = plan.get("counts") if isinstance(plan.get("counts"), dict) else None
+    if counts is None:
+        return False, "counts is not an object"
+    for key in ("milestones", "work_items", "ready", "events"):
+        rows = plan.get(key)
+        if not isinstance(rows, list):
+            return False, f"{key} is not a list"
+        if not isinstance(counts.get(key), int):
+            return False, f"counts.{key} is not a number"
+        if counts[key] < len(rows):
+            return False, f"counts.{key}={counts[key]} but {len(rows)} row(s) are listed"
+    if len(plan.get("ready") or []) > 20:
+        return False, f"ready lists {len(plan['ready'])}, the route bounds it at 20"
+    if len(plan.get("events") or []) > 100:
+        return False, f"events lists {len(plan['events'])}, the route bounds it at 100"
+    ids = {str(item.get("id")) for item in plan.get("work_items") or []
+           if isinstance(item, dict)}
+    unknown = [rid for rid in plan.get("ready") or [] if str(rid) not in ids]
+    if unknown:
+        return False, f"ready names item(s) the plan does not hold: {unknown[:3]}"
+    return True, ""
+
+
+def section_pm4():
+    REC.header("PM4", "the plan read both apps share, and the export door "
+               "(2026-11-21)", "/api/projects + /plan + /export")
+    if not STATE["ready"]:
+        return REC.skip("preflight failed")
+    status, projects, _, err = http_json("/api/projects")
+    items = (projects or {}).get("projects") if isinstance(projects, dict) else None
+    if status != 200 or not isinstance(items, list) or not items:
+        REC.fail("GET /api/projects answers with a project to read", f"HTTP {status} {err}".strip())
+        return REC.end("FAIL", "the project list could not be read")
+    project = items[0]
+    pid = project.get("id")
+    status, plan, _, err = http_json(f"/api/projects/{pid}/plan")
+    if status == 404:
+        return REC.skip("the deployed build has no PM4 plan read (older release)")
+    ok, why = _plan_shape_ok(plan)
+    REC.expect("the plan read answers with its own keys and true counts", ok, why)
+    if ok:
+        REC.info(f"plan: {plan['counts'].get('work_items')} work item(s), "
+                 f"{len(plan.get('ready') or [])} ready listed, "
+                 f"{len(plan.get('events') or [])} event(s) listed")
+        status2, again, _, _ = http_json(f"/api/projects/{pid}/plan")
+        REC.expect("reading it twice changes nothing", status2 == 200 and again == plan,
+                   "the second read differed" if again != plan else "")
+        empty_honest = not (plan.get("work_items") or [])
+        REC.expect("an empty plan is the honest empty, not a made-up row",
+                   (not empty_honest) or (not (plan.get("ready") or [])
+                                          and not (plan.get("milestones") or [])),
+                   f"work_items={len(plan.get('work_items') or [])} "
+                   f"ready={len(plan.get('ready') or [])}")
+    status, bad, _, err = http_json(f"/api/projects/{'0' * 32}/plan")
+    REC.expect("a plan read for an id that is not a project is refused", status == 404,
+               f"HTTP {status} {err}".strip())
+    status, doc, _, _ = http_json(f"/api/projects/{pid}/export")
+    REC.expect("the export door is POST-only (a GET cannot write)", status == 405,
+               f"HTTP {status}")
+    status, doc, _, _ = http_json(f"/api/projects/{'0' * 32}/export", method="POST",
+                                  body={})
+    said = str(doc.get("error") if isinstance(doc, dict) else doc).lower()
+    REC.expect("... and an id that is not a project is refused before any card",
+               status == 404 and "no such project" in said, f"HTTP {status} {said[:160]}")
+    return REC.end("PASS", "the plan read carries its own counts, twice identical, "
+                           "and the export door answers 405/404 without a write")
+
+
 def section_bounded_cloud():
     if not _section_feature_gate(
             "CLOUD-BOUND", "the cloud answer is bounded (PR #1408, 2026-11-19)",
@@ -3787,6 +3875,7 @@ def main(only=None, allow_stale_cloud=False):
         section_fallback,
         section_project_answers,
         section_project_chat,
+        section_pm4,
         section_bounded_cloud,
     ]
     if only:
