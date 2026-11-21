@@ -815,6 +815,8 @@ def t_a_pull_request_ci_answer_cannot_say_passed_while_a_check_is_red():
         return Routed([
             ("/check-runs", (200, json.dumps({"total_count": len(checks),
                                              "check_runs": checks}))),
+            (f"/commits/{SHA}/status",
+             (200, json.dumps({"state": "success", "statuses": []}))),
             ("/actions/runs", (200, json.dumps({"total_count": len(runs),
                                                "workflow_runs": runs}))),
             ("/pulls/1263", (200, json.dumps({
@@ -862,7 +864,7 @@ def t_a_pull_request_ci_answer_cannot_say_passed_while_a_check_is_red():
     out = _run_request(r, routes(green, one_red_run))
     text = str(out.get("text", ""))
     check("a red RUN beside green checks still blocks a green answer",
-          "did not" in text and "CI: failure" in text
+          "failed" in text and "CI: failure" in text
           and "passed" not in text.lower(), out)
     # A repository that reports NO check runs at all: every visible run counts,
     # never just the first one.
@@ -870,7 +872,25 @@ def t_a_pull_request_ci_answer_cannot_say_passed_while_a_check_is_red():
     text = str(out.get("text", ""))
     check("with no check runs, the second, failing run is still found",
           "passed" not in text.lower() and "CI: failure" in text
-          and "did not finish successfully" in text, out)
+          and "one ci run on the head commit failed" in text.lower(), out)
+    check("... and the finished run that passed is not called failing",
+          "Jarvis client: success" not in text, out)
+    # RULING 5.2 (2026-11-20): a run that has NOT finished is not a failure.
+    # Deploy #4 answered this state as "did not finish successfully" with both
+    # runs listed under "2 failing check(s): CI: pending Jarvis client:
+    # pending"; `gh pr checks` showed them PENDING.
+    still_going = [{"name": "CI", "status": "queued",
+                    "conclusion": None, "head_branch": "feature/x"},
+                   {"name": "Jarvis client", "status": "in_progress",
+                    "conclusion": None, "head_branch": "feature/x"}]
+    out = _run_request(r, routes([], still_going))
+    text = str(out.get("text", ""))
+    check("a still-going run with no check runs is named as pending, never failing",
+          out.get("ok") is True and "still going" in text.lower()
+          and "did not finish successfully" not in text.lower()
+          and "failing check" not in text.lower(), out)
+    check("... and both still-going runs are named",
+          "CI" in text and "Jarvis client" in text, out)
 
 
 def t_the_runs_list_answers_even_when_the_answer_is_cut():

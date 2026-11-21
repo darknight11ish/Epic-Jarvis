@@ -4103,7 +4103,7 @@ def t_ci_status_names_the_failing_checks_and_one_log_excerpt():
     check("a passing check is not called failing",
           "backend: success" not in all_checks
           and "phone-unit-tests" not in all_checks, all_checks[:300])
-    check("the answer says how many failed", "2 failing check(s) on that run:"
+    check("the answer says how many failed", "2 failing check(s):"
           in text, text[:300])
     check("ONE bounded excerpt of the first failing check's log is shown",
           "The end of rust's log" in text and "error[E0308]: mismatched types"
@@ -4182,8 +4182,13 @@ def t_one_renderer_answers_both_ci_questions():
         return Routed([("/actions/runs", (200, runs))])
 
     def pr_fake(runs, checks=no_checks):
+        # The pull request form also reads the head commit's commit STATUSES
+        # (ruling 5.2, 2026-11-20) after the plan's three reads. An empty,
+        # readable answer keeps those cases about the check runs they model.
         return Routed([("/pulls/1263", (200, _pr_doc(number=1263))),
                        ("/check-runs", checks),
+                       (f"/commits/{HEAD_SHA}/status",
+                        (200, json.dumps({"statuses": []}))),
                        ("/actions/runs", (200, runs))])
 
     # 2. BOTH call sites go through the one function: a stand-in that answers a

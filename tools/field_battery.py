@@ -1751,12 +1751,33 @@ def section_cloud_efficiency():
 
 # ---- GitHub battery --------------------------------------------------------
 def _gh_checks(pr):
-    doc, why = gh_json("pr", "checks", str(pr), "--repo", GH_REPO,
-                       "--json", "name,bucket")
-    return doc if isinstance(doc, list) else [], why
+    """(check rows, why) for one pull request, from gh's own categorization.
+
+    `gh pr checks --json name,bucket,state` reports every check with gh's own
+    `bucket` - the documented categorization of its `state` into pass / fail /
+    pending / skipping / cancel - and the raw `state` beside it. The battery
+    uses ONLY those gh words as ground truth: `bucket == "fail"` is a FAILED
+    check, `bucket == "pending"` is a check that has not finished, and nothing
+    else counts as a failure (ruling 5.2, 2026-11-20).
+
+    `gh pr checks` exits 8 when any check is still PENDING. That is a valid
+    answer, not an error, so this read cannot go through `gh_json`, which
+    refuses every non-zero exit - it would throw away exactly the pending
+    ground truth the running-checks question compares against.
+    """
+    code, out, err = run(["gh", "pr", "checks", str(pr), "--repo", GH_REPO,
+                          "--json", "name,bucket,state"])
+    if code not in (0, 8):
+        return [], norm(err or out)[:200]
+    try:
+        rows = json.loads(out)
+    except ValueError as exc:
+        return [], f"gh output is not JSON ({exc})"
+    return rows if isinstance(rows, list) else [], ""
 
 
 def _check_names(rows, bucket):
+    """The names of the checks gh put in one of its own buckets."""
     names = []
     for row in rows or []:
         if str(row.get("bucket") or "") == bucket:
@@ -1764,6 +1785,68 @@ def _check_names(rows, bucket):
             if name:
                 names.append(name)
     return names
+
+
+def _squashed_bases(names):
+    """`names` reduced to what a squashed answer can be searched for."""
+    return {re.sub(r"[^a-z0-9]", "", name.split(" (")[0].lower())
+            for name in names}
+
+
+def _mentions_count(text, count):
+    """True when `count` appears as its OWN number, never inside another one.
+
+    The old substring test read the `1` in a pull request number ("#1400") as a
+    count of one failed check, so an answer that named only the PR number passed
+    the "names the failed checks" rule. Ruling 5.2's ground truth is only as
+    honest as the comparison against it, so the count is matched as a whole
+    number, not as a substring of any other number.
+    """
+    return re.search(r"(?<!\d)" + str(int(count)) + r"(?!\d)",
+                     str(text)) is not None
+
+
+def _failing_answer_ok(text, pr, names):
+    """True when the answer names the failed checks gh ground truth holds.
+
+    RULING 5.2 (2026-11-20): the battery asks this question only about a
+    SETTLED pull request - gh shows a failed check and NO pending one - so the
+    answer must name one of the checks gh puts in its `fail` bucket (or the real
+    count) and must not say nothing is failing. A "still going" answer is not
+    the answer to this question's own state.
+    """
+    low = norm(text).lower()
+    squashed = re.sub(r"[^a-z0-9]", "", low)
+    named = any(base and base in squashed for base in _squashed_bases(names))
+    said_none = any(phrase in low for phrase in
+                    ("no failing", "nothing is failing", "nothing failing",
+                     "all checks pass", "no failed"))
+    count_ok = bool(names) and _mentions_count(text, len(names))
+    return str(pr) in str(text) and (named or count_ok) and not said_none \
+        and not ASK_WHO_RE.search(text)
+
+
+def _pending_answer_ok(text, pr, names):
+    """True when the answer says the pending checks are still going, not failed.
+
+    RULING 5.2 (2026-11-20): the battery asks this question about a pull request
+    whose checks gh calls PENDING and none it calls failed. The answer must name
+    the pull request and at least one pending check (or the real count), say
+    they are still going / not finished / pending, and must NEVER use the
+    failing words - a check that has not finished has not failed.
+    """
+    low = norm(text).lower()
+    squashed = re.sub(r"[^a-z0-9]", "", low)
+    named = any(base and base in squashed for base in _squashed_bases(names))
+    count_ok = bool(names) and _mentions_count(text, len(names))
+    still = any(phrase in low for phrase in
+                ("still going", "still running", "not all finished",
+                 "not finished", "have not finished", "pending"))
+    said_failed = any(phrase in low for phrase in
+                      ("failed", "failing", "not all green",
+                       "did not finish successfully"))
+    return str(pr) in str(text) and (named or count_ok) and still \
+        and not said_failed and not ASK_WHO_RE.search(text)
 
 
 # ---- recognising an honest "there is nothing" (fixed 2026-11-19) -----------
@@ -1907,16 +1990,32 @@ def section_github():
         print(f"      #{row['number']:<5} {row.get('mergeStateStatus','?'):<9} "
               f"{(row.get('headRefName') or '')[:52]}")
 
+    # RULING 5.2 (2026-11-20): a check that has not finished is PENDING, not
+    # failing, so each question picks a subject whose gh state makes its expected
+    # answer unambiguous:
+    #   * failing - a SETTLED pull request: at least one failed check and NO
+    #     pending check, so nothing on it can honestly be called "still going"
+    #     and the answer must not mix the two groups;
+    #   * running - a pull request with pending checks and NO failed check, so
+    #     the honest answer is about the checks still going (in the product's
+    #     own order a failed check outranks a running one, so a mixed PR would
+    #     answer about the failure instead).
+    # gh's own `bucket` is the ground truth: fail is failed, pending is pending.
     failing_pr = pending_pr = None
     failing_names = pending_names = []
     for number in ground["open_numbers"]:
         rows, _ = _gh_checks(number)
         failed = _check_names(rows, "fail")
         pending = _check_names(rows, "pending")
-        if failed and failing_pr is None:
+        if failed and not pending and failing_pr is None:
             failing_pr, failing_names = number, failed
-        if pending and pending_pr is None:
+        if pending and not failed and pending_pr is None:
             pending_pr, pending_names = number, pending
+    if failing_pr is None:
+        print("    failing checks: no open pull request has a settled "
+              "failing check (an unsettled one is only pending)")
+    if pending_pr is None:
+        print("    pending checks: no open pull request has only pending checks")
     main_txt, main_why = gh_text("api", f"repos/{GH_REPO}/commits/main", "--jq",
                                  '.sha, .commit.message')
     main_lines = [line.strip() for line in (main_txt or "").splitlines()
@@ -2015,27 +2114,20 @@ def section_github():
                                  "gh says none are CLEAN; " + empty_why
                                  if not got else "gh says none are CLEAN")
         elif kind == "failing":
-            squashed = re.sub(r"[^a-z0-9]", "", low)
-            bases = {re.sub(r"[^a-z0-9]", "", name.split(" (")[0].lower())
-                     for name in failing_names}
-            named = any(base and base in squashed for base in bases)
-            said_none = any(phrase in low for phrase in
-                            ("no failing", "nothing is failing", "nothing failing",
-                             "all checks pass", "no failed"))
-            count_ok = str(len(failing_names)) in low
-            got = str(failing_pr) in text and (named or count_ok) and not said_none \
-                and not ASK_WHO_RE.search(text)
-            ok &= REC.expect(f"PR {failing_pr}'s failing checks verified", got,
+            # RULING 5.2: the subject is a SETTLED PR (gh: a failed check and no
+            # pending one), so the answer must name one of the checks gh calls
+            # FAILED - and must not read as "still going".
+            got = _failing_answer_ok(text, failing_pr, failing_names)
+            ok &= REC.expect(f"PR {failing_pr}'s failing checks verified "
+                             f"(settled: no pending checks)", got,
                              f"gh failing: {failing_names}")
         elif kind == "pending":
-            squashed = re.sub(r"[^a-z0-9]", "", low)
-            bases = {re.sub(r"[^a-z0-9]", "", name.split(" (")[0].lower())
-                     for name in pending_names}
-            named = any(base and base in squashed for base in bases)
-            count_ok = str(len(pending_names)) in low
-            got = str(pending_pr) in text and (named or count_ok) \
-                and not ASK_WHO_RE.search(text)
-            ok &= REC.expect(f"PR {pending_pr}'s running checks verified", got,
+            # RULING 5.2: the subject has PENDING checks and no failed one, so
+            # the honest answer says they are still going/pending - and NEVER
+            # "failed": a still-running check has not failed.
+            got = _pending_answer_ok(text, pending_pr, pending_names)
+            ok &= REC.expect(f"PR {pending_pr}'s running checks verified "
+                             f"(gh pending: {len(pending_names)})", got,
                              f"gh pending: {pending_names}")
         elif kind == "main":
             short = main_sha[:7].lower()
@@ -3323,7 +3415,11 @@ def section_fallback():
 #   self-test: the GITHUB "there is nothing" rules (offline, no HUD)
 # ---------------------------------------------------------------------------
 def self_test_github():
-    """Offline proof of the three GITHUB rules fixed on 2026-11-19.
+    """Offline proof of the GITHUB comparison rules.
+
+    The three empty-queue rules fixed on 2026-11-19, plus ruling 5.2 (2026-11-20):
+    a still-going check is never accepted as a failure, and an answer using the
+    failing words is never accepted for the running-checks question.
 
     No network, no gh, no HUD, no token, no money: it feeds the EXACT answers the
     deployed build gave against the empty queue (and wrong answers a model could
@@ -3333,7 +3429,8 @@ def self_test_github():
     Run it with:  py -3 .dsh-scratch/wave21/field-battery/run_battery.py --self-test
     """
     print("=" * 78)
-    print("SELF-TEST - the GITHUB empty-state rules fixed on 2026-11-19 (offline)")
+    print("SELF-TEST - the GITHUB comparison rules, empty-state and ruling 5.2 "
+          "(offline)")
     print("=" * 78)
 
     honest_ready = [
@@ -3385,6 +3482,40 @@ def self_test_github():
          38, False, "the count is the CLOSED column, not the status=open one"),
         ("There are 38 open defects in the register.", 38, False,
          "the answer names no file"),
+    ]
+    # RULING 5.2 (2026-11-20): the two CI questions' comparison rules. The
+    # failing question is asked only about a SETTLED pull request (a failed
+    # check and no pending one); the running question about a pull request whose
+    # checks are pending and none failed. A still-going run is NEVER accepted as
+    # a failure, and an answer using the failing words is never accepted for the
+    # running question - that is the deploy #4 bug, in words.
+    failing_cases = [
+        # (the answer, PR number, gh fail names, expected, what it proves)
+        ("The checks on pull request #1400 in darknight11ish/Epic-Jarvis are NOT "
+         "all green.\n1 failing check(s):\n  rust: failure",
+         1400, ["rust"], True, "the failing answer the fixed build gives"),
+        ("GitHub reports no check runs on pull request #1400 in "
+         "darknight11ish/Epic-Jarvis; 2 CI runs are still going: CI, Jarvis "
+         "client. Nothing is known about them yet - ask again when they finish.",
+         1400, ["rust"], False, "a still-going answer is not a failing one"),
+        ("There is no failing check on pull request #1400.",
+         1400, ["rust"], False, "a 'nothing is failing' answer is refused"),
+    ]
+    running_cases = [
+        # (the answer, PR number, gh pending names, expected, what it proves)
+        ("The checks on pull request #1401 in darknight11ish/Epic-Jarvis have "
+         "not all finished: audit, backend-shard (3/4). Nothing is known about "
+         "them yet - ask again when they finish.",
+         1401, ["audit"], True, "the running answer the fixed build gives"),
+        ("GitHub reports no check runs on pull request #1401 in "
+         "darknight11ish/Epic-Jarvis; 2 CI runs are still going: CI, Jarvis "
+         "client. Nothing is known about them yet - ask again when they finish.",
+         1401, ["CI"], True, "the no-check-runs pending sentence"),
+        ("The checks on pull request #1401 are NOT all green. 1 failing check(s): "
+         "audit: failure", 1401, ["audit"], False,
+         "failing words are never accepted for the running question"),
+        ("Did not finish successfully - pull request #1401 has failures.",
+         1401, ["audit"], False, "the old false-failure sentence is refused"),
     ]
 
     failed = []
@@ -3444,6 +3575,17 @@ def self_test_github():
     for answer, count, want, detail in defect_cases:
         got = defect_answer_ok(answer, count)
         case("count", got, want, f"{detail}: {answer[:72]!r}"
+             + ("" if got == want else " - WRONG"))
+
+    print("\n  ruling 5.2 - 'failing checks', a settled PR (gh: failed, no pending):")
+    for answer, pr, names, want, detail in failing_cases:
+        got = _failing_answer_ok(answer, pr, names)
+        case("failing", got, want, f"{detail}: {answer[:64]!r}"
+             + ("" if got == want else " - WRONG"))
+    print("\n  ruling 5.2 - 'running checks', a pending PR (gh: pending, no failed):")
+    for answer, pr, names, want, detail in running_cases:
+        got = _pending_answer_ok(answer, pr, names)
+        case("pending", got, want, f"{detail}: {answer[:64]!r}"
              + ("" if got == want else " - WRONG"))
 
     # The old substring rule, shown once on the honest answer it failed.

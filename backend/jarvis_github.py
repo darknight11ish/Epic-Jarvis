@@ -4684,6 +4684,75 @@ def _check_runs(fetch: Callable, headers: dict, token: str,
     return [r for r in (runs or ()) if isinstance(r, dict)], ""
 
 
+def _commit_statuses(fetch: Callable, headers: dict, token: str,
+                     repo: str, sha: str) -> tuple:
+    """(commit statuses, error) for one commit's STATUS checks, or ([], sentence).
+
+    THE SECOND SOURCE (ruling 5.2, 2026-11-20). `gh pr checks` shows a pull
+    request's whole check set: the CHECK RUNS (`/commits/{sha}/check-runs`) AND
+    the older commit STATUSES (`/commits/{sha}/status`). The CI answer read only
+    the first, so a context a repository or an app reports as a status was
+    missing from the answer the owner compared with `gh`. The answer is
+    `{"state": ..., "statuses": [{"context", "state", ...}]}`.
+
+    A read that fails is not fatal: it returns ([], plain sentence), and the
+    caller says the check list is check-runs only. A failure to read is not a
+    claim that no status exists - the same rule every other extra CI read
+    follows.
+    """
+    sha = str(sha or "").strip().lower()
+    if not _SHA.match(sha):
+        return [], ("GitHub did not name the head commit whose commit statuses "
+                    "to read.")
+    doc, err = _read(fetch, f"{_repo_path(repo)}/commits/{sha}/status",
+                     headers, token)
+    if err:
+        return [], err
+    if not isinstance(doc, dict):
+        return [], ("GitHub sent back something that is not a commit statuses "
+                    "answer.")
+    rows = doc.get("statuses")
+    return [r for r in (rows or ()) if isinstance(r, dict)], ""
+
+
+#: GitHub commit STATUS states -> the check-run fields `_check_verdict` reads.
+#: These four are the documented set. `pending` becomes a NOT-completed check,
+#: NEVER a failure: ruling 5.2's line is that a check which has not finished has
+#: not failed - and that line does not stop being true because the check is a
+#: commit status rather than a check run.
+_STATUS_STATE = {
+    "success": ("completed", "success"),
+    "failure": ("completed", "failure"),
+    "error": ("completed", "failure"),
+    "pending": ("in_progress", ""),
+}
+
+
+def _status_check_rows(statuses: list) -> list:
+    """Commit STATUSES as check-run-shaped rows, so ONE judgement reads both.
+
+    `context` becomes the name (that is what `gh pr checks` shows), and `state`
+    becomes the `status`/`conclusion` pair `_check_verdict` already judges:
+    success -> completed/success, failure and error -> completed/failure,
+    pending -> in_progress. A state this module does not know is kept as "still
+    running" rather than called failed: the honest claim about an unknown state
+    is that it has not reported success, and turning "not finished" into
+    "failing" is the exact bug ruling 5.2 fixes.
+    """
+    rows = []
+    for one in statuses or ():
+        if not isinstance(one, dict):
+            continue
+        name = (_clean_github_text(one.get("context"), wrap=False)
+                or _clean_github_text(one.get("name"), wrap=False)
+                or "a commit status")
+        state = str(one.get("state") or "").strip().lower()
+        status, conclusion = _STATUS_STATE.get(state, ("in_progress", ""))
+        rows.append({"name": name, "status": status,
+                     "conclusion": conclusion or None})
+    return rows
+
+
 def _check_name(run_doc: dict) -> str:
     """One check's own name, cleaned: it is fetched text and becomes words."""
     if not isinstance(run_doc, dict):
@@ -6936,7 +7005,7 @@ def _ci_failed_lines(headline: str, evidence: dict) -> list:
                      + (f": {why}." if why else " from this answer."))
         lines.append(FIX_EVIDENCE_WORDS)
         return lines
-    lines.append(f"{len(checks)} failing check(s) on that run:")
+    lines.append(f"{len(checks)} failing check(s):")
     for item in checks[:MAX_DETAIL_ITEMS]:
         lines.append(f"  {item.get('name') or 'a check'}: "
                      f"{item.get('conclusion') or 'no result'}")
@@ -6982,8 +7051,127 @@ def _red_lines(headline: str, evidence, checks: list) -> str:
     return "\n".join(_ci_failed_lines(headline, told))
 
 
-def _ci_red_runs_headline(who: str, runs: list, checks_doc) -> str:
-    """The failed-commit sentence: what was READ about the checks, and how many runs.
+#: The conclusions that mean a FINISHED workflow run passed - the same pass set
+#: `_check_verdict` uses for a check run, so the two judgements cannot drift.
+RUN_PASS_CONCLUSIONS = ("success", "neutral", "skipped")
+
+
+def _run_verdict(one) -> tuple:
+    """("ok" | "failed" | "pending", its conclusion) for ONE workflow run.
+
+    THE one judgement of whether a workflow run on a commit is red, in the same
+    three words `_check_verdict` uses for one check run:
+
+      * `completed` with `success`, `neutral` or `skipped`: "ok";
+      * `completed` with ANY other conclusion: "failed";
+      * not `completed`: "pending". A queued or in-progress run carries
+        `conclusion: None`, and it has NOT failed.
+
+    RULING 5.2 (2026-11-20) is that last line. Before it, `_ci_words` counted
+    `conclusion is None` as red, so deploy #4's answer to "What is failing on
+    pull request 1424?" was "2 CI runs are on the head commit and at least one
+    did not finish successfully ... 2 failing check(s): CI: pending Jarvis
+    client: pending" while `gh pr checks` showed those checks PENDING. A run
+    that has not finished is not a failure, and calling it one is a false
+    statement about the owner's own repository.
+    """
+    if not isinstance(one, dict):
+        return "ok", ""
+    conclusion = str(one.get("conclusion") or "")
+    if str(one.get("status") or "") != "completed":
+        return "pending", conclusion
+    if conclusion in RUN_PASS_CONCLUSIONS:
+        return "ok", conclusion
+    return "failed", conclusion
+
+
+def _run_split(runs: list) -> tuple:
+    """(the FAILED runs, the PENDING runs) - passing runs are in neither list.
+
+    ONE helper for every place the CI answer groups a head commit's runs, so the
+    count in a headline and the names under it can never disagree about which
+    run is which. Both lists are the ORIGINAL run docs, so their names and
+    conclusions are cleaned where they become words.
+    """
+    failed, pending = [], []
+    for one in runs or ():
+        verdict, _conclusion = _run_verdict(one)
+        if verdict == "failed":
+            failed.append(one)
+        elif verdict == "pending":
+            pending.append(one)
+    return failed, pending
+
+
+def _ci_checks_read(who: str, checks_doc) -> str:
+    """What was READ about a commit's checks: no check runs, or a failed read.
+
+    GitHub REPORTING no check runs (a repository that only uses workflows, or
+    one whose checks are all commit statuses) is not the same as a check-runs
+    answer that could not be read at all, and `checks_doc` being None is the
+    second. Extracted so every sentence that starts by being honest about the
+    check list uses the one distinction and cannot drift.
+    """
+    if isinstance(checks_doc, dict):
+        return f"GitHub reports no check runs on {who}"
+    return f"GitHub did not answer with the check runs on {who}"
+
+
+def _ci_runs_count(runs: list) -> str:
+    """`one CI run` / `N CI runs` - the count words the run sentences share."""
+    return "one CI run" if len(runs) == 1 else f"{len(runs)} CI runs"
+
+
+def _ci_run_row(one: dict) -> dict:
+    """ONE FAILED workflow run as the check-shaped row the failing half names."""
+    conclusion = _clean_github_text(one.get("conclusion"), wrap=False)
+    return {"name": (_clean_github_text(one.get("name"), wrap=False)
+                     or "a workflow"),
+            "conclusion": conclusion or "no result"}
+
+
+def _ci_run_names(runs: list) -> str:
+    """The bounded names of workflow runs, for the pending sentences."""
+    names = [_clean_github_text(one.get("name"), wrap=False) or "a workflow"
+             for one in runs]
+    shown = names[:MAX_DETAIL_ITEMS]
+    more = len(names) - len(shown)
+    return ", ".join(shown) + (f", and {more} more" if more else "")
+
+
+def _ci_pending_runs_sentence(who: str, pending: list, checks_doc) -> str:
+    """The answer when there are NO check runs and the runs have NOT finished.
+
+    RULING 5.2's measured shape: "no check runs ... N CI run(s) are still going:
+    names. Nothing is known about them yet - ask again when they finish." The
+    run names are fetched text, so they are cleaned before they become words,
+    and the bounded list is the same one `_ci_failed_lines` bounds.
+    """
+    verb = "is" if len(pending) == 1 else "are"
+    return (f"{_ci_checks_read(who, checks_doc)}; {_ci_runs_count(pending)} "
+            f"{verb} still going: {_ci_run_names(pending)}. Nothing is known "
+            f"about them yet - ask again when they finish.")
+
+
+def _ci_pending_runs_clause(pending: list) -> str:
+    """The separated sentence naming runs still going, or "".
+
+    Used AFTER a sentence already about the same commit (green checks, or a
+    failed run), so it says the same fact without repeating the check-runs
+    preface. A run is named here only when `_run_split` judged it PENDING, so
+    "still going" can never be said of a run that finished and failed.
+    """
+    if not pending:
+        return ""
+    verb = "is" if len(pending) == 1 else "are"
+    count = _ci_runs_count(pending)
+    return (f"\n{count[0].upper() + count[1:]} on that same commit {verb} still "
+            f"going: {_ci_run_names(pending)}. Nothing is known about them yet "
+            f"- ask again when they finish.")
+
+
+def _ci_red_runs_headline(who: str, failed_runs: list, checks_doc) -> str:
+    """The failed-commit sentence: what was READ about the checks, and how many runs FAILED.
 
     DEF-078 (2026-11-16). This sentence used to be "More than one CI run is on
     the head commit of {who} and at least one did not finish successfully",
@@ -6992,21 +7180,18 @@ def _ci_red_runs_headline(who: str, runs: list, checks_doc) -> str:
     false count about his own repository - and the count spoke where the checks
     had never been read.
 
-    The count now comes from the runs this answer actually holds, so "more than
-    one" is only ever said when it is true. The check half says which fact it
-    is and never borrows the other's words: GitHub REPORTING no check runs (a
-    repository that only uses workflows) is not the same as a check-runs answer
-    that could not be read at all, and `checks_doc` being None is the second.
+    RULING 5.2 (2026-11-20) fixes the other half: the count is the runs
+    `_run_split` judged FAILED, and the sentence says "failed". "Did not finish
+    successfully" was literally true of a run that had not finished at all, and
+    it read as a failure - so a pending run was printed under a "failing
+    check(s)" headline. `failed_runs` therefore never holds a pending run; the
+    pending sentence is `_ci_pending_runs_sentence`'s job.
     """
-    if isinstance(checks_doc, dict):
-        checks_read = f"GitHub reports no check runs on {who}"
-    else:
-        checks_read = f"GitHub did not answer with the check runs on {who}"
-    if len(runs) == 1:
-        return (f"{checks_read}; one CI run is on the head commit and it did not "
-                f"finish successfully.")
-    return (f"{checks_read}; {len(runs)} CI runs are on the head commit and at "
-            f"least one did not finish successfully.")
+    checks_read = _ci_checks_read(who, checks_doc)
+    if len(failed_runs) == 1:
+        return (f"{checks_read}; one CI run on the head commit failed.")
+    return (f"{checks_read}; {_ci_runs_count(failed_runs)} on the head commit "
+            f"failed.")
 
 
 def _ci_words(doc, evidence: Optional[dict] = None, *,
@@ -7049,6 +7234,20 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
     gate judges, and only a commit with every check finished successfully is
     called green.
 
+    RULING 5.2 (2026-11-20) fixes the other direction - a false "failing". The
+    runs a pull request's head commit carries are split THREE ways by
+    `_run_verdict`: a completed run with a non-pass conclusion is failed, a
+    completed run in the pass set is fine, and a run that has not finished is
+    PENDING. It used to be enough that a run's conclusion was not in the pass
+    set: `conclusion: None` on a queued or in-progress run counted as red, so
+    deploy #4 answered "What is failing on pull request 1424?" with "2 CI runs
+    ... did not finish successfully ... 2 failing check(s): CI: pending Jarvis
+    client: pending" while `gh pr checks` showed both PENDING. A run that has
+    not finished is named as still going, never as a failure. The check list
+    this judges is the COMBINED set `_ci_combined_checks` prepares - check runs
+    AND the commit statuses `gh pr checks` also shows - and it arrives here as
+    one list, so there is still one judgement of a commit.
+
     `evidence` is `_ci_failing_checks` for the newest run: it carries the ONE
     log excerpt (and nothing about which checks failed when that run passed), so
     a commit whose red check came from another workflow is still named correctly.
@@ -7069,6 +7268,11 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
         # ONE judgement, shared with the pull request scan (`_scan_checks`), so
         # the two answers can never disagree about whether this commit is green.
         failed, running = _scan_checks(checks)
+        # And the same THREE-WAY split of the commit's workflow runs (ruling
+        # 5.2, 2026-11-20): only a completed run with a non-pass conclusion is
+        # failed; a queued or in-progress run is PENDING and is never named as a
+        # failure. The split is made once, so the count and the names agree.
+        failed_runs, pending_runs = _run_split(runs)
         if failed:
             return _red_lines(
                 f"The checks on {who} are NOT all green.", evidence,
@@ -7081,36 +7285,38 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
                        if len(running) > MAX_DETAIL_ITEMS else "")
                     + ". Nothing is known about them yet - ask again when they "
                       "finish.")
-        red_runs = [x for x in runs
-                    if str(x.get("conclusion") or "")
-                    not in ("success", "neutral", "skipped")]
-        named_red_runs = [
-            {"name": (_clean_github_text(x.get("name"), wrap=False)
-                      or "a workflow"),
-             "conclusion": (str(x.get("conclusion") or "")
-                            or str(x.get("status") or "not finished"))}
-            for x in red_runs]
         if checks:
-            if red_runs:
-                # Green checks and a red run on the SAME commit: both are true,
-                # and the honest answer says both rather than picking the
-                # cheerful half.
-                return _red_lines(
+            if failed_runs:
+                # Green checks and a FAILED run on the SAME commit: both are
+                # true, and the honest answer says both rather than picking the
+                # cheerful half. A run that has NOT finished is not here: it is
+                # said by the pending clause below, never by this sentence.
+                text = _red_lines(
                     f"Every check on {who} finished successfully, but "
-                    f"{len(red_runs)} CI run(s) on that same commit did not.",
-                    evidence, named_red_runs)
-            return (f"Every check on {who} finished successfully "
-                    f"({len(checks)} checks on the head commit).")
-        # No CHECK RUNS readable (a repository that only uses workflows, or a
-        # check-runs answer that did not arrive): judge EVERY visible run on the
-        # commit, never just the first, and say which of the two it was.
+                    f"{_ci_runs_count(failed_runs)} on that same commit "
+                    f"failed.", evidence,
+                    [_ci_run_row(x) for x in failed_runs])
+            else:
+                text = (f"Every check on {who} finished successfully "
+                        f"({len(checks)} checks on the head commit).")
+            return text + _ci_pending_runs_clause(pending_runs)
+        # No CHECK RUNS readable (a repository that only uses workflows, a
+        # repository whose checks are all commit statuses - now merged into
+        # `checks` before this point - or a check-runs answer that did not
+        # arrive): judge EVERY visible run on the commit, never just the first,
+        # and say which of the two it was.
         if not runs:
             return "There is no recent CI run there to report."
-        if red_runs:
-            return _red_lines(_ci_red_runs_headline(who, runs, checks_doc),
-                              evidence, named_red_runs)
-        # Nothing red and no check runs: the newest-run sentences below are the
-        # answer, which is the path a branch read takes too.
+        if failed_runs:
+            text = _red_lines(
+                _ci_red_runs_headline(who, failed_runs, checks_doc), evidence,
+                [_ci_run_row(x) for x in failed_runs])
+            return text + _ci_pending_runs_clause(pending_runs)
+        if pending_runs:
+            return _ci_pending_runs_sentence(who, pending_runs, checks_doc)
+        # Nothing red, nothing pending and no check runs: the newest-run
+        # sentences below are the answer, which is the path a branch read takes
+        # too.
     # ---- The RUN question (a branch or a repository): the newest run. ----
     if not isinstance(doc, dict):
         return "GitHub answered without saying anything about CI."
@@ -7422,6 +7628,72 @@ def _ci_failing_checks(repo: str, newest: dict, fetch: Callable, token: str,
     return evidence
 
 
+def _ci_head_sha(newest, answers: list) -> str:
+    """The 40-hex head commit a pull request's CI answer is about, or "".
+
+    The newest RUN names the commit its own checks belong to (`head_sha`, and
+    its `head_commit.id`), and the pull request the plan read first names the
+    commit at its head (`head.sha`). Either is the same commit for the answer
+    GitHub gave; the first one that is a real sha is used, and a value that is
+    not 40 hex is NEVER put into an address this module builds.
+    """
+    candidates = []
+    if isinstance(newest, dict):
+        candidates.append(str(newest.get("head_sha") or ""))
+        head_commit = newest.get("head_commit")
+        if isinstance(head_commit, dict):
+            candidates.append(str(head_commit.get("id") or ""))
+    doc = _payload(answers[0][1]) if answers else None
+    if isinstance(doc, dict):
+        head = doc.get("head")
+        if isinstance(head, dict):
+            candidates.append(str(head.get("sha") or ""))
+    for one in candidates:
+        one = str(one or "").strip().lower()
+        if _SHA.match(one):
+            return one
+    return ""
+
+
+def _ci_combined_checks(r: Request, answers: list, newest, checks_doc,
+                        fetch: Callable, token: str,
+                        headers: dict) -> tuple:
+    """(the check list to judge, the sentence to add when statuses failed).
+
+    THE COMBINED-SOURCE READ (ruling 5.2, 2026-11-20). `gh pr checks` shows a
+    pull request's head commit check set from TWO sources: the CHECK RUNS and the
+    older commit STATUSES (`GET /commits/{sha}/status`). The CI answer read only
+    the first, so a context that a repository or an app still reports as a status
+    was invisible, and the answer did not match what `gh` showed. After the
+    plan's three fixed reads (the plan itself keeps its three steps - the pull
+    form's detection reads `steps[-1]`), this reads the head commit's statuses
+    and gives each one the check-run shape the one judgement already reads, so
+    `_ci_words` sees ONE list of checks.
+
+    A FAILED read is not fatal and does not become a claim. The check list keeps
+    the check runs and `note` says, in the answer's own words, that the list is
+    check-runs only - never that the statuses do not exist. Nothing is built from
+    statuses alone: when the check-runs answer itself could not be read, the
+    answer already says so and this returns it untouched rather than presenting
+    one source as the other.
+    """
+    if not isinstance(checks_doc, dict):
+        return checks_doc, ""
+    sha = _ci_head_sha(newest, answers)
+    statuses, why = _commit_statuses(fetch, headers, token, r.repo, sha)
+    if why:
+        return checks_doc, (
+            "\n(The check list for that commit is check-runs only: GitHub's "
+            "commit statuses on it could not be read, so a status check that "
+            "exists there may be missing.)")
+    merged = [c for c in (checks_doc.get("check_runs") or ())
+              if isinstance(c, dict)]
+    merged.extend(_status_check_rows(statuses))
+    combined = dict(checks_doc)
+    combined["check_runs"] = merged
+    return combined, ""
+
+
 def _ci_result(r: Request, answers: list, fetch: Callable, token: str,
                headers: dict, *,
                log: Optional[Callable] = None) -> dict:
@@ -7431,12 +7703,19 @@ def _ci_result(r: Request, answers: list, fetch: Callable, token: str,
     when the newest run failed (`_ci_failing_checks`), and it refuses a cut answer
     in the same words `_said` uses rather than guessing at half of it (Q-G).
 
-    THE PULL REQUEST FORM IS THREE READS (2026-11-15). Its answers are, in order,
-    the pull request, the runs for its head commit, and every CHECK - the last
-    one is what stops "the newest run passed" being said about a commit with a
-    red check from another workflow. So this decides the shape first: the check
-    list is what a commit is judged by, and the run's own jobs/log are added to
-    it when the run failed. A branch or repository read has one answer.
+    THE PULL REQUEST FORM IS THREE PLANNED READS (2026-11-15). Its answers are,
+    in order, the pull request, the runs for its head commit, and every CHECK -
+    the last one is what stops "the newest run passed" being said about a commit
+    with a red check from another workflow. So this decides the shape first: the
+    check list is what a commit is judged by, and the run's own jobs/log are
+    added to it when the run failed. A branch or repository read has one answer.
+
+    PLUS THE COMBINED-SOURCE READ (ruling 5.2, 2026-11-20). The plan keeps its
+    three steps - its last step being the check-runs read is how this shape is
+    recognised - and after them this reads the head commit's commit STATUSES
+    itself (`_ci_combined_checks`) and merges them into the check list, so the
+    answer matches the whole check set `gh pr checks` shows. That read failing is
+    said, not fatal: the answer then names the list as check-runs only.
 
     BOTH FORMS ARE RENDERED BY ONE FUNCTION (2026-11-15, the owner's ruling Q2):
     `_ci_words` is handed the check list and the subject its sentences name for
@@ -7457,9 +7736,11 @@ def _ci_result(r: Request, answers: list, fetch: Callable, token: str,
         if newest is not None:
             evidence = _ci_failing_checks(r.repo, newest, fetch, token, headers,
                                           log=log)
+        checks_doc, statuses_note = _ci_combined_checks(
+            r, answers, newest, _payload(checks_text), fetch, token, headers)
         return {"ok": True, "text": _ci_words(
-            runs_doc, evidence, checks_doc=_payload(checks_text),
-            who=f"pull request #{r.number} in {r.repo}")}
+            runs_doc, evidence, checks_doc=checks_doc,
+            who=f"pull request #{r.number} in {r.repo}") + statuses_note}
     text = answers[-1][1] if answers else ""
     if CUT_MARKER in str(text or ""):
         return {"ok": True, "text": CUT_ANSWER}
