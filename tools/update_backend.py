@@ -55,6 +55,14 @@ WHAT IT DOES, IN ORDER
    line-buffered, and a Python child gets `PYTHONUNBUFFERED=1`), because the
    desktop's progress bound tells a working run from a wedged one by whether
    the log is still growing.
+3a. **The proof stage says it is alive.** One proof suite can print nothing for
+   more than 15 minutes between suite boundaries (measured on the owner's PC,
+   2026-11-21: the desktop's 15-minute silence bound ended a HEALTHY run at
+   48m 10s), so while the suites child is quiet this tool prints a `PROOF:`
+   line of its own at least every five minutes. That makes the desktop's
+   silence bound mean what it should - the tool AND its suites both stopped,
+   a real hang - instead of "one suite is slow". The heartbeat is the fix; the
+   bound is not raised. Real child output still flows through unchanged.
 3b. **The owner's everyday model lane is recorded and put back.** The proof
    suites run against the live folder, and at least one of them loads a
    different model on the everyday lane without putting the owner's back
@@ -184,11 +192,13 @@ import json
 import math
 import ntpath
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -1901,6 +1911,171 @@ def emit_event(say, phase: str, **fields) -> dict:
 #   Running a child and reading it as it goes
 # ---------------------------------------------------------------------------
 
+# THE PROOF STAGE'S OWN SIGN OF LIFE (measured on the owner's PC, 2026-11-21).
+#
+# That day's automatic finish for desktop 0.2.491 started at 07:07 PT. The
+# deploy route carried the file half (VERSION 0.2.491 at 07:11), delivered the
+# look spec and recorded the everyday lane's model, then the proof suites ran.
+# At 07:55 PT - 48m 10s in - the desktop's silence bound ended that HEALTHY run:
+#
+#   "The patch run was ended by the silence bound after 48m 10s (no new output
+#    arrived for 15m) ... Restart Jarvis and it will read IN SYNC."
+#
+# The backend half had genuinely succeeded (the restart logged IN SYNC), and the
+# lane restore line was there. The only fault was that ONE proof suite can print
+# nothing for more than 15 minutes between suite boundaries
+# (`test_live_settings_parity.py` was one; the previous full run took ~48-57
+# minutes), so "the child printed nothing" was read as evidence of a stall.
+#
+# THE FIX IS THE HEARTBEAT, NOT A WEAKER BOUND. While the suites child is quiet
+# this tool prints the line below at least every five minutes, so the app's
+# silence clock is reset by the tool's own real progress. The desktop's
+# fifteen-minute silence bound stays exactly as it is and now means what it
+# should: the heartbeat AND the child's output both stopped, a real hang. Five
+# minutes is less than a third of fifteen, so the heartbeat itself can never be
+# late enough to trip the bound. Real child output still flows through
+# unchanged; every child line only resets this clock, it is never replaced.
+PROOF_HEARTBEAT_PREFIX = "PROOF: "
+#: At least this often while the suites child is silent. Must stay WELL under
+#: `backend_update.rs`'s `SCRIPT_SILENCE_LIMIT` (15 minutes) - the Rust test
+#: `the_proof_stage_heartbeats_well_inside_the_silence_bound` pins both numbers.
+PROOF_HEARTBEAT_SECONDS = 300.0
+#: What the line says the proof is doing, in the owner's words.
+PROOF_HEARTBEAT_DETAIL = "checking the backend against the live folder"
+#: How long one wait for the child's next line lasts before the loop looks at
+#: the clock again. Small enough that a heartbeat is never visibly late, large
+#: enough that a quiet hour is not a busy loop.
+HEARTBEAT_POLL_SECONDS = 1.0
+
+#: Returned by a `next_line`: the child printed nothing before the poll passed.
+_QUIET = object()
+#: Returned by a `next_line`: the child has closed its output.
+_ENDED = object()
+
+
+def elapsed_words(seconds) -> str:
+    """The heartbeat's own clock: `24m 05s`, `1h 07m`, `0m 42s`.
+
+    Whole seconds, minutes never shown as "0h", and the seconds always two
+    digits so the line reads like a timestamp rather than a tally."""
+    total = max(0, int(seconds))
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    return f"{minutes}m {secs:02d}s"
+
+
+def proof_heartbeat_words(elapsed) -> str:
+    """The one heartbeat line, exactly as the app's log and tail show it.
+
+    Example (the measured 24-minute mark of a proof stage):
+    `PROOF: still running - 24m 05s elapsed, checking the backend against the
+    live folder`. Pure, so the words are a test."""
+    return (f"{PROOF_HEARTBEAT_PREFIX}still running - "
+            f"{elapsed_words(elapsed)} elapsed, {PROOF_HEARTBEAT_DETAIL}")
+
+
+class _ProofHeartbeat:
+    """Prints the proof stage's line on a quiet clock, on injected time.
+
+    `beat(now)` prints one line when `interval` seconds have passed since the
+    last thing this run said (a child line or a heartbeat), and nothing before
+    then; `saw_output(now)` is a real child line, which is progress of its own
+    and restarts the clock. `started` is when the suites child started, so the
+    elapsed time in the line is the run's, not the interval's. Pure enough to
+    drive every branch with a fake clock - no five-minute wait is ever real.
+    """
+
+    def __init__(self, say, started, *, interval=PROOF_HEARTBEAT_SECONDS):
+        self.say = say
+        self.started = float(started)
+        self.last = float(started)
+        self.interval = float(interval)
+        self.printed = 0
+
+    def beat(self, now) -> "str | None":
+        """Print the heartbeat when due; return the line, else `None`."""
+        now = float(now)
+        if now - self.last < self.interval:
+            return None
+        self.last = now
+        self.printed += 1
+        line = proof_heartbeat_words(now - self.started)
+        self.say(line)
+        return line
+
+    def saw_output(self, now) -> None:
+        """A real child line is the run's own progress: restart the clock."""
+        self.last = float(now)
+
+
+def _is_proof_stage(argv) -> bool:
+    """True when this command is the proof suite runner.
+
+    `_run` sees the exact command it was handed, exactly as it already looks at
+    `argv[0]` to decide a child's environment. This is how the proof stage is
+    told from the patcher (whose own lines already arrive per patch) without
+    changing the runner contract every test injects with.
+    """
+    return any(Path(str(part)).name == SUITES_REL.name for part in argv)
+
+
+def follow_child(next_line, on_line, heartbeat=None, *, clock=time.monotonic) -> None:
+    """Hand every child line to `on_line`; on a quiet poll, let the heartbeat speak.
+
+    `next_line()` returns a line, `_QUIET` when its wait passed with nothing, or
+    `_ENDED` when the child closed its output. `clock()` reads the wall clock.
+    Both are injected, so the rule "a healthy proof stage must never look
+    silent" is a test with a fake child and a fake clock, never a wait.
+    """
+    while True:
+        got = next_line()
+        if got is _ENDED:
+            return
+        now = clock()
+        if got is _QUIET:
+            if heartbeat is not None:
+                heartbeat.beat(now)
+            continue
+        if heartbeat is not None:
+            heartbeat.saw_output(now)
+        on_line(str(got).rstrip("\r\n"))
+
+
+def _follow_pipe(stream, on_line, heartbeat) -> None:
+    """`follow_child` over a real pipe: a reader thread does the blocking read.
+
+    Windows pipes have no read timeout, so a thread waits on the pipe and this
+    side takes one line at a time from a queue - a queue wait that comes back
+    empty is the child being quiet, which is where `follow_child` lets the
+    heartbeat print. stdout and stderr are one pipe, so the order is the
+    child's."""
+    lines: "queue.Queue" = queue.Queue()
+    errors = []
+
+    def pump() -> None:
+        try:
+            for line in stream:
+                lines.put(line)
+        except Exception as exc:            # noqa: BLE001 - reported, not swallowed
+            errors.append(exc)
+        finally:
+            lines.put(_ENDED)
+
+    threading.Thread(target=pump, name="update-child-reader", daemon=True).start()
+
+    def next_line():
+        try:
+            return lines.get(timeout=HEARTBEAT_POLL_SECONDS)
+        except queue.Empty:
+            return _QUIET
+
+    follow_child(next_line, on_line, heartbeat)
+    if errors:
+        raise errors[0]
+
+
 def _run(cmd, cwd, on_line) -> "int | None":
     """Run one child, hand every line to `on_line`, return its exit code.
 
@@ -1913,7 +2088,15 @@ def _run(cmd, cwd, on_line) -> "int | None":
     cmdlets are discoverable even when the parent was started by pwsh. A Python
     child gets `PYTHONUNBUFFERED=1` so each line it prints arrives at once
     (see `_child_env`); every other child inherits the caller's environment.
-    """
+
+    THE PROOF CHILD ALSO GETS A HEARTBEAT. `backend/run_suites.py` can be quiet
+    for more than fifteen minutes while one long suite runs, and the desktop
+    would read that silence as a hang (measured 2026-11-21: a healthy run was
+    ended at 48m 10s). So while the suites child is silent this runner prints
+    its own `PROOF:` line every five minutes; every real child line still goes
+    to `on_line` unchanged and restarts that clock. A patcher or deploy child
+    is untouched - its own lines are already frequent and are what the app
+    sees."""
     argv = [str(part) for part in cmd]
     env = None
     if argv:
@@ -1921,6 +2104,8 @@ def _run(cmd, cwd, on_line) -> "int | None":
         python = _is_python_program(argv[0])
         if shell or python:
             env = _child_env(argv[0], python=python)
+    heartbeat = (_ProofHeartbeat(print, time.monotonic())
+                 if _is_proof_stage(argv) else None)
     try:
         child = subprocess.Popen(
             argv, cwd=str(cwd), env=env,
@@ -1932,8 +2117,11 @@ def _run(cmd, cwd, on_line) -> "int | None":
         return None
     try:
         if child.stdout is not None:
-            for line in child.stdout:
-                on_line(line.rstrip("\r\n"))
+            if heartbeat is None:
+                for line in child.stdout:
+                    on_line(line.rstrip("\r\n"))
+            else:
+                _follow_pipe(child.stdout, on_line, heartbeat)
         return child.wait()
     except Exception as exc:               # noqa: BLE001 - never a crash
         try:
