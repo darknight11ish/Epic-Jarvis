@@ -847,6 +847,40 @@ pub fn tail_of(text: &str, lines: usize) -> String {
     all[start..].join("\n")
 }
 
+/// The lines the backend half printed about the release's new tool defaults,
+/// verbatim (`TOOL DEFAULTS: ...`), in the order it printed them.
+///
+/// That step runs ONCE THE UPDATE HAS PROVED ITSELF (`tools/update_backend.py`,
+/// after the suites proved the folder): it hands the tools this release NEWLY
+/// ships ON to `tools/enable_new_tools.py`'s additive write of the owner's own
+/// `jarvis-framework.toml`. These lines are the audit of what reached that file
+/// (the baseline commit, the add list, and the writer's own "added"/"backup"
+/// lines), so Rust keeps them verbatim and never paraphrases them.
+pub fn tool_defaults_lines(tail: &str) -> Vec<String> {
+    tail.lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("TOOL DEFAULTS:"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The lines the backend half printed about the release's own files reaching
+/// this PC (`BESIDE: ...`), verbatim, in the order it printed them.
+///
+/// The look spec is the one that matters today: every start used to warn that
+/// the desktop's bundled spec DISAGREED with the live backend folder's copy,
+/// because nothing carried the release's copy into that folder (measured
+/// 2026-11-21). `tools/update_backend.py` now delivers it after the update
+/// proves itself - backed up, atomic, read back - and these lines are the audit
+/// of that write or of the exact read that failed.
+pub fn beside_lines(tail: &str) -> Vec<String> {
+    tail.lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("BESIDE:"))
+        .map(str::to_string)
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // The two sentences, kept as functions so a test can hold them
 // ---------------------------------------------------------------------------
@@ -1028,12 +1062,30 @@ pub struct Run {
     /// False when this program folder has no `tools/update_backend.py`, so the
     /// older one-at-a-time patcher was run instead. Said on the card.
     pub used_tool: bool,
+    /// The verbatim lines the run printed about the release's own files reaching
+    /// this PC (`BESIDE:` for the look spec, `TOOL DEFAULTS:` for the additive
+    /// config step). The auto-finish puts them on its own ending line too, so an
+    /// update the owner never sees a card for still says what reached the PC.
+    pub notes: Vec<String>,
 }
 
 /// Puts the two folders in place and runs the chosen pace's update: the repo
 /// tool when this clone has it, the older one-at-a-time patcher when it does
 /// not. Refuses — changing nothing — when either folder is missing.
-pub async fn run(app: &AppHandle, mode: &str, mode_label: &str) -> Run {
+///
+/// `previous_release` is the commit the desktop was built from BEFORE the update
+/// action this run belongs to. The repo tool uses it to tell a tool that THIS
+/// release newly ships ON from one the owner deliberately turned off in
+/// `[tools].enabled` - the tool's own additive step then adds only the former to
+/// the owner's config. `None` (a build that recorded no commit) makes that step
+/// say which read it could not do and add nothing; it never guesses, and it can
+/// never fail this backend half.
+pub async fn run(
+    app: &AppHandle,
+    mode: &str,
+    mode_label: &str,
+    previous_release: Option<&str>,
+) -> Run {
     // S4/S5: this is the last check before the backend is touched. `update_both`
     // checks the same lock before calling here; doing it again inside `run`
     // keeps the ordering safe for any future caller that stops a backend.
@@ -1093,8 +1145,16 @@ pub async fn run(app: &AppHandle, mode: &str, mode_label: &str) -> Run {
     let mode_owned = mode.to_string();
     let label_owned = mode_label.to_string();
     let repo_root = PathBuf::from(&repo);
+    let previous_owned = previous_release.map(str::to_string);
     let mut finished = tauri::async_runtime::spawn_blocking(move || {
-        run_script(&repo_root, &backend, &reports_to, &mode_owned, &label_owned)
+        run_script(
+            &repo_root,
+            &backend,
+            &reports_to,
+            &mode_owned,
+            &label_owned,
+            previous_owned.as_deref(),
+        )
     })
     .await
     .unwrap_or_else(|err| Run {
@@ -1128,7 +1188,14 @@ fn resolve_python() -> Option<(String, Vec<String>)> {
 }
 
 /// The blocking half: spawn, watch, and read back what it printed.
-fn run_script(repo: &Path, backend: &Path, app: &AppHandle, mode: &str, mode_label: &str) -> Run {
+fn run_script(
+    repo: &Path,
+    backend: &Path,
+    app: &AppHandle,
+    mode: &str,
+    mode_label: &str,
+    previous_release: Option<&str>,
+) -> Run {
     let log_dir = Some(backend.join(LOG_DIR).to_string_lossy().to_string());
     let tool = repo.join(TOOL_REL);
     let used_tool = tool.is_file();
@@ -1191,6 +1258,13 @@ fn run_script(repo: &Path, backend: &Path, app: &AppHandle, mode: &str, mode_lab
             &backend.to_string_lossy(),
             mode,
         ));
+        // The commit the desktop was built from BEFORE this update action. The
+        // tool uses it to tell a tool the release NEWLY ships ON from one the
+        // owner turned off (which is never re-enabled): only the former may be
+        // added to the owner's config, and only after the run proves itself.
+        if let Some(previous) = previous_release.map(str::trim).filter(|p| !p.is_empty()) {
+            command.arg("--previous-release").arg(previous);
+        }
         command
     } else {
         // An older program folder with no repo tool (or no Python to run it):
@@ -1367,6 +1441,17 @@ fn run_script(repo: &Path, backend: &Path, app: &AppHandle, mode: &str, mode_lab
              result is that safe pass.",
         );
     }
+    // The release's own files reaching this PC, as the repo tool reported them
+    // once the update proved itself (2026-11-21): `BESIDE:` for the look spec
+    // and `TOOL DEFAULTS:` for the additive config step. Shown verbatim - the
+    // owner's config and the copy the desktop compares are where a shipped
+    // feature becomes usable - so a step that could not run must be READ.
+    let mut notes = beside_lines(&tail);
+    notes.extend(tool_defaults_lines(&tail));
+    if !notes.is_empty() {
+        detail.push(' ');
+        detail.push_str(&notes.join(" "));
+    }
 
     Run {
         ok: verdict.ok,
@@ -1383,6 +1468,7 @@ fn run_script(repo: &Path, backend: &Path, app: &AppHandle, mode: &str, mode_lab
         mode_label: mode_label.to_string(),
         fallback,
         used_tool,
+        notes,
     }
 }
 
@@ -1454,12 +1540,12 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_folder, folder_of_hud, halves_line, known_mode, marker_words, normalise_commit,
-        parse_mode_plan, parse_update_lock, read_verdict, refuse, release_marker, repo_commit,
-        repo_is_at_least_build, setting_text, start_blocked_words, tail_of, tool_args,
-        unknown_mode_words, update_lock_is_valid, update_running_words, write_release_marker,
-        MarkerEnding, ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
-        LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, VERSION_NAME,
+        backend_folder, beside_lines, folder_of_hud, halves_line, known_mode, marker_words,
+        normalise_commit, parse_mode_plan, parse_update_lock, read_verdict, refuse, release_marker,
+        repo_commit, repo_is_at_least_build, setting_text, start_blocked_words, tail_of, tool_args,
+        tool_defaults_lines, unknown_mode_words, update_lock_is_valid, update_running_words,
+        write_release_marker, MarkerEnding, ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD,
+        LOCK_CEILING_SECONDS, LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, VERSION_NAME,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
@@ -2102,5 +2188,70 @@ mod tests {
             repo_is_at_least_build(Some(r"C:\nowhere"), Some("not-a-commit")),
             None
         );
+    }
+
+    // ---- the release's new tool defaults (2026-11-21) ----------------------
+
+    #[test]
+    fn the_tool_defaults_step_is_reported_verbatim_and_nothing_else_is() {
+        let tail = "Update pace: Balanced (responsive), 14 suite(s) at a time.\n\
+                    ALL DONE - the backend is patched and proven\n\
+                    TOOL DEFAULTS: baseline: the shipped tool defaults at 7add1b7c1d5f \
+                    (the desktop build before this update)\n\
+                    TOOL DEFAULTS: this release newly ships these tools on: project_create\n\
+                    TOOL DEFAULTS: added and read back: project_create\n\
+                    a normal line the step did not write";
+        let lines = tool_defaults_lines(tail);
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert!(lines[0].contains("7add1b7c1d5f"), "{lines:?}");
+        assert!(lines[1].contains("project_create"), "{lines:?}");
+        assert!(lines[2].contains("added and read back"), "{lines:?}");
+        // The lines are kept as the tool printed them (only outer whitespace
+        // trimmed), so nothing here paraphrases what reached the config.
+        for line in &lines {
+            assert!(line.starts_with("TOOL DEFAULTS:"), "{line}");
+        }
+        // A run that never reached the step (or an older program folder) adds
+        // nothing at all - no invented "no tools were new".
+        assert!(tool_defaults_lines("ALL DONE - the backend is patched and proven").is_empty());
+        // A refusal by the step is still a line: the owner must read it.
+        let refused = tool_defaults_lines(
+            "TOOL DEFAULTS: NOT ADDED: the config step is not in this release \
+             (no tools/enable_new_tools.py), so these new tools were NOT enabled: a, b",
+        );
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(refused[0].contains("NOT ADDED"), "{refused:?}");
+    }
+
+    #[test]
+    fn the_look_spec_step_is_reported_verbatim_and_only_when_it_ran() {
+        // The measured 2026-11-21 warning: the desktop's bundled spec disagreed
+        // with the live backend folder's copy on every start. The delivery step
+        // prints one BESIDE: line - unchanged, wrote+backup, or NOT delivered
+        // with the exact read that failed - and Rust shows it verbatim.
+        let tail = "Update pace: Balanced (responsive), 14 suite(s) at a time.\n\
+                    ALL DONE - the backend is patched and proven\n\
+                    BESIDE: jarvis-visual-spec.json wrote 73121 bytes (was 61301 bytes); \
+                    backup at jarvis-visual-spec.json.before-visual-spec-20261121-060000\n\
+                    TOOL DEFAULTS: added and read back: project_create";
+        let beside = beside_lines(tail);
+        assert_eq!(beside.len(), 1, "{beside:?}");
+        assert!(beside[0].contains("jarvis-visual-spec.json"), "{beside:?}");
+        assert!(beside[0].contains("73121"), "{beside:?}");
+        assert!(beside[0].contains("backup at"), "{beside:?}");
+        // The two kinds of report line are separate lists, each verbatim.
+        let defaults = tool_defaults_lines(tail);
+        assert_eq!(defaults.len(), 1, "{defaults:?}");
+        assert!(defaults[0].starts_with("TOOL DEFAULTS:"), "{defaults:?}");
+        // A step that did not run adds no line - never an invented "unchanged".
+        assert!(beside_lines("ALL DONE - the backend is patched and proven").is_empty());
+        // A refusal is still a line the owner must read.
+        let refused = beside_lines(
+            "BESIDE: jarvis-visual-spec.json NOT delivered: the release's copy \
+             could not be read at C:\\repo\\jarvis-desktop\\src\\jarvis-visual-spec.json \
+             (FileNotFoundError); nothing was written",
+        );
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(refused[0].contains("NOT delivered"), "{refused:?}");
     }
 }

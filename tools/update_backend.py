@@ -46,6 +46,21 @@ WHAT IT DOES, IN ORDER
    1, so a `safe` run is not evidence for `max_speed`. A pace that has not
    completed a run yet says "unmeasured for this pace" and shows a wide range;
    the first run of each pace measures it.
+5. **The release's new tool defaults reach the owner's own config.** ONCE THE
+   UPDATE HAS PROVED ITSELF (a run that is merely unproven returns before this),
+   the tools a release NEWLY ships ON are added to the owner's
+   `jarvis-framework.toml` through `tools/enable_new_tools.py`'s explicit,
+   backup-first, additive write. "New" means shipped ON now and not shipped ON
+   at the desktop build the owner had before this update (`--previous-release`);
+   a tool the owner turned off was shipped at that baseline and is never
+   re-enabled, and a tool that is merely absent from the live list is never
+   added on that evidence. Every decision, the baseline commit and the writer's
+   own lines are printed under `TOOL DEFAULTS:`, so the desktop's log and card
+   say what happened verbatim. The step can never fail the backend update; a
+   release whose program folder has no `tools/enable_new_tools.py` says exactly
+   that and adds nothing. Its honest limit is written above
+   `enable_new_tool_defaults`: tools that shipped ON before the previous build
+   are a one-time explicit migration, not a fact the automatic rule may infer.
 
 THE UPDATE LOCK (exclusive update, one PC)
 
@@ -1577,7 +1592,9 @@ def _fallback_words(restore: dict) -> str:
 
 
 def update(repo, backend, mode: str, *, requested_workers=None, timings_path=None,
-           say=print, run=_run, clock=time.time, lock_file=None) -> int:
+           say=print, run=_run, clock=time.time, lock_file=None,
+           previous_release=None,
+           tool_defaults=None, beside_files=None) -> int:
     """Run one backend update at `mode`'s pace; return 0 only when it proved it.
 
     The whole state machine is in `_update_locked`, so the fallback can be
@@ -1592,8 +1609,16 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     by another update is a refusal (`UpdateRefused("update_running", ...)`)
     naming its pid, pace and start time. `lock_file` overrides the path; when
     only `timings_path` is given (a caller naming its own state folder, which is
+    `lock_file` overrides the path; when
+    only `timings_path` is given (a caller naming its own state folder, which is
     how the tests keep the owner's `~/.openjarvis` untouched), the lock sits
     BESIDE that file rather than in the shared settings folder.
+
+    `previous_release` is the commit the running desktop was built from BEFORE
+    this update; it is what lets `enable_new_tool_defaults` tell a tool this
+    release NEWLY ships from one the owner deliberately turned off. `None` (a
+    build with no recorded commit) means that step says which read it could not
+    do and adds nothing - it never guesses.
 
     Exit codes: 0 = no problems (proven or, with skips, unproven - the words
     say which), 1 = problems/ambiguous/failed. The desktop's `read_verdict`
@@ -1631,6 +1656,9 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
                               requested_workers=requested_workers,
                               timings_path=timings_path, say=say, run=run,
                               clock=clock,
+                              previous_release=previous_release,
+                              tool_defaults=tool_defaults,
+                              beside_files=beside_files,
                               lock_file=target if taken.get("ok") else None)
     finally:
         if taken.get("ok"):
@@ -1642,9 +1670,12 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
 
 def _update_locked(repo, backend, mode: str, *, requested_workers,
                    timings_path=None, say=print, run=_run, clock=time.time,
-                   lock_file=None) -> int:
+                   lock_file=None, previous_release=None,
+                   tool_defaults=None, beside_files=None) -> int:
     """The update itself. The lock is already held by `update()`; `lock_file`
     is refreshed as suites finish (the heartbeat) and released by the caller."""
+    tool_defaults = tool_defaults or enable_new_tool_defaults
+    beside_files = beside_files or deliver_visual_spec
     repo = Path(repo)
     backend = Path(backend)
     spec = mode_spec(mode)                 # unknown mode: refused here, first
@@ -1899,6 +1930,16 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                 "applied but NOT proven.")
         else:
             say("ALL DONE - the backend is patched and proven")
+            # The proof is in: NOW the release's own files reach the places the
+            # half needs them. Both steps are reported verbatim - the desktop
+            # shows these lines on the card - and neither can fail the update.
+            for step in (beside_files, tool_defaults):
+                try:
+                    step(repo, backend, previous_release, say=say)
+                except Exception as exc:   # noqa: BLE001 - never fail a proven update
+                    say(TOOL_DEFAULTS_PREFIX + "NOT DONE: the release's own files "
+                        f"step failed ({type(exc).__name__}: {exc}); the backend "
+                        "update itself is unaffected")
         return 0
 
 
@@ -1918,6 +1959,354 @@ def _failed_count(lines) -> int:
     return sum(1 for line in lines if line.startswith("FAIL  "))
 
 
+# ---------------------------------------------------------------------------
+#   The release's NEW tool defaults, into the owner's own config
+# ---------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (measured 2026-11-21, off-peak). PM2 shipped its eight project
+# tools ON in the published config (`jarvis-backend/jarvis-framework.toml`) and
+# the deploy carried every module - but the owner's live
+# `jarvis-framework.toml` still listed 29 tools and none of the eight, so
+# `enabled_tools_for_turn()` was 29 and the model was never offered a project
+# tool. `scripts/apply-patches.ps1` deliberately never overwrites that file (it
+# holds the owner's vault path, bind address and every switch they chose), so a
+# new release's defaults never reach an existing install by themselves.
+#
+# THE WRITE is `tools/enable_new_tools.py`'s. THIS is the choice of what to hand
+# it, and the choice is the safety:
+#   * it only ever names a tool this release NEWLY ships ON - shipped ON now and
+#     NOT shipped ON at the desktop build the owner had before this update. A
+#     tool the owner turned off was shipped at that baseline, so its absence from
+#     the live list is the owner's decision and it is never named;
+#   * a tool that is merely absent from the live list is NEVER added on that
+#     evidence alone - that is how a deliberate OFF gets flipped back ON;
+#   * anything it cannot read - the baseline commit is not in this clone, the
+#     shipped config does not parse, the live config does not parse - is said out
+#     loud and NOTHING is added. A missing baseline never becomes a silent
+#     "nothing new": the line names which read failed;
+#   * it never fails the backend update. The patch run has already proved
+#     itself; this step is reported, not fatal, and a release without the tool
+#     says exactly that.
+#
+# HONEST LIMIT, for the decisions fragment: shipped(now) - shipped(previous
+# build) is empty for tools that shipped ON BEFORE the previous build. PM2's
+# eight are exactly that, so their first delivery was one explicit `--add`
+# migration by hand. The automatic rule covers FUTURE releases; it must never be
+# "fixed" by adding every shipped tool that is absent from the live list.
+
+#: The prefix every line of this step carries, so the desktop can show them
+#: verbatim in the backend half's own sentence.
+TOOL_DEFAULTS_PREFIX = "TOOL DEFAULTS: "
+#: The explicit, auditable writer of the owner's config (its own suite:
+#: backend/test_enable_new_tools.py). Gated by presence: it reaches this program
+#: folder with a release, and an older folder without it says so and adds nothing.
+NEW_TOOLS_TOOL_REL = Path("tools") / "enable_new_tools.py"
+FRAMEWORK_NAME = "jarvis-framework.toml"
+
+
+def _toml():
+    """The standard library's TOML reader, or None on a Python too old for it."""
+    try:
+        import tomllib
+    except ImportError:                    # pragma: no cover - Python < 3.11
+        return None
+    return tomllib
+
+
+def framework_tool_defaults(text: str):
+    """([tool names], "") from one `jarvis-framework.toml`'s [tools].enabled.
+
+    `(None, why)` when it cannot be read as that document - never an empty list,
+    because "no tools" and "could not read" are different answers.
+    """
+    tomllib = _toml()
+    if tomllib is None:
+        return None, "this Python cannot read TOML (tomllib is missing)"
+    try:
+        doc = tomllib.loads(text)
+    except Exception as exc:               # noqa: BLE001 - any parse failure is a state
+        return None, f"the TOML does not parse ({type(exc).__name__})"
+    tools = doc.get("tools") if isinstance(doc, dict) else None
+    if not isinstance(tools, dict):
+        return None, "it has no [tools] table"
+    names = tools.get("enabled")
+    if not isinstance(names, list):
+        return None, "its [tools] table has no enabled list"
+    return [str(name) for name in names], ""
+
+
+def framework_tool_defaults_in(path) -> "tuple":
+    """[tool names] out of one config FILE, or (None, why)."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"{path} could not be read ({type(exc).__name__})"
+    return framework_tool_defaults(text)
+
+
+def _git_show(repo, ref: str, path: str):
+    """One file at one REF from the clone on this PC - read-only, no network."""
+    argv = ["git", "-C", str(repo), "show", f"{ref}:{Path(path).as_posix()}"]
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=15)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git could not be run ({type(exc).__name__}: {exc})"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        tail = f" ({detail[-1]})" if detail else ""
+        return None, f"git show of {ref} exited {proc.returncode}{tail}"
+    return proc.stdout, ""
+
+
+def new_tool_defaults(repo, backend, previous_release, *, git_show=_git_show) -> dict:
+    """The release's NEW ON tools, and which of them the live config lacks.
+
+    `ok` is False when any read failed; nothing may be added then and `why` says
+    exactly which read failed. This function never writes and never guesses.
+    """
+    out = {"ok": False, "why": "", "shipped": [], "previous": [],
+           "new": [], "to_add": []}
+    shipped, why = framework_tool_defaults_in(Path(repo) / BASE_REL / FRAMEWORK_NAME)
+    if shipped is None:
+        out["why"] = f"this release's shipped tool defaults could not be read: {why}"
+        return out
+    out["shipped"] = shipped
+    previous_release = str(previous_release or "").strip()
+    if not previous_release:
+        out["why"] = ("this desktop build does not record which commit it came from, "
+                      "so the release before this update cannot be read")
+        return out
+    text, why = git_show(repo, previous_release,
+                         f"{BASE_REL.as_posix()}/{FRAMEWORK_NAME}")
+    if text is None:
+        out["why"] = (f"the release before this update ({previous_release}) could not "
+                      f"be read: {why}")
+        return out
+    previous, why = framework_tool_defaults(text)
+    if previous is None:
+        out["why"] = (f"the shipped tool defaults at the previous build "
+                      f"({previous_release}) could not be read: {why}")
+        return out
+    out["previous"] = previous
+    out["new"] = [name for name in shipped if name not in set(previous)]
+    live, why = framework_tool_defaults_in(Path(backend) / FRAMEWORK_NAME)
+    if live is None:
+        out["why"] = f"the owner's config could not be read: {why}"
+        return out
+    out["to_add"] = [name for name in out["new"] if name not in set(live)]
+    out["ok"] = True
+    return out
+
+
+def enable_new_tool_defaults(repo, backend, previous_release, *, say=print,
+                             run=_run, git_show=_git_show) -> dict:
+    """One explicit, audited step: the release's new ON tools reach the config.
+
+    Prints every decision and the writer's own lines under
+    [`TOOL_DEFAULTS_PREFIX`], so the update's log and the desktop's card can say
+    what happened verbatim. Returns a dict for tests; NEVER raises and NEVER
+    changes the backend update's own verdict - a failed step here is reported in
+    words, not turned into a failed update.
+    """
+    def tell(line: str) -> None:
+        say(TOOL_DEFAULTS_PREFIX + line)
+
+    shipped_path = Path(repo) / BASE_REL / FRAMEWORK_NAME
+    tell(f"this release's shipped tool defaults: {shipped_path}")
+    plan = new_tool_defaults(repo, backend, previous_release, git_show=git_show)
+    if not plan["ok"]:
+        tell("NOT ADDED: " + plan["why"] + ". No tool defaults were added; the "
+             "backend update itself is unaffected.")
+        return {"ok": False, "added": [], "invoked": False, "why": plan["why"]}
+    tell(f"baseline: the shipped tool defaults at {str(previous_release).strip()} "
+         "(the desktop build before this update)")
+    if not plan["new"]:
+        tell("this release ships no tool that the release before this update did "
+             "not already ship on, so there is nothing new from defaults")
+    else:
+        tell("this release newly ships these tools on: " + ", ".join(plan["new"]))
+    if not plan["to_add"]:
+        tell("nothing to add: the owner's config already lists every tool this "
+             "release newly ships")
+        return {"ok": True, "added": [], "invoked": False}
+    utility = Path(repo) / NEW_TOOLS_TOOL_REL
+    if not utility.is_file():
+        tell("NOT ADDED: the config step is not in this release (no "
+             f"{NEW_TOOLS_TOOL_REL.as_posix()}), so these new tools were NOT "
+             "enabled: " + ", ".join(plan["to_add"]))
+        return {"ok": False, "added": [], "invoked": False,
+                "why": "the config step is not in this release"}
+    tell("adding " + ", ".join(plan["to_add"]) + " through "
+         f"{NEW_TOOLS_TOOL_REL.as_posix()} (it backs the file up first)")
+
+    def on_line(line: str) -> None:
+        tell(line)
+
+    code = _call(run, [sys.executable, "-B", str(utility),
+                       "--backend", str(backend),
+                       "--add", ",".join(plan["to_add"]), "--apply"],
+                 Path(repo), on_line)
+    if code != 0:
+        tell(f"NOT ADDED: {NEW_TOOLS_TOOL_REL.as_posix()} exited {code!r}, so the "
+             "owner's config was NOT changed by this step; the backend update "
+             "itself is unaffected")
+        return {"ok": False, "added": [], "invoked": True,
+                "why": f"the config step exited {code!r}"}
+    live, why = framework_tool_defaults_in(Path(backend) / FRAMEWORK_NAME)
+    missing = [name for name in plan["to_add"]
+               if live is None or name not in set(live)]
+    if missing:
+        tell("NOT ADDED: the tool reported success but these names are still not "
+             "in the owner's config: " + ", ".join(missing)
+             + (f" ({why})" if why else ""))
+        return {"ok": False, "added": [], "invoked": True,
+                "why": "the names could not be read back"}
+    tell("added and read back: " + ", ".join(plan["to_add"]))
+    return {"ok": True, "added": list(plan["to_add"]), "invoked": True}
+
+
+# ---------------------------------------------------------------------------
+#   The release's look spec, delivered to the live backend folder
+# ---------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (measured 2026-11-21, off-peak, the owner's own startup log):
+# every start warned
+#
+#     visual spec: the look spec DISAGREES with the server's copy
+#                  (server sha256: 6b2b38d2291a...)
+#
+# because the desktop release bundles `jarvis-desktop/src/jarvis-visual-spec.json`
+# (73,121 bytes, sha 7af57c8e...) while the live backend folder served the OLD
+# copy (61,301 bytes, sha 667c4802..., dated 2026-09-13). Nothing carried the
+# release's copy into the live folder - `scripts/apply-patches.ps1` copies
+# modules, not the desktop's spec, and the deploy's beside-file list did not
+# include it either. So the warning was permanent until somebody copied it by
+# hand. It is the same gap as the tool defaults: "both halves updated" must mean
+# everything the half NEEDS, not just its code.
+#
+# WHAT IT DOES, and what it refuses to do:
+#   * reads the shipped copy from the tree this update is applying
+#     (`<repo>/jarvis-desktop/src/jarvis-visual-spec.json`) and the live copy
+#     (`<backend>/jarvis-visual-spec.json` - the third place `_visual_spec()`
+#     looks on this PC, and the one this folder owns);
+#   * the comparison is STRUCTURAL, the same one the desktop's `spec_drift.rs`
+#     makes: two files that differ only in whitespace or key order already agree,
+#     and are reported unchanged rather than rewritten;
+#   * a real difference is written ATOMICALLY, with a timestamped copy of the old
+#     file kept beside it, and read back; every failure restores the old bytes;
+#   * if the shipped copy cannot be read or is not JSON, if the live copy exists
+#     but cannot be read, or the write fails - it says exactly which and writes
+#     nothing. It never guesses a spec, and it can never fail the backend update.
+
+#: The release's own copy: the file the desktop client bundles.
+VISUAL_SPEC_REL = Path("jarvis-desktop") / "src" / "jarvis-visual-spec.json"
+#: The same file in the live backend folder - a place `jarvis_hud._visual_spec`
+#: reads, served at `GET /api/visual-spec`.
+VISUAL_SPEC_NAME = "jarvis-visual-spec.json"
+#: The report prefix, so the desktop shows these lines verbatim (the deploy
+#: tool's own word for a file carried beside the modules).
+BESIDE_PREFIX = "BESIDE: "
+
+
+def _json_structure(raw: bytes):
+    """(parsed, why) - the desktop's own comparison, so formatting cannot lie."""
+    try:
+        return json.loads(raw.decode("utf-8")), ""
+    except (UnicodeDecodeError, ValueError) as exc:
+        return None, f"not readable JSON ({type(exc).__name__})"
+
+
+def deliver_visual_spec(repo, backend, previous_release=None, *, say=print) -> dict:
+    """Carry the release's look spec into the live backend folder.
+
+    `previous_release` is accepted only so this step and
+    `enable_new_tool_defaults` share one call shape; the spec is the one the
+    tree this update is applying ships, and the baseline plays no part in it.
+
+    Prints one `BESIDE:` line for the outcome (unchanged / wrote + backup / NOT
+    delivered + the exact read that failed) and never raises; returns a dict for
+    tests. The write is atomic and read back, and the old file is kept beside it.
+    """
+    def tell(line: str) -> None:
+        say(BESIDE_PREFIX + line)
+
+    shipped_path = Path(repo) / VISUAL_SPEC_REL
+    live_path = Path(backend) / VISUAL_SPEC_NAME
+    try:
+        shipped = shipped_path.read_bytes()
+    except OSError as exc:
+        tell(f"{VISUAL_SPEC_NAME} NOT delivered: the release's copy could not be "
+             f"read at {shipped_path} ({type(exc).__name__}); nothing was written")
+        return {"ok": False, "wrote": False, "why": "the release's copy is unreadable"}
+    shipped_doc, why = _json_structure(shipped)
+    if shipped_doc is None:
+        tell(f"{VISUAL_SPEC_NAME} NOT delivered: the release's copy at "
+             f"{shipped_path} is {why}; nothing was written")
+        return {"ok": False, "wrote": False, "why": "the release's copy is not JSON"}
+    try:
+        live = live_path.read_bytes()
+    except FileNotFoundError:
+        live = None
+    except OSError as exc:
+        tell(f"{VISUAL_SPEC_NAME} NOT delivered: the live copy at {live_path} "
+             f"could not be read ({type(exc).__name__}); nothing was written")
+        return {"ok": False, "wrote": False, "why": "the live copy is unreadable"}
+    if live is not None:
+        if live == shipped:
+            tell(f"{VISUAL_SPEC_NAME} unchanged: the live copy already is this "
+                 "release's copy")
+            return {"ok": True, "wrote": False}
+        live_doc, _why = _json_structure(live)
+        if live_doc is not None and live_doc == shipped_doc:
+            tell(f"{VISUAL_SPEC_NAME} unchanged: the live copy is the same look "
+                 "spec (only formatting differs)")
+            return {"ok": True, "wrote": False}
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = live_path.with_name(f"{live_path.name}.before-visual-spec-{stamp}")
+    if live is not None:
+        try:
+            shutil.copy2(live_path, backup)
+        except OSError as exc:
+            tell(f"{VISUAL_SPEC_NAME} NOT delivered: its copy could not be backed "
+                 f"up beside the live file ({type(exc).__name__}); nothing was written")
+            return {"ok": False, "wrote": False, "why": "the backup could not be made"}
+    temporary = live_path.with_name(f"{live_path.name}.tmp-{os.getpid()}")
+    try:
+        temporary.write_bytes(shipped)
+        os.replace(temporary, live_path)
+    except OSError as exc:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        if live is not None:
+            try:
+                shutil.copy2(backup, live_path)
+            except OSError:
+                pass
+        tell(f"{VISUAL_SPEC_NAME} NOT delivered: the live file could not be "
+             f"written ({type(exc).__name__}); the old copy was put back")
+        return {"ok": False, "wrote": False, "why": "the live file could not be written"}
+    try:
+        written = live_path.read_bytes()
+    except OSError:
+        written = b""
+    if written != shipped:
+        if live is not None:
+            try:
+                shutil.copy2(backup, live_path)
+            except OSError:
+                pass
+        tell(f"{VISUAL_SPEC_NAME} NOT delivered: the write could not be read back "
+             "as this release's copy; the old copy was put back")
+        return {"ok": False, "wrote": False, "why": "the write did not read back"}
+    old = "absent" if live is None else f"{len(live)} bytes"
+    tell(f"{VISUAL_SPEC_NAME} wrote {len(shipped)} bytes (was {old}); "
+         f"backup at {backup.name if live is not None else 'none - there was no old file'}")
+    return {"ok": True, "wrote": True, "backup": str(backup) if live is not None else None}
+
+
 def _minutes(seconds: int) -> str:
     seconds = max(0, int(seconds))
     if seconds < 90:
@@ -1932,7 +2321,7 @@ def _minutes(seconds: int) -> str:
 def _usage() -> str:
     return ("usage: update_backend.py --repo <program folder> --backend <backend folder> "
             "[--mode max_speed|responsive|safe] [--workers N] [--modes-json] "
-            "[--timings PATH]")
+            "[--timings PATH] [--previous-release COMMIT]")
 
 
 def parse_args(argv) -> dict:
@@ -1941,7 +2330,8 @@ def parse_args(argv) -> dict:
     `argparse` would exit on its own with a usage line; this tool's refusals are
     read by the owner, so they are written like the rest of the card's words."""
     out = {"mode": DEFAULT_MODE, "workers": None, "modes_json": False,
-           "repo": None, "backend": None, "timings": None}
+           "repo": None, "backend": None, "timings": None,
+           "previous_release": None}
     rest = list(argv)
     while rest:
         word = rest.pop(0)
@@ -1951,7 +2341,8 @@ def parse_args(argv) -> dict:
         if word == "--modes-json":
             out["modes_json"] = True
             continue
-        if word in ("--repo", "--backend", "--mode", "--workers", "--timings"):
+        if word in ("--repo", "--backend", "--mode", "--workers", "--timings",
+                    "--previous-release"):
             if not rest:
                 raise UpdateRefused("bad_argument", f"{word} needs a value after it.")
             value = rest.pop(0)
@@ -2014,7 +2405,8 @@ def main(argv=None, *, say=print, run=_run) -> int:
             return 0
         return update(args["repo"], args["backend"], args["mode"],
                       requested_workers=args["workers"],
-                      timings_path=args["timings"], say=say, run=run)
+                      timings_path=args["timings"], say=say, run=run,
+                      previous_release=args["previous_release"])
     except UpdateRefused as exc:
         print(f"REFUSED  {exc.message}", file=sys.stderr)
         return 2

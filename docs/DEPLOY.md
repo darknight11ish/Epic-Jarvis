@@ -483,6 +483,20 @@ longer claim a reconcile over a patch whose hunks are absent.
   context still matches; the tasks generator does not.
 - It never restarts Jarvis. After `--apply`, restart and read the start-up
   banner; the probes only prove the routes answer while the new code is running.
+- **The in-app backend half now carries three things this page's deploy also
+  writes, and they are not a second deploy** (2026-11-21): after the patcher
+  proves itself, the Updates card's own backend half may (a) write the shared
+  `VERSION` marker when git proves the program folder holds the running
+  desktop's build commit or later, (b) carry the release's
+  `jarvis-visual-spec.json` into the live backend folder (backed up, atomic,
+  read back, reported as one `BESIDE:` line), and (c) add the tools the release
+  NEWLY ships ON to the owner's `jarvis-framework.toml` through
+  `tools/enable_new_tools.py`'s explicit additive write (never a tool the owner
+  turned off; reported as `TOOL DEFAULTS:` lines). None of them touches
+  `SOURCE-COMMIT`, which stays this deploy's record, and none of them replaces
+  a step here: the deploy is still the route that carries the repo's bytes and
+  writes the source commit, and a `VERSION` the in-app half moved without a
+  matching `SOURCE-COMMIT` is what the preflight's WARN is for.
 - `jarvis-backend/` is never copied over the live folder - it is a snapshot of
   the published base, not the runtime tree.
 - A patch with **no** `DELTA_TABLE` entry is still judged by "any one pre-image-absent

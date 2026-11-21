@@ -1886,6 +1886,335 @@ def t_an_unexpected_lock_error_never_stops_the_update():
 
 
 # ==========================================================================
+#   The release's own files reach this PC (2026-11-21, off-peak field test)
+# ==========================================================================
+#
+# The same rule as "both halves updated": a release ships code AND the defaults
+# and files the half needs to be usable. Two gaps were measured on the live PC:
+# PM2's eight project tools were ON in the published config and absent from the
+# owner's own `jarvis-framework.toml`, and the desktop's look spec disagreed with
+# the live backend folder's copy on every start. Both steps run AFTER the update
+# proves itself, are reported verbatim (`TOOL DEFAULTS:` / `BESIDE:`), and can
+# never fail the backend update.
+
+SHIPPED_TOML = ('[tools]\n'
+                'enabled = ["calculator", "new_tool", "old_tool"]\n\n'
+                '[voice]\nenabled = true\n')
+PREVIOUS_TOML = '[tools]\nenabled = ["calculator", "old_tool"]\n'
+
+
+def _tool_defaults_fixture(root: Path):
+    """(repo, backend, live config): a release that newly ships `new_tool`."""
+    repo, backend = _make_repo(root)
+    (repo / U.BASE_REL).mkdir(parents=True, exist_ok=True)
+    (repo / U.BASE_REL / U.FRAMEWORK_NAME).write_text(SHIPPED_TOML, encoding="utf-8")
+    live = backend / U.FRAMEWORK_NAME
+    live.write_text('# the owner\'s own settings\n[voice]\nenabled = true\n\n'
+                    '[tools]\nenabled = ["calculator"]\n', encoding="utf-8")
+    (repo / "tools").mkdir(parents=True, exist_ok=True)
+    (repo / U.NEW_TOOLS_TOOL_REL).write_text(
+        "# the release's additive tool writer; its real suite is "
+        "backend/test_enable_new_tools.py\n", encoding="utf-8")
+    return repo, backend, live
+
+
+def t_a_newly_shipped_tool_reaches_the_config_and_an_owner_removed_tool_stays():
+    root = _make_root()
+    repo, backend, live = _tool_defaults_fixture(root)
+    said, calls = [], []
+
+    def fake_git_show(repo_arg, ref, path):
+        if ref != "7add1b7c1d5f":
+            return None, f"git show of {ref} exited 128 (bad object)"
+        return PREVIOUS_TOML, ""
+
+    def fake_run(cmd, cwd, on_line):
+        calls.append([str(part) for part in cmd])
+        if not any(str(part).endswith("enable_new_tools.py") for part in cmd):
+            return 1
+        # The real tool's contract: write ONLY the names it was given.
+        names = cmd[cmd.index("--add") + 1].split(",")
+        current = U.framework_tool_defaults_in(live)[0] or []
+        merged = current + [name for name in names if name not in current]
+        live.write_text('[tools]\nenabled = ['
+                        + ", ".join(f'"{name}"' for name in merged) + ']\n',
+                        encoding="utf-8")
+        on_line("would add 1 tool(s) to the owner's config: " + ", ".join(names))
+        on_line("added 1 tool(s); backup at jarvis-framework.toml.before-enable-tools-x")
+        return 0
+
+    report = U.enable_new_tool_defaults(repo, backend, "7add1b7c1d5f",
+                                        say=said.append, run=fake_run,
+                                        git_show=fake_git_show)
+    now = U.framework_tool_defaults_in(live)[0]
+    check("a tool the release NEWLY ships ON reaches the owner's config",
+          report["ok"] is True and report["added"] == ["new_tool"]
+          and now is not None and "new_tool" in now, (report, now))
+    check("... and a tool the owner turned off is NOT re-enabled (it shipped at the "
+          "baseline too, so it is never named)",
+          "old_tool" not in now and report["added"] == ["new_tool"],
+          (now, report["added"]))
+    check("... the writer is called ONCE with exactly the new name and --apply",
+          len(calls) == 1
+          and calls[0][calls[0].index("--add") + 1] == "new_tool"
+          and "--apply" in calls[0], calls)
+    check("... the report names the baseline commit and the new tool",
+          any("baseline: the shipped tool defaults at 7add1b7c1d5f" in line
+              for line in said)
+          and any("newly ships these tools on: new_tool" in line for line in said),
+          said)
+    check("... and relays the writer's own lines verbatim under its prefix",
+          any(line.startswith("TOOL DEFAULTS: added 1 tool(s); backup at")
+              for line in said), said)
+
+    # A second run is the no-op the update path relies on.
+    said_second, calls_second = [], []
+    report_second = U.enable_new_tool_defaults(
+        repo, backend, "7add1b7c1d5f", say=said_second.append,
+        run=lambda cmd, cwd, on_line: calls_second.append(cmd) or 0,
+        git_show=fake_git_show)
+    check("a second run adds nothing and starts no writer",
+          report_second["ok"] is True and report_second["invoked"] is False
+          and report_second["added"] == [] and calls_second == []
+          and any("nothing to add" in line for line in said_second),
+          (report_second, calls_second, said_second))
+
+
+def t_a_legacy_missing_tool_is_never_added_from_absence_alone():
+    # Exactly PM2's eight were shipped before the owner's previous desktop build:
+    # the automatic rule cannot know them, and "absent from the live list and
+    # present in shipped" is how a deliberate OFF would be flipped back ON.
+    root = _make_root()
+    repo, backend, live = _tool_defaults_fixture(root)
+    (repo / U.BASE_REL / U.FRAMEWORK_NAME).write_text(
+        '[tools]\nenabled = ["calculator", "legacy_tool"]\n', encoding="utf-8")
+    said, calls = [], []
+    report = U.enable_new_tool_defaults(
+        repo, backend, "7add1b7c1d5f", say=said.append,
+        run=lambda cmd, cwd, on_line: calls.append(cmd) or 0,
+        git_show=lambda repo_arg, ref, path: (
+            '[tools]\nenabled = ["calculator", "legacy_tool"]\n', ""))
+    check("a tool merely ABSENT from the live list is never added by itself",
+          report["ok"] is True and report["added"] == [] and calls == [],
+          (report, calls))
+    check("... and the report says this release ships nothing new, in that order",
+          any("ships no tool that the release before this update did not already "
+              "ship on" in line for line in said), said)
+    check("... while the owner's live list is left exactly as it was",
+          U.framework_tool_defaults_in(live)[0] == ["calculator"],
+          U.framework_tool_defaults_in(live))
+
+
+def t_a_missing_or_unreadable_baseline_is_reported_not_guessed():
+    root = _make_root()
+    repo, backend, live = _tool_defaults_fixture(root)
+
+    def missing(repo_arg, ref, path):
+        return None, "git show of deadbee exited 128 (bad object)"
+
+    said, calls = [], []
+    report = U.enable_new_tool_defaults(repo, backend, "deadbee",
+                                        say=said.append,
+                                        run=lambda cmd, cwd, on_line: calls.append(cmd) or 0,
+                                        git_show=missing)
+    check("a baseline commit this clone does not have refuses the add, naming it",
+          report["ok"] is False and "deadbee" in report["why"]
+          and any("could not be read" in line and "deadbee" in line for line in said),
+          (report["why"], said))
+    check("... and NOTHING is written or run",
+          calls == [] and U.framework_tool_defaults_in(live)[0] == ["calculator"],
+          (calls, U.framework_tool_defaults_in(live)))
+
+    # A build that recorded no commit cannot name the previous release at all.
+    said_none = []
+    report_none = U.enable_new_tool_defaults(repo, backend, None,
+                                             say=said_none.append,
+                                             run=lambda cmd, cwd, on_line: 0)
+    check("a build with no recorded commit says exactly that and adds nothing",
+          report_none["ok"] is False
+          and "does not record which commit" in report_none["why"], report_none)
+
+
+def t_the_config_step_missing_from_a_release_is_reported_and_never_fatal():
+    root = _make_root()
+    repo, backend, live = _tool_defaults_fixture(root)
+    (repo / U.NEW_TOOLS_TOOL_REL).unlink()          # a release before the writer
+    said = []
+    report = U.enable_new_tool_defaults(
+        repo, backend, "7add1b7c1d5f", say=said.append,
+        git_show=lambda repo_arg, ref, path: (PREVIOUS_TOML, ""))
+    check("a release without the config step says the step is not in it",
+          report["ok"] is False and "not in this release" in report["why"]
+          and any("not in this release" in line for line in said),
+          (report, said))
+    check("... names the tools that therefore were NOT enabled",
+          any("new_tool" in line and "NOT enabled" in line for line in said), said)
+
+    # And the whole update still ends as a proven backend update.
+    repo2, backend2 = _make_repo(root / "second")
+    fake = FakeRun(_staged_handler(repo2, backend2, suites="ok"))
+    said2 = []
+    code = U.update(repo2, backend2, "safe", run=fake, say=said2.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json",
+                    previous_release="7add1b7c1d5f")
+    check("... and a failed/reported config step never fails the backend update",
+          code == 0 and any(line.startswith("TOOL DEFAULTS:") for line in said2),
+          (code, [line for line in said2 if line.startswith("TOOL DEFAULTS:")]))
+
+
+SPEC_OLD = {"version": 1, "palette": {"ink": "#111111", "paper": "#fafafa"}}
+SPEC_NEW = {"version": 1, "palette": {"ink": "#111111", "paper": "#fafafa"},
+            "faces": {"robot": {"eyes": "round"}}}
+
+
+def _spec_fixture(root: Path, *, shipped=SPEC_NEW, live=SPEC_OLD):
+    """(repo, backend, shipped path, live path) with real files on disk."""
+    repo, backend = _make_repo(root)
+    (repo / "jarvis-desktop" / "src").mkdir(parents=True)
+    shipped_path = repo / U.VISUAL_SPEC_REL
+    shipped_path.write_text(json.dumps(shipped, indent=1) + "\n", encoding="utf-8")
+    live_path = backend / U.VISUAL_SPEC_NAME
+    if live is not None:
+        live_path.write_text(json.dumps(live, indent=1) + "\n", encoding="utf-8")
+    return repo, backend, shipped_path, live_path
+
+
+def t_the_release_s_look_spec_is_delivered_and_the_desktop_warning_disappears():
+    root = _make_root()
+    repo, backend, shipped_path, live_path = _spec_fixture(root)
+    old = live_path.read_bytes()
+    said = []
+    report = U.deliver_visual_spec(repo, backend, say=said.append)
+    written = live_path.read_bytes()
+    backups = list(backend.glob(U.VISUAL_SPEC_NAME + ".before-visual-spec-*"))
+    check("the release's look spec is written into the live backend folder",
+          report["ok"] is True and report["wrote"] is True
+          and written == shipped_path.read_bytes(), (report, len(written)))
+    check("... which is EXACTLY what the desktop's drift check compares (parsed "
+          "structure equals), so its disagreement warning has nothing left to say",
+          json.loads(written) == json.loads(shipped_path.read_text(encoding="utf-8")),
+          "the served copy is not the release's")
+    check("... the old copy is backed up beside it, byte for byte",
+          len(backups) == 1 and backups[0].read_bytes() == old, backups)
+    check("... and the report carries one BESIDE: line naming what was written",
+          any(line.startswith("BESIDE: " + U.VISUAL_SPEC_NAME) and "wrote" in line
+              for line in said), said)
+
+    said_second = []
+    backups_before = set(backend.glob(U.VISUAL_SPEC_NAME + ".before-visual-spec-*"))
+    report_second = U.deliver_visual_spec(repo, backend, say=said_second.append)
+    backups_after = set(backend.glob(U.VISUAL_SPEC_NAME + ".before-visual-spec-*"))
+    check("a second run is a no-op: identical copy, no second backup, no write",
+          report_second["ok"] is True and report_second["wrote"] is False
+          and backups_after == backups_before
+          and any("unchanged" in line for line in said_second),
+          (report_second, said_second))
+
+
+def t_an_identical_or_formatting_only_look_spec_is_not_rewritten():
+    root = _make_root()
+    repo, backend, shipped_path, live_path = _spec_fixture(root)
+    live_path.write_bytes(shipped_path.read_bytes())
+    before = live_path.read_bytes()
+    said = []
+    report = U.deliver_visual_spec(repo, backend, say=said.append)
+    check("an identical look spec is reported unchanged, not rewritten",
+          report["wrote"] is False and live_path.read_bytes() == before
+          and any("unchanged" in line for line in said), (report, said))
+    check("... and no backup is made for a file it did not touch",
+          not list(backend.glob(U.VISUAL_SPEC_NAME + ".before-visual-spec-*")))
+
+    # The desktop compares STRUCTURE, so whitespace/key order is not a difference.
+    live_path.write_text(json.dumps(SPEC_NEW, sort_keys=True), encoding="utf-8")
+    said_order = []
+    report_order = U.deliver_visual_spec(repo, backend, say=said_order.append)
+    check("... and a copy that differs only in formatting is the same look spec",
+          report_order["wrote"] is False
+          and any("only formatting differs" in line for line in said_order),
+          (report_order, said_order))
+
+
+def t_a_look_spec_that_cannot_be_read_is_reported_and_nothing_is_written():
+    root = _make_root()
+    repo, backend, shipped_path, live_path = _spec_fixture(root)
+    before = live_path.read_bytes()
+
+    shipped_path.unlink()
+    said = []
+    report = U.deliver_visual_spec(repo, backend, say=said.append)
+    check("a missing release copy is reported, nothing written",
+          report["ok"] is False and report["wrote"] is False
+          and live_path.read_bytes() == before
+          and any("could not be read" in line and "NOT delivered" in line
+                  for line in said), (report, said))
+
+    shipped_path.write_text("{ not json", encoding="utf-8")
+    said_bad = []
+    report_bad = U.deliver_visual_spec(repo, backend, say=said_bad.append)
+    check("a release copy that is not JSON is reported, nothing written",
+          report_bad["ok"] is False and live_path.read_bytes() == before
+          and any("not readable JSON" in line for line in said_bad),
+          (report_bad, said_bad))
+    shipped_path.write_text(json.dumps(SPEC_NEW), encoding="utf-8")
+    # An unreadable LIVE copy (a directory where the file should be) is refused
+    # rather than guessed at, and the release's copy is not written over it.
+    live_path.unlink()
+    live_path.mkdir()
+    said_live = []
+    report_live = U.deliver_visual_spec(repo, backend, say=said_live.append)
+    check("an unreadable live copy is reported, nothing written",
+          report_live["ok"] is False and report_live["wrote"] is False
+          and any("live copy" in line and "could not be read" in line
+                  for line in said_live), (report_live, said_live))
+
+
+def t_both_release_file_steps_run_only_after_a_proven_update():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    ran = []
+
+    def fake_beside(repo_arg, backend_arg, previous, *, say):
+        ran.append(("beside", previous))
+
+    def fake_tools(repo_arg, backend_arg, previous, *, say):
+        ran.append(("tools", previous))
+
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    said = []
+    code = U.update(repo, backend, "safe", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json",
+                    previous_release="7add1b7c1d5f",
+                    tool_defaults=fake_tools, beside_files=fake_beside)
+    check("after a PROVEN update both release-file steps run, with the baseline",
+          code == 0 and ran == [("beside", "7add1b7c1d5f"),
+                                ("tools", "7add1b7c1d5f")], (code, ran))
+
+    # A safe-mode failure returns 1 and must not touch the owner's config or spec.
+    root2 = _make_root()
+    repo2, backend2 = _make_repo(root2)
+    ran2 = []
+
+    def handler(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            for name, content in NEW.items():
+                (backend2 / name).write_bytes(content)
+            on_line("DONE - no problems, but NOT fully proven (see below)")
+            return 0
+        on_line("FAIL  test_b.py  0.1s  (exit 1)")
+        on_line("2 passed, 0 skipped, 1 failed")
+        return 1
+
+    code2 = U.update(repo2, backend2, "safe", run=FakeRun(handler),
+                     say=lambda line: None, clock=lambda: 0.0,
+                     timings_path=root2 / "timings.json",
+                     previous_release="7add1b7c1d5f",
+                     tool_defaults=lambda *a, **k: ran2.append("tools"),
+                     beside_files=lambda *a, **k: ran2.append("beside"))
+    check("a failed update never runs the release-file steps",
+          code2 == 1 and ran2 == [], (code2, ran2))
+
+
+# ==========================================================================
 #   The suite's own runner
 # ==========================================================================
 

@@ -1523,6 +1523,14 @@ pub fn reconcile_pending_at_startup(app: &AppHandle) {
     let Some(ending) = reconcile(Some(&pending), &version(app)) else {
         return;
     };
+    // The build the desktop ran BEFORE this installer: the automatic finish and
+    // the tool-defaults step need it to tell what THIS release newly ships. Only
+    // a finished install proves the replacement happened; every other ending
+    // leaves the old build running, so the caller falls back to this binary's
+    // own commit (the same one).
+    if matches!(ending, DesktopEnding::Finished { .. }) {
+        remember_previous_desktop_build(pending.app_commit.as_deref());
+    }
     let words = ending_words(
         &ending,
         crate::backend_update::app_commit().as_deref(),
@@ -1850,7 +1858,13 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
          test suites. {halves}"
     );
     announce_step(&app, &step_starting(STEP_BACKEND, Some(&opening)));
-    let backend = crate::backend_update::run(&app, &mode, &mode_label).await;
+    // The build the desktop is running NOW - the release before this action.
+    // The backend tool needs it to tell the tools THIS release newly ships ON
+    // from one the owner turned off on purpose (never re-enabled), and to hand
+    // only the former to the additive config step after the run proves itself.
+    let previous_release = crate::backend_update::app_commit();
+    let backend =
+        crate::backend_update::run(&app, &mode, &mode_label, previous_release.as_deref()).await;
     // `proven` is its own answer rather than a flavour of done: a backend that
     // patched but skipped its own checks is patched, and is not a pass.
     let backend_step = if !backend.ok {
@@ -2112,6 +2126,40 @@ impl AutoFinishAttempts {
 /// ever called on it.
 static AUTO_FINISH_ATTEMPTS: AutoFinishAttempts = AutoFinishAttempts(std::sync::Mutex::new(None));
 
+/// The commit the desktop binary ran BEFORE the installer that just finished,
+/// remembered by [`reconcile_pending_at_startup`] for the automatic finish.
+///
+/// `pending-desktop-update.json` is written by the OLD process and carries
+/// `appCommit` - the build it was running. After the installer ends it, the new
+/// process's own commit is the RELEASE; the old one is the baseline the tool
+/// defaults step compares against (so a tool THIS release newly ships ON is told
+/// from one the owner turned off, which is never re-enabled). One value per
+/// process, set once, and only when the installer really finished.
+static PREVIOUS_DESKTOP_BUILD: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Remember the build commit recorded by the pending install that just finished.
+/// Returns what was stored, so a caller can log it.
+pub fn remember_previous_desktop_build(commit: Option<&str>) -> Option<String> {
+    let commit = commit
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let mut slot = PREVIOUS_DESKTOP_BUILD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *slot = commit;
+    slot.clone()
+}
+
+/// The build commit the desktop ran before the update that just installed, when
+/// the startup reconcile saw such an update finish.
+pub fn previous_desktop_build() -> Option<String> {
+    PREVIOUS_DESKTOP_BUILD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
 /// One line for the HUD's chat, on the feed's `version` channel - the same
 /// channel the MISMATCH sentence arrives on, so the story is in one place.
 fn say_version_line(app: &AppHandle, state: &str, words: &str) {
@@ -2216,7 +2264,12 @@ async fn finish_backend_half(
 
     // THE SAME runner the button uses, at the default pace. It stops the
     // supervised backend itself, patches, runs the suites and reports a verdict.
-    let backend = crate::backend_update::run(app, "responsive", &label).await;
+    // The tool-defaults step compares against the build the desktop had BEFORE
+    // the installer that started this launch - remembered from the pending
+    // record - and falls back to this build when there was no such record.
+    let previous_release = previous_desktop_build().or_else(crate::backend_update::app_commit);
+    let backend =
+        crate::backend_update::run(app, "responsive", &label, previous_release.as_deref()).await;
     let (state, mut words) = if !backend.ok {
         let mut words = format!(
             "The automatic backend update did NOT finish, so the two halves still \
@@ -2242,12 +2295,8 @@ async fn finish_backend_half(
         // HUD compares moves with it. The value is this app's own version (the
         // one the installer just put here), and it is written only because the
         // check above proved the program folder holds this build's commit.
-        let backend_dir = here
-            .backend
-            .clone()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::new());
-        let marker = crate::backend_update::write_release_marker(&backend_dir, &sync.desktop);
+        let backend_dir = Path::new(here.backend.as_deref().unwrap_or_default());
+        let marker = crate::backend_update::write_release_marker(backend_dir, &sync.desktop);
         let marker_said = crate::backend_update::marker_words(&marker);
         crate::logfile::log(&format!("[jarvis] automatic backend finish: {marker_said}"));
         // The backend was stopped for the patch; start it again so the version
@@ -2255,11 +2304,21 @@ async fn finish_backend_half(
         // the pair back. Bounded, and never retried beyond that.
         let after = restart_and_read(app).await;
         if marker.in_step() && after.state == crate::backend_self::SyncState::InSync {
+            // What the release's own files did, when they had anything to say:
+            // the look spec delivered beside the backend, and the new tool
+            // defaults added to the owner's config. Verbatim on the ending line,
+            // so an update nobody presses a button for still says what reached
+            // this PC.
+            let files = if backend.notes.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", backend.notes.join(" "))
+            };
             (
                 "ok",
                 format!(
                     "The backend half finished, and both halves now match: Jarvis Desktop \
-                     {} and the backend {}.",
+                     {} and the backend {}.{files}",
                     after.desktop,
                     after.backend.as_deref().unwrap_or("the same version")
                 ),
@@ -2560,9 +2619,10 @@ mod tests {
         auto_finish_behind_words, auto_finish_opening, auto_finish_plan, both_updated, chat_facts,
         claim_update_both, clear_pending, desktop_half_allowed, desktop_half_trace,
         desktop_install_gate, ending_words, finish, friendly, install_notice_for, is_update_card,
-        local_stamp, mark_launched, read_pending, reconcile, same_version, state_of, step_starting,
-        write_pending, AutoFinish, AutoFinishAttempts, BackendHalf, BeforeInstaller, DesktopEnding,
-        DesktopHalf, PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
+        local_stamp, mark_launched, previous_desktop_build, read_pending, reconcile,
+        remember_previous_desktop_build, same_version, state_of, step_starting, write_pending,
+        AutoFinish, AutoFinishAttempts, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
+        PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
         DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL, INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE,
         STEP_BACKEND, STEP_DESKTOP,
     };
@@ -3123,11 +3183,23 @@ mod tests {
             .find("AUTO_FINISH_ATTEMPTS.claim(")
             .expect("the automatic finish has no once-per-mismatch record");
         let run = automatic
-            .find(concat!(
-                "crate::backend_update::run(app, ",
-                "\"responsive\", &label)"
-            ))
+            .find("crate::backend_update::run(")
             .expect("the automatic finish never runs the backend half");
+        let run_call = &automatic[run..automatic
+            .find("\n    .await;")
+            .filter(|end| *end > run)
+            .unwrap_or(automatic.len())];
+        for part in [
+            "app,",
+            "\"responsive\"",
+            "&label",
+            "previous_release.as_deref()",
+        ] {
+            assert!(
+                run_call.contains(part),
+                "the automatic finish's backend run no longer carries `{part}`:\n{run_call}"
+            );
+        }
         assert!(
             claim < run,
             "the automatic finish runs before it claims its attempt"
@@ -3150,6 +3222,76 @@ mod tests {
         assert!(
             automatic.contains("for _ in 0..5"),
             "the restart-and-read wait is not bounded"
+        );
+    }
+
+    /// The baseline for the release's NEW tool defaults (2026-11-21): the build
+    /// the desktop ran BEFORE the installer that just finished. The reconcile is
+    /// the only place that knows it, and every step after it reads it from here.
+    #[test]
+    fn the_build_the_installer_replaced_is_remembered_for_the_release_steps() {
+        // Before any finished install there is no such build: the callers fall
+        // back to this binary's own commit, which is the same release.
+        assert_eq!(remember_previous_desktop_build(None), None);
+        assert_eq!(previous_desktop_build(), None);
+        // Whitespace is not a commit.
+        assert_eq!(remember_previous_desktop_build(Some("  ")), None);
+        let remembered = remember_previous_desktop_build(Some("7add1b7c1d5f"));
+        assert_eq!(remembered.as_deref(), Some("7add1b7c1d5f"));
+        assert_eq!(previous_desktop_build().as_deref(), Some("7add1b7c1d5f"));
+        // One value per process; a second finished install replaces it.
+        remember_previous_desktop_build(Some("97edfab81dd4"));
+        assert_eq!(previous_desktop_build().as_deref(), Some("97edfab81dd4"));
+        // Leave the process as it was for anything else that reads it.
+        remember_previous_desktop_build(None);
+        assert_eq!(previous_desktop_build(), None);
+    }
+
+    /// The wiring of the two release-file steps: the in-app press passes the
+    /// running build as the baseline; the automatic finish prefers the build the
+    /// installer replaced; the reconcile stores it only for a FINISHED install.
+    #[test]
+    fn the_release_file_steps_are_wired_to_the_right_baseline() {
+        let src = include_str!("update.rs");
+        let both = &src[src
+            .find("pub async fn update_both")
+            .expect("update.rs has no update_both")..];
+        let both = &both[..both
+            .find("// ---- 2. the executable")
+            .expect("update_both has no desktop half")];
+        assert!(
+            both.contains("let previous_release = crate::backend_update::app_commit();"),
+            "the in-app press no longer passes the running build as the baseline"
+        );
+        assert!(
+            both.contains("previous_release.as_deref()"),
+            "the in-app press never gives the backend tool its baseline"
+        );
+
+        let start = src
+            .find("pub async fn finish_backend_if_desktop_ahead")
+            .expect("update.rs has no automatic finish");
+        let automatic = &src[start
+            ..src
+                .find("/// The update a chat message asked for")
+                .expect("the automatic finish has no end")];
+        assert!(
+            automatic
+                .contains("previous_desktop_build().or_else(crate::backend_update::app_commit)"),
+            "the automatic finish does not prefer the build the installer replaced"
+        );
+
+        let reconcile = &src[src
+            .find("pub fn reconcile_pending_at_startup")
+            .expect("update.rs has no startup reconcile")..];
+        let reconcile = &reconcile[..reconcile.find("\n}\n").expect("it has no end")];
+        assert!(
+            reconcile.contains("remember_previous_desktop_build(pending.app_commit.as_deref())"),
+            "the startup reconcile no longer remembers the replaced build"
+        );
+        assert!(
+            reconcile.contains("matches!(ending, DesktopEnding::Finished { .. })"),
+            "the replaced build is remembered for an install that did not finish"
         );
     }
 

@@ -35348,6 +35348,33 @@ is what turns "the code moved" into "the HUD says the two are in step"; without
 it the MISMATCH sentence would survive a successful patch. It is one marker
 file, written atomically, and it writes nothing else.
 
+**Two more things the half needs, measured broken the next day (2026-11-21).**
+After the proof, `tools/update_backend.py` also carries the release's own copies
+to the places the half needs them, reporting each verbatim on the card:
+
+- **the look spec.** The desktop bundles
+  `jarvis-desktop/src/jarvis-visual-spec.json`; the live backend folder served a
+  stale copy, so `spec_drift.rs` warned on every start that the spec DISAGREED
+  with the server's (measured: 73,121 bytes at the desktop against 61,301 beside
+  the backend). The update compares the release's copy with
+  `<backend>/jarvis-visual-spec.json` structurally (the same parsed-JSON rule
+  the desktop uses, so formatting is not a difference), and on a real change
+  writes it atomically with a timestamped backup and a read-back - one
+  `BESIDE:` line. If the release's copy cannot be read or is not JSON, the old
+  file is left exactly as it was and the line says which read failed.
+- **the release's new tool defaults.** The published config
+  (`jarvis-backend/jarvis-framework.toml`) is never copied over the owner's own
+  `jarvis-framework.toml` (it holds their vault path, bind address and every
+  switch they chose), so a new ON tool used to reach a fresh install only. The
+  update now hands the tools this release NEWLY ships ON to the explicit,
+  additive `tools/enable_new_tools.py` write (`--add`, `--apply`): a tool the
+  owner turned off was shipped at the baseline (the desktop build before this
+  update) and is never named; a tool merely absent from the live list is never
+  added on that evidence. Lines are `TOOL DEFAULTS:` and the step can never fail
+  the backend update. Its honest limit: tools shipped before that baseline need
+  a one-time explicit `--add`; the rule is not allowed to infer them from
+  absence.
+
 The rules: **"up to date" is only ever said when both sides parse the same**
 (`backend_self.rs`'s own test `only_the_in_sync_sentence_says_in_sync`), no
 window waits on it, and the read is display-only. At start-up one handshake runs

@@ -290,8 +290,12 @@ await check("CONTROL: a desktop-only update finishes its backend half automatica
     "the automatic finish has no honest blocked answer");
   assert.match(rust, /AUTO_FINISH_ATTEMPTS\.claim\(/,
     "the automatic finish has no once-per-mismatch record");
-  assert.match(rust, /crate::backend_update::run\(app, "responsive", &label\)/,
+  assert.match(rust, /crate::backend_update::run\(\s*app,\s*"responsive",\s*&label,/,
     "the automatic finish does not run the SAME backend half at the default pace");
+  // ...and it carries the baseline (the build BEFORE the installer) for the
+  // release's new tool defaults (2026-11-21).
+  assert.match(rust, /previous_desktop_build\(\)/,
+    "the automatic finish does not name the build the installer replaced");
   // It must never touch the desktop install: it runs because the desktop was
   // ALREADY installed by the Windows installer.
   const start = rust.indexOf("pub async fn finish_backend_if_desktop_ahead");
@@ -303,6 +307,26 @@ await check("CONTROL: a desktop-only update finishes its backend half automatica
   assert.match(self,
     /crate::update::finish_backend_if_desktop_ahead\(&handle, &sync\)\.await/,
     "the startup handshake never asks for the automatic finish");
+});
+
+await check("CONTROL: the boot-strap run passes the baseline for the release's own files", () => {
+  // The desktop's backend half now also carries (a) the release's new tool
+  // defaults into the owner's config and (b) the release's look spec into the
+  // live backend folder (both measured broken on 2026-11-21). The baseline for
+  // (a) is the desktop build BEFORE this update; the repo tool must receive it,
+  // and Rust must show its report lines verbatim.
+  const rust = read("src-tauri/src/update.rs");
+  const backend = read("src-tauri/src/backend_update.rs");
+  assert.match(backend, /--previous-release/,
+    "backend_update.rs never passes the previous build to the update tool");
+  assert.match(backend, /beside_lines\(&tail\)/,
+    "the look-spec report lines are not shown");
+  assert.match(backend, /tool_defaults_lines\(&tail\)/,
+    "the new-tool-defaults report lines are not shown");
+  assert.match(rust, /previous_release = crate::backend_update::app_commit\(\)/,
+    "the in-app press does not pass the running build as the baseline");
+  assert.match(rust, /remember_previous_desktop_build\(pending\.app_commit\.as_deref\(\)\)/,
+    "the startup reconcile does not remember the replaced build");
 });
 
 await check("a backend behind the desktop reads as a MISMATCH that finishes automatically", async () => {
