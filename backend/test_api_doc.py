@@ -41,14 +41,26 @@ WHAT IT PROVES
   6. No line says a module this repository holds is "not in this repository" -
      the family of sentence that went stale the moment the base backend was
      published.
+  7. The four PM4 routes both apps depend on are FROZEN in section 88.12
+     (ruling 5.3, 2026-11-21): the page lists each route's request and response
+     keys and its status codes, the build notes 88.10/88.11 point at it, and
+     `tools/check_parity.py` keeps them classified the way the freeze says -
+     the shared three `ported`, the desktop-only export `deliberate`.
 
 No network, no model.
 """
 from __future__ import annotations
 
+import ast
+import importlib.util
+import inspect
 import re
+import shutil
 import sys
+import tempfile
+import textwrap
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -56,12 +68,27 @@ sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("jarvis_sayable.py", "jarvis_quick.py", "jarvis_schedule.py",
-                "jarvis_limits.py")
+                "jarvis_limits.py", "jarvis_projects.py")
 
 import jarvis_quick as Q  # noqa: E402
 import jarvis_limits as L  # noqa: E402
 import jarvis_sayable as S  # noqa: E402
 import jarvis_schedule as SCHED  # noqa: E402
+
+#: `jarvis_projects`' writes pass through `jarvis_framework`'s audit log, and
+#: the real module lives on the owner's PC only. This suite builds a real store
+#: in a TEMPORARY folder (never the owner's), so the same stub
+#: `backend/test_projects.py` uses is installed before the import: no audit
+#: line, no config read, no owner file touched.
+_fw = types.ModuleType("jarvis_framework")
+_fw.CONFIG_DIR = HERE
+_fw.LOG_DIR = HERE
+_fw.load_framework = lambda: {}
+_fw.audit_log = lambda event, detail=None: None
+_fw.action_tier = lambda action: "ask"
+sys.modules["jarvis_framework"] = _fw
+
+import jarvis_projects as P  # noqa: E402
 
 PASSED, FAILED = [], []
 SKIPPED = []
@@ -352,6 +379,378 @@ def t_the_limits_table_matches_the_code():
           f"jarvis_limits adds {len(notify)} notification rows")
 
 
+# ------------------------------- the PM4 route contract, frozen (ruling 5.3)
+
+#: Ruling 5.3 (Gemini, 2026-11-21): the four PM4 routes both apps now depend on
+#: are frozen into this page. The section is ONE stable heading on purpose - a
+#: moved or renamed frozen contract is a contract change, and these checks name
+#: it instead of quietly comparing nothing to nothing.
+PM4_HEADING = "### 88.12 The PM4 route contract (FROZEN, 2026-11-21)"
+PM4_END = "## 89. The sun, the moon and the weather behind the animals"
+
+#: Each frozen route: the page's spelling, `tools/check_parity.py`'s key, the
+#: method it answers, and the classification the freeze gives it. The shared
+#: three are `ported` because BOTH apps call them; the export stays
+#: `deliberate` - the desktop's alone, with its reason written down.
+PM4_ROUTES = (
+    ("/api/projects/<id>/plan", "/api/projects/{id}/plan", "GET", "ported"),
+    ("/api/projects/<id>/work_items", "/api/projects/{id}/work_items", "POST",
+     "ported"),
+    ("/api/projects/<id>/work_items/<wid>/status",
+     "/api/projects/{id}/work_items/{id}/status", "POST", "ported"),
+    ("/api/projects/<id>/export", "/api/projects/{id}/export", "POST",
+     "deliberate"),
+)
+
+#: The status codes the frozen status table must list for each route. All of
+#: them are answered by the real handler in `_pm4_answer()` except the two that
+#: need a card or a receipt: the `202` of an export whose card is still up, and
+#: the `200` of a status change (which leaves its `jarvis_undo` receipt). Those
+#: two are proved against a real store in `backend/test_projects.py`, so this
+#: check never has to draw a card or write the owner's receipts store.
+PM4_STATUS_CODES = {
+    "/api/projects/<id>/plan": {"200", "404"},
+    "/api/projects/<id>/work_items": {"200", "400", "404", "405"},
+    "/api/projects/<id>/work_items/<wid>/status": {"200", "400", "404", "405"},
+    "/api/projects/<id>/export": {"202", "200", "404", "405"},
+}
+
+
+def pm4_block() -> str:
+    """The frozen contract's own text, anchored by its heading and section 89."""
+    return section(text(), PM4_HEADING, PM4_END, "the frozen PM4 contract")
+
+
+def key_line(block: str, label: str) -> list:
+    """The backticked keys on the block's `- **<label>:** ...` line."""
+    m = re.search(r"^[ \t]*- \*\*" + re.escape(label) + r":\*\* (.+)$", block,
+                  re.M)
+    if m is None:
+        raise Anchor(f"the frozen PM4 contract no longer carries a "
+                     f"'- **{label}:** ...' line, so its keys cannot be read")
+    return re.findall(r"`([^`]+)`", m.group(1))
+
+
+def returned_answer_keys(fn) -> list:
+    """The dict-literal keys of every answer a route function returns.
+
+    `return 202, {...}` and `return {...}` are both read, by walking the `ast`
+    nodes - the project's own replacement for a source-text pin, so renaming a
+    local or reformatting the function cannot turn this red.
+    """
+    fn_text = textwrap.dedent(inspect.getsource(fn))
+    tree = ast.parse(fn_text)
+    answers = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Return) or node.value is None:
+            continue
+        value = node.value
+        pieces = value.elts if isinstance(value, ast.Tuple) else [value]
+        for piece in pieces:
+            if (isinstance(piece, ast.Dict)
+                    and all(isinstance(k, ast.Constant)
+                            and isinstance(k.value, str) for k in piece.keys)):
+                answers.append({k.value for k in piece.keys})
+    if not answers:
+        raise Anchor(f"no dict-literal answer found in {fn.__name__}")
+    return answers
+
+
+def _pm4_answer() -> dict:
+    """A real plan read and Quick Add from a real store in a temp folder.
+
+    Nothing here touches the owner's `projects.db`, receipts store or audit
+    log: the store is created under `tempfile.mkdtemp()` and removed again, and
+    the framework stub above makes the audit log a no-op. The status change is
+    NOT called for its 200 (that writes a receipt); only its refusals are,
+    which are raised before any write.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-api-doc-"))
+    try:
+        s = P.Projects(tmp / "projects.db")
+        pid = s.create({"name": "Doc probe", "kind": "life"}, here=True)["id"]
+        s.set_plan_fields(pid, {"objective": "the owner's own words",
+                                "success_criteria": "what done looks like",
+                                "status": "active", "target_date": "2026-04-12"})
+        mid = s.add_milestone(pid, {"title": "A milestone"})["id"]
+        first = s.add_work_item(pid, {"title": "A step", "status": "ready",
+                                      "milestone": mid})
+        second = s.add_work_item(pid, {"title": "A blocker", "status": "ready"})
+        s.add_edge("blocks", second["id"], first["id"])
+        code, plan = P.handle_get(f"/api/projects/{pid}/plan", "", store=s)
+        if code != 200:
+            raise Anchor(f"the plan route answers {code} on a real store")
+        add_code, add = P.handle_post(f"/api/projects/{pid}/work_items",
+                                      {"title": "  A typed task  "}, store=s)
+        if add_code != 200:
+            raise Anchor(f"Quick Add answers {add_code} on a real store")
+        blocked = next(i for i in plan["work_items"] if i["id"] == first["id"])
+        gone = "0" * 32
+        item = first["id"]
+        # Every status answer the frozen table names, from the REAL handler.
+        # The two that need a card or a receipt are left to test_projects.py.
+        codes = {
+            "plan": P.handle_get(f"/api/projects/{pid}/plan", "",
+                                 store=s)[0],
+            "plan_unknown": P.handle_get(f"/api/projects/{gone}/plan", "",
+                                         store=s)[0],
+            "plan_post": P.handle_post(f"/api/projects/{pid}/plan", {},
+                                       store=s)[0],
+            "add": add_code,
+            "add_bad_key": P.handle_post(f"/api/projects/{pid}/work_items",
+                                         {"title": "Dated",
+                                          "due_date": "2026-01-01"},
+                                         store=s)[0],
+            "add_unknown": P.handle_post(f"/api/projects/{gone}/work_items",
+                                         {"title": "Nowhere"}, store=s)[0],
+            "add_get": P.handle_get(f"/api/projects/{pid}/work_items", "",
+                                    store=s)[0],
+            "status_get": P.handle_get(
+                f"/api/projects/{pid}/work_items/{item}/status", "",
+                store=s)[0],
+            "status_bad": P.handle_post(
+                f"/api/projects/{pid}/work_items/{item}/status",
+                {"status": "finished"}, store=s)[0],
+            "status_unknown_item": P.handle_post(
+                f"/api/projects/{pid}/work_items/{'a' * 32}/status",
+                {"status": "done"}, store=s)[0],
+            "export_get": P.handle_get(f"/api/projects/{pid}/export", "",
+                                       store=s)[0],
+            "export_unknown": P.handle_post(f"/api/projects/{gone}/export",
+                                            {}, store=s)[0],
+        }
+        return {"plan": plan, "add": add, "blocked": blocked, "codes": codes,
+                "pid": pid}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def t_the_pm4_routes_are_frozen_and_the_build_notes_point_at_them():
+    """Ruling 5.3: one stable FROZEN section owns the four routes, and the two
+    PM4 build notes (88.10, 88.11) point at it instead of standing alone."""
+    doc = text()
+    block = pm4_block()
+    low = block.lower()
+
+    check("the frozen section says it IS the frozen contract",
+          "frozen contract" in low)
+    check("... and names the ruling that froze it", "ruling 5.3" in low)
+    check("... and says a change is written there FIRST, not in the code",
+          "written in this section first" in low)
+    check("... and says sections 88.10/88.11 are now the build record",
+          "build record" in low)
+
+    head = "| Route | Method | Called by | Card |"
+    if head not in block:
+        raise Anchor("the frozen PM4 contract no longer opens with its "
+                     "'| Route | Method | Called by | Card |' table")
+    rows = table_rows(block[block.index(head):], "the frozen PM4 at-a-glance table")
+    got = [(r[0].strip("`"), r[1].strip("`")) for r in rows]
+    check("the frozen section lists exactly the four routes with their methods",
+          got == [(route, method) for route, _key, method, _kind in PM4_ROUTES],
+          got)
+    by_route = {r[0].strip("`"): r for r in rows}
+    for route, _key, _method, kind in PM4_ROUTES:
+        row = by_route.get(route)
+        check(f"{route} is in the frozen at-a-glance table", row is not None)
+        if row is None:
+            continue
+        card = row[3].lower()
+        if kind == "deliberate":
+            check(f"{route} names the ONE notes-editor card it raises",
+                  "edit_vault_note" in card, row[3])
+        else:
+            check(f"{route} is recorded as cardless", card.startswith("none"), row[3])
+    for phrase, what in (
+            ("read-only", "the plan read is read-only"),
+            ("cardless", "the two writes are cardless"),
+            ("owner-direct", "the two writes are the owner's own"),
+            ("stale link", "both apps hold the writes on a stale link (rule 4)"),
+            ("gate action", "no route adds a gate action"),
+            ("new permission", "no route adds a permission"),
+            ("creates `projects.db`", "the read never creates projects.db"),
+            ("edit_vault_note` card", "the export raises the notes editor's card"),
+            ("never read back", "the hub note is one-way"),
+    ):
+        check(f"the frozen contract says {what}", phrase in low)
+
+    build10 = section(doc, "### 88.10 ", "### 88.11 ", "section 88.10")
+    build11 = section(doc, "### 88.11 ", PM4_HEADING, "section 88.11")
+    check("section 88.10 points at the frozen contract", "88.12" in build10)
+    check("section 88.11 points at the frozen contract", "88.12" in build11)
+    check("section 88.10 no longer calls the work-item states 'five'",
+          "five states" not in build10 and "outside the five" not in build10)
+
+
+def t_the_pm4_plan_read_keys_are_the_codes_own():
+    """The frozen plan read's key lists are the REAL answer's keys, not a
+    remembered list: the check builds a real store and reads the route."""
+    block = pm4_block()
+    answer = _pm4_answer()
+    plan = answer["plan"]
+    documented = {
+        "top-level keys": set(key_line(block, "top-level keys")),
+        "counts keys": set(key_line(block, "counts keys")),
+        "milestone keys": set(key_line(block, "milestone keys")),
+        "work item keys": set(key_line(block, "work item keys")),
+        "blocked_by keys": set(key_line(block, "blocked_by keys")),
+        "event keys": set(key_line(block, "event keys")),
+    }
+    real = {
+        "top-level keys": set(plan),
+        "counts keys": set(plan["counts"]),
+        "milestone keys": set(plan["milestones"][0]),
+        "work item keys": set(plan["work_items"][0]),
+        "blocked_by keys": set(answer["blocked"]["blocked_by"][0]),
+        "event keys": set(plan["events"][0]),
+    }
+    for label in documented:
+        check(f"the frozen plan read's {label} are exactly the answer's keys",
+              documented[label] == real[label],
+              f"document {sorted(documented[label])}\n        code     {sorted(real[label])}")
+    check("a blocked item in the real answer names its blocker",
+          answer["blocked"]["blocked_by"],
+          "the probe store must really have an open blocking edge")
+    check("... so the blocked_by key list above is measured, not empty",
+          answer["blocked"]["blocked_by"] != [])
+
+
+def t_the_pm4_requests_and_status_lists_are_the_codes_own():
+    """The frozen request keys, state lists and status codes are the code's."""
+    block = pm4_block()
+    answer = _pm4_answer()
+    codes = answer["codes"]
+
+    check("Quick Add's frozen request takes exactly title",
+          key_line(block, "add request keys") == ["title"])
+    check("... and the store's own door accepts exactly that one key",
+          set(P.APP_ADD_FIELDS) == {"title"}, sorted(P.APP_ADD_FIELDS))
+    check("the status tap's frozen request takes exactly status",
+          key_line(block, "status request keys") == ["status"])
+    check("the frozen work-item states are the store's seven, in its order",
+          key_line(block, "work-item statuses") == list(P.WORK_STATUSES),
+          f"document {key_line(block, 'work-item statuses')}\n"
+          f"        code     {list(P.WORK_STATUSES)}")
+    check("the frozen project states are the store's five, in its order",
+          key_line(block, "project statuses") == list(P.PROJECT_STATUSES),
+          f"document {key_line(block, 'project statuses')}\n"
+          f"        code     {list(P.PROJECT_STATUSES)}")
+    check("the frozen executor values are the store's four",
+          key_line(block, "executor values") == list(P.EXECUTORS),
+          f"document {key_line(block, 'executor values')}\n"
+          f"        code     {list(P.EXECUTORS)}")
+    check("the ready list's frozen cap is PLAN_READY_MAX",
+          str(P.PLAN_READY_MAX) in block and "capped at" in block.lower())
+    check("the event window's frozen bound is PLAN_EVENTS_MAX",
+          str(P.PLAN_EVENTS_MAX) in block)
+    check("the export's frozen request reads no body field",
+          "no body field is read" in block.lower())
+
+    head = "| Route | Success | Bad request | Not found | Wrong method |"
+    if head not in block:
+        raise Anchor("the frozen PM4 contract no longer carries its "
+                     "'| Route | Success | Bad request | Not found | Wrong method |' "
+                     "status table")
+    rows = table_rows(block[block.index(head):], "the frozen PM4 status table")
+    documented = {}
+    for row in rows:
+        route = row[0].strip("`")
+        documented[route] = set(re.findall(r"`(\d{3})`", " | ".join(row[1:])))
+    check("the frozen status table lists exactly the four routes",
+          set(documented) == set(PM4_STATUS_CODES), sorted(documented))
+    for route, wanted in PM4_STATUS_CODES.items():
+        check(f"{route}'s frozen status codes are {sorted(wanted)}",
+              documented.get(route) == wanted, documented.get(route))
+
+    # The real handler answers every documented code except the card/receipt
+    # two; the codes below ARE the ones each situation answers.
+    check("the plan read answers 200 on a real store", codes["plan"] == 200, codes)
+    for name, wanted in (
+            ("plan_unknown", 404), ("plan_post", 404),
+            ("add", 200), ("add_bad_key", 400), ("add_unknown", 404),
+            ("add_get", 405), ("status_get", 405), ("status_bad", 400),
+            ("status_unknown_item", 404), ("export_get", 405),
+            ("export_unknown", 404)):
+        check(f"the real route answers {wanted} where the frozen table says "
+              f"{wanted} ({name})", codes[name] == wanted, codes[name])
+
+
+def t_the_pm4_write_and_export_answers_are_the_codes_own():
+    """The frozen answer keys are the keys the code really builds."""
+    block = pm4_block()
+    answer = _pm4_answer()
+    check("the frozen add answer keys are the real Quick Add answer's",
+          set(key_line(block, "add answer keys")) == set(answer["add"]),
+          f"document {key_line(block, 'add answer keys')}\n"
+          f"        code     {sorted(answer['add'])}")
+    check("... and its frozen message is the real one",
+          'Added "<the title>".' in block)
+    check("... and the real answer really says it",
+          answer["add"]["message"] == 'Added "A typed task".',
+          answer["add"]["message"])
+
+    status_answers = returned_answer_keys(P.change_work_item_status)
+    check("the status route builds exactly ONE answer", len(status_answers) == 1)
+    check("the frozen status answer keys are that answer's keys",
+          len(status_answers) == 1
+          and set(key_line(block, "status answer keys")) == status_answers[0],
+          f"document {key_line(block, 'status answer keys')}\n"
+          f"        code     {sorted(status_answers[0]) if status_answers else None}")
+
+    export_answers = returned_answer_keys(P.request_export_hub)
+    check("the export route builds three answers: waiting, saved, refused",
+          len(export_answers) == 3, export_answers)
+    if len(export_answers) == 3:
+        common = set.intersection(*export_answers)
+        extra = set.union(*export_answers) - common
+        check("every frozen export answer key is on all three answers",
+              set(key_line(block, "export answer keys")) == common,
+              f"document {sorted(key_line(block, 'export answer keys'))}\n"
+              f"        code     {sorted(common)}")
+        check("... and only the refused answer adds the frozen `error` key",
+              extra == {"error"}
+              and sum("error" in a for a in export_answers) == 1,
+              (sorted(extra), sum("error" in a for a in export_answers)))
+
+
+def _parity_module():
+    """`tools/check_parity.py` loaded from the tree - the same existing path
+    `backend/test_creator_mode.py` uses to read a CLASSIFICATION entry."""
+    spec = importlib.util.spec_from_file_location("pm4_check_parity",
+                                                  REPO / "tools" / "check_parity.py")
+    if spec is None or spec.loader is None:
+        raise Anchor("tools/check_parity.py cannot be loaded")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def t_the_pm4_parity_classification_is_frozen():
+    """`tools/check_parity.py`: the shared three stay `ported`, the export stays
+    `deliberate`, and every reason names the frozen contract (ruling 5.3)."""
+    mod = _parity_module()
+    for route, key, _method, kind in PM4_ROUTES:
+        entry = mod.CLASSIFICATION.get(key)
+        check(f"{route} is classified in tools/check_parity.py",
+              entry is not None, key)
+        if entry is None:
+            continue
+        status, why = entry
+        check(f"{route} stays {kind!r} - the freeze does not move it",
+              status == kind, status)
+        check(f"{route}'s reason is written down", len(why) > 80, len(why))
+        low = why.lower()
+        check(f"{route}'s reason names the frozen section, 88.12",
+              "88.12" in why, why[:160])
+        check(f"{route}'s reason says it is frozen", "frozen" in low, why[:160])
+        if kind == "ported":
+            check(f"{route}'s reason says BOTH apps call it",
+                  "both apps" in low, why[:160])
+        else:
+            check(f"{route}'s reason says why the phone deliberately has none",
+                  "phone" in low and "deliberate" in low, why[:160])
+
+
 # ------------------------------------- "not in this repository", the family
 
 #: Modules this check holds the document to. Every one of them is in the
@@ -392,6 +791,11 @@ def main():
                t_a_plain_repeat_really_needs_no_card,
                t_the_two_snooze_windows_are_the_two_constants,
                t_the_limits_table_matches_the_code,
+               t_the_pm4_routes_are_frozen_and_the_build_notes_point_at_them,
+               t_the_pm4_plan_read_keys_are_the_codes_own,
+               t_the_pm4_requests_and_status_lists_are_the_codes_own,
+               t_the_pm4_write_and_export_answers_are_the_codes_own,
+               t_the_pm4_parity_classification_is_frozen,
                t_nothing_held_here_is_called_absent):
         print(f"\n--- {fn.__name__} ---")
         try:
