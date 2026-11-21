@@ -121,6 +121,15 @@ anything tries):
     date is ever invented; and the hub note is refreshed from the store, never
     read back, with the bridge state in it. The Run Step DISPATCH is
     deliberately deferred - see the decisions fragment and ARCHITECTURE §8;
+  - PM4 (2026-11-21, desktop half; docs/JARVIS-API.md section 88.11):
+    `POST /api/projects/<id>/export` is the desktop's one-click door to the
+    EXISTING hub note - it raises the notes editor's ONE `edit_vault_note`
+    card (never a new class), answers 202 while that card is still waiting and
+    200 with the note's path and the editor's own undo receipt once it ended,
+    writes not one byte and takes no File Guardian copy when the card says no,
+    leaves no file behind for a refused brand-new note, and answers an unknown
+    project with the store's own 404. GET on the route is 405 and no second
+    route is added;
   - the routes, install() and the patch on the stack of earlier patches;
   - the audit log never carries a name, a note or a number.
 
@@ -4703,6 +4712,153 @@ def t_pm3_the_hub_export_stays_one_way_and_carries_the_bridge():
             os.environ["JARVIS_OBSIDIAN_VAULT"] = old_vault
         _pm2_unuse(old_env)
         _pm3_github_off(GH, old_token)
+
+
+def t_pm4_the_export_route_is_the_one_existing_card():
+    """PM4 (2026-11-21, desktop half). `POST /api/projects/<id>/export` is the
+    desktop's one-click door to the EXISTING hub note: it calls the same
+    `export_hub()`, so the only thing that can allow the write is the notes
+    editor's ONE `edit_vault_note` card (no new card class, no second writer).
+    202 while that card waits; 200 with the note's path and the editor's own
+    receipt when it ended; a NO writes not one byte and takes no File Guardian
+    copy; an unknown project is the store's own 404. One route is added, POST
+    only."""
+    import hashlib
+    import time as _time
+
+    class _SlowDenyGate:
+        """A card that is still up when the route's wait ends: 202, then no."""
+
+        def __init__(self, delay=0.4):
+            self.delay = delay
+            self.calls = []
+
+        def __call__(self, action, detail, prompt):
+            self.calls.append((action, dict(detail or {}), str(prompt or "")))
+            _time.sleep(self.delay)
+            return _PmVerdict(False, "denied", "ask")
+
+    s, project, other = _pm2_owner_store()
+    s.set_plan_fields(project["id"], {"objective": "Ship the door"})
+    s.add_milestone(project["id"], {"title": "Stage one"})
+    pid = project["id"]
+    old_env = _pm2_use(s)
+    old_vault = os.environ.get("JARVIS_OBSIDIAN_VAULT")
+    os.environ["JARVIS_OBSIDIAN_VAULT"] = str(_PM2_VAULT)
+    note_path = _PM2_VAULT / "Projects" / "Site.md"
+    other_path = _PM2_VAULT / "Projects" / "Tool.md"
+    try:
+        for path in (note_path, other_path):
+            if path.is_file():
+                path.unlink()
+        # ---- the one route, POST only ----
+        check("the export route is in the project store's route table",
+              P.parse_route(f"/api/projects/{pid}/export") == ("export", pid)
+              and P.parse_route(f"/api/projects/{pid}/export/more") is None
+              and P.parse_route(f"/api/projects/{pid}/export_once") is None,
+              P.parse_route(f"/api/projects/{pid}/export"))
+        code, said = P.handle_get(f"/api/projects/{pid}/export", store=s)
+        check("... and it is POST only", code == 405, (code, said))
+        events_before, counts_before = len(s.events()), s.plan_counts()
+
+        # ---- accept a BRAND-NEW note: the editor's ONE card, then the file ----
+        cards = _PmChecker()
+        code, body = P.request_export_hub(pid, store=s, gate_check=cards, wait_s=10.0)
+        check("the export route raises exactly ONE notes-editor card",
+              len(cards.calls) == 1 and cards.calls[0][0] == "edit_vault_note",
+              cards.calls[:1])
+        check("... whose card names the note it will write",
+              cards.calls and "Projects/Site.md" in cards.calls[0][2],
+              cards.calls[:1])
+        check("... a YES answers 200 saved with the hub note's path and the "
+              "editor's own undo receipt",
+              code == 200 and body.get("ok") is True and body.get("state") == "saved"
+              and body.get("path") == "Projects/Site.md"
+              and body.get("created") is True and bool(body.get("receipt"))
+              and note_path.is_file(), (code, body))
+        text = note_path.read_text(encoding="utf-8") if note_path.is_file() else ""
+        check("... and the note it wrote is the one-way hub note",
+              P.HUB_NOTE_WORDS in text and "Stage one" in text, text[:300])
+        check("... the project store itself is NOT changed by an export",
+              s.plan_counts() == counts_before and len(s.events()) == events_before,
+              (s.plan_counts(), counts_before))
+
+        # ---- replace an existing note: the Guardian copy comes FIRST ----
+        try:
+            import jarvis_file_guardian as GU
+            before_rows = len(GU.rows())
+            guardian = True
+        except Exception:                                 # noqa: BLE001
+            GU = None
+            before_rows = 0
+            guardian = False
+        old_bytes = note_path.read_bytes() if note_path.is_file() else b""
+        s.add_work_item(pid, {"title": "A step the second note carries"})
+        cards2 = _PmChecker()
+        code2, body2 = P.request_export_hub(pid, store=s, gate_check=cards2, wait_s=10.0)
+        text2 = note_path.read_text(encoding="utf-8") if note_path.is_file() else ""
+        check("a second export asks its ONE card again and replaces the note",
+              len(cards2.calls) == 1 and cards2.calls[0][0] == "edit_vault_note"
+              and code2 == 200 and body2.get("replaced") is True
+              and "A step the second note carries" in text2, (code2, body2))
+        if guardian:
+            rows = GU.rows()
+            check("... the File Guardian copied the OLD note before the write",
+                  len(rows) == before_rows + 1
+                  and str(rows[-1].get("path", "")).endswith("Site.md")
+                  and rows[-1].get("before_sha256")
+                  == hashlib.sha256(old_bytes).hexdigest(),
+                  (len(rows), before_rows, rows[-1:]))
+        else:
+            skip("the File Guardian is not in this tree, so its copy was not proved")
+
+        # ---- NO on a replacement: zero bytes, no copy ----
+        good_bytes = note_path.read_bytes() if note_path.is_file() else b""
+        rows_before_no = len(GU.rows()) if guardian else 0
+        no = _PmChecker(allowed=False, outcome="denied")
+        code3, body3 = P.request_export_hub(pid, store=s, gate_check=no, wait_s=10.0)
+        check("a NO card answers with the notes editor's own words",
+              code3 == 200 and body3.get("ok") is False
+              and body3.get("state") == "denied"
+              and body3.get("error") == "You said no, so the note was not changed.",
+              (code3, body3))
+        check("... and writes not one byte",
+              (note_path.read_bytes() if note_path.is_file() else b"") == good_bytes)
+        if guardian:
+            check("... and takes no File Guardian copy",
+                  len(GU.rows()) == rows_before_no, (len(GU.rows()), rows_before_no))
+
+        # ---- NO on a BRAND-NEW note: no file at all ----
+        no2 = _PmChecker(allowed=False, outcome="denied")
+        code4, body4 = P.request_export_hub(other["id"], store=s, gate_check=no2, wait_s=10.0)
+        check("a refused brand-new note leaves no file behind",
+              code4 == 200 and body4.get("ok") is False and not other_path.is_file(),
+              (code4, body4, other_path.is_file()))
+
+        # ---- a card still waiting: 202, the waiting words, nothing written yet ----
+        slow = _SlowDenyGate()
+        code5, body5 = P.request_export_hub(pid, store=s, gate_check=slow, wait_s=0.01)
+        check("a card still waiting answers 202 with the waiting words",
+              code5 == 202 and body5.get("waiting") is True
+              and "Waiting for your approval" in str(body5.get("message")),
+              (code5, body5))
+        check("... and the waiting answer names the notes-editor job",
+              bool(body5.get("job")), body5)
+        _time.sleep(1.0)                          # let the slow worker finish
+
+        # ---- an unknown project: the store's own 404, no card ----
+        gone = "0" * 32
+        code6, body6 = P.handle_post(f"/api/projects/{gone}/export", {}, store=s)
+        check("an unknown project is the store's own 404 in words",
+              code6 == 404 and body6.get("ok") is False
+              and body6.get("error") == "no such project, benchmark or number",
+              (code6, body6))
+    finally:
+        if old_vault is None:
+            os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+        else:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = old_vault
+        _pm2_unuse(old_env)
 
 
 def t_pm4_the_plan_read_is_the_one_read_the_screens_use():

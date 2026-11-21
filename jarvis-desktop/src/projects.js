@@ -141,6 +141,118 @@ export const APP_WORDS = {
   open_tasks_meta: "{count} open",
 };
 
+/**
+ * The plan board's own words (PM4, 2026-11-21): the four Kanban columns, the
+ * Ready List, the milestone bar, the blocker badges, the card's detail and the
+ * one-click hub note. Kept apart from [`WORDS`] on purpose, and for the same
+ * reason [`APP_WORDS`] is: WORDS is the phone's frozen step-3 contract, word
+ * for word (tools/gen_projects_cases.py), and this board is the desktop's
+ * first reader of a route the phone PR adds in the same wave
+ * (docs/ARCHITECTURE.md section 8 says which half is deliberately one-sided).
+ * `{name}` and friends are filled in by [`fill`].
+ */
+export const PLAN_WORDS = {
+  board: "Project plan",
+  project: "Project",
+  all_projects: "All projects",
+  under: "The plan Jarvis keeps for this project: the steps that are ready now, every step by its stage, the milestones, and the activity log. Read from your PC; nothing here is guessed.",
+  missing: "Your PC's Jarvis cannot show a project's plan yet - update it by running apply-patches.ps1 on the PC.",
+  hidden: "The plan is hidden until Windows Hello confirms it is you.",
+  reading: "Reading the plan…",
+  export: "Export hub note to Obsidian",
+  export_title: "Writes one read-only copy of this project into your Obsidian vault. It asks you with one approval card first, and no benchmark number ever goes into the note.",
+  export_missing: "Your PC's Jarvis cannot write a project's hub note yet - update it by running apply-patches.ps1 on the PC.",
+  export_waiting: "Waiting for your approval card.",
+  export_more: "The note is rebuilt from this project every time, and it is never read back.",
+  ready: "Ready now",
+  ready_under: "The steps that can be started now, in the order your PC keeps them.",
+  ready_empty: "Nothing is ready to start right now.",
+  ready_more: "{count} more ready steps are not shown here - switch to the full plan to see them.",
+  ready_open: "Open ready item: {title}",
+  milestones: "Milestones",
+  milestones_empty: "No milestones yet.",
+  progress: "Milestone progress",
+  progress_work: "{done} of {total} work items done",
+  progress_milestones: "{done} of {total} milestones done",
+  progress_none: "No work items yet.",
+  milestone_work: "{done} of {total}",
+  column_planning: "Planning",
+  column_progress: "In Progress",
+  column_review: "In Review / Waiting",
+  column_done: "Done",
+  column_empty: "Nothing here.",
+  item_open: "Open work item: {title}",
+  blocked_by: "Blocked by {names}",
+  blocked_by_one: "Blocked by {name}",
+  milestone: "Milestone: {name}",
+  due: "Due {date}",
+  objective: "Objective",
+  objective_none: "No objective is set for this project yet.",
+  success: "Done looks like",
+  waiting_on: "Waiting on",
+  waiting_none: "No blockers are recorded for this card.",
+  blocks: "Blocks",
+  blocks_none: "Nothing is recorded as waiting on this card.",
+  linked: "Linked pull request or note",
+  linked_none: "No pull request or note is linked yet.",
+  linked_pr: "Pull request #{number} - {state}{checks}",
+  linked_checks: ", {words}",
+  linked_note: "Note: {path}",
+  linked_repo: "Repository: {repo}",
+  activity: "Activity",
+  activity_none: "Nothing is recorded for this card yet.",
+  moves: "Move this card to",
+  move_start: "Start it",
+  move_review: "In review",
+  move_done: "Done",
+  move_reopen: "Reopen",
+  moved: "Moved.",
+  move_refused: "The PC refused the move.",
+  add_item: "Add a work item",
+  add_title: "A new work item",
+  add_empty: "Give the work item a title.",
+  add_long: "A work item title is at most 120 characters.",
+  added: "Added.",
+  close: "Close",
+  status_backlog: "Planning",
+  status_ready: "Ready",
+  status_in_progress: "In progress",
+  status_waiting_approval: "Waiting for approval",
+  status_in_review: "In review",
+  status_done: "Done",
+  status_cancelled: "Cancelled",
+  milestone_planned: "Planned",
+  milestone_active: "In progress",
+  milestone_done: "Done",
+  pr_open: "open",
+  pr_merged: "merged",
+  pr_closed: "closed",
+  ci_green: "checks green",
+  ci_running: "checks running",
+  ci_failed: "checks failed",
+  ci_unknown: "checks unknown",
+  executor: "Who does it: {who}",
+  executor_owner: "you",
+  executor_jarvis_local: "Jarvis, on this PC",
+  executor_jarvis_cloud: "Jarvis, in the cloud",
+  executor_jarvis_job: "a Jarvis job",
+};
+
+/** What each kind of `project_events` row is, in words (an unknown kind shows its own name). */
+export const PLAN_EVENT_WORDS = {
+  work_item_added: "Work item added",
+  work_item_status: "Status changed",
+  milestone_added: "Milestone added",
+  project_plan_changed: "Project fields changed",
+  edge_added: "Dependency added",
+  work_item_link: "Linked to a job or pull request",
+  pr_synced: "Pull request read",
+  pr_merged_offer: "Pull request merged - offered as done",
+  plan_seeded: "Imported from goals and work lists",
+  checkpoint: "Checkpoint",
+  reflection: "Reflection",
+};
+
 /** `{name}` and friends filled in. */
 export function fill(template, values) {
   return String(template).replace(/\{(\w+)\}/g, (m, k) =>
@@ -667,4 +779,339 @@ export function shortDate(at) {
   const d = new Date(Number(at) * 1000);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/* ── The plan board (PM4, 2026-11-21) ──────────────────────────────────────
+ * `GET /api/projects/<id>/plan` - one project's plan, read from its own store
+ * on the PC. The route is the phone PR's (see docs/ARCHITECTURE.md section 8);
+ * this page reads it and never names it: the Rust command does.
+ *
+ * The four columns and the statuses each one holds. Every status the store
+ * knows is in exactly one column, so no card is shown twice and none is
+ * dropped; an unknown status still appears, in Planning, rather than being
+ * hidden because this page did not recognise one word.
+ */
+
+export const PLAN_COLUMNS = Object.freeze([
+  Object.freeze({ id: "planning", statuses: Object.freeze(["backlog", "ready"]) }),
+  Object.freeze({ id: "progress", statuses: Object.freeze(["in_progress"]) }),
+  Object.freeze({ id: "review", statuses: Object.freeze(["waiting_approval", "in_review"]) }),
+  Object.freeze({ id: "done", statuses: Object.freeze(["done", "cancelled"]) }),
+]);
+
+/** Every work-item status the plan store has (backend jarvis_projects.WORK_STATUSES). */
+export const WORK_STATUSES = Object.freeze([
+  "backlog", "ready", "in_progress", "waiting_approval", "in_review", "done", "cancelled"]);
+
+/** Which of the four columns one status is shown in. */
+export function columnOf(status) {
+  const s = text(status);
+  for (const col of PLAN_COLUMNS) {
+    if (col.statuses.includes(s)) return col.id;
+  }
+  return "planning";
+}
+
+/** "Planning", "In progress", ... for one status; an unknown word is shown as itself. */
+export function statusWords(status) {
+  const s = text(status);
+  return PLAN_WORDS[`status_${s}`] || s;
+}
+
+/** "Planned", "In progress", "Done" for one milestone. */
+export function milestoneStatusWords(status) {
+  const s = text(status);
+  return PLAN_WORDS[`milestone_${s}`] || s;
+}
+
+function whole(v) {
+  return Number.isInteger(v) && v >= 0 ? v : 0;
+}
+
+/** The empty plan, so calling code never tests for null. */
+function emptyPlan() {
+  return {
+    available: true,
+    hidden: false,
+    why: "",
+    id: "",
+    objective: "",
+    successCriteria: "",
+    status: "",
+    targetDate: "",
+    linkedRepo: "",
+    linkedNotePath: "",
+    slug: "",
+    counts: { milestones: 0, workItems: 0, ready: 0, blocked: 0, edges: 0, events: 0 },
+    milestones: [],
+    items: [],
+    ready: [],
+    events: [],
+  };
+}
+
+/** One work item, from the plan route's own shape. Nothing is trusted. */
+export function readWorkItem(w) {
+  const o = w && typeof w === "object" ? w : {};
+  const blockedBy = Array.isArray(o.blocked_by)
+    ? o.blocked_by.filter((b) => b && text(b.title)).map((b) => ({
+      id: text(b.id), title: text(b.title), status: text(b.status) }))
+    : [];
+  return {
+    id: text(o.id),
+    project: text(o.project),
+    milestone: text(o.milestone),
+    title: text(o.title),
+    detail: text(o.detail),
+    status: text(o.status),
+    priority: num(o.priority),
+    dueDate: text(o.due_date),
+    created: num(o.created),
+    changed: num(o.changed),
+    blockedBy,
+    ready: o.ready === true,
+    executor: text(o.executor) || "owner",
+    linkedTaskId: text(o.linked_task_id),
+    linkedPrNumber: num(o.linked_pr_number),
+    linkedPrState: text(o.linked_pr_state),
+    linkedCiStatus: text(o.linked_ci_status),
+  };
+}
+
+/** One milestone, with its own work-item counts when the route sends them. */
+export function readMilestone(m) {
+  const o = m && typeof m === "object" ? m : {};
+  const c = o.counts && typeof o.counts === "object" ? o.counts : {};
+  return {
+    id: text(o.id),
+    title: text(o.title),
+    status: text(o.status),
+    dueDate: text(o.due_date),
+    position: num(o.position),
+    counts: { workItems: whole(c.work_items), done: whole(c.done) },
+  };
+}
+
+/** One event row (project_events is append-only; this page only reads it). */
+export function readEvent(e) {
+  const o = e && typeof e === "object" ? e : {};
+  return {
+    id: text(o.id),
+    at: num(o.at),
+    kind: text(o.kind),
+    subject: text(o.subject),
+    detail: o.detail && typeof o.detail === "object" ? o.detail : {},
+  };
+}
+
+/**
+ * `GET /api/projects/<id>/plan`, read. `available: false` with the PC's own
+ * sentence for a PC without the route; `hidden: true` while the private lists
+ * are hidden (Rust took the plan out). A route answer wrapped in `plan` is
+ * accepted too, so a backend that wraps it does not break this page.
+ */
+export function readPlan(answer) {
+  const empty = emptyPlan();
+  if (!answer || typeof answer !== "object") {
+    return { ...empty, available: false, why: PLAN_WORDS.missing };
+  }
+  if (answer.hidden === true) {
+    return { ...empty, hidden: true, why: PLAN_WORDS.hidden };
+  }
+  if (answer.available === false) {
+    return { ...empty, available: false, why: text(answer.why) || PLAN_WORDS.missing };
+  }
+  const o = answer.plan && typeof answer.plan === "object" ? answer.plan : answer;
+  const counts = o.counts && typeof o.counts === "object" ? o.counts : {};
+  const milestones = Array.isArray(o.milestones) ? o.milestones.map(readMilestone) : [];
+  const items = Array.isArray(o.work_items) ? o.work_items.map(readWorkItem) : [];
+  return {
+    ...empty,
+    id: text(o.id) || text(o.project),
+    objective: text(o.objective),
+    successCriteria: text(o.success_criteria),
+    status: text(o.status),
+    targetDate: text(o.target_date),
+    linkedRepo: text(o.linked_repo),
+    linkedNotePath: text(o.linked_note_path),
+    slug: text(o.slug),
+    counts: {
+      milestones: whole(counts.milestones) || milestones.length,
+      workItems: whole(counts.work_items) || items.length,
+      ready: whole(counts.ready),
+      blocked: whole(counts.blocked),
+      edges: whole(counts.edges),
+      events: whole(counts.events),
+    },
+    milestones,
+    items,
+    ready: Array.isArray(o.ready) ? o.ready.filter((id) => text(id)).map(text) : [],
+    events: Array.isArray(o.events) ? o.events.map(readEvent) : [],
+  };
+}
+
+/** True when a plan has nothing to draw (a project with no plan rows yet). */
+export function planEmpty(plan) {
+  return !plan || (!plan.milestones.length && !plan.items.length && !plan.events.length
+    && !plan.objective && !plan.successCriteria);
+}
+
+/** The work items in each of the four columns, in the route's own order. */
+export function planColumns(plan) {
+  const items = (plan && plan.items) || [];
+  const out = {};
+  for (const col of PLAN_COLUMNS) out[col.id] = [];
+  for (const item of items) {
+    const col = columnOf(item.status);
+    out[col].push(item);
+  }
+  return out;
+}
+
+/** The Ready List: exactly the ids the route returned, in its order. */
+export function readyItems(plan) {
+  const byId = new Map(((plan && plan.items) || []).map((i) => [i.id, i]));
+  return ((plan && plan.ready) || []).map((id) => byId.get(id)).filter(Boolean);
+}
+
+/** "Waiting on" names for one card, from the blockers the route sent. */
+export function blockerNames(item) {
+  return ((item && item.blockedBy) || []).map((b) => b.title).filter(Boolean);
+}
+
+/** The blocker badge's words for one card, or "" when nothing blocks it. */
+export function blockerWords(item) {
+  const names = blockerNames(item);
+  if (!names.length) return "";
+  return fill(names.length === 1 ? PLAN_WORDS.blocked_by_one : PLAN_WORDS.blocked_by,
+    { name: names[0], names: names.join(", ") });
+}
+
+/** The work items another card is recorded as waiting on (the reverse link). */
+export function blocksItems(plan, itemId) {
+  return ((plan && plan.items) || []).filter((other) =>
+    other.id !== itemId && other.blockedBy.some((b) => b.id === itemId));
+}
+
+/** The milestone of one item, or null. */
+export function itemMilestone(plan, item) {
+  if (!item || !item.milestone) return null;
+  return ((plan && plan.milestones) || []).find((m) => m.id === item.milestone) || null;
+}
+
+/**
+ * The project's progress, from the route's real counts: work items done out of
+ * all work items, and milestones done out of all milestones. `percent` is the
+ * bar's share - of the milestones when the project has any (the bar is the
+ * design's "Milestone progress bar"), otherwise of the work items - rounded
+ * down, so the bar never claims more than is done.
+ */
+export function milestoneProgress(plan) {
+  const p = plan || {};
+  const items = p.items || [];
+  const milestones = p.milestones || [];
+  const total = p.counts && p.counts.workItems ? p.counts.workItems : items.length;
+  const done = items.filter((i) => i.status === "done").length;
+  const milestoneDone = milestones.filter((m) => m.status === "done").length;
+  const workPercent = total ? Math.floor((done / total) * 100) : 0;
+  const milestonePercent = milestones.length
+    ? Math.floor((milestoneDone / milestones.length) * 100) : null;
+  return {
+    workDone: done,
+    workTotal: total,
+    milestoneDone,
+    milestoneTotal: milestones.length,
+    workPercent,
+    milestonePercent,
+    percent: milestonePercent === null ? workPercent : milestonePercent,
+  };
+}
+
+/** One row per milestone: its own counts (the route's, or counted from the items). */
+export function milestoneRows(plan) {
+  const p = plan || {};
+  const items = p.items || [];
+  return (p.milestones || []).map((m) => {
+    const own = items.filter((i) => i.milestone === m.id);
+    const fromItems = own.filter((i) => i.status === "done").length;
+    const sent = m.counts.workItems > 0 || m.counts.done > 0;
+    const done = sent ? m.counts.done : fromItems;
+    const total = m.counts.workItems || own.length;
+    return { ...m, workDone: done, workTotal: total,
+      percent: total ? Math.floor((done / total) * 100) : 0 };
+  });
+}
+
+/** "Pull request #12 - merged, checks green", or "" when none is linked. */
+export function linkedPrWords(item) {
+  const n = num(item && item.linkedPrNumber);
+  if (n === null) return "";
+  const state = PLAN_WORDS[`pr_${text(item.linkedPrState)}`] || text(item.linkedPrState)
+    || PLAN_WORDS.pr_open;
+  const ci = text(item.linkedCiStatus);
+  const checks = ci ? fill(PLAN_WORDS.linked_checks, {
+    words: PLAN_WORDS[`ci_${ci}`] || ci }) : "";
+  return fill(PLAN_WORDS.linked_pr, { number: numberWords(n), state, checks });
+}
+
+/** "Who does it: Jarvis, on this PC" for one card. */
+export function executorWords(item) {
+  const executor = text(item && item.executor) || "owner";
+  return fill(PLAN_WORDS.executor,
+    { who: PLAN_WORDS[`executor_${executor}`] || executor });
+}
+
+/**
+ * One `project_events` row in words, with the id `subject` resolved to the
+ * work item's or milestone's own title. An unknown kind shows its own name
+ * rather than an invented one.
+ */
+export function eventWords(event, plan) {
+  const e = event && typeof event === "object" ? event : {};
+  const kind = text(e.kind);
+  const label = PLAN_EVENT_WORDS[kind] || kind || "Activity";
+  const detail = e.detail && typeof e.detail === "object" ? e.detail : {};
+  const subject = text(e.subject);
+  let subjectWords = "";
+  for (const item of ((plan && plan.items) || [])) {
+    if (item.id === subject) subjectWords = item.title;
+  }
+  for (const milestone of ((plan && plan.milestones) || [])) {
+    if (milestone.id === subject && !subjectWords) subjectWords = milestone.title;
+  }
+  let extra = "";
+  if (detail.from !== undefined && detail.to !== undefined) {
+    extra = `${statusWords(detail.from)} → ${statusWords(detail.to)}`;
+  } else if (typeof detail.text === "string") {
+    extra = detail.text;
+  } else if (detail.status !== undefined) {
+    extra = statusWords(detail.status);
+  }
+  return { kind, label, subject: subjectWords, extra, at: num(e.at) };
+}
+
+/** The events recorded for one card, newest first (the route sends newest first). */
+export function itemEvents(plan, itemId) {
+  return ((plan && plan.events) || []).filter((e) => e.subject === itemId);
+}
+
+/**
+ * The status moves this page offers for one card, through the store's own
+ * existing status path (the phone half's route: one event and one Undo
+ * receipt). Nothing here changes a status by itself: the PC decides, refuses a
+ * blocked item in its own words, and the page re-reads after every move.
+ */
+export function statusMoves(item) {
+  const status = text(item && item.status);
+  const closed = status === "done" || status === "cancelled";
+  if (closed) return [{ status: "backlog", label: PLAN_WORDS.move_reopen }];
+  const moves = [];
+  if (status === "backlog" || status === "ready") {
+    moves.push({ status: "in_progress", label: PLAN_WORDS.move_start });
+  }
+  if (status === "in_progress" || status === "waiting_approval") {
+    moves.push({ status: "in_review", label: PLAN_WORDS.move_review });
+  }
+  moves.push({ status: "done", label: PLAN_WORDS.move_done });
+  return moves;
 }

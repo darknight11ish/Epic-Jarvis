@@ -781,6 +781,10 @@ CLASSIFICATION = {
     "/api/projects/{id}": ("ported", "One project: read it (GET) or change what the owner typed (POST) - instructions, notes, and clearing the folder. Both apps; choosing the folder is the desktop's (the Windows picker, projects_choose_folder)."),
     "/api/projects/{id}/delete": ("ported", "Delete one project after \"are you sure?\". Both apps."),
     "/api/projects/{id}/shareable": ("ported", "The Shareable switch: ON is one approval card on the PC, OFF is instant and never held on a stale link. Both apps."),
+    # The desktop's one-click hub note (PM4, 2026-11-21; JARVIS-API section
+    # 88.11). This desktop half's only new route, and deliberately not on the
+    # phone: it can ask Jarvis in chat for the same one-way note.
+    "/api/projects/{id}/export": ("deliberate", "The desktop's one-click hub note (POST; JARVIS-API section 88.11; jarvis_projects.py request_export_hub, PM4 2026-11-21): it calls the SAME export_hub() the PM2 chat tool calls, so the notes editor raises its ONE `edit_vault_note` card - no new card class and no second writer - and the note is rebuilt from the store on every export and never read back. 202 while the card waits, 200 with the path and the editor's own receipt when it ended, a NO writes nothing and takes no File Guardian copy. The desktop's Export button is the only caller; the phone deliberately gets no export button in this slice (it can ask Jarvis in chat, which already works from both apps), so this is 'deliberate', not a missing phone screen: ARCHITECTURE section 8 has the row."),
     # An app inside a project (docs/APPS-IN-PROJECTS-DESIGN.md, JARVIS-API section 92).
     "/api/projects/{id}/app/tasks": ("deliberate", "Start a task in an app project (POST): an empty copy of the app to work in, no card. The desktop's (New task on a project's page). The phone reads an app's open tasks from the project itself and can look at, merge and discard them, but starts none: with no way to paste a change in (deep editing stays off the phone) an empty task has nothing to offer there. The backend would take it from either app. ARCHITECTURE section 8."),
     "/api/projects/{id}/app/tasks/{id}": ("ported", "Read one task of an app: its files and the whole comparison (GET). Both apps show the whole change before Merge; the phone pages it and opens Merge only on the last page."),
@@ -796,19 +800,18 @@ CLASSIFICATION = {
     # PM4 (2026-11-21, JARVIS-API section 88.10): the plan store's ONE read and
     # the two work-item doors, served to BOTH apps. The phone draws its concise
     # Projects screen (ProjectsPlate.kt, net/ProjectPlan.kt) from the plan read
-    # and calls both writes (Done, Quick Add); the desktop's PM4 page reads the
-    # same route and its board will use the status door - that pull request is
-    # landing in the same wave, so on THIS tree the desktop does not call them
-    # yet, which is why they are `planned` rather than `ported`; flip the three
-    # to `ported` when the desktop calls them. Cardless by design and NOT a
+    # and calls both writes (Done, Quick Add); the desktop's PM4 plan board
+    # (projects.js/projects-panel.js) reads the same route, moves a card's
+    # status through the same door and adds a work item through the same add -
+    # so all three are `ported`. Cardless by design and NOT a
     # hole: they are the owner's own taps on their own rows (the `todo_add`
     # owner-direct tier), going through the store's existing `add_work_item` /
     # `set_work_item_status` so the safety is the model path's own - one event
     # and one `jarvis_undo` receipt, no date accepted from this door, no force
     # flag, no new card class, no gate row. Held on a stale link by both apps.
-    "/api/projects/{id}/plan": ("planned", "The plan store's one read (GET): objective, milestones with their progress counts, work items as stored, the ready ids in the store's own order, and the newest events - every value the store's own, a missing date null and never invented, and the honest empty for a project with no plan rows. The phone's PM4 Projects screen reads it for the Projects list, the Next 3 ready tasks (the phone caps the READOUT at 3; the route sends the store's own order) and the spoken summary; the desktop's PM4 page reads the same route for its board. JARVIS-API section 88.10."),
-    "/api/projects/{id}/work_items": ("planned", "Add ONE work item the owner typed (POST {\"title\"}): Quick Add on the phone, cardless, through the store's existing `add_work_item` - one `work_item_added` event, no date parsed from words and none invented, the title bounded by the store's own limit. The desktop's board will use it for its own add. JARVIS-API section 88.10."),
-    "/api/projects/{id}/work_items/{id}/status": ("planned", "Move ONE work item between the store's five states (POST {\"status\"}): the phone's Done tap, cardless, through the store's EXISTING `set_work_item_status` - one `work_item_status` event and the normal one-click `jarvis_undo` receipt, no second write and no second receipt; a status outside the five is refused in the store's words and a second tap on the same state changes nothing. The desktop board's move uses this same door. JARVIS-API section 88.10."),
+    "/api/projects/{id}/plan": ("ported", "The plan store's one read (GET): objective, milestones with their progress counts, work items as stored, the ready ids in the store's own order, and the newest events - every value the store's own, a missing date null and never invented, and the honest empty for a project with no plan rows. The phone's PM4 Projects screen reads it for the Projects list, the Next 3 ready tasks (the phone caps the READOUT at 3; the route sends the store's own order) and the spoken summary; the desktop's PM4 page reads the same route for its board. JARVIS-API section 88.10."),
+    "/api/projects/{id}/work_items": ("ported", "Add ONE work item the owner typed (POST {\"title\"}): Quick Add on the phone, cardless, through the store's existing `add_work_item` - one `work_item_added` event, no date parsed from words and none invented, the title bounded by the store's own limit. The desktop's board uses it for its own quick add. JARVIS-API section 88.10."),
+    "/api/projects/{id}/work_items/{id}/status": ("ported", "Move ONE work item between the store's five states (POST {\"status\"}): the phone's Done tap, cardless, through the store's EXISTING `set_work_item_status` - one `work_item_status` event and the normal one-click `jarvis_undo` receipt, no second write and no second receipt; a status outside the five is refused in the store's words and a second tap on the same state changes nothing. The desktop board's move uses this same door. JARVIS-API section 88.10."),
     # Pairing a phone by QR code, with a key per device (docs/PAIRING-DESIGN.md
     # phase 1, docs/JARVIS-API.md section 90; backend/jarvis_devices.py).
     "/api/devices": ("ported", "The device list (docs/JARVIS-API.md section 90.4): This PC, every paired device with its own Remove, and the old shared key's row - never a key or a hash. Desktop: Settings, Devices. Phone: Settings, Devices (DevicesPlate.kt)."),

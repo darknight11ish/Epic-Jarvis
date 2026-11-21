@@ -44,23 +44,42 @@ import { refreshPictures, setPicturesVisible } from "./pictures-panel.js";
 import { refreshGuardian, setGuardianVisible } from "./guardian-panel.js";
 import {
   APP_WORDS,
+  PLAN_COLUMNS,
+  PLAN_WORDS,
   appProjectBody,
   appTypeWords,
   benchBody,
+  blockerWords,
+  blocksItems,
   chartGeometry,
   chartSummary,
+  columnOf,
   diffLineKind,
+  eventWords,
+  executorWords,
   fill,
+  itemEvents,
+  itemMilestone,
+  linkedPrWords,
   mergeOffer,
+  milestoneProgress,
+  milestoneRows,
+  milestoneStatusWords,
   notesFrom,
   numberWords,
   pasteBody,
+  planColumns,
+  planEmpty,
   projectMeta,
   readBench,
   readList,
+  readPlan,
   readProject,
   readTask,
+  readyItems,
   shortDate,
+  statusMoves,
+  statusWords,
   taskChange,
   taskTitleBody,
   unmarkOffer,
@@ -93,6 +112,14 @@ const state = {
   /** A refresh asked for while a read was running: read again when it ends. */
   again: false,
   readAt: 0,
+  /** The plan board's selected project id (the list view), or "". */
+  boardProject: "",
+  /** That project's plan, a `readPlan` answer; null before the first read. */
+  plan: null,
+  /** The plan read's own error sentence, when the read threw (not availability). */
+  planError: "",
+  /** The open work item's id, whose detail is drawn under the board. */
+  boardItem: "",
 };
 
 /** Buttons and fields that send a change: greyed while the link cannot be confirmed. */
@@ -240,6 +267,40 @@ async function readTaskNow(projectId) {
   }
 }
 
+/** The board's project: the selected one, still on the list, or the first. */
+function boardProjectId() {
+  const v = state.list;
+  if (!v || !v.available || v.hidden || !v.projects.length) return "";
+  const ids = v.projects.map((p) => p.id);
+  return ids.includes(state.boardProject) ? state.boardProject : ids[0];
+}
+
+/**
+ * The selected project's plan, from the PC. Read on its own so a PC that does
+ * not have the route yet shows its own sentence instead of an empty board -
+ * the page never draws an empty plan and calls it the project's plan.
+ */
+async function readBoardNow() {
+  state.plan = null;
+  state.planError = "";
+  const id = boardProjectId();
+  state.boardProject = id;
+  if (!id) {
+    state.boardItem = "";
+    return;
+  }
+  try {
+    const out = await invoke("projects_read", { project: id, plan: true });
+    state.plan = readPlan(out);
+  } catch (error) {
+    state.plan = null;
+    state.planError = errorText(error);
+  }
+  if (state.boardItem && state.plan && !state.plan.items.some((i) => i.id === state.boardItem)) {
+    state.boardItem = "";
+  }
+}
+
 /** Reads what is on screen again, then draws it. */
 export async function showProjects() {
   if (state.reading) {
@@ -253,6 +314,7 @@ export async function showProjects() {
   try {
     await readListNow();
     if (state.open) await readProjectNow(state.open);
+    else await readBoardNow();
     if (!state.error) state.readAt = Date.now();
   } finally {
     state.reading = false;
@@ -515,6 +577,409 @@ function hiddenNode(count) {
   return box;
 }
 
+/* ── The plan board (PM4, 2026-11-21) ──────────────────────────────────────
+ * The existing Projects view keeps its list; the board sits above it and reads
+ * one project's plan from the PC. It is a READ except for two named actions:
+ * switching the board's project (a read) and Export, which is the existing
+ * hub-export action - ONE notes-editor card, raised by the PC, never here.
+ * No work item's status is changed from this page: a status move is the
+ * project store's own route, with its receipt and Undo, and this page does not
+ * add a second one.
+ */
+
+async function chooseBoardProject(id) {
+  state.boardProject = String(id || "");
+  state.boardItem = "";
+  await showProjects();
+  const sel = document.getElementById("projects-board-select");
+  if (sel) sel.focus();
+}
+
+async function openBoardItem(id) {
+  state.boardItem = String(id || "");
+  paint();
+  const heading = document.getElementById("projects-item-heading");
+  if (heading) heading.focus();
+}
+
+async function closeBoardItem() {
+  const was = state.boardItem;
+  state.boardItem = "";
+  paint();
+  const card = [...document.querySelectorAll(".pj-wcard")]
+    .find((node) => node.dataset.id === was);
+  if (card) card.focus();
+}
+
+/** Export: the existing hub-export action. ONE request; the PC raises the card. */
+async function exportHub() {
+  const id = state.boardProject;
+  if (!id) return;
+  await write("export_hub", { project: id }, { done: PLAN_WORDS.export_waiting });
+}
+
+/**
+ * ONE status move, through the project store's own status path (the receipt
+ * and Undo are the store's). A blocked item is the PC's to refuse; its own
+ * sentence is shown and the board is read again, so the card never silently
+ * changes column.
+ */
+async function moveItem(projectId, item, status) {
+  await write("work_item_status",
+    { project: projectId, item: item.id, body: { status } }, { done: PLAN_WORDS.moved });
+}
+
+/** ONE new work item - the store's own quick add. */
+async function addWorkItem(projectId, field) {
+  const title = String(field.value || "").trim();
+  if (!title) {
+    say(PLAN_WORDS.add_empty, "bad");
+    field.focus();
+    return;
+  }
+  if ([...title].length > 120) {
+    say(PLAN_WORDS.add_long, "bad");
+    field.focus();
+    return;
+  }
+  const out = await write("work_item_add", { project: projectId, body: { title } },
+    { done: PLAN_WORDS.added });
+  if (out) field.value = "";
+}
+
+function boardSection(v) {
+  const chosen = boardProjectId();
+  const board = el("section", "pj-board");
+  board.id = "projects-board";
+  board.setAttribute("aria-label", PLAN_WORDS.board);
+  board.dataset.project = chosen;
+
+  const head = el("div", "pj-board-head");
+  const label = el("label", "lbl pj-selector");
+  label.append(el("span", "", PLAN_WORDS.project));
+  const select = el("select", "field");
+  select.id = "projects-board-select";
+  select.setAttribute("aria-label", PLAN_WORDS.project);
+  for (const p of v.projects) {
+    const option = el("option", "", p.name);
+    option.value = p.id;
+    select.append(option);
+  }
+  select.value = chosen;
+  select.addEventListener("change", () => chooseBoardProject(select.value));
+  label.append(select);
+  const exportButton = button(PLAN_WORDS.export, exportHub, { title: PLAN_WORDS.export_title });
+  exportButton.id = "projects-export";
+  const chosenName = (v.projects.find((p) => p.id === chosen) || {}).name || "";
+  exportButton.setAttribute("aria-label", `${PLAN_WORDS.export}: ${chosenName}`);
+  head.append(label, exportButton);
+  board.append(head);
+  board.append(el("p", "note pj-board-under", PLAN_WORDS.under));
+  board.append(el("p", "note pj-export-under", PLAN_WORDS.export_more));
+
+  const plan = state.plan;
+  if (state.planError) {
+    board.append(el("p", "empty failed", `Could not read the plan: ${state.planError}.`));
+  } else if (plan && plan.hidden) {
+    board.append(el("p", "empty", PLAN_WORDS.hidden));
+  } else if (plan && plan.available === false) {
+    board.append(el("p", "empty failed pj-plan-missing", plan.why));
+  } else if (!plan) {
+    board.append(el("p", "empty", PLAN_WORDS.reading));
+  } else {
+    board.append(planSection(plan), readySection(plan), milestoneSection(plan),
+      kanbanSection(plan), addWorkItemForm(chosen));
+    if (state.boardItem) board.append(itemDetail(plan, state.boardItem));
+    if (planEmpty(plan)) board.append(el("p", "note", PLAN_WORDS.ready_empty));
+  }
+  return board;
+}
+
+/** Quick add: ONE work item through the store's own add path. */
+function addWorkItemForm(projectId) {
+  const form = el("form", "todo-form pj-add-item");
+  form.id = "projects-add-item";
+  form.autocomplete = "off";
+  const field = el("input", "field todo-text");
+  field.type = "text";
+  field.maxLength = 120;
+  field.id = "projects-item-title";
+  field.placeholder = PLAN_WORDS.add_title;
+  field.setAttribute("aria-label", PLAN_WORDS.add_title);
+  const add = el("button", "btn small", PLAN_WORDS.add_item);
+  add.type = "submit";
+  live.add(add);
+  syncLive(add);
+  form.append(field, add);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addWorkItem(projectId, field);
+  });
+  return form;
+}
+
+/** The project-level words a card opens on: its objective is the anchor. */
+function planSection(plan) {
+  const box = el("section", "pj-plan-fields");
+  box.append(el("h3", "subhead", PLAN_WORDS.objective));
+  box.append(el("p", "pj-line pj-objective", plan.objective || PLAN_WORDS.objective_none));
+  if (plan.successCriteria) {
+    box.append(el("h4", "pj-detail-label", PLAN_WORDS.success),
+      el("p", "pj-line pj-success", plan.successCriteria));
+  }
+  return box;
+}
+
+/** The milestone bar: the project's real counts, never an estimate. */
+function milestoneSection(plan) {
+  const box = el("section", "pj-progress-box");
+  box.id = "projects-progress-box";
+  box.setAttribute("aria-label", PLAN_WORDS.progress);
+  box.append(el("h3", "subhead", PLAN_WORDS.progress));
+  const p = milestoneProgress(plan);
+  const words = p.workTotal
+    ? `${fill(PLAN_WORDS.progress_work, { done: p.workDone, total: p.workTotal })} · `
+      + fill(PLAN_WORDS.progress_milestones,
+        { done: p.milestoneDone, total: p.milestoneTotal })
+    : PLAN_WORDS.progress_none;
+  const bar = el("div", "pj-bar");
+  bar.id = "projects-progress";
+  bar.setAttribute("role", "progressbar");
+  bar.setAttribute("aria-label", PLAN_WORDS.progress);
+  bar.setAttribute("aria-valuemin", "0");
+  bar.setAttribute("aria-valuemax", "100");
+  bar.setAttribute("aria-valuenow", String(p.percent));
+  bar.setAttribute("aria-valuetext", words);
+  const fillBar = el("span", "pj-bar-fill");
+  fillBar.style.width = `${p.percent}%`;
+  bar.append(fillBar);
+  box.append(bar, el("p", "pj-progress-words", words));
+
+  const rows = milestoneRows(plan);
+  if (!rows.length) box.append(el("p", "note", PLAN_WORDS.milestones_empty));
+  else {
+    const list = el("ul", "pj-milestones");
+    for (const m of rows) {
+      const li = el("li", "pj-milestone");
+      li.dataset.id = m.id;
+      const name = el("span", "pj-milestone-name", m.title);
+      const tag = el("span", "row-tag pj-milestone-status", milestoneStatusWords(m.status));
+      tag.dataset.status = m.status;
+      const count = el("span", "pj-milestone-count",
+        fill(PLAN_WORDS.milestone_work, { done: m.workDone, total: m.workTotal }));
+      const mini = el("span", "pj-mini-bar");
+      mini.setAttribute("aria-hidden", "true");
+      const miniFill = el("span", "pj-mini-bar-fill");
+      miniFill.style.width = `${m.percent}%`;
+      mini.append(miniFill);
+      li.append(name, tag, count, mini);
+      list.append(li);
+    }
+    box.append(list);
+  }
+  return box;
+}
+
+/** The Ready List: exactly the ids the route returned, in its order. */
+function readySection(plan) {
+  const box = el("section", "pj-ready");
+  box.id = "projects-ready";
+  box.setAttribute("aria-label", PLAN_WORDS.ready);
+  box.append(el("h3", "subhead", PLAN_WORDS.ready),
+    el("p", "note", PLAN_WORDS.ready_under));
+  const ready = readyItems(plan);
+  if (!ready.length) {
+    box.append(el("p", "empty", PLAN_WORDS.ready_empty));
+    return box;
+  }
+  const list = el("ul", "pj-ready-list");
+  for (const item of ready) {
+    const li = el("li", "pj-ready-item");
+    li.dataset.id = item.id;
+    const open = button(fill(PLAN_WORDS.ready_open, { title: item.title }),
+      () => openBoardItem(item.id), { isLive: false, ghost: true });
+    open.dataset.id = item.id;
+    li.append(open);
+    const tag = el("span", "row-tag pj-status", statusWords(item.status));
+    tag.dataset.status = item.status;
+    li.append(tag);
+    if (item.dueDate) li.append(el("span", "pj-wcard-due", fill(PLAN_WORDS.due, { date: item.dueDate })));
+    const blocked = blockerWords(item);
+    if (blocked) li.append(el("span", "pj-blocker", blocked));
+    list.append(li);
+  }
+  box.append(list);
+  const total = plan.counts.ready || ready.length;
+  if (total > ready.length) {
+    box.append(el("p", "note", fill(PLAN_WORDS.ready_more, { count: total - ready.length })));
+  }
+  return box;
+}
+
+/** The four columns: Planning | In Progress | In Review / Waiting | Done. */
+function kanbanSection(plan) {
+  const columns = planColumns(plan);
+  const board = el("div", "pj-kanban");
+  board.id = "projects-kanban";
+  for (const col of PLAN_COLUMNS) {
+    const section = el("section", "pj-col");
+    section.dataset.column = col.id;
+    const heading = el("h3", "pj-col-title", PLAN_WORDS[`column_${col.id}`]);
+    section.append(heading, el("span", "pj-col-count", String(columns[col.id].length)));
+    const cards = el("div", "pj-cards");
+    if (!columns[col.id].length) {
+      cards.append(el("p", "empty pj-col-empty", PLAN_WORDS.column_empty));
+    }
+    for (const item of columns[col.id]) cards.append(workCard(plan, item));
+    section.append(cards);
+    board.append(section);
+  }
+  return board;
+}
+
+/** One work item as a card; the whole card is the button that opens it. */
+function workCard(plan, item) {
+  const card = el("button", "pj-wcard");
+  card.type = "button";
+  card.dataset.id = item.id;
+  card.dataset.status = item.status;
+  card.setAttribute("aria-label", fill(PLAN_WORDS.item_open, { title: item.title }));
+  card.append(el("span", "pj-wcard-title", item.title));
+  const meta = el("span", "pj-wcard-meta");
+  const tag = el("span", "row-tag pj-status", statusWords(item.status));
+  tag.dataset.status = item.status;
+  meta.append(tag);
+  if (item.dueDate) {
+    meta.append(el("span", "pj-wcard-due", fill(PLAN_WORDS.due, { date: item.dueDate })));
+  }
+  const milestone = itemMilestone(plan, item);
+  if (milestone) {
+    meta.append(el("span", "pj-wcard-milestone",
+      fill(PLAN_WORDS.milestone, { name: milestone.title })));
+  }
+  card.append(meta);
+  const blocked = blockerWords(item);
+  if (blocked) {
+    const badge = el("span", "pj-blocker", blocked);
+    badge.dataset.state = "warn";
+    card.append(badge);
+  }
+  card.addEventListener("click", () => openBoardItem(item.id));
+  return card;
+}
+
+/** One card's detail: objective anchor, dependencies, links and activity. */
+function itemDetail(plan, id) {
+  const item = plan.items.find((i) => i.id === id);
+  if (!item) return el("p", "empty", PLAN_WORDS.activity_none);
+  const box = el("section", "pj-detail");
+  box.id = "projects-item";
+  box.dataset.id = item.id;
+  const head = el("div", "pj-detail-head");
+  const heading = el("h3", "pj-detail-title", item.title);
+  heading.id = "projects-item-heading";
+  heading.tabIndex = -1;
+  const close = button(PLAN_WORDS.close, closeBoardItem, { isLive: false, ghost: true });
+  close.id = "projects-item-close";
+  close.setAttribute("aria-label", `${PLAN_WORDS.close}: ${item.title}`);
+  head.append(heading, close);
+  box.append(head);
+  const lines = [statusWords(item.status)];
+  if (item.dueDate) lines.push(fill(PLAN_WORDS.due, { date: item.dueDate }));
+  lines.push(executorWords(item));
+  box.append(el("p", "pj-line pj-detail-meta", lines.join(" · ")));
+  if (item.detail) box.append(el("p", "pj-line pj-detail-text", item.detail));
+
+  // Status moves: the store's own status path, one receipt each. The PC
+  // refuses a blocked item in its own words; nothing here decides.
+  box.append(el("h4", "pj-detail-label", PLAN_WORDS.moves));
+  const moves = el("div", "row pj-moves");
+  for (const move of statusMoves(item)) {
+    const b = button(move.label,
+      () => moveItem(state.boardProject, item, move.status));
+    b.dataset.status = move.status;
+    b.setAttribute("aria-label", `${move.label}: ${item.title}`);
+    moves.append(b);
+  }
+  box.append(moves);
+
+  box.append(el("h4", "pj-detail-label", PLAN_WORDS.objective));
+  box.append(el("p", "pj-line pj-objective", plan.objective || PLAN_WORDS.objective_none));
+  if (plan.successCriteria) {
+    box.append(el("h4", "pj-detail-label", PLAN_WORDS.success),
+      el("p", "pj-line pj-success", plan.successCriteria));
+  }
+
+  box.append(el("h4", "pj-detail-label", PLAN_WORDS.waiting_on));
+  if (item.blockedBy.length) {
+    const list = el("ul", "pj-deps pj-deps-blocked");
+    for (const blocker of item.blockedBy) {
+      const li = el("li", "pj-dep");
+      li.dataset.id = blocker.id;
+      li.append(el("span", "pj-dep-name", blocker.title),
+        el("span", "row-tag pj-status", statusWords(blocker.status)));
+      list.append(li);
+    }
+    box.append(list);
+  } else box.append(el("p", "pj-line", PLAN_WORDS.waiting_none));
+
+  const blocks = blocksItems(plan, item.id);
+  box.append(el("h4", "pj-detail-label", PLAN_WORDS.blocks));
+  if (blocks.length) {
+    const list = el("ul", "pj-deps pj-deps-blocks");
+    for (const other of blocks) {
+      const li = el("li", "pj-dep");
+      li.append(el("span", "pj-dep-name", other.title),
+        el("span", "row-tag pj-status", statusWords(other.status)));
+      list.append(li);
+    }
+    box.append(list);
+  } else box.append(el("p", "pj-line", PLAN_WORDS.blocks_none));
+
+  box.append(el("h4", "pj-detail-label", PLAN_WORDS.linked));
+  const pr = linkedPrWords(item);
+  let linked = false;
+  if (pr) {
+    box.append(el("p", "pj-line pj-linked-pr", pr));
+    linked = true;
+  }
+  if (plan.linkedNotePath) {
+    box.append(el("p", "pj-line pj-linked-note",
+      fill(PLAN_WORDS.linked_note, { path: plan.linkedNotePath })));
+    linked = true;
+  }
+  if (plan.linkedRepo) {
+    box.append(el("p", "pj-line pj-linked-repo",
+      fill(PLAN_WORDS.linked_repo, { repo: plan.linkedRepo })));
+    linked = true;
+  }
+  if (!linked) box.append(el("p", "pj-line", PLAN_WORDS.linked_none));
+
+  box.append(el("h4", "pj-detail-label", PLAN_WORDS.activity));
+  const events = itemEvents(plan, item.id);
+  if (!events.length) box.append(el("p", "pj-line", PLAN_WORDS.activity_none));
+  else {
+    const list = el("ol", "pj-events");
+    for (const event of events) list.append(eventRow(event, plan));
+    box.append(list);
+  }
+  return box;
+}
+
+function eventRow(event, plan) {
+  const words = eventWords(event, plan);
+  const li = el("li", "pj-event");
+  li.dataset.kind = words.kind;
+  li.append(el("span", "pj-event-when", shortDate(words.at)));
+  const main = el("span", "pj-event-main");
+  main.append(el("span", "pj-event-kind", words.label));
+  if (words.subject) main.append(el("span", "pj-event-subject", words.subject));
+  if (words.extra) main.append(el("span", "pj-event-extra", words.extra));
+  li.append(main);
+  return li;
+}
+
+/** The existing project list (the board above it is the plan view). */
 function listCard() {
   const card = el("div", "card card-wide pj-card");
   const h = el("h2", "", WORDS.title);
@@ -537,8 +1002,12 @@ function listCard() {
     return card;
   }
   if (state.error) card.append(el("p", "empty failed", `Could not read it again: ${state.error}.`));
+  // The plan board (PM4, 2026-11-21) sits above the list; the list stays the
+  // way into a project's instructions, notes and benchmarks, as it was.
+  if (v.projects.length) card.append(boardSection(v));
   if (!v.projects.length) card.append(el("p", "empty", v.empty || "No projects yet."));
   else {
+    card.append(el("h3", "subhead", PLAN_WORDS.all_projects));
     const rows = el("div", "rows pj-list");
     for (const p of v.projects) {
       const item = el("div", "row-item");

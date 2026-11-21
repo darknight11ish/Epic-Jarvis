@@ -19724,8 +19724,9 @@ safety rule and never speaks for the PC's permissions.
 **What is deliberately not here:** no Run Step dispatch (still deferred, §88.9),
 no GitHub read or sync on this route, no bulk status change, no date invented,
 no Kanban editor, and no change to the frozen §88.2 shapes. `docs/ARCHITECTURE.md`
-section 8 records the phone-first order and why `tools/check_parity.py`
-classifies the three routes PHONE_ONLY until the desktop page calls them.
+section 8 records the phone-first order; both apps call the three routes (the
+desktop's PM4 plan board is the second caller), so `tools/check_parity.py`
+classifies all three `ported`.
 
 **Acceptance.** `backend/test_projects.py`'s `t_pm4_*` tests prove the shape and
 each key against a real SQLite store, the honest empty, a blocked item never in
@@ -19738,6 +19739,62 @@ in `contract/projects-cases.json` (`tools/gen_projects_cases.py` now carries the
 cap, the project name on each ready row, one request per tap on the one route,
 Quick Add carrying exactly the typed words, the honest empty/error states and
 the spoken answer's 3-item cap.
+
+### 88.11 The desktop's one-click hub note (added 2026-11-21)
+
+PM4, the desktop half of the project-management wave (the owner-approved PM4
+spec: `docs/PROJECTS-DESIGN.md`'s build notes). The plan read and the two
+work-item writes the desktop consumes are documented in section 88.10, added by
+the phone half in the same wave; this section is the one route the desktop half
+ADDS. No other route, no card class and no gate action are added by it.
+
+**The route.**
+
+```
+POST /api/projects/<project_id>/export
+```
+
+No body field is read. It calls the SAME `jarvis_projects.export_hub()` the PM2
+chat tool `project_export_obsidian_hub` calls, so the vault write is the notes
+editor's own: ONE `edit_vault_note` card, the File Guardian copy of the old
+bytes first when an existing hub note is replaced, and the notes editor's own
+undo receipt for a brand-new one. `export_hub` raises the notes editor with
+provenance `model`, which keeps its ONE-card path whatever the owner-direct rule
+says, and the route passes no gate check of its own - so the only thing that can
+allow the write is that card. The note is rebuilt from the store on every export
+and never read back; JSON stays the write master (PM2, section 88.8).
+
+**Answers.**
+
+- 202 `{"ok": true, "state": "waiting", "waiting": true, "path": "...",
+  "receipt": "", "snapshot": "", "job": "<notes-editor job id>",
+  "message": "Waiting for your approval. ..."}` while the card is still up.
+- 200 once it ended: `{"ok": true, "state": "saved", "waiting": false,
+  "created": true|false, "replaced": true|false, "path": "...",
+  "receipt": "<the notes editor's own undo receipt, when it made one>",
+  "snapshot": "<its File Guardian snapshot id, when it replaced a note>",
+  "job": "...", "message": "..."}`.
+- A card that said no, timed out or failed is 200 with `"ok": false`, the notes
+  editor's own `"state"` (`denied` / `timed_out` / `failed`) and `"error"` in its
+  own words - never a new sentence that hides it - and nothing was written: no
+  byte, no File Guardian copy. No Obsidian vault configured, a protected or
+  hidden path and a too-large note are answered the same way, in the editor's
+  words.
+- An unknown project is the store's 404 (`"no such project, benchmark or
+  number"`). `GET` on the path answers 405: POST only.
+
+**Who calls it, and `tools/check_parity.py`.** The desktop's Export button is
+the only caller (`brain/projects.rs` `projects_write` action `export_hub`; the
+card itself is drawn by the PC in the Jarvis bar, as every `edit_vault_note`
+card is). The phone deliberately has no export button in this slice - it can
+ask Jarvis in chat, which already works from both apps - so the route is
+classified `deliberate` in `tools/check_parity.py`, and
+`docs/ARCHITECTURE.md` section 8 records the one-sided decision. The acceptance
+is in `backend/test_projects.py`
+(`t_pm4_the_export_route_is_the_one_existing_card`): one card and only that
+class, a NO writes nothing and takes no copy, a YES returns the path and the
+editor's receipt, a waiting card answers 202, and an unknown project is the
+404.
 
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 

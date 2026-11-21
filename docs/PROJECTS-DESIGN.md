@@ -4,7 +4,8 @@ Status: **build steps 1 and 2 built on the backend, step 3 - the
 screens in both apps - built (2026-09-28), and step 4's first slice - a chat
 that belongs to a project - built (2026-11-19); the plan store's execution and
 brief bridges are built on the backend (2026-11-20, PM3 - see its build
-note); see "Build notes" at the end.**
+note), and PM4's desktop half - the plan board - is built (2026-11-21; the
+phone half is its own pull request against the same API).**
 For the owner's decision "Projects,
 like Claude's Projects and more" (`CLAUDE.md`, 2026-09-28): both coding and
 life projects, and Jarvis does real work on the PC with a card for every
@@ -570,3 +571,61 @@ second tap changing nothing, and Quick Add saving the typed words with no invent
 the phone's `ProjectPlanTest` JVM suite, and the regenerated shared contract
 (`tools/gen_projects_cases.py` now carries `plan_full`, `plan_empty`, `plan_words`,
 `plan_limits` and the two write answers).
+
+### PM4, desktop half (2026-11-21): the plan board
+
+The owner-approved PM4 desktop spec (the architecture review's "PM4 - Desktop &
+Phone Surface Design"). Brain -> Projects keeps its existing list, and above it
+now draws the plan board the design called for:
+
+- a **Project Selector** (a plain `<select>` of the projects on the list);
+- the **4 columns** - Planning | In Progress | In Review / Waiting | Done -
+  with every work-item status in exactly one column (`backlog`/`ready`,
+  `in_progress`, `waiting_approval`/`in_review`, `done`/`cancelled`; an
+  unrecognised status is still shown, in Planning, rather than hidden);
+- a **Ready List** that is exactly the ids `GET /api/projects/<id>/plan`
+  returned, in the store's own `ready_next` order and cap - the page never
+  re-decides readiness, so "at most the ready items the API returns" holds;
+- a **Milestone progress bar** from the route's real counts: work items done
+  out of all work items (the bar and its `aria-valuetext`) and milestones done
+  out of all milestones, plus one small bar per milestone with its own counts;
+- **Blocker badges**: a work item the store reports as `blocked_by` another
+  one is marked "Blocked by <the blocker it waits on>", in words and not by
+  colour alone;
+- a **1-click Export Hub Note to Obsidian** button, which is the existing
+  PM2/PM3 hub export behind ONE notes-editor `edit_vault_note` card - no new
+  card class and no automatic write;
+- **cards that open**: clicking a work item shows its project's objective
+  anchor, its dependency links both ways ("Waiting on" and "Blocks"), the
+  linked pull request / note / repository, and the item's `project_events`
+  timeline (`project_events` is append-only; this page only reads it).
+
+**Writes, and where they go.** Nothing on this board decides a card or writes
+on its own. A status move is ONE `POST /api/projects/<id>/work_items/<id>/status`
+through the store's own `set_work_item_status` (one event and one
+`jarvis_undo` receipt; a blocked move is refused in the PC's words and the card
+stays where it was - the page re-reads after every move rather than moving it
+locally), and the quick add is ONE `POST /api/projects/<id>/work_items` with a
+title only (a typed task never dates itself). Both are the phone half's routes
+in the same wave (#1436); this half consumes them, and `tools/check_parity.py`
+carries all three as `ported` now both apps call them.
+
+**The one route this half ADDS.** `POST /api/projects/<id>/export` (JARVIS-API
+section 88.11) - the deterministic door a one-click button needs, because the
+existing hub export could only be raised from a model turn. It calls the same
+`jarvis_projects.export_hub()` the PM2 tool calls: the notes editor's ONE
+`edit_vault_note` card, the File Guardian copy first when a note is replaced,
+the editor's own undo receipt for a brand-new one, 202 while the card waits and
+200 with the path and the receipt when it ended; a NO writes nothing and takes
+no copy. No new card class, no second writer, no new gate action. The phone
+deliberately gets no export button in this slice (it can ask Jarvis in chat for
+the same one-way note), so that route is `deliberate` in `check_parity.py` and
+ARCHITECTURE section 8 says why.
+
+**Deliberately not built.** No Sync button and no Run Step dispatch: the
+bridge route PM3 built is read-only and still has no app caller, and a
+background step executor does not exist (PM3's own note and
+`decisions.d/2026-11-20-the-plan-store-bridges.md`). No drag-and-drop: a move
+is a button, so a mis-drag can never skip a card. No multi-column Kanban on
+the phone - the phone half is the summary / next-3 / tap-to-done surface the
+same PM4 spec names.
