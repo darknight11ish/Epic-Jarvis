@@ -2067,6 +2067,48 @@ DELTA_TABLE = {
             },
         },
     },
+    # attached-file.patch (2026-11-19, #1410): MEASURED FALSE PRESENT, 2026-11-20.
+    # It has no entry, so presence fell back to "any one distinctive added line is
+    # in the live file" - and its hunks add `import jarvis_agent`, a line the live
+    # HUD already carries from an earlier patch in the same region. The deploy
+    # therefore called the patch PRESENT and would never have carried its block,
+    # even though the live HUD has NO `_file_turn` at all (measured: the helper and
+    # the has_file= call line are absent). The probes below are the block's own
+    # definition and call site, so presence is decided by THIS patch's text, not by
+    # a coincidental neighbour. The three hunks are cut against the fully deployed
+    # stack, so `hunks` carries them.
+    "attached-file.patch": {
+        "jarvis_hud.py": {
+            "probes": ("def _file_turn(body) -> bool:",
+                       "has_file=_file_turn(body),"),
+            "hunks": True,
+        },
+    },
+    # router-strikes.patch (2026-11-20, #1419): the HUD half of the 2-strike
+    # coding fallback. Seven hunks, all jarvis_hud.py, and its pre-images are the
+    # POST-images of earlier patches (f01/attached-file's choose() call,
+    # chat-stream's 503 wording and use_tools) - which is why it sits after them
+    # in the stack and its own hunks replay cleanly on the fully deployed file.
+    # The probes are the two definitions it adds, so a second deploy is
+    # ALREADY_PRESENT rather than a second copy.
+    "router-strikes.patch": {
+        "jarvis_hud.py": {
+            "probes": ("def _note_local_failure(lane: str, local_model: str, conversation) -> None:",
+                       "def _clear_local_failures(lane: str, local_model: str, conversation) -> None:"),
+            "hunks": True,
+        },
+    },
+    # crisis-route.patch (2026-11-20, #1421): ONE added block INSIDE
+    # cloud-honesty.patch's crisis block, so it must run after that patch (it does
+    # - stack order) and its pre-image is exactly the text cloud-honesty stages.
+    # The probes are the two header keys it adds; nothing else in the block moved.
+    "crisis-route.patch": {
+        "jarvis_hud.py": {
+            "probes": ('route_header["crisis"] = True',
+                       'route_header["cloud_refused"] = "crisis"'),
+            "hunks": True,
+        },
+    },
 }
 
 #: Live-HUD deltas that are RECORDED BUT DELIBERATELY NOT APPLIED. They are kept
