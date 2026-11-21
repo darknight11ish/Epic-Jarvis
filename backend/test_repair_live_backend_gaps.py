@@ -221,6 +221,29 @@ def t_check_names_both_missing_then_apply_fixes_them():
     check("... inside the _TOOL_ACTIONS literal, not floating after the table",
           {"app_build_android", "app_install_android"} <= set(table),
           f"the literal's keys are {sorted(table)}")
+    # The plan store's rows (2026-11-20, PM2): the eight typed tools map to
+    # actions that already exist, and the one new _RISK row is what lets the
+    # gate's own unclassified-action rule keep the five owner-direct writes
+    # cardless on a clean turn. Both halves are in the same repair, one write.
+    check("the plan store's eight tool->action rows landed",
+          {name: table.get(name) for name in (
+              "project_create", "work_item_add", "work_item_update_status",
+              "work_item_link_dependency", "project_checkpoint_reflect",
+              "project_seed_plan", "project_decompose_plan",
+              "project_export_obsidian_hub")} == {
+              "project_create": "todo_add",
+              "work_item_add": "todo_add",
+              "work_item_update_status": "todo_add",
+              "work_item_link_dependency": "todo_add",
+              "project_checkpoint_reflect": "todo_add",
+              "project_seed_plan": "change_own_config",
+              "project_decompose_plan": "change_own_config",
+              "project_export_obsidian_hub": "edit_vault_note"},
+          f"the literal's keys are {sorted(table)}")
+    risk = risk_table(gate)
+    check("... and the one new risk row for todo_add landed",
+          risk.get("todo_add", ())[:2] == ("yes", "local"),
+          risk.get("todo_add"))
     hud = (live / "jarvis_hud.py").read_text(encoding="utf-8")
     check("both history routes landed", '"/api/history/pin"' in hud
           and '"/api/history/archive"' in hud)
@@ -737,8 +760,12 @@ def t_a_gate_that_already_has_the_note_edit_row_is_a_no_op():
     check("... and no backup was left behind",
           not any(live.glob("jarvis_gate.py.before-repair-*")))
     check("... and the row is still there exactly once",
+          # The count is of the RISK ROW, not of the bare name: the gate's
+          # `_TOOL_ACTIONS` table legitimately carries `"edit_vault_note"` as
+          # the action for the hub-note tool since 2026-11-20 (PM2), so a bare
+          # name count would read 2 on a correct file.
           (live / "jarvis_gate.py").read_text(encoding="utf-8")
-          .count('"edit_vault_note"') == 1)
+          .count('"edit_vault_note": ("yes", "local"') == 1)
 
 
 def t_a_gate_with_the_wrong_shape_refuses_the_note_edit_row():

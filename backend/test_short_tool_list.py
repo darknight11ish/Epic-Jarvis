@@ -280,8 +280,18 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,735 tokens)", short <= 1735,
+    check("the short list stays small (pinned: at most 1,760 tokens)", short <= 1760,
           str(short))
+        # Pinned 1,735 -> 1,760 on 2026-11-20, and this is the whole of the
+    # growth: the plan store's eight typed tools (PM2) have their own `projects`
+    # group - a question about goals must not also put eight plan writes in
+    # front of the model, and every one of them is its own switch - so the
+    # short list carries that group's name and its one line. Measured on this
+    # tree with this module's own estimate_tokens rule: 1,735 + 22 = 1,757, so
+    # 1,760 leaves 3 tokens spare; a group's MEMBERS cost nothing extra here,
+    # only its name and description do. The cost is paid only with
+    # `[tools] short_list = true`, which ships OFF, and only when one of the
+    # eight is enabled (a fresh install enables all eight, so it pays).
         # Pinned 1,710 -> 1,735 on 2026-11-11 (the GitHub union, 0.2.448): the
     # `github` group's line gained the union's seven parity member names and
     # `more_tools` gained the two local review gates; measured 1720 here with
@@ -434,9 +444,9 @@ def t_what_it_saves():
     # lands here must widen this pin with its own measurement, which is exactly
     # what this note is for. The cost is paid only with `[tools] short_list =
     # true`, which ships OFF.
-    check("more_tools itself stays small (at most 520 tokens)",
+    check("more_tools itself stays small (at most 560 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 520)
+          <= 560)
 
 
 if __name__ == "__main__":

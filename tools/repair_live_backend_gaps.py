@@ -1225,8 +1225,83 @@ UNKNOWN_RISK = Repair(
 )
 
 
-REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK, GATE_TOOL_ACTIONS,
-                              HISTORY_ROUTES, CARD_TIMER, UNKNOWN_RISK)}
+#: PM2's rows (2026-11-20): the plan store's typed tools (`jarvis_agent.py`).
+#:
+#: WHY THEY ARE NEEDED ON A LIVE INSTALL AT ALL. The five OWNER-DIRECT plan
+#: tools are decided under `todo_add` - the shipped "auto" line the four goals
+#: tools already resolve under - and `todo_add` has never had a `_RISK` row
+#: because the scheduler tools bypass the gate. The moment a chat tool is
+#: decided under it, the gate's own unclassified-action rule forces "ask", so
+#: every cardless plan write would raise a card on this PC. The two proposal
+#: tools (`change_own_config`) and the hub note (`edit_vault_note`) already have
+#: their rows, so only `todo_add` is added on the risk side.
+#:
+#: WHY THE ROWS SIT INSIDE THE LITERALS HERE. This is the LIVE file, which no
+#: patch is applied to afterwards, so the owner's 2026-11-14 rule (a base file
+#: gets a `<table>.update` block at its end) does not apply to this write - the
+#: same shape `note-edit` and `tool-actions` above use. The published base
+#: carries the same rows in one `_TOOL_ACTIONS.update` / `_RISK.update` pair at
+#: the end of the file.
+#:
+#: The published base's exact text is copied byte for byte; both anchors survive
+#: every other repair in this file (each inserts immediately after its own
+#: opening brace), so the order the repairs run in cannot duplicate a block.
+PROJECT_GATE_ROWS = Repair(
+    name="project-tools",
+    filename="jarvis_gate.py",
+    probes=('"project_create": "todo_add"',
+            '"work_item_update_status": "todo_add"',
+            '"project_seed_plan": "change_own_config"',
+            '"project_export_obsidian_hub": "edit_vault_note"',
+            '"todo_add": ("yes", "local"'),
+    pieces=(
+        Piece(
+            anchor="_TOOL_ACTIONS: dict[str, str] = {\n",
+            replace_with=(
+                "_TOOL_ACTIONS: dict[str, str] = {\n"
+                "    # tools/repair_live_backend_gaps.py (2026-11-20, PM2): the\n"
+                "    # plan store's typed tools, each mapped to the action the tool\n"
+                "    # is decided under - `todo_add` for the five owner-direct writes,\n"
+                "    # `change_own_config` for the two proposal cards, and\n"
+                "    # `edit_vault_note` for the hub note. Without these entries\n"
+                "    # action_for_tool() answers \"unclassified_tool\" and the card\n"
+                "    # shown is not the one the tool raises. Copied from\n"
+                "    # jarvis-backend/jarvis_gate.py byte for byte (the base carries\n"
+                "    # them in one `_TOOL_ACTIONS.update` block at its end).\n"
+                '    "project_create": "todo_add",\n'
+                '    "work_item_add": "todo_add",\n'
+                '    "work_item_update_status": "todo_add",\n'
+                '    "work_item_link_dependency": "todo_add",\n'
+                '    "project_checkpoint_reflect": "todo_add",\n'
+                '    "project_seed_plan": "change_own_config",\n'
+                '    "project_decompose_plan": "change_own_config",\n'
+                '    "project_export_obsidian_hub": "edit_vault_note",\n'
+            ),
+        ),
+        Piece(
+            anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+            replace_with=(
+                "_RISK: dict[str, tuple[str, str, str]] = {\n"
+                "    # tools/repair_live_backend_gaps.py (2026-11-20, PM2): the\n"
+                "    # plan store's five owner-direct writes are decided under the\n"
+                "    # shipped \"auto\" `todo_add` line, and the gate forces an action\n"
+                "    # with no row to \"ask\" - so without this row every cardless\n"
+                "    # plan write would raise a card. Local and reversible: ONE of\n"
+                "    # the owner's own rows, which can be moved again. Copied from\n"
+                "    # jarvis-backend/jarvis_gate.py byte for byte.\n"
+                '    "todo_add": ("yes", "local", "adds ONE row to your own to-do list or project plan on this PC; nothing existing is changed or deleted, the row can be moved or removed again, and nothing is sent anywhere"),\n'
+            ),
+        ),
+    ),
+    why="without the `todo_add` row every cardless plan write raises a card, "
+        "and without the tool rows the Reach page calls the eight new tools "
+        "unclassified",
+)
+
+
+REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK, PROJECT_GATE_ROWS,
+                              GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
+                              UNKNOWN_RISK)}
 
 
 class Refused(Exception):

@@ -86,6 +86,22 @@ anything tries):
     store, naming projects.db and the date they read, with honest empty
     answers, ahead of the model, and as record reads an untagged request may
     use;
+  - the PLAN STORE'S IMPORT AND TOOLS (2026-11-20, PM2): the import/seed
+    reads goals.db's plan steps and the one scheduler's work-list items
+    READ-ONLY and proposes them as milestones and work items behind ONE
+    change_own_config card; a dry run writes nothing, a second run creates
+    nothing new (every source row has one stable key in the append-only log),
+    the source's own rough date label stays words and an imported item is
+    undated unless the source row really had a date. The eight typed tools are
+    driven through the REAL `_one_call`: the five owner-direct writes are
+    cardless on a clean owner turn (the shipped "auto" `todo_add` line through
+    the REAL published gate) and ONE card after outside text; the decomposed
+    plan is ONE card that writes zero rows on a deny and runs nothing; the
+    circle guards refuse with nothing written and no card; a status change
+    leaves one project event and one Undo receipt that really puts the old
+    status back; the hub note is ONE notes-editor card with the File Guardian
+    copy first; and the acceptance case answers "what should I work on next?"
+    from a REAL plan row after the import, not the empty answer;
   - the routes, install() and the patch on the stack of earlier patches;
   - the audit log never carries a name, a note or a number.
 
@@ -111,7 +127,14 @@ sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("jarvis_projects.py", "jarvis_quick.py", "jarvis_schedule.py",
-                "jarvis_documents.py", "jarvis_sensitive.py")
+                "jarvis_documents.py", "jarvis_sensitive.py",
+                # PM2 (2026-11-20): the tests below drive the REAL model tools
+                # through jarvis_agent, and the import/seed reads goals.db and
+                # the scheduler read-only.
+                "jarvis_agent.py", "jarvis_goals.py", "jarvis_receipts.py",
+                "jarvis_notes_edit.py", "jarvis_file_guardian.py",
+                "jarvis_claims.py", "jarvis_reach.py",
+                "jarvis_tool_profiles.py")
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-projects-"))
 #: Every project edit in this suite now leaves a receipt. Pointed at this
@@ -3192,6 +3215,797 @@ def t_the_three_project_answers_are_read_only_and_the_widening_is_narrow():
         _restore_env("JARVIS_PROJECTS_DB", old)
         _restore_env("OPENJARVIS_CONFIG_DIR", old_config)
         P._reset_for_tests()
+
+
+# ==========================================================================
+#   PM2 (2026-11-20): the import/seed and the plan store's typed tools
+# ==========================================================================
+# The store (jarvis_projects.py, PM1) has the rows; these prove the import
+# that fills it from the two stores that already hold the owner's work
+# (goals.db, read-only; the one scheduler's work lists, read-only) and the
+# typed model tools that are now the only doors into writing them. Everything
+# here drives the REAL jarvis_agent.TOOLS entries through the REAL `_one_call`,
+# with a fake approval gate where a card is expected - so "one card", "zero
+# rows on deny" and "nothing runs" are read off the same contract an install
+# runs, and the clean-turn tier is the REAL published jarvis_gate.py with the
+# SHIPPED [autonomy.tiers].
+
+_PM2 = _TMP / "pm2"
+_PM2.mkdir(exist_ok=True)
+_PM2_VAULT = _PM2 / "vault"
+(_PM2_VAULT / ".obsidian").mkdir(parents=True, exist_ok=True)
+
+_AGENT = None
+_REAL_TIERS: dict = {}
+_GATE = None
+
+
+def _pm2_agent():
+    """jarvis_agent, imported once - no model, no socket."""
+    global _AGENT
+    if _AGENT is None:
+        import jarvis_agent
+        _AGENT = jarvis_agent
+    return _AGENT
+
+
+def _pm2_tiers() -> dict:
+    """The SHIPPED [autonomy.tiers], read from the template an install gets."""
+    if _REAL_TIERS:
+        return dict(_REAL_TIERS)
+    import tomllib
+    cfg = tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml")
+                        .read_text(encoding="utf-8"))
+    _REAL_TIERS.update(dict(cfg.get("autonomy", {}).get("tiers") or {}))
+    return dict(_REAL_TIERS)
+
+
+def _pm2_gate():
+    """The REAL published jarvis_gate.py (jarvis-backend/), or None here.
+
+    A gate is one of the files that live only on the owner's PC, so this
+    repository keeps the published base and that is what is loaded - with the
+    SHIPPED tier table, so the tier proved is the tier an install gets.
+    """
+    global _GATE
+    if _GATE is not None:
+        return _GATE
+    try:
+        import _base
+        base = _base.folder("jarvis_gate.py")
+    except Exception:                                     # noqa: BLE001
+        return None
+    if base is None:
+        return None
+    tiers = _pm2_tiers()
+    if not tiers:
+        return None
+    fw.load_framework = lambda: {
+        "autonomy": {"unknown_action_tier": "ask", "tiers": tiers},
+        "logging": {"redact_private_content_in_logs": True},
+    }
+    _base.put_on_path(base)
+    import jarvis_gate
+    _GATE = jarvis_gate
+    return _GATE
+
+
+class _PmVerdict:
+    def __init__(self, allowed=True, outcome="approved", tier="ask"):
+        self.allowed = bool(allowed)
+        self.outcome = outcome
+        self.tier = tier
+        self.request_id = "pm2-card"
+        self.reason = ""
+
+
+class _PmChecker:
+    """A fake approval gate: records every card, answers with one verdict."""
+
+    def __init__(self, allowed=True, outcome="approved", tier="ask"):
+        self.calls = []
+        self.verdict = _PmVerdict(allowed, outcome, tier)
+
+    def __call__(self, action, detail, prompt):
+        self.calls.append((action, dict(detail or {}), str(prompt or "")))
+        return self.verdict
+
+
+def _pm2_call(name, args, checker, watch=None):
+    """Drive ONE real `_one_call` and read the tool result and the step."""
+    AG = _pm2_agent()
+    call = {"id": "pm2-" + name,
+            "function": {"name": name, "arguments": json.dumps(args)}}
+    convo, steps = [], []
+
+    class _Out:
+        status = None
+        gone = False
+
+        def set_status(self, word):
+            self.status = word
+
+        def card_answered(self, verdict):
+            pass
+
+    AG._one_call(call, [name], convo, steps, checker,
+                 lambda *a, **k: None, _Out(), lambda *a, **k: None,
+                 watch=watch)
+    return (json.loads(convo[-1]["content"]) if convo else {}), steps
+
+
+def _pm2_use(store):
+    """Point the tools' own store door at `store`; return the old env value."""
+    old = os.environ.get("JARVIS_PROJECTS_DB")
+    os.environ["JARVIS_PROJECTS_DB"] = str(store.path)
+    P._reset_for_tests()
+    return old
+
+
+def _pm2_unuse(old):
+    if old is None:
+        os.environ.pop("JARVIS_PROJECTS_DB", None)
+    else:
+        os.environ["JARVIS_PROJECTS_DB"] = old
+    P._reset_for_tests()
+
+
+class _PmGoals:
+    """The two calls the seed and the next answer make on the goals store."""
+
+    def __init__(self, goals):
+        self._goals = [dict(g) for g in goals]
+
+    def list(self):
+        return [dict(g) for g in self._goals]
+
+    def next_open_step(self, goal_id):
+        for goal in self._goals:
+            if goal["id"] != goal_id:
+                continue
+            for step in goal.get("plan") or []:
+                if step.get("state") == "open":
+                    return dict(step)
+        return None
+
+
+def _pm2_goals(goals, path):
+    fake = types.ModuleType("jarvis_goals")
+    fake.db_path = lambda: Path(path)
+    fake.get = lambda: _PmGoals(goals)
+    saved = sys.modules.get("jarvis_goals")
+    sys.modules["jarvis_goals"] = fake
+    return saved
+
+
+def _pm2_sched(sched):
+    fake = types.ModuleType("jarvis_schedule")
+    fake.get = lambda: sched
+    fake.list_title = (lambda key: (key[0].upper() + key[1:] + " list")
+                       if key else "To-do list")
+    saved = sys.modules.get("jarvis_schedule")
+    sys.modules["jarvis_schedule"] = fake
+    return saved
+
+
+def _pm2_restore_module(name, saved):
+    if saved is None:
+        sys.modules.pop(name, None)
+    else:
+        sys.modules[name] = saved
+
+
+class _PmSched:
+    """Enough of the one scheduler for the import and the next answer."""
+
+    def __init__(self, todos=()):
+        self._todos = [dict(t) for t in todos]
+        self.commands = []
+
+    def todos(self):
+        return [dict(t) for t in self._todos]
+
+    def listed(self):
+        return []
+
+    def mark_command(self, text):
+        self.commands.append(text)
+
+
+def _pm2_owner_store():
+    """A store shaped like the owner's: two coding projects, no plan rows."""
+    s = fresh(clock=_ticking_clock())
+    coding = s.create({"name": "Site", "kind": "coding"}, here=True)
+    other = s.create({"name": "Tool", "kind": "coding"}, here=True)
+    return s, coding, other
+
+
+def _pm2_link_goal(store, project_id, goal_id):
+    import sqlite3
+    with sqlite3.connect(str(store.path)) as c:
+        c.execute("UPDATE projects SET goals = ? WHERE id = ?",
+                  (json.dumps([goal_id]), project_id))
+
+
+_PM2_GOALS = [{
+    "id": "g1", "text": "Ship the plan", "status": "active",
+    "plan": [
+        {"id": "s1", "step": "Write the plan", "by": "before winter",
+         "state": "open", "needs": []},
+        {"id": "s2", "step": "Test the plan", "by": "",
+         "state": "open", "needs": ["s1"]},
+        {"id": "s3", "step": "Agree the plan", "by": "",
+         "state": "done", "needs": []},
+    ],
+}]
+_PM2_DUE = time.mktime(time.strptime("2026-12-01", "%Y-%m-%d"))
+_PM2_DUE_DATE = time.strftime("%Y-%m-%d", time.localtime(_PM2_DUE))
+
+
+def _pm2_sources(store, project):
+    """A linked goal with steps, and one scheduler item on the project's list."""
+    _pm2_link_goal(store, project["id"], "g1")
+    work_list = (project.get("work_list") or {}).get("name") or ""
+    sched = _PmSched([{"id": "t1", "kind": "todo", "state": "active",
+                       "list": work_list, "text": "Buy the domain",
+                       "due": _PM2_DUE}])
+    goals_file = _PM2 / "goals.db"
+    goals_file.write_text("", encoding="utf-8")
+    return sched, goals_file
+
+
+def t_pm2_the_seed_imports_once_and_invents_no_date():
+    """The import/seed: reads goals.db and the scheduler READ-ONLY, proposes
+    the source's own words on ONE card, writes on a yes, keeps the source's
+    dates and invents none, and a second run creates nothing new."""
+    s, project, _other = _pm2_owner_store()
+    sched, goals_file = _pm2_sources(s, project)
+    old_goals = _pm2_goals(_PM2_GOALS, goals_file)
+    old_sched = _pm2_sched(sched)
+    old_env = _pm2_use(s)
+    try:
+        # ---- the DRY RUN: the whole proposal, and not one byte written ----
+        before_bytes = s.path.read_bytes()
+        counts_before = s.plan_counts()
+        dry = _PmChecker()
+        res, _steps = _pm2_call("project_seed_plan", {"dry_run": True}, dry)
+        check("the seed's dry run answers with the source's own rows",
+              res.get("ok") is True and res.get("dry_run") is True
+              and [item["title"] for item in res.get("items") or []]
+              == ["Ship the plan", "Write the plan", "Test the plan",
+                  "Agree the plan", "Buy the domain"], res)
+        check("... and raises NO card at all", dry.calls == [], dry.calls)
+        check("... and writes nothing: not one plan row, not one byte",
+              s.plan_counts() == counts_before
+              and s.path.read_bytes() == before_bytes, s.plan_counts())
+        check("... and reports how many rows WOULD be imported",
+              "5 row(s) would be imported" in str(res.get("message")),
+              res.get("message"))
+
+        # ---- the WRITE: ONE card, the picture the owner approved ----
+        yes = _PmChecker()
+        res, _steps = _pm2_call("project_seed_plan", {}, yes)
+        check("the import asks exactly ONE card", len(yes.calls) == 1, yes.calls)
+        check("... under the existing change_own_config action",
+              bool(yes.calls) and yes.calls[0][0] == "change_own_config", yes.calls[:1])
+        prompt = yes.calls[0][2] if yes.calls else ""
+        check("... showing every row it would save, in the source's words",
+              '"Ship the plan"' in prompt and '"Write the plan"' in prompt
+              and '"Buy the domain"' in prompt and "Nothing will run" in prompt, prompt)
+        check("... and the store's own read built the picture it showed",
+              "milestone" in prompt and "due " + _PM2_DUE_DATE in prompt, prompt)
+        check("the approved card writes the plan rows",
+              res.get("ok") is True and res.get("wrote") is True
+              and res.get("created") == {"milestones": 1, "work_items": 4,
+                                         "edges": 1}, res)
+        items = {row["title"]: row for row in s.work_items()}
+        check("... the goal's steps, its milestone and the work-list item",
+              set(items) == {"Write the plan", "Test the plan", "Agree the plan",
+                             "Buy the domain"}, sorted(items))
+        check("... with the source's own statuses (a done step imports done)",
+              items["Agree the plan"]["status"] == "done"
+              and items["Write the plan"]["status"] == "backlog", items)
+        check("... and the goal step's rough label kept as words, NEVER as a date",
+              items["Write the plan"]["due_date"] is None
+              and "before winter" in items["Write the plan"]["detail"],
+              items["Write the plan"])
+        check("... every imported work item that had no date stays undated",
+              all(row["due_date"] is None for name, row in items.items()
+                  if name != "Buy the domain"))
+        check("... and a source row that REALLY had a due date imports it unchanged",
+              items["Buy the domain"]["due_date"] == _PM2_DUE_DATE,
+              items["Buy the domain"]["due_date"])
+        check("... the milestone is undated too",
+              all(row["due_date"] is None for row in s.milestones()))
+        check("... the step that needs another is imported as ONE blocking link",
+              s.edge_count() == 1, s.edge_count())
+        check("... every created row is in the append-only log, one event each",
+              len([e for e in s.events() if e["kind"] == P.SEED_EVENT]) == 6,
+              [e["kind"] for e in s.events()])
+        check("... and the goals store itself was never written to",
+              goals_file.read_text(encoding="utf-8") == "")
+
+        # ---- the SECOND run: nothing new, and no card to answer ----
+        counts = s.plan_counts()
+        events = len(s.events())
+        again = _PmChecker()
+        res2, _steps = _pm2_call("project_seed_plan", {}, again)
+        check("a second run creates nothing new",
+              res2.get("ok") is True and res2.get("wrote") is False
+              and s.plan_counts() == counts and len(s.events()) == events,
+              (res2, s.plan_counts(), counts))
+        check("... and says so in the owner's words",
+              res2.get("message") == P.SEED_ALL_DONE, res2.get("message"))
+        check("... and asks no card at all: there is nothing to approve",
+              again.calls == [], again.calls)
+
+        # ---- the sources are READ-ONLY: a goals store that is not there ----
+        missing = _PM2 / "no-goals-here.db"
+        _pm2_goals(_PM2_GOALS, missing)
+        res3, _st = _pm2_call("project_seed_plan", {"dry_run": True}, _PmChecker())
+        check("a goals.db that does not exist is not created by the import",
+              res3.get("ok") is True and not missing.exists(), res3)
+    finally:
+        _pm2_restore_module("jarvis_goals", old_goals)
+        _pm2_restore_module("jarvis_schedule", old_sched)
+        _pm2_unuse(old_env)
+
+
+def t_pm2_the_plan_card_is_one_card_and_runs_nothing():
+    """project_decompose_plan: ONE card; a refused card writes ZERO rows; a yes
+    writes the plan and NOTHING runs. A proposed circle is refused before the
+    card, so nothing is written and no card asks about a plan that cannot be
+    saved."""
+    s, project, _other = _pm2_owner_store()
+    old_env = _pm2_use(s)
+    try:
+        yes = _PmChecker()
+        res, _steps = _pm2_call("project_decompose_plan", {
+            "project": "Site",
+            "milestones": [{"title": "Stage one"}],
+            "items": [{"title": "Draft it"},
+                      {"title": "Ship it", "milestone": 1, "priority": 0}],
+            "blocks": [[1, 2]],
+        }, yes)
+        check("the plan is written on ONE card", len(yes.calls) == 1, yes.calls)
+        check("... under the existing change_own_config action",
+              bool(yes.calls) and yes.calls[0][0] == "change_own_config",
+              yes.calls[:1])
+        prompt = yes.calls[0][2] if yes.calls else ""
+        check("... showing the whole plan: milestones, items and the blocking pair",
+              "Stage one" in prompt and "Draft it" in prompt and "Ship it" in prompt
+              and "must finish before" in prompt, prompt)
+        check("... and saying plainly that nothing runs and no date is set",
+              "Nothing runs" in prompt and "no date is set" in prompt, prompt)
+        check("the yes writes the rows",
+              res.get("ok") is True and res.get("created") == {
+                  "milestones": 1, "work_items": 2, "edges": 1}, res)
+        check("... and the answer says NOTHING RAN",
+              "Nothing ran." in str(res.get("message")), res.get("message"))
+        check("... exactly one milestone, two items and one edge exist",
+              s.plan_counts()[project["id"]]["milestones"] == 1
+              and s.plan_counts()[project["id"]]["work_items"] == 2
+              and s.edge_count() == 1, s.plan_counts())
+        check("... the blocker really makes the second item not ready",
+              [row["title"] for row in s.ready_next()] == ["Draft it"],
+              [(row["title"], row["ready"]) for row in s.work_items()])
+        check("... no date was set by the plan card",
+              all(row["due_date"] is None for row in s.work_items())
+              and all(row["due_date"] is None for row in s.milestones()))
+        check("... and only plan rows and their own events changed",
+              {e["kind"] for e in s.events()} ==
+              {"milestone_added", "work_item_added", "edge_added"},
+              [e["kind"] for e in s.events()])
+
+        # ---- a DENIED card writes nothing at all ----
+        before_rows = s.plan_counts()
+        before_events = len(s.events())
+        no = _PmChecker(allowed=False, outcome="denied")
+        res, _steps = _pm2_call("project_decompose_plan", {
+            "project": "Site", "milestones": [], "items": [{"title": "Never"}],
+            "blocks": []}, no)
+        check("a refused plan card writes ZERO rows",
+              s.plan_counts() == before_rows and len(s.events()) == before_events,
+              (s.plan_counts(), before_rows))
+        check("... and the model is told the card said no",
+              res.get("ok") is False and "refused" in str(res.get("error")), res)
+        check("... one card, no second write", len(no.calls) == 1, no.calls)
+
+        # ---- a CIRCLE is refused BEFORE any card ----
+        rows = s.plan_counts()
+        events = len(s.events())
+        circle = _PmChecker()
+        res, _steps = _pm2_call("project_decompose_plan", {
+            "project": "Site", "milestones": [],
+            "items": [{"title": "One"}, {"title": "Two"}],
+            "blocks": [[1, 2], [2, 1]]}, circle)
+        check("a proposed circle of blockers is refused",
+              res.get("ok") is False and "circle" in str(res.get("error")), res)
+        check("... BEFORE any card is raised", circle.calls == [], circle.calls)
+        check("... and it writes nothing: no milestone, item, edge or event",
+              s.plan_counts() == rows and len(s.events()) == events,
+              (s.plan_counts(), rows))
+    finally:
+        _pm2_unuse(old_env)
+
+
+def t_pm2_a_link_circle_is_refused_by_the_tool_and_writes_nothing():
+    """work_item_link_dependency keeps the store's existing DFS circle guard:
+    the link that would close a circle is refused before a card, and NOTHING
+    is written - no edge, no event."""
+    s, project, _other = _pm2_owner_store()
+    first = s.add_work_item(project["id"], {"title": "First step"})
+    second = s.add_work_item(project["id"], {"title": "Second step"})
+    s.add_edge("blocks", first["id"], second["id"])
+    old_env = _pm2_use(s)
+    try:
+        edges = s.edge_count()
+        events = len(s.events())
+        cards = _PmChecker()
+        res, _steps = _pm2_call("work_item_link_dependency",
+                                {"from": "Second step", "to": "First step",
+                                 "kind": "blocks"}, cards)
+        check("a link that would close a circle is refused",
+              res.get("ok") is False and "circle" in str(res.get("error")), res)
+        check("... before a card is raised", cards.calls == [], cards.calls)
+        check("... and it writes nothing: no edge, no event",
+              s.edge_count() == edges and len(s.events()) == events,
+              (s.edge_count(), edges, len(s.events()), events))
+        # A legal link still runs cardless on a clean owner turn through the
+        # real gate, and it writes the one row plus its event.
+        gate = _pm2_gate()
+        if gate is None:
+            skip("the real gate is not in this tree, so the cardless link was not run")
+        else:
+            res, steps = _pm2_call("work_item_link_dependency",
+                                   {"from": "First step", "to": "Second step",
+                                    "kind": "related"}, _pm2_agent()._gate_check)
+            check("a legal link runs with no card through the real gate",
+                  res.get("ok") is True and bool(steps)
+                  and steps[-1].get("outcome") == "auto", (res, steps[-1:]))
+            check("... and adds exactly one edge",
+                  s.edge_count() == edges + 1, s.edge_count())
+    finally:
+        _pm2_unuse(old_env)
+
+
+def t_pm2_a_tainted_turn_asks_and_a_clean_one_does_not():
+    """The owner-direct plan writes are cardless on a clean owner turn (the
+    shipped "auto" todo_add line) and are swapped to ONE change_own_config card
+    when the conversation is tainted - and a refused card writes nothing."""
+    AG = _pm2_agent()
+    s, project, _other = _pm2_owner_store()
+    old_env = _pm2_use(s)
+    try:
+        gate = _pm2_gate()
+        if gate is None:
+            skip("the real gate is not in this tree, so the clean-turn tier was not run")
+        else:
+            before = len(gate.pending())
+            res, steps = _pm2_call("work_item_add",
+                                   {"project": "Site", "title": "Clean step"},
+                                   AG._gate_check)
+            check("a CLEAN owner turn adds the item with no card",
+                  res.get("ok") is True
+                  and bool(steps) and steps[-1].get("outcome") == "auto",
+                  (res, steps[-1:]))
+            check("... and nothing was left waiting for approval",
+                  len(gate.pending()) == before, gate.pending())
+            clean = [row for row in s.work_items() if row["title"] == "Clean step"]
+            check("... the row is really there", len(clean) == 1, clean)
+
+        # ---- TAINTED: every plan write raises ONE change_own_config card ----
+        no = _PmChecker(allowed=False, outcome="denied")
+        res, _steps = _pm2_call("work_item_add",
+                                {"project": "Site", "title": "Tainted step"},
+                                no, watch=AG._TurnWatch(tainted=True))
+        check("a TAINTED turn forces the write to ONE change_own_config card",
+              len(no.calls) == 1 and no.calls[0][0] == "change_own_config", no.calls)
+        prompt = no.calls[0][2] if no.calls else ""
+        check("... whose card says outside text shaped this request",
+              "outside text" in prompt.lower(), prompt)
+        check("... a NO writes nothing",
+              res.get("ok") is False
+              and not [row for row in s.work_items()
+                       if row["title"] == "Tainted step"], res)
+
+        yes = _PmChecker()
+        res, _steps = _pm2_call("work_item_add",
+                                {"project": "Site", "title": "Tainted step"},
+                                yes, watch=AG._TurnWatch(tainted=True))
+        check("... a YES writes the row the card named",
+              res.get("ok") is True
+              and [row["title"] for row in s.work_items()
+                   if row["title"] == "Tainted step"] == ["Tainted step"], res)
+        check("... still exactly one card", len(yes.calls) == 1, yes.calls)
+
+        # A pasted (not typed) newest message is the same rule.
+        no2 = _PmChecker(allowed=False, outcome="denied")
+        watch2 = AG._TurnWatch(messages=[{"role": "user", "content": "pasted words",
+                                          "provenance": "pasted"}])
+        res, _steps = _pm2_call("work_item_update_status",
+                                {"item": "Clean step", "status": "in_progress"},
+                                no2, watch=watch2)
+        check("a turn whose newest message was PASTED also asks one card",
+              len(no2.calls) == 1 and no2.calls[0][0] == "change_own_config",
+              no2.calls)
+        check("... and a no leaves the status alone",
+              [row["status"] for row in s.work_items()
+               if row["title"] == "Clean step"] == ["backlog"],
+              [row["status"] for row in s.work_items()
+               if row["title"] == "Clean step"])
+    finally:
+        _pm2_unuse(old_env)
+
+
+def t_pm2_the_hub_export_is_one_notes_card_and_a_guardian_copy():
+    """project_export_obsidian_hub: ONE edit_vault_note card raised by the
+    notes editor, a one-way Markdown copy of the project in the vault, the File
+    Guardian copy first when an existing note is replaced, and no write to the
+    project store."""
+    s, project, _other = _pm2_owner_store()
+    s.add_milestone(project["id"], {"title": "Stage one"})
+    s.add_work_item(project["id"], {"title": "Draft it"})
+    old_env = _pm2_use(s)
+    old_vault = os.environ.get("JARVIS_OBSIDIAN_VAULT")
+    os.environ["JARVIS_OBSIDIAN_VAULT"] = str(_PM2_VAULT)
+    try:
+        events_before = len(s.events())
+        counts_before = s.plan_counts()
+        cards = _PmChecker()
+        res, _steps = _pm2_call("project_export_obsidian_hub",
+                                {"project": "Site"}, cards)
+        note_path = _PM2_VAULT / "Projects" / "Site.md"
+        check("the export raises exactly ONE notes-editor card",
+              len(cards.calls) == 1
+              and cards.calls[0][0] == "edit_vault_note", cards.calls[:1])
+        card_prompt = cards.calls[0][2] if cards.calls else ""
+        check("... showing the note's path and its own words",
+              "Projects/Site.md" in card_prompt and "# Site" in card_prompt,
+              cards.calls[:1])
+        check("the export writes the hub note into the vault",
+              res.get("ok") is True and note_path.is_file(), res)
+        text = note_path.read_text(encoding="utf-8") if note_path.is_file() else ""
+        check("... a one-way picture of the project",
+              "# Site" in text and P.HUB_NOTE_WORDS in text
+              and "Stage one" in text and "Draft it" in text, text[:300])
+        check("... and the project store is NOT changed by an export",
+              s.plan_counts() == counts_before
+              and len(s.events()) == events_before, (s.plan_counts(), counts_before))
+
+        # ---- replacing an existing note: the File Guardian copy comes first ----
+        try:
+            import jarvis_file_guardian as GU
+            before_rows = len(GU.rows())
+        except Exception:                                 # noqa: BLE001
+            GU = None
+            before_rows = 0
+        old_bytes = note_path.read_bytes() if note_path.is_file() else b""
+        cards2 = _PmChecker()
+        res2, _steps2 = _pm2_call("project_export_obsidian_hub",
+                                  {"project": "Site"}, cards2)
+        check("a second export asks its ONE card again",
+              len(cards2.calls) == 1
+              and cards2.calls[0][0] == "edit_vault_note", cards2.calls[:1])
+        check("... and replaces the note",
+              res2.get("ok") is True and res2.get("replaced") is True, res2)
+        if GU is not None:
+            import hashlib
+            rows = GU.rows()
+            check("... the File Guardian copied the old note BEFORE the write",
+                  len(rows) == before_rows + 1
+                  and str(rows[-1].get("path", "")).endswith("Site.md")
+                  and rows[-1].get("before_sha256")
+                  == hashlib.sha256(old_bytes).hexdigest(),
+                  (len(rows), before_rows, rows[-1:]))
+        else:
+            skip("the File Guardian is not in this tree, so its copy was not proved")
+    finally:
+        if old_vault is None:
+            os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+        else:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = old_vault
+        _pm2_unuse(old_env)
+
+
+def t_pm2_a_status_change_leaves_an_undo_receipt():
+    """work_item_update_status: one project_event row and ONE receipt, and the
+    receipt's Undo really puts the old status back (exactly once)."""
+    import jarvis_receipts as R
+    s, project, _other = _pm2_owner_store()
+    item = s.add_work_item(project["id"], {"title": "Move me"})
+    old_env = _pm2_use(s)
+    try:
+        before = {row["receipt_id"] for row in R.recent()}
+        out = s.set_work_item_status(item["id"], "in_progress")
+        check("a status change still moves the item", out["status"] == "in_progress")
+        new = [row for row in R.recent() if row["receipt_id"] not in before]
+        check("... and leaves exactly ONE receipt", len(new) == 1, new)
+        rid = new[0]["receipt_id"] if new else ""
+        check("... whose tool name is the status change itself",
+              bool(new) and new[0].get("tool_name") == "work_item_status", new[:1])
+        check("... and whose summary names the new state",
+              bool(new) and "in_progress" in str(new[0].get("summary", "")), new[:1])
+        if rid:
+            status_rows = [row for row in R.recent()
+                           if row.get("tool_name") == "work_item_status"]
+            got = R.undo(rid)
+            check("the receipt's Undo really puts the old status back",
+                  got.get("ok") is True, got)
+            rows = [row for row in P.get().work_items() if row["id"] == item["id"]]
+            check("... in the store itself",
+                  bool(rows) and rows[0]["status"] == "backlog", rows)
+            check("... and the Undo itself leaves no second receipt",
+                  len([row for row in R.recent()
+                       if row.get("tool_name") == "work_item_status"])
+                  == len(status_rows),
+                  [row.get("summary") for row in R.recent()][:3])
+            again = R.undo(rid)
+            check("... and a second Undo refuses, applying nothing",
+                  again.get("ok") is False, again)
+        check("... the change ALSO left one project event, and the Undo its own",
+              [e["kind"] for e in s.events()] == ["work_item_added",
+                                                  "work_item_status",
+                                                  "work_item_status"],
+              [e["kind"] for e in s.events()])
+    finally:
+        _pm2_unuse(old_env)
+
+
+def t_pm2_the_tools_are_registered_and_tiered():
+    """The registry and the tiers: every one of the eight is a real tool with a
+    real prepare/execute, in exactly one short-list home, offered by the
+    shipped settings, mapped to an existing gate action, and the one new risk
+    row is a local reversible write. No new card class and no new action."""
+    AG = _pm2_agent()
+    expect = {
+        "project_create": "todo_add",
+        "work_item_add": "todo_add",
+        "work_item_update_status": "todo_add",
+        "work_item_link_dependency": "todo_add",
+        "project_checkpoint_reflect": "todo_add",
+        "project_seed_plan": "change_own_config",
+        "project_decompose_plan": "change_own_config",
+        "project_export_obsidian_hub": "edit_vault_note",
+    }
+    check("all eight tools are in jarvis_agent.TOOLS",
+          set(expect) <= set(AG.TOOLS), sorted(set(expect) - set(AG.TOOLS)))
+    check("... and each carries a real prepare() and execute()",
+          all(callable(AG.TOOLS[n].prepare) and callable(AG.TOOLS[n].execute)
+              and getattr(AG.TOOLS[n].prepare, "__name__", "").startswith("_prepare_")
+              for n in expect),
+          {n: getattr(AG.TOOLS[n].prepare, "__name__", "") for n in expect})
+    check("... exactly one home each in the short list's core/groups",
+          all((1 if n in AG.CORE_TOOLS else 0)
+              + sum(1 for _g, _w, members in AG.TOOL_GROUPS if n in members) == 1
+              for n in expect),
+          {n: [g for g, _w, members in AG.TOOL_GROUPS if n in members]
+           for n in expect})
+    import tomllib
+    shipped = set(tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml")
+                                .read_text(encoding="utf-8"))["tools"]["enabled"])
+    check("the shipped settings file offers all eight", set(expect) <= shipped,
+          sorted(set(expect) - shipped))
+    tiers = _pm2_tiers()
+    check("both carded actions ship their own 'ask' tier line, and the "
+          "owner-direct one is the gate's own per-tool 'auto' literal (proved "
+          "by the real gate check below)",
+          tiers.get("change_own_config") == "ask"
+          and tiers.get("edit_vault_note") == "ask"
+          and "todo_add" not in tiers,
+          {a: tiers.get(a) for a in set(expect.values())})
+    check("the two proposal tools are in NEEDS_A_PERSON, so a loosened line "
+          "cannot run them with nobody asked",
+          {"project_seed_plan", "project_decompose_plan"} <= set(AG.NEEDS_A_PERSON))
+    check("the five owner-direct writes are NOT a standing card",
+          not (set(AG.PROJECT_OWNER_DIRECT_TOOLS) & set(AG.NEEDS_A_PERSON)))
+    check("a plan tool's own result is not recorded as outside text",
+          AG.PROJECT_TOOLS <= AG._NOT_READING)
+    try:
+        import jarvis_reach as REACH
+        import jarvis_tool_profiles as PROFILES
+        import jarvis_claims as CLAIMS
+        check("every plan tool has a Reach-page name",
+              set(expect) <= set(REACH.TOOL_NAMES),
+              sorted(set(expect) - set(REACH.TOOL_NAMES)))
+        check("... and a tool dossier",
+              set(expect) <= set(PROFILES.PROFILES),
+              sorted(set(expect) - set(PROFILES.PROFILES)))
+        check("... and a claim classification (an action, never a read)",
+              set(expect) <= set(CLAIMS.ACTING_TOOLS)
+              and not (set(expect) & set(CLAIMS.READ_ONLY_TOOLS)),
+              sorted(set(expect) - set(CLAIMS.ACTING_TOOLS)))
+    except Exception as exc:                              # noqa: BLE001
+        check("the Reach page, dossiers and claims are importable here",
+              False, repr(exc))
+
+    gate = _pm2_gate()
+    if gate is None:
+        skip("the real gate is not in this tree, so the registry rows were not run")
+        return
+    want = dict(expect)
+    resolved = {name: gate.action_for_tool(name, {}) for name in want}
+    check("every plan tool resolves to its action in the published gate",
+          {name: resolved[name][0] for name in want} == want, resolved)
+    check("... so no tool answers 'unclassified_tool'",
+          all(resolved[name][1] and resolved[name][0] != "unclassified_tool"
+              for name in want), resolved)
+    gate.action_for_tool("todo_add", {})     # the gate's own per-tool tier warm
+    verdict = gate.check("todo_add", {})
+    check("the owner-direct action really ships 'auto', so a clean turn is cardless",
+          verdict.tier == "auto" and verdict.allowed is True,
+          (verdict.tier, verdict.allowed))
+    risk = gate.risk_for("todo_add")
+    check("... and the one new risk row says a local, reversible row",
+          risk["classified"] is True and risk["reversible"] == "yes"
+          and risk["reach"] == "local" and risk["swipe_ok"] is True, risk)
+    check("... while both carded actions stay 'ask' in the shipped tiers",
+          tiers.get("change_own_config") == "ask"
+          and tiers.get("edit_vault_note") == "ask",
+          (tiers.get("change_own_config"), tiers.get("edit_vault_note")))
+
+
+def t_pm2_the_seeded_plan_is_a_real_next_item():
+    """THE ACCEPTANCE TEST. On the owner-shaped store (two coding projects, no
+    plan rows) plus a goal with steps and a work-list item that really exist,
+    the answer before the import is the honest empty one; AFTER the import the
+    answer comes from the plan rows in projects.db alone - a real item, not the
+    empty answer - even when goals.db and the scheduler read nothing."""
+    s, project, _other = _pm2_owner_store()
+    old_env = _pm2_use(s)
+    old_goals = sys.modules.get("jarvis_goals")
+    old_sched = sys.modules.get("jarvis_schedule")
+    try:
+        before = Q.answer("what should I work on next?",
+                          sched=_PmSched([]), now=_NOW)
+        check("before the import, the owner-shaped store answers honestly empty",
+              before is not None and before.intent == "project_next"
+              and "Nothing is ready to work on right now" in str(before.reply),
+              before and before.reply)
+        check("... and the plan store really has no rows yet",
+              s.plan_counts() == {}, s.plan_counts())
+
+        sched, goals_file = _pm2_sources(s, project)
+        _pm2_sched(sched)
+        _pm2_goals(_PM2_GOALS, goals_file)
+        yes = _PmChecker()
+        res, _steps = _pm2_call("project_seed_plan", {}, yes)
+        check("the import writes the owner's own rows after ONE card",
+              res.get("ok") is True and res.get("wrote") is True
+              and len(yes.calls) == 1, (res, yes.calls))
+        check("... so the goal step and the work-list item now EXIST as plan rows",
+              s.plan_counts()[project["id"]]["work_items"] == 4,
+              s.plan_counts())
+
+        # The sources are put back the way the owner's real PC has them (no
+        # readable goal, no scheduler item): the answer must now come from the
+        # plan rows the import wrote.
+        _pm2_restore_module("jarvis_goals", old_goals)
+        _pm2_restore_module("jarvis_schedule", old_sched)
+        answered = Q.answer("what should I work on next?",
+                            sched=_PmSched([]), now=_NOW)
+        said = str(answered.reply) if answered is not None else ""
+        check("after the import, 'what should I work on next?' answers from "
+              "projects.db - a REAL plan item, not the empty answer",
+              answered is not None and answered.intent == "project_next"
+              and "Nothing is ready to work on right now" not in said
+              and "Write the plan" in said, said[:400])
+        plan_items = {row["title"]: row for row in s.work_items()}
+        check("... the named item is a real work item row the store can act on",
+              "Write the plan" in plan_items
+              and plan_items["Write the plan"]["id"]
+              in [row["id"] for row in s.ready_next()],
+              plan_items.get("Write the plan"))
+        check("... and it is the plan store's own ready count",
+              s.plan_counts()[project["id"]]["ready"] >= 1,
+              s.plan_counts())
+        moved = s.set_work_item_status(plan_items["Write the plan"]["id"], "done")
+        check("... and it can be moved like any other plan row",
+              moved["status"] == "done")
+    finally:
+        _pm2_restore_module("jarvis_goals", old_goals)
+        _pm2_restore_module("jarvis_schedule", old_sched)
+        _pm2_unuse(old_env)
 
 
 def main():

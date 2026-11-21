@@ -276,6 +276,15 @@ ACTING_TOOLS = frozenset({
     # done" after one of them is the same false claim a to-do tick would be.
     # `goals_list` is absent on purpose - it reads.
     "goal_add", "goal_progress", "goal_done",
+    # The plan store's eight typed tools (2026-11-20, PM2). All of them CHANGE
+    # the owner's own plan store - a project, a work item, its state, a link, a
+    # checkpoint - or write a note into the vault, so a claimed "nothing was
+    # done" after one must be corrected exactly as for a to-do tick or a goal
+    # write. None of them is read-only: the seed's dry run is still the SAME
+    # tool that writes on a yes.
+    "project_create", "project_seed_plan", "project_decompose_plan",
+    "work_item_add", "work_item_update_status", "work_item_link_dependency",
+    "project_checkpoint_reflect", "project_export_obsidian_hub",
     # "phone_apps" (2026-11-02): the mixed shape browser_control already has.
     # Its `list` action reads the settings file and changes nothing, while
     # `add` and `remove` write one line of it - and only after a card. It stays

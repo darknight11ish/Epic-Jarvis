@@ -405,16 +405,22 @@ def t_the_short_list():
     # 460 -> 482 there in the same change. This copy moves with that pin, as it
     # did for every earlier one; 482 leaves 0 spare and the next member must
     # widen it with its own measurement.
-    check("more_tools itself still fits the budget with every group in (520 since "
-          "2026-11-10, measured 511 - see test_short_tool_list.py's note; 482 since "
-          "2026-11-10, measured 482; 460 since "
+    # 560 since 2026-11-20: the plan store's eight typed tools (PM2) needed a
+    # `projects` group of their own - one more group name and one more line -
+    # and the card measures 548 on this tree with this module's own
+    # estimate_tokens, against 520 without it. test_short_tool_list.py raised
+    # its copy of this pin 520 -> 560 in the same change and carries the
+    # measurement in full; this copy moves with it.
+    check("more_tools itself still fits the budget with every group in (560 since "
+          "2026-11-20, measured 548 - see test_short_tool_list.py's note; 520 since "
+          "2026-11-10, measured 511; 482 since 2026-11-10, measured 482; 460 since "
           "2026-11-05, measured 447 with the send_text and github lines; 425 since "
           "2026-11-02, measured 411 with the goals group; 395 since 2026-11-01, measured "
           "387 with the web_search_grant group; 380 since 2026-10-28, measured 360 with "
           "connect_account's own group; 345 since 2026-10-13: change_setting's own "
           "group; 325 since 2026-10-05 for read_web_page's)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 520)
+          <= 560)
     check("the tool is offered only when [tools].enabled names it",
           AG.RETIREMENT_TOOL not in AG.offered_tools({"calculator"}) and AG.RETIREMENT_TOOL in AG.offered_tools(enabled))
 

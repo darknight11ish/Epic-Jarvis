@@ -1504,6 +1504,38 @@
      "name": "Marking one of your goals done (kept, with its progress)"
     },
     {
+     "id": "project_create",
+     "name": "Creating a project, in your words"
+    },
+    {
+     "id": "project_seed_plan",
+     "name": "Importing the goal steps and work-list items you already have into a project's plan (one card)"
+    },
+    {
+     "id": "project_decompose_plan",
+     "name": "Saving a whole plan - milestones, work items and their links - on one card"
+    },
+    {
+     "id": "work_item_add",
+     "name": "Adding one work item to a project"
+    },
+    {
+     "id": "work_item_update_status",
+     "name": "Moving one work item between backlog, ready, in progress, done and cancelled (one Undo receipt)"
+    },
+    {
+     "id": "work_item_link_dependency",
+     "name": "Linking two work items: one blocks the other, or contains it, or is related"
+    },
+    {
+     "id": "project_checkpoint_reflect",
+     "name": "Writing a checkpoint or a lesson into a project's own log"
+    },
+    {
+     "id": "project_export_obsidian_hub",
+     "name": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+    },
+    {
      "id": "change_setting",
      "name": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
     },

@@ -226,6 +226,34 @@ CROSS_PROJECT_EDGE = "A blocking link joins two work items in the same project."
 CYCLE_EDGE = "That link would make a circle of work, so it was not saved."
 EDGE_EXISTS = "That link is already recorded."
 
+#: ---- PM2 (2026-11-20): the import/seed, checkpoints and the hub note ------
+#: The import/seed reads the two stores that ALREADY hold the owner's work - a
+#: goal's plan steps (`goals.db`) and a project's work list on the one scheduler
+#: - and proposes rows for this store's `milestones`/`work_items`. It is
+#: IDEMPOTENT: every created row's source key ("goal:<id>",
+#: "goal_step:<goal>:<step>", "todo:<id>") is written into the append-only
+#: `project_events` log, so a second run finds it and creates nothing new. It
+#: INVENTS NOTHING: a goal step's `by` is the owner's rough label ("before
+#: winter"), never a calendar date, so the imported item stays undated; a
+#: scheduler to-do that really has its own due date imports that date unchanged.
+SEED_EVENT = "plan_seeded"
+MAX_SEED_ITEMS = 200
+#: A decomposed plan is kept as short as a goal's own plan: a card the owner
+#: reads must stay readable, and a long plan was the measured failure mode.
+MAX_PLAN_MILESTONES = 9
+MAX_PLAN_ITEMS = 30
+#: A checkpoint/reflection line is the owner's (or Jarvis's) own short lesson.
+MAX_CHECKPOINT = 500
+CHECKPOINT_KINDS = ("checkpoint", "reflection")
+#: The one folder a hub note is written into when the project names no path.
+HUB_FOLDER = "Projects"
+HUB_NOTE_WORDS = ("This is a one-way copy of the project. Jarvis keeps the project "
+                  "in its own store on this PC; edit it there, not here.")
+HUB_MAX_BYTES = 64 * 1024
+SEED_NOTHING = ("Nothing to import: no goal's step or work-list item can be "
+                "attached to a project yet.")
+SEED_ALL_DONE = "Everything from your goals and work lists is already in the plan."
+
 #: The card this module raises: turning Shareable ON, and taking an
 #: automatic private mark off a benchmark. The same action "Folders Jarvis
 #: may look in" raises, so the gate needs no new line.
@@ -461,6 +489,22 @@ def _clean_priority(value) -> Optional[int]:
     if not 0 <= number <= MAX_PRIORITY:
         raise ValueError(f"a priority is a whole number from 0 to {MAX_PRIORITY}")
     return number
+
+
+def _clip(text, limit: int) -> str:
+    """The source's own words, shortened to fit one line. Truncation is marked
+    with "...", so a shortened import can never pass for the owner's whole
+    sentence."""
+    line = " ".join(str(text or "").split())
+    if len(line) <= limit:
+        return line
+    return line[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _safe_note_name(name: str) -> str:
+    """A file name safe inside an Obsidian vault, from a project's name."""
+    clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", str(name or "")).strip(" .")
+    return clean or "project"
 
 
 #: The ONE ready-work condition, shared by `ready_next()` and the counts in
@@ -2033,13 +2077,17 @@ class Projects:
         _audit("projects.work.add", {"project": project_id, "id": wid, "status": status})
         return view
 
-    def set_work_item_status(self, item_id: str, status: str) -> dict:
+    def set_work_item_status(self, item_id: str, status: str, *,
+                             receipt: bool = True) -> dict:
         """Move one item between the five states. No card and no second write:
-        the status change is one row plus one event. Returns the item."""
+        the status change is one row plus one event, and - unless `receipt` is
+        off, which only an Undo itself uses - one `jarvis_receipts` entry so the
+        change has a one-click Undo. Returns the item."""
         status = str(status or "")
         if status not in WORK_STATUSES:
             raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
         now = self.clock()
+        changed = False
         with self._lock, self._db() as c:
             row = self._work_row(c, item_id)
             old = row["status"]
@@ -2050,8 +2098,12 @@ class Projects:
                           (now, row["project"]))
                 self._event(c, row["project"], "work_item_status", item_id,
                             {"from": old, "to": status})
+                changed = True
             view = self._work_view(c, self._work_row(c, item_id))
         _audit("projects.work.status", {"id": item_id, "status": status})
+        if changed and receipt:
+            _record_work_status_receipt(row["project"], item_id, view["title"],
+                                        old, status)
         return view
 
     def set_plan_fields(self, project_id: str, body: dict) -> dict:
@@ -2544,6 +2596,571 @@ class Projects:
                     stack.pop()
                     path.pop()
         return circles
+
+    # ---- PM2 (2026-11-20): the import/seed, checkpoints and the hub note ----
+    # The store's own door for "put the plan the owner already has into this
+    # plan store". Like the PM1 writes above it raises no card itself: the
+    # TOOL is the carded door (jarvis_agent), and this file only ever writes
+    # once a yes was given. Everything here reads the sources READ-ONLY and
+    # writes the source's own words - never a date, a name or a priority the
+    # source did not carry.
+
+    def _seeded(self, c) -> dict:
+        """{source key: {"kind", "id"}} already imported, from the append-only
+        log. One read; the import's whole idempotence rests on this."""
+        found = {}
+        for row in c.execute("SELECT detail FROM project_events WHERE kind = ?",
+                             (SEED_EVENT,)).fetchall():
+            try:
+                detail = json.loads(row["detail"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            source = str(detail.get("source") or "")
+            if not source or source in found:
+                continue
+            found[source] = {"kind": str(detail.get("kind") or ""),
+                             "id": str(detail.get("item") or detail.get("milestone") or "")}
+        return found
+
+    def _seed_items(self) -> tuple:
+        """(items, edges, skipped, sources) - a pure read of the two stores that
+        already hold the owner's work. Nothing is created: a store that is not
+        there is not opened."""
+        items, edges, skipped = [], [], []
+        sources = {"goals": 0, "goal_steps": 0, "work_lists": 0,
+                   "work_list_items": 0}
+        projects = self.list() if self.exists() else []
+        by_goal: dict = {}
+        for project in projects:
+            for goal_id in project.get("goals") or []:
+                by_goal.setdefault(str(goal_id), []).append(project)
+        # ---- a goal's own steps (goals.db, read only) ----
+        try:
+            import jarvis_goals as G
+            goal_rows = list(G.get().list()) if G.db_path().is_file() else []
+            goals_ok = True
+        except Exception:                    # noqa: BLE001 - unreadable, said so
+            goal_rows, goals_ok = [], False
+        if not goals_ok:
+            skipped.append({"source": "goals", "kind": "goal",
+                            "why": "the goals store could not be read here"})
+        sources["goals"] = len(goal_rows)
+        for goal in goal_rows:
+            gid = str(goal.get("id") or "")
+            words = str(goal.get("text") or "").strip()
+            if not gid or not words:
+                continue
+            owners = by_goal.get(gid) or []
+            if len(owners) != 1:
+                skipped.append({
+                    "source": f"goal:{gid}", "kind": "goal",
+                    "title": _clip(words, MAX_WORK_TITLE),
+                    "why": ("no project links this goal" if not owners else
+                            "more than one project links this goal")})
+                continue
+            status = str(goal.get("status") or "")
+            if status == "draft":
+                skipped.append({"source": f"goal:{gid}", "kind": "goal",
+                                "title": _clip(words, MAX_WORK_TITLE),
+                                "why": "this goal is still a draft"})
+                continue
+            project = owners[0]
+            mkey = f"goal:{gid}"
+            items.append({
+                "source": mkey, "kind": "milestone",
+                "project": project["id"], "project_name": project["name"],
+                "milestone": "", "title": _clip(words, MAX_MILESTONE_TITLE),
+                "status": {"done": "done", "active": "active"}.get(status, "planned"),
+                "priority": None, "due_date": None, "detail": ""})
+            step_keys = {}
+            for step in goal.get("plan") or []:
+                sid = str(step.get("id") or "")
+                step_words = str(step.get("step") or "").strip()
+                if not sid or not step_words:
+                    continue
+                key = f"goal_step:{gid}:{sid}"
+                step_keys[sid] = key
+                state = str(step.get("state") or "")
+                done = state in ("done", "met_by_number")
+                detail = f'From the goal "{_clip(words, MAX_WORK_TITLE)}".'
+                by = str(step.get("by") or "").strip()
+                if by:
+                    # The goal's own rule (jarvis_goals.py:71-76): `by` is a
+                    # rough label, never a calendar date. It is kept as the
+                    # owner's words and the item stays UNDATED.
+                    detail += f' Their own rough date: "{_clip(by, 40)}" - not a calendar date.'
+                items.append({
+                    "source": key, "kind": "work_item",
+                    "project": project["id"], "project_name": project["name"],
+                    "milestone": mkey,
+                    "title": _clip(step_words, MAX_WORK_TITLE),
+                    "status": "done" if done else "backlog",
+                    "priority": None, "due_date": None, "detail": detail})
+                sources["goal_steps"] += 1
+            for step in goal.get("plan") or []:
+                sid = str(step.get("id") or "")
+                for need in step.get("needs") or []:
+                    need = str(need)
+                    if sid in step_keys and need in step_keys and need != sid:
+                        edges.append({"kind": "blocks", "from": step_keys[need],
+                                      "to": step_keys[sid]})
+        # ---- each project's work list (the one scheduler, read only) ----
+        with_lists = [(p, (p.get("work_list") or {}).get("name") or "")
+                      for p in projects if (p.get("work_list") or {}).get("name")]
+        sources["work_lists"] = len(with_lists)
+        try:
+            todos = _schedule_store().todos() if with_lists else []
+            sched_ok = True
+        except Exception:                    # noqa: BLE001 - unreadable, said so
+            todos, sched_ok = [], False
+        if not sched_ok:
+            skipped.append({"source": "work_lists", "kind": "work_list",
+                            "why": "the scheduler could not be read here"})
+        for project, list_name in with_lists:
+            for todo in todos:
+                if not isinstance(todo, dict):
+                    continue
+                if todo.get("kind") != "todo" or todo.get("list") != list_name:
+                    continue
+                if todo.get("state") not in ("active", "paused"):
+                    continue
+                text = str(todo.get("text") or "").strip()
+                todo_id = str(todo.get("id") or "")
+                if not text or not todo_id:
+                    continue
+                # The scheduler's own due date, when it really has one: the
+                # owner typed it there, so importing it invents nothing.
+                due_date = None
+                due = todo.get("due")
+                if isinstance(due, (int, float)) and not isinstance(due, bool):
+                    due_date = time.strftime("%Y-%m-%d", time.localtime(float(due)))
+                items.append({
+                    "source": f"todo:{todo_id}", "kind": "work_item",
+                    "project": project["id"], "project_name": project["name"],
+                    "milestone": "", "title": _clip(text, MAX_WORK_TITLE),
+                    "status": "backlog", "priority": None, "due_date": due_date,
+                    "detail": f'From the "{_list_title(list_name)}" work list.'})
+                sources["work_list_items"] += 1
+        if len(items) > MAX_SEED_ITEMS:
+            skipped.append({"source": "cap", "kind": "cap",
+                            "why": f"only the first {MAX_SEED_ITEMS} rows are "
+                                   f"imported in one run"})
+            keep = {item["source"] for item in items[:MAX_SEED_ITEMS]}
+            items = items[:MAX_SEED_ITEMS]
+            edges = [e for e in edges if e["from"] in keep and e["to"] in keep]
+        return items, edges, skipped, sources
+
+    def seed_sources(self) -> dict:
+        """The proposal the import card shows: what WOULD be saved, what is
+        already saved, and what was skipped and why. Reads only - a dry run is
+        this function."""
+        items, edges, skipped, sources = self._seed_items()
+        already = {}
+        if self.exists():
+            with self._lock, self._db() as c:
+                already = self._seeded(c)
+        pending = [item for item in items if item["source"] not in already]
+        for item in items:
+            if item["source"] in already:
+                item["already"] = True
+        return {"items": items, "pending": pending, "edges": edges,
+                "skipped": skipped, "sources": sources,
+                "already": len(items) - len(pending)}
+
+    def seed_plan(self, dry_run: bool = True) -> dict:
+        """Import the source's own plan rows into this store. `dry_run=True`
+        reads and proposes and writes NOTHING (the default); `dry_run=False`
+        is only ever called after an approval card, and writes in ONE
+        transaction: the milestones, the work items, the `blocks` links and one
+        event per created row. A second run creates nothing new."""
+        proposal = self.seed_sources()
+        pending = proposal["pending"]
+        known = {}
+        if self.exists():
+            with self._lock, self._db() as c:
+                known = self._seeded(c)
+        result = {"dry_run": bool(dry_run), "items": pending,
+                  "edges": proposal["edges"], "skipped": proposal["skipped"],
+                  "sources": proposal["sources"],
+                  "already": proposal["already"], "wrote": False,
+                  "created": {"milestones": 0, "work_items": 0, "edges": 0},
+                  "events": 0}
+        if dry_run or not pending:
+            result["message"] = (SEED_NOTHING if dry_run and not pending
+                                 and not proposal["items"] else
+                                 SEED_ALL_DONE if not pending else "")
+            return result
+        ids = {source: row["id"] for source, row in known.items()
+               if row.get("id")}
+        by_source = {item["source"]: item for item in pending}
+        created = result["created"]
+        now = self.clock()
+        skipped = list(result["skipped"])
+        with self._lock, self._db() as c:
+            # Positions continue after any milestone already there.
+            positions: dict = {}
+            for project_id in {item["project"] for item in pending}:
+                row = c.execute("SELECT COALESCE(MAX(position), -1) + 1 "
+                                "FROM milestones WHERE project = ?",
+                                (project_id,)).fetchone()
+                positions[project_id] = int(row[0])
+            for item in pending:
+                if item["kind"] != "milestone":
+                    continue
+                mid = _new_id()
+                position = positions[item["project"]]
+                positions[item["project"]] = position + 1
+                c.execute("INSERT INTO milestones (id, project, title, status, "
+                          "due_date, position, created, changed) "
+                          "VALUES (?,?,?,?,?,?,?,?)",
+                          (mid, item["project"], item["title"], item["status"],
+                           None, position, now, now))
+                ids[item["source"]] = mid
+                self._event(c, item["project"], SEED_EVENT, mid,
+                            {"source": item["source"], "kind": "milestone",
+                             "item": mid})
+                created["milestones"] += 1
+                result["events"] += 1
+            for item in pending:
+                if item["kind"] != "work_item":
+                    continue
+                wid = _new_id()
+                milestone = ids.get(item["milestone"] or "") or None
+                c.execute("INSERT INTO work_items (id, project, milestone, title, "
+                          "detail, status, priority, due_date, created, changed) "
+                          "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                          (wid, item["project"], milestone, item["title"],
+                           item["detail"], item["status"], item["priority"],
+                           item["due_date"], now, now))
+                ids[item["source"]] = wid
+                self._event(c, item["project"], SEED_EVENT, wid,
+                            {"source": item["source"], "kind": "work_item",
+                             "item": wid})
+                created["work_items"] += 1
+                result["events"] += 1
+            for edge in proposal["edges"]:
+                src, dst = ids.get(edge["from"] or ""), ids.get(edge["to"] or "")
+                if not src or not dst:
+                    continue
+                if c.execute("SELECT 1 FROM work_edges WHERE kind = ? AND src = ? "
+                             "AND dst = ?", (edge["kind"], src, dst)).fetchone():
+                    continue
+                if self._would_cycle(c, edge["kind"], src, dst):
+                    skipped.append({"source": edge["from"], "kind": "edge",
+                                    "why": "that link would make a circle, so "
+                                           "it was not imported"})
+                    continue
+                project_id = str(by_source.get(edge["from"], {}).get("project")
+                                 or c.execute("SELECT project FROM work_items "
+                                              "WHERE id = ?", (src,)).fetchone()[0])
+                eid = _new_id()
+                c.execute("INSERT INTO work_edges (id, project, kind, src, dst, "
+                          "created) VALUES (?,?,?,?,?,?)",
+                          (eid, project_id, edge["kind"], src, dst, now))
+                self._event(c, project_id, SEED_EVENT, eid,
+                            {"source": f"edge:{edge['from']}:{edge['to']}",
+                             "kind": "edge", "item": eid})
+                created["edges"] += 1
+                result["events"] += 1
+            for project_id in {item["project"] for item in pending}:
+                c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                          (now, project_id))
+        result["wrote"] = True
+        result["skipped"] = skipped
+        _audit("projects.plan.seed", {"milestones": created["milestones"],
+                                      "work_items": created["work_items"],
+                                      "edges": created["edges"]})
+        return result
+
+    def apply_plan(self, project_id: str, milestones: list, items: list,
+                   blocks: list) -> dict:
+        """Write ONE proposed plan - the milestones, the work items and the
+        `blocks` links between them - on the strength of the one approval card
+        that showed it. NOTHING RUNS: no command, no job, no other store is
+        touched; this is rows, exactly like the owner typing them in.
+
+        The plan is validated BEFORE the first write, and a circular `blocks`
+        set is refused with the whole plan untouched (the same rule
+        `add_edge()` keeps for one link). No date is accepted here at all: a
+        plan the model wrote may never carry a date the owner did not give."""
+        if not isinstance(milestones, list) or not isinstance(items, list):
+            raise ValueError("a plan is a list of milestones and a list of items")
+        if len(milestones) > MAX_PLAN_MILESTONES:
+            raise ValueError(f"a plan keeps at most {MAX_PLAN_MILESTONES} milestones")
+        if len(items) > MAX_PLAN_ITEMS:
+            raise ValueError(f"a plan keeps at most {MAX_PLAN_ITEMS} work items")
+        clean_milestones = []
+        for m in milestones:
+            if not isinstance(m, dict):
+                raise ValueError("a milestone is an object with a title")
+            title = _one_line(m.get("title"), MAX_MILESTONE_TITLE,
+                              "a milestone's title", required=True)
+            status = str(m.get("status") or "planned")
+            if status not in MILESTONE_STATUSES:
+                raise ValueError("a milestone is " + ", ".join(MILESTONE_STATUSES))
+            clean_milestones.append({"title": title, "status": status})
+        clean_items = []
+        for i in items:
+            if not isinstance(i, dict):
+                raise ValueError("a work item is an object with a title")
+            body = i
+            title = _one_line(body.get("title"), MAX_WORK_TITLE,
+                              "a work item's title", required=True)
+            status = str(body.get("status") or "backlog")
+            if status not in WORK_STATUSES:
+                raise ValueError("a work item is " + ", ".join(WORK_STATUSES))
+            priority = _clean_priority(body.get("priority"))
+            milestone = body.get("milestone")
+            if milestone in (None, ""):
+                milestone = None
+            else:
+                try:
+                    milestone = int(milestone)
+                except (TypeError, ValueError):
+                    raise ValueError("an item's milestone is its number in the "
+                                     "plan's milestone list") from None
+                if not 0 <= milestone < len(clean_milestones):
+                    raise ValueError("that item names a milestone the plan does not have")
+            clean_items.append({
+                "title": title,
+                "detail": _text(body.get("detail"), MAX_WORK_DETAIL, "a work item's detail"),
+                "status": status, "priority": priority, "milestone": milestone})
+        clean_blocks = []
+        adjacency: dict = {}
+        for pair in blocks or []:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                raise ValueError("a blocking pair is [the item that must finish "
+                                 "first, the item it blocks]")
+            try:
+                src, dst = int(pair[0]), int(pair[1])
+            except (TypeError, ValueError):
+                raise ValueError("a blocking pair names two items by their "
+                                 "number in the plan's item list") from None
+            if not (0 <= src < len(clean_items) and 0 <= dst < len(clean_items)):
+                raise ValueError("a blocking pair names an item the plan does not have")
+            if src == dst:
+                raise ValueError(SELF_EDGE)
+            clean_blocks.append((src, dst))
+            adjacency.setdefault(src, []).append(dst)
+        # A circle in the PROPOSED plan is refused whole: one edge written would
+        # already block work silently, and the owner approved one picture.
+        for start in adjacency:
+            seen, stack = set(), [start]
+            while stack:
+                at = stack.pop()
+                for nxt in adjacency.get(at, ()):
+                    if nxt == start:
+                        raise ValueError(CYCLE_EDGE)
+                    if nxt in seen:
+                        continue
+                    seen.add(nxt)
+                    stack.append(nxt)
+        now = self.clock()
+        result = {"milestones": 0, "work_items": 0, "edges": 0,
+                  "project": project_id}
+        with self._lock, self._db() as c:
+            self._project_row(c, project_id)
+            position = int(c.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM milestones "
+                "WHERE project = ?", (project_id,)).fetchone()[0])
+            milestone_ids = []
+            for m in clean_milestones:
+                mid = _new_id()
+                c.execute("INSERT INTO milestones (id, project, title, status, "
+                          "due_date, position, created, changed) "
+                          "VALUES (?,?,?,?,?,?,?,?)",
+                          (mid, project_id, m["title"], m["status"], None,
+                           position, now, now))
+                position += 1
+                milestone_ids.append(mid)
+                self._event(c, project_id, "milestone_added", mid,
+                            {"status": m["status"]})
+                result["milestones"] += 1
+            item_ids = []
+            for item in clean_items:
+                wid = _new_id()
+                milestone = (milestone_ids[item["milestone"]]
+                             if item["milestone"] is not None else None)
+                c.execute("INSERT INTO work_items (id, project, milestone, title, "
+                          "detail, status, priority, due_date, created, changed) "
+                          "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                          (wid, project_id, milestone, item["title"],
+                           item["detail"], item["status"], item["priority"],
+                           None, now, now))
+                item_ids.append(wid)
+                self._event(c, project_id, "work_item_added", wid,
+                            {"status": item["status"]})
+                result["work_items"] += 1
+            for src, dst in clean_blocks:
+                eid = _new_id()
+                c.execute("INSERT INTO work_edges (id, project, kind, src, dst, "
+                          "created) VALUES (?,?,?,?,?,?)",
+                          (eid, project_id, "blocks", item_ids[src],
+                           item_ids[dst], now))
+                self._event(c, project_id, "edge_added", eid,
+                            {"kind": "blocks", "src": item_ids[src],
+                             "dst": item_ids[dst]})
+                result["edges"] += 1
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                      (now, project_id))
+        _audit("projects.plan.apply", {"project": project_id,
+                                       "milestones": result["milestones"],
+                                       "work_items": result["work_items"],
+                                       "edges": result["edges"]})
+        return result
+
+    def resolve_project(self, words) -> dict:
+        """One project from what the model was given: its id, or enough of its
+        name. Ambiguity is refused with the candidates named - never guessed."""
+        text = str(words or "").strip()
+        if not text:
+            raise ValueError("say which project")
+        if _ID.fullmatch(text):
+            try:
+                return self.get(text)
+            except KeyError:
+                raise ValueError("there is no project with that id") from None
+        projects = self.list() if self.exists() else []
+        exact = [p for p in projects if p["name"].casefold() == text.casefold()]
+        if len(exact) == 1:
+            return exact[0]
+        hits = [p for p in projects if text.casefold() in p["name"].casefold()]
+        if len(hits) == 1:
+            return hits[0]
+        if not hits:
+            raise ValueError(f'there is no project called "{_clip(text, 60)}"')
+        names = ", ".join(f'"{p["name"]}"' for p in hits[:4])
+        raise ValueError(f'more than one project matches "{_clip(text, 60)}": '
+                         f'{names} - say which one')
+
+    def find_work_item(self, words) -> dict:
+        """One work item from what the model was given: its id, or enough of its
+        title. Ambiguity is refused with the candidates named."""
+        text = str(words or "").strip()
+        if not text:
+            raise ValueError("say which work item")
+        if not self.exists():
+            raise ValueError("there are no work items yet")
+        items = self.work_items()
+        if _ID.fullmatch(text):
+            for item in items:
+                if item["id"] == text:
+                    return item
+            raise ValueError("there is no work item with that id")
+        exact = [i for i in items if i["title"].casefold() == text.casefold()]
+        if len(exact) == 1:
+            return exact[0]
+        hits = [i for i in items if text.casefold() in i["title"].casefold()]
+        if len(hits) == 1:
+            return hits[0]
+        if not hits:
+            raise ValueError(f'there is no work item called "{_clip(text, 60)}"')
+        names = ", ".join(f'"{i["title"]}"' for i in hits[:4])
+        raise ValueError(f'more than one work item matches "{_clip(text, 60)}": '
+                         f'{names} - say which one')
+
+    def record_checkpoint(self, project_id: str, text, *,
+                          kind: str = "checkpoint",
+                          item_id: Optional[str] = None) -> dict:
+        """One checkpoint or lesson, in the append-only event log. No card: a
+        reflection is the owner's own note about their own project, like a
+        project note. Returns the event."""
+        kind = str(kind or "checkpoint")
+        if kind not in CHECKPOINT_KINDS:
+            raise ValueError("a checkpoint is " + " or ".join(CHECKPOINT_KINDS))
+        words = _text(text, MAX_CHECKPOINT, "a checkpoint", required=True)
+        now = self.clock()
+        with self._lock, self._db() as c:
+            self._project_row(c, project_id)
+            item = None
+            if item_id not in (None, ""):
+                item = str(item_id)
+                row = self._work_row(c, item)
+                if row["project"] != project_id:
+                    raise ValueError("that work item is not in this project")
+            evid = _new_id()
+            c.execute("INSERT INTO project_events (id, project, at, kind, subject, "
+                      "detail) VALUES (?,?,?,?,?,?)",
+                      (evid, project_id, now, kind, item or project_id,
+                       json.dumps({"text": words, "item": item or ""},
+                                  sort_keys=True)))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?",
+                      (now, project_id))
+        _audit("projects.plan." + kind, {"project": project_id, "item": bool(item)})
+        return {"id": evid, "project": project_id, "kind": kind,
+                "at": now, "item": item or "", "text": words}
+
+    def hub_note(self, project_id: str) -> dict:
+        """The Markdown the export writes: a one-way, read-only picture of the
+        project. Built from SQL only, and NO benchmark number appears - a
+        private number must never leave the store, even into a note (A3)."""
+        state = self.plan_state(project_id)
+        milestones = self.milestones(project_id)
+        items = self.work_items(project_id)
+        events = self.events(project_id, limit=10)
+        name = str(state.get("name") or "Project")
+        path = str(state.get("linked_note_path") or "").strip()
+        if path:
+            path = path.replace("\\", "/")
+            while path.startswith("/"):
+                path = path[1:]
+            if not path.lower().endswith((".md", ".txt")):
+                path += ".md"
+        else:
+            path = f"{HUB_FOLDER}/{_safe_note_name(name)}.md"
+        lines = [f"# {_clip(name, MAX_NAME)}", "", f"> {HUB_NOTE_WORDS}", ""]
+        objective = str(state.get("objective") or "").strip()
+        criteria = str(state.get("success_criteria") or "").strip()
+        if objective:
+            lines += [f"**Objective:** {_clip(objective, 300)}", ""]
+        if criteria:
+            lines += [f"**Success criteria:** {_clip(criteria, 300)}", ""]
+        status = str(state.get("status") or "").strip()
+        if status:
+            lines.append(f"**Status:** {status}")
+        if state.get("target_date"):
+            # Only a date the owner himself gave; the export never adds one.
+            lines.append(f"**Target date:** {state['target_date']}")
+        if status or state.get("target_date"):
+            lines.append("")
+        if milestones:
+            lines += ["## Milestones", ""]
+            for m in milestones:
+                mark = "x" if m["status"] == "done" else " "
+                lines.append(f"- [{mark}] {_clip(m['title'], MAX_MILESTONE_TITLE)}")
+            lines.append("")
+        ready = [i for i in items if i.get("ready")]
+        if ready:
+            lines += ["## Ready now", ""]
+            for item in ready[:10]:
+                lines.append(f"- {_clip(item['title'], MAX_WORK_TITLE)}")
+            lines.append("")
+        if items:
+            lines += ["## Work items", ""]
+            for item in items:
+                tail = ""
+                if item["due_date"]:
+                    tail = f" (due {item['due_date']})"
+                blockers = item.get("blocked_by") or []
+                blocked = ""
+                if blockers:
+                    blocked = (" - blocked by "
+                               + ", ".join(f'"{_clip(b["title"], 60)}"'
+                                           for b in blockers[:3]))
+                lines.append(f"- [{item['status']}] "
+                             f"{_clip(item['title'], MAX_WORK_TITLE)}{tail}{blocked}")
+            lines.append("")
+        if events:
+            lines += ["## Recent activity", ""]
+            for ev in events:
+                when = time.strftime("%Y-%m-%d", time.localtime(float(ev["at"])))
+                lines.append(f"- {when} {ev['kind']}")
+            lines.append("")
+        text = "\n".join(lines)
+        raw = text.encode("utf-8")
+        if len(raw) > HUB_MAX_BYTES:
+            text = _clip(text, HUB_MAX_BYTES // 2 - 3) + "\n"
+        return {"project": project_id, "name": name, "path": path, "text": text}
 
     # ---- the progress side (the heatmap and balance chart; JARVIS-API section 105) ----
     # Read-only for the heatmap and the balance chart, plus the owner's own
@@ -4097,13 +4714,56 @@ def restore_project(pid: str, before: dict, *, store: Optional[Projects] = None)
     return True
 
 
+def restore_work_status(item_id: str, before: str, *,
+                        store: Optional[Projects] = None) -> bool:
+    """Put a work item's status back (the one-click Undo for a status change).
+
+    Writes through the store's own `set_work_item_status` with `receipt=False`,
+    so the Undo itself raises no second receipt; the change still appends its
+    own `project_events` row, which is the honest record of what happened."""
+    store = store or get()
+    if not isinstance(item_id, str) or not _ID.fullmatch(item_id):
+        return False
+    if before not in WORK_STATUSES:
+        return False
+    try:
+        store.set_work_item_status(item_id, before, receipt=False)
+    except (KeyError, ValueError):
+        return False
+    return True
+
+
+def _record_work_status_receipt(pid: str, item_id: str, title: str,
+                                before: str, after: str) -> str:
+    """One receipt for one status change, or "" - never an exception into the
+    change. The same shape as `_record_project_receipt`."""
+    try:
+        import jarvis_receipts
+    except Exception:
+        return ""
+    try:
+        summary = f'Moved "{_clip(title, 60)}" to {after}'
+        return jarvis_receipts.record(
+            "work_item_status", summary,
+            before={"item": item_id, "before": before},
+            after={"item": item_id, "after": after},
+            undo=lambda: restore_work_status(item_id, before))
+    except Exception:
+        return ""
+
+
 def _register_receipts() -> bool:
     try:
         import jarvis_receipts
-        return bool(jarvis_receipts.register_restorer("project_edit",
-                                                      lambda payload: restore_project(
-                                                          (payload or {}).get("id", ""),
-                                                          (payload or {}).get("before") or {})))
+        ok = bool(jarvis_receipts.register_restorer("project_edit",
+                                                    lambda payload: restore_project(
+                                                        (payload or {}).get("id", ""),
+                                                        (payload or {}).get("before") or {})))
+        ok = bool(jarvis_receipts.register_restorer(
+            "work_item_status",
+            lambda payload: restore_work_status((payload or {}).get("item", ""),
+                                                (payload or {}).get("before") or ""))) and ok
+        return ok
     except Exception:
         return False
 
@@ -4126,6 +4786,77 @@ def _record_project_receipt(pid: str, before: dict, after: dict, what: str) -> s
 
 
 _register_receipts()
+
+
+# --------------------------------------------------------------------------
+#   The Obsidian hub note (PM2, 2026-11-20): ONE projection, written through
+#   the notes editor's own door
+# --------------------------------------------------------------------------
+# SQLite stays the write master. The note is a one-way picture: it is built
+# from SQL, it says so in its own text, and a later export replaces it. Every
+# write goes through jarvis_notes_edit's own paths, so it keeps the product's
+# one way of touching a vault file: ONE `edit_vault_note` card, the File
+# Guardian copy first when an existing note is replaced, the undo receipt for a
+# brand-new one, and the note path checks (inside the vault, no hidden folder).
+# No second writer is added here.
+
+def export_hub(project_id: str, *, gate_check=None, wait_s=None,
+               store: Optional[Projects] = None) -> dict:
+    """Write one project's hub note into the owner's Obsidian vault.
+
+    `gate_check` is the gate callable the notes editor raises its ONE
+    `edit_vault_note` card through (the agent passes the turn's own checker).
+    Returns the module's own words plus the note and path; nothing in the
+    project store is changed by an export. A brand-new note is created (the
+    undo receipt comes first); an existing hub note is replaced whole (the
+    File Guardian copies the old bytes first, and the receipt makes the change
+    undoable)."""
+    store = store or get()
+    note = store.hub_note(project_id)
+    try:
+        import jarvis_notes_edit as N
+    except Exception as exc:                 # noqa: BLE001 - module absent
+        return {"ok": False, "created": False, "replaced": False,
+                "path": note["path"],
+                "error": f"the notes editor is not available here "
+                         f"({type(exc).__name__})"}
+    kwargs: dict = {}
+    if gate_check is not None:
+        kwargs["gate_check"] = gate_check
+    if wait_s is not None:
+        kwargs["wait_s"] = wait_s
+    try:
+        full, _rel, why = N._resolve_note(note["path"])
+    except Exception as exc:                 # noqa: BLE001 - bad path, said so
+        return {"ok": False, "created": False, "replaced": False,
+                "path": note["path"], "error": f"{type(exc).__name__}: {exc}"}
+    if why:
+        return {"ok": False, "created": False, "replaced": False,
+                "path": note["path"], "error": str(why)}
+    if full.is_file():
+        try:
+            sha = N._sha256(N._read_bytes(full))
+        except OSError as exc:
+            return {"ok": False, "created": False, "replaced": False,
+                    "path": note["path"],
+                    "error": f"the note could not be read ({type(exc).__name__})"}
+        code, out = N.handle_save({"path": note["path"], "text": note["text"],
+                                   "expected_sha256": sha}, **kwargs)
+        verb = "replaced"
+    else:
+        code, out = N.handle_create({"path": note["path"], "text": note["text"]},
+                                    provenance="model", client="agent", **kwargs)
+        verb = "created"
+    state = str(out.get("state") or "")
+    ok = code in (200, 202) and state in ("saved", "waiting")
+    result = {"ok": ok, "created": ok and verb == "created",
+              "replaced": ok and verb == "replaced", "path": note["path"],
+              "state": state, "note": note["text"],
+              "message": str(out.get("message") or "")}
+    if not ok:
+        result["error"] = (str(out.get("error") or out.get("message")
+                               or "the note was not written"))
+    return result
 
 
 # --------------------------------------------------------------------------

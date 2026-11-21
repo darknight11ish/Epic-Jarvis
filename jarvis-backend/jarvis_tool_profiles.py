@@ -144,7 +144,9 @@ REA               = "backend/jarvis_rea.py"
 APPROVAL_POLICY   = "backend/jarvis_approval_policy.py"
 OWNER_CHECK       = "backend/jarvis_owner_check.py"
 BASE_GATE         = "jarvis-backend/jarvis_gate.py"
+NOTES_EDIT        = "backend/jarvis_notes_edit.py"
 PACKS             = "backend/jarvis_packs.py"
+PLAN_STORE        = "backend/jarvis_projects.py"
 
 #: One entry per name in `jarvis_agent.TOOLS` (52 tools on this branch), in the
 #: same order that dict declares them. Every field is prose for a beginner
@@ -2812,6 +2814,242 @@ PROFILES: dict = {
                        "install still asks on its own card at the \"ask\" tier.",
         "sources": [AGENT, ANDROID_BUILDER, REBUILT_FRAMEWORK, ASKS_FIRST],
     },
+
+    # THE PLAN STORE'S TYPED TOOLS (2026-11-20, PM2). They write the owner's
+    # own plan rows in projects.db - projects, milestones, work items, their
+    # typed links, checkpoints and the one-way Obsidian hub note. The five
+    # owner-direct writes are cardless in a clean turn (the shipped "auto"
+    # `todo_add` line the goals tools already use) and go to ONE
+    # `change_own_config` card in a turn shaped by outside text; the two
+    # proposal tools ALWAYS ask one card and run nothing; the hub note asks the
+    # notes editor's own `edit_vault_note` card. No dossier claims a date can
+    # be invented: no tool here takes one.
+    "project_create": {
+        "id": "project_create",
+        "title": "Create a project",
+        "what": "Creates ONE project in the owner's own words - its name, and "
+                "whether it is a coding or a life project - with an optional "
+                "objective and what done looks like. No date is set.",
+        "gives": [
+            "Start a project by naming it, without hunting for a screen",
+            "Say in your own words what the project is for and what done looks like",
+            "Keep coding and life projects apart from the first sentence",
+        ],
+        "touches": "settings",
+        "limits": [
+            "ONE project per call, in the owner's words - it names and kinds no "
+            "second thing",
+            "It sets no date: a target date only ever comes from the owner's own route",
+            "It changes nothing in a turn shaped by outside text: that asks ONE card first",
+            "It writes a plan row, not a file and not a folder",
+        ],
+        "combines": {
+            "work_item_add": "Create the project, then add its first work item.",
+            "project_decompose_plan": "Create it, then save a whole plan for it on one card.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; switch it off "
+                       "in Settings -> Tools under \"What asks first\".",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "project_seed_plan": {
+        "id": "project_seed_plan",
+        "title": "Import the plan you already have",
+        "what": "Reads the plan the owner already has - a goal's steps in "
+                "goals.db and each project's work-list items on the one "
+                "scheduler - and proposes them as milestones and work items. "
+                "ONE approval card shows every row; nothing runs.",
+        "gives": [
+            "Bring the goal steps and work-list items already recorded into the plan store",
+            "See every row it would save before anything is written",
+            "Run it again without creating the same row twice",
+        ],
+        "touches": "settings",
+        "limits": [
+            "It reads goals.db and the scheduler read-only, and writes only after the ONE card",
+            "It invents nothing: a goal step's rough label stays a label and its item stays undated",
+            "A second run creates nothing new - every source row has one stable key",
+            "`dry_run` shows the same list and writes nothing at all",
+        ],
+        "combines": {
+            "project_create": "Create a project first if the source row has no project yet.",
+            "work_item_update_status": "Import the rows, then move one as work starts.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; the import "
+                       "always asks its ONE card first.",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "project_decompose_plan": {
+        "id": "project_decompose_plan",
+        "title": "Save a whole plan on one card",
+        "what": "Proposes a plan for ONE project - milestones, work items and "
+                "which items block which - and saves it after ONE approval card "
+                "shows all of it. Nothing runs and no date is set.",
+        "gives": [
+            "Turn a project into short milestones and concrete work items",
+            "Record which items must finish before others can start",
+            "Approve the whole picture once instead of clicking each row",
+        ],
+        "touches": "settings",
+        "limits": [
+            "ONE card shows the whole plan; a refused card writes no row at all",
+            "A proposed circle of blockers is refused before the card, and nothing is written",
+            "It runs nothing: every acting step still needs its own card later",
+            "No date is accepted - a date can only come from the owner's own route",
+        ],
+        "combines": {
+            "project_create": "Create the project, then plan it.",
+            "work_item_link_dependency": "Save the plan, then add a link it did not carry.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; every plan "
+                       "still asks its ONE card.",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "work_item_add": {
+        "id": "work_item_add",
+        "title": "Add a work item",
+        "what": "Adds ONE work item to one of the owner's projects, in their own "
+                "words, with an optional priority and milestone. It sets no "
+                "date.",
+        "gives": [
+            "Add the next concrete step to a project while it is being discussed",
+            "Say which milestone the step belongs under",
+            "Give a step a priority so the plan has an order",
+        ],
+        "touches": "settings",
+        "limits": [
+            "ONE item per call, and it only adds - no plan tool deletes a row",
+            "It sets no date: a due date only ever comes from the owner's own route",
+            "It changes nothing in a turn shaped by outside text: that asks ONE card first",
+            "The project has to be matched by its name, and the name has to pick out one project",
+        ],
+        "combines": {
+            "work_item_update_status": "Add the item, then move it as work starts.",
+            "project_decompose_plan": "A whole plan on one card instead of one item at a time.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; switch it off "
+                       "in Settings -> Tools under \"What asks first\".",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "work_item_update_status": {
+        "id": "work_item_update_status",
+        "title": "Move a work item along",
+        "what": "Moves ONE work item between backlog, ready, in progress, done "
+                "and cancelled. It appends one project event and keeps one "
+                "Undo receipt, so the change can be put back.",
+        "gives": [
+            "Say a step is started, finished or dropped and have the plan agree",
+            "Have the blocked items it unblocks become ready on their own",
+            "Put the change back with one Undo in receipts",
+        ],
+        "touches": "settings",
+        "limits": [
+            "One status at a time and ONE item per call - never a bulk change",
+            "It never deletes an item; cancelled keeps it and its history",
+            "It changes nothing in a turn shaped by outside text: that asks ONE card first",
+            "The item has to be matched by its own words, and the words have to pick out one item",
+        ],
+        "combines": {
+            "work_item_add": "Add the item, then move it when it starts.",
+            "work_item_link_dependency": "Move the blocker to done, which makes the blocked item ready.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; the change "
+                       "keeps one Undo receipt.",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "work_item_link_dependency": {
+        "id": "work_item_link_dependency",
+        "title": "Link two work items",
+        "what": "Records ONE typed link between two work items - one blocks "
+                "another, one contains another, two are related, or one was "
+                "discovered from the other. A link that would make a circle is "
+                "refused and nothing at all is written.",
+        "gives": [
+            "Say one step must finish before another can start",
+            "Say one item contains another, or that two are related",
+            "Keep the reason a blocked item is waiting, not just that it waits",
+        ],
+        "touches": "settings",
+        "limits": [
+            "ONE link per call, between two items that already exist",
+            "A blocks or parent_child circle is refused by the same depth-first guard, and NOTHING is written",
+            "A blocking link joins two items in the same project only",
+            "It changes nothing in a turn shaped by outside text: that asks ONE card first",
+        ],
+        "combines": {
+            "work_item_add": "Add both items, then record the link between them.",
+            "work_item_update_status": "Link them, then finish the blocker to unblock the other.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; a refused "
+                       "circle writes nothing.",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "project_checkpoint_reflect": {
+        "id": "project_checkpoint_reflect",
+        "title": "Write a checkpoint or a lesson",
+        "what": "Writes one short checkpoint or reflection about a project into "
+                "the project's append-only event log - where it got to, or what "
+                "was learned. It writes no plan row and runs nothing.",
+        "gives": [
+            "Record where a project really got to, in a line or two",
+            "Keep a lesson beside the project instead of in a separate notebook",
+            "Tie a checkpoint to the one work item it is about",
+        ],
+        "touches": "settings",
+        "limits": [
+            "It appends to an append-only log: no checkpoint line is ever edited or removed",
+            "One short line per call - it is not a place for a page of prose",
+            "It writes no plan row, runs nothing and sends nothing",
+            "It changes nothing in a turn shaped by outside text: that asks ONE card first",
+        ],
+        "combines": {
+            "work_item_update_status": "Move the item, then write what the move taught.",
+            "project_export_obsidian_hub": "Checkpoints appear in the hub note's recent activity.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; switch it off "
+                       "in Settings -> Tools under \"What asks first\".",
+        "sources": [AGENT, PLAN_STORE, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
+
+    "project_export_obsidian_hub": {
+        "id": "project_export_obsidian_hub",
+        "title": "Write a project's hub note",
+        "what": "Writes ONE read-only Markdown copy of a project - its objective, "
+                "milestones, work items and recent activity - into the owner's "
+                "Obsidian vault, behind the notes editor's own card.",
+        "gives": [
+            "See a project as a note in the vault the owner already reads",
+            "Have the old note copied by the File Guardian before it is replaced",
+            "Undo a brand-new note from the receipts list",
+        ],
+        "touches": "files",
+        "limits": [
+            "ONE card, raised by the notes editor, shows the exact path and the note's words",
+            "The note is a ONE-WAY copy: the project store stays the write master",
+            "No benchmark number ever appears in the note",
+            "The File Guardian copies the old bytes first, and a replaced note can be put back",
+        ],
+        "combines": {
+            "project_read": "project_read shows the code; the hub note shows the plan.",
+            "project_checkpoint_reflect": "A checkpoint lands in the note's next export.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Ships ON in the shipped [tools].enabled list; every export "
+                       "still asks the notes editor's own card.",
+        "sources": [AGENT, PLAN_STORE, NOTES_EDIT, REBUILT_FRAMEWORK, ASKS_FIRST],
+    },
 }
 
 
@@ -2962,11 +3200,22 @@ FAMILIES: dict = {
 
     "routines-and-goals": {
         "title": "Timers, reminders, to-dos and goals",
-        "what": "The small structures that hold a day: countdown timers, alarms, "
-                "one-time and repeating reminders, one to-do list, one \"Coming up\" "
-                "view, and goals with a progress log.",
+        "what": "The small structures that hold a day and the longer ones that "
+                "hold a project: countdown timers, alarms, one-time and repeating "
+                "reminders, one to-do list, one \"Coming up\" view, goals with a "
+                "progress log, and whole projects with milestones, work items, "
+                "typed links and checkpoints.",
         "tools": ["set_timer", "set_reminder", "todo_add", "todo_done", "coming_up",
-                  "goals_list", "goal_add", "goal_progress", "goal_done"],
+                  "goals_list", "goal_add", "goal_progress", "goal_done",
+                  # The plan store's typed tools (2026-11-20, PM2): the same
+                  # subject this family already owns - the structures that hold
+                  # the owner's work - one level further out: whole projects,
+                  # their milestones and work items, the links between them,
+                  # checkpoints and the one-way Obsidian hub note.
+                  "project_create", "project_seed_plan",
+                  "project_decompose_plan", "work_item_add",
+                  "work_item_update_status", "work_item_link_dependency",
+                  "project_checkpoint_reflect", "project_export_obsidian_hub"],
         "impact": "This is the family that makes Jarvis useful when nothing is "
                   "happening: it remembers the thing at 6pm, keeps the list, and "
                   "keeps a goal's history so progress is visible rather than felt. "

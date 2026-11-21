@@ -588,6 +588,17 @@ TIER_EXTRA = (
     # switch here offers the ability to the model at all; it never changes a
     # policy by itself, and every loosening still needs its own card.
     "approval_policy",
+    # The plan store's eight typed tools (jarvis_agent.py, PM2, 2026-11-20).
+    # They ship ON in [tools].enabled, and each really is decided by that line
+    # (plus the shaped-turn rule in _one_call, which raises a card in a turn
+    # outside text shaped), so a switch here is real - the same reason every
+    # other row in this group is. The five owner-direct writes are cardless in
+    # a clean turn, exactly like goal_add; the two proposal tools always raise
+    # ONE card, and the hub note raises the notes editor's own edit_vault_note
+    # card. None of them runs anything or deletes a row.
+    "project_create", "project_seed_plan", "project_decompose_plan",
+    "work_item_add", "work_item_update_status", "work_item_link_dependency",
+    "project_checkpoint_reflect", "project_export_obsidian_hub",
 )
 
 #: The standing cloud escalation switch (2026-11-06) rides with
@@ -2193,13 +2204,29 @@ TEMPLATE_TOOLS = (
     # ENABLED by default in both shipped settings files, and still switchable
     # off from the Tools page like every other shipped-on tool.
     "review_changes", "check_records",
+    # The plan store's eight typed tools (2026-11-20, PM2), in the order the
+    # shipped template names them. The five owner-direct writes are cardless
+    # on a clean owner turn and ONE card after outside text; the import/seed
+    # and the decomposed plan always ask ONE card; the hub note asks the
+    # notes editor's own card. No name here enables anything by itself - the
+    # page only says which shipped ability an older file has not named yet.
+    "project_create", "project_seed_plan", "project_decompose_plan",
+        "work_item_add", "work_item_update_status", "work_item_link_dependency",
+        "project_checkpoint_reflect", "project_export_obsidian_hub",
 )
 #: The tools this build added on top of what the owner's live file named on
 #: 2026-11-05/06. A name here that is NOT in the live list is offered with the
 #: pill even on a PC whose template predates it - so the read stays honest on
 #: an older install, where "enabled in the shipped template" cannot be known.
 NEW_IN_THIS_BUILD = ("approval_policy", "pack_list", "pack_inspect",
-                     "pack_install", "pack_remove")
+                     "pack_install", "pack_remove",
+                     # The plan store's eight (2026-11-20, PM2): added after the
+                     # owner last edited his own [tools].enabled line, so an
+                     # existing PC gets the pill for each of them too.
+                     "project_create", "project_seed_plan", "project_decompose_plan",
+                         "work_item_add", "work_item_update_status", "work_item_link_dependency",
+                         "project_checkpoint_reflect", "project_export_obsidian_hub",
+                     )
 #: The pill's exact words, from the ruling. Both apps draw this string.
 NEW_OFF_LABEL = "New — currently off"
 NEW_OFF_WHY = ("This build offers it and your settings file does not name it yet, so "
