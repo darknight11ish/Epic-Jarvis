@@ -2713,6 +2713,32 @@ def t_both_release_file_steps_run_only_after_a_proven_update():
 #   The suite's own runner
 # ==========================================================================
 
+
+def t_the_deploy_tool_loads_with_its_dataclasses():
+    """MEASURED 2026-11-21 02:52 on the owner's PC: the deploy route could never start.
+
+    `load_deploy_tool()` executed `tools/reconcile_live_backend.py` through
+    importlib WITHOUT registering it in `sys.modules`. Python 3.12's
+    `dataclasses` resolves `KW_ONLY` through
+    `sys.modules[cls.__module__].__dict__`, so the first `@dataclass`
+    (`ShippedAction`) raised `AttributeError: 'NoneType' object has no attribute
+    '__dict__'` - and the in-app auto-finish could only report "the deploy route
+    itself failed". The file's own CLI imports it normally, so only this dynamic
+    path was broken; the lane's tests faked the module and missed it.
+    """
+    import sys as _sys
+    # A fresh load, exactly the app's first load: drop any copy another suite
+    # test already put in sys.modules, and this loader's own cache.
+    _sys.modules.pop("reconcile_live_backend", None)
+    U._DEPLOY_MODULE = None
+    mod = U.load_deploy_tool()
+    check("load_deploy_tool() returns the deploy module", mod is not None)
+    check("... and it is registered in sys.modules (what dataclasses needs)",
+          _sys.modules.get(mod.__name__) is mod, mod.__name__)
+    check("... so a real dataclass in it can be built",
+          bool(mod.DeltaAction("p", "jarvis_hud.py", "insert")))
+    check("... and the deploy entry point is callable", callable(mod.run_deploy))
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

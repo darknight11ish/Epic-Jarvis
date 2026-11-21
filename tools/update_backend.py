@@ -1611,7 +1611,20 @@ def load_deploy_tool():
             f"{path} could not be loaded as a Python module, so the deploy "
             "route cannot run on this PC.")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # MEASURED 2026-11-21 02:52 on the owner's PC: the deploy route could never
+    # start. Python 3.12's `dataclasses` resolves `KW_ONLY` through
+    # `sys.modules[cls.__module__].__dict__`, and a module executed WITHOUT
+    # being registered in `sys.modules` therefore raises
+    # "'NoneType' object has no attribute '__dict__'" at its first `@dataclass`
+    # (`ShippedAction` at reconcile line 2296) - inside this loader, where the
+    # in-app auto-finish only ever saw "the deploy route itself failed". The
+    # file's own CLI imports it normally, so only this dynamic path was broken.
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(spec.name, None)
+        raise
     _DEPLOY_MODULE = module
     return module
 
