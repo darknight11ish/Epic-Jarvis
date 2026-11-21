@@ -2082,6 +2082,75 @@ pub fn auto_finish_behind_words(desktop: &str, repo: Option<&str>, build: Option
     )
 }
 
+/// The one honest line for an automatic finish that RAN and did not finish.
+///
+/// WHAT IS WRONG AND WHAT IS NOT. The desktop half was installed by its own
+/// installer BEFORE this attempt started - that is the whole reason the run
+/// happened - so this line must never say the desktop was not installed. That
+/// exact claim was measured false on the owner's PC, 2026-11-21 00:28 PT: after
+/// 0.2.487 was installed, the backend half failed and the HUD said "The backend
+/// step did not finish, so Jarvis Desktop was NOT installed on top of it".
+/// What is incomplete is the BACKEND half; the one press that would retry it is
+/// **Update everything**; and the run's own log is named so its report can be
+/// read. `backend` is the version the handshake read BEFORE the attempt, named
+/// only when it was really read. `detail` is `backend_update::Run::detail` on a
+/// failure: the failure's own specifics, shown verbatim. Its generic "did not
+/// finish" opener is dropped here because this sentence already says it.
+///
+/// Pure, so both outcomes are tests rather than hopes.
+pub fn auto_finish_failed_words(
+    desktop: &str,
+    backend: Option<&str>,
+    detail: &str,
+    log_dir: Option<&str>,
+) -> String {
+    let still = match backend.map(str::trim).filter(|version| !version.is_empty()) {
+        Some(version) => format!("the backend is still {version}, so the two halves still differ"),
+        None => "the two halves still differ".to_string(),
+    };
+    let mut words = format!(
+        "Jarvis Desktop {desktop} is installed; the backend half is the one that did not \
+         finish, so {still}. Press \"Update everything\" to try the backend half again."
+    );
+    let detail = detail.trim();
+    let detail = detail
+        .strip_prefix("The backend half did not finish.")
+        .map(str::trim)
+        .unwrap_or(detail);
+    if !detail.is_empty() {
+        words.push(' ');
+        words.push_str(detail);
+    }
+    match log_dir.map(str::trim).filter(|dir| !dir.is_empty()) {
+        Some(dir) => words.push_str(&format!(" The run's own log is in {dir}.")),
+        None => words.push_str(" The run's own log is the printout above."),
+    }
+    words
+}
+
+/// The one line for an automatic finish that proved itself AND read the two
+/// versions back as in step. "Both halves now match" may be said only here: the
+/// caller reaches this with an IN SYNC read-back, never with a plan or a hope.
+/// `files` carries the release's own `BESIDE:` / `TOOL DEFAULTS:` lines when it
+/// has them, so an update nobody pressed a button for still says what reached
+/// the PC.
+pub fn auto_finish_ok_words(desktop: &str, backend: Option<&str>, files: &str) -> String {
+    let backend = backend
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
+        .unwrap_or("the same version");
+    let files = files.trim();
+    let mut words = format!(
+        "The backend half finished, and both halves now match: Jarvis Desktop {desktop} and \
+         the backend {backend}."
+    );
+    if !files.is_empty() {
+        words.push(' ');
+        words.push_str(files);
+    }
+    words
+}
+
 /// One automatic attempt is allowed per exact mismatch, in this process.
 ///
 /// A record rather than a comment: "once per mismatch, never in a loop" is a
@@ -2271,15 +2340,19 @@ async fn finish_backend_half(
     let backend =
         crate::backend_update::run(app, "responsive", &label, previous_release.as_deref()).await;
     let (state, mut words) = if !backend.ok {
-        let mut words = format!(
-            "The automatic backend update did NOT finish, so the two halves still \
-             differ. {}",
-            backend.detail
-        );
-        if let Some(dir) = backend.log_dir.as_deref() {
-            words.push_str(&format!(" The run's own log is in {dir}."));
-        }
-        ("failed", words)
+        // The desktop half was installed by its installer before this ran, so
+        // the failure line names the BACKEND half as the incomplete one and the
+        // press that would retry it - never "Jarvis Desktop was NOT installed"
+        // (measured false on the owner's PC, 2026-11-21 00:28 PT).
+        (
+            "failed",
+            auto_finish_failed_words(
+                &sync.desktop,
+                sync.backend.as_deref(),
+                &backend.detail,
+                backend.log_dir.as_deref(),
+            ),
+        )
     } else if !backend.proven {
         (
             "partial",
@@ -2316,12 +2389,7 @@ async fn finish_backend_half(
             };
             (
                 "ok",
-                format!(
-                    "The backend half finished, and both halves now match: Jarvis Desktop \
-                     {} and the backend {}.{files}",
-                    after.desktop,
-                    after.backend.as_deref().unwrap_or("the same version")
-                ),
+                auto_finish_ok_words(&after.desktop, after.backend.as_deref(), &files),
             )
         } else {
             let extra = if marker.in_step() {
@@ -2616,10 +2684,11 @@ pub fn spawn_startup_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        auto_finish_behind_words, auto_finish_opening, auto_finish_plan, both_updated, chat_facts,
-        claim_update_both, clear_pending, desktop_half_allowed, desktop_half_trace,
-        desktop_install_gate, ending_words, finish, friendly, install_notice_for, is_update_card,
-        local_stamp, mark_launched, previous_desktop_build, read_pending, reconcile,
+        auto_finish_behind_words, auto_finish_failed_words, auto_finish_ok_words,
+        auto_finish_opening, auto_finish_plan, both_updated, chat_facts, claim_update_both,
+        clear_pending, desktop_half_allowed, desktop_half_trace, desktop_install_gate,
+        ending_words, finish, friendly, install_notice_for, is_update_card, local_stamp,
+        mark_launched, previous_desktop_build, read_pending, reconcile,
         remember_previous_desktop_build, same_version, state_of, step_starting, write_pending,
         AutoFinish, AutoFinishAttempts, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
         PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
@@ -3157,6 +3226,86 @@ mod tests {
         assert!(build_only.contains("does not record"), "{build_only}");
     }
 
+    // ---- the automatic finish's two endings (2026-11-21) ------------------
+
+    #[test]
+    fn the_automatic_finish_never_says_the_desktop_was_not_installed() {
+        // THE MEASURED WORDING BUG. 2026-11-21 00:25-00:28 PT: the installer had
+        // put Jarvis Desktop 0.2.487 on the PC, the automatic finish failed its
+        // backend half, and the app said "The backend step did not finish, so
+        // Jarvis Desktop was NOT installed on top of it" - false about the half
+        // that was installed. The honest line names the incomplete half, the one
+        // press that retries it, and the run's log.
+        let detail = crate::backend_update::backend_failure_words(false);
+        let words = auto_finish_failed_words(
+            "0.2.487",
+            Some("0.2.486"),
+            &detail,
+            Some(
+                r"C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\_jarvis-logs",
+            ),
+        );
+        // What is what: the desktop IS installed; the BACKEND half is the one
+        // that did not finish, and it is still the older version.
+        assert!(
+            words.contains("Jarvis Desktop 0.2.487 is installed"),
+            "{words}"
+        );
+        assert!(words.contains("backend half"), "{words}");
+        assert!(words.contains("did not finish"), "{words}");
+        assert!(words.contains("0.2.486"), "{words}");
+        assert!(words.contains("two halves still differ"), "{words}");
+        // The one press that would retry it is named, and the log is named.
+        assert!(words.contains("Update everything"), "{words}");
+        assert!(words.contains("_jarvis-logs"), "{words}");
+        // The false claim, in every spelling the old sentence used, is gone.
+        for forbidden in [
+            "Jarvis Desktop was NOT installed",
+            "was NOT installed on top",
+            "nothing was put on top",
+            "The backend step did not finish",
+        ] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        // Nothing here claims the halves match or that an update happened.
+        for forbidden in ["now match", "IN SYNC", "was updated", "is updated"] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        assert!(!words.contains('\n'), "{words:?}");
+        // An unknown backend version is still named honestly, and a detail
+        // sentence that is already there is not duplicated.
+        let old = auto_finish_failed_words("0.2.487", None, "", None);
+        assert!(
+            old.contains("The run's own log is the printout above"),
+            "{old}"
+        );
+        assert!(!old.contains("0.2.486"), "{old}");
+    }
+
+    #[test]
+    fn the_automatic_finish_claims_a_match_only_from_the_read_back() {
+        // The SUCCESS ending is a pure function too, and it exists in exactly
+        // one shape: both versions read back equal. The caller reaches it only
+        // after `restart_and_read` said IN SYNC, so "both halves now match" can
+        // never be painted from a plan or a hope.
+        let words = auto_finish_ok_words(
+            "0.2.487",
+            Some("0.2.487"),
+            "BESIDE: jarvis-visual-spec.json wrote 73121 bytes (was 61301 bytes)",
+        );
+        assert!(words.contains("both halves now match"), "{words}");
+        assert!(words.contains("Jarvis Desktop 0.2.487"), "{words}");
+        assert!(words.contains("the backend 0.2.487"), "{words}");
+        // The release's own lines ride on the ending, so an update nobody
+        // pressed a button for still says what reached the PC.
+        assert!(words.contains("BESIDE:"), "{words}");
+        assert!(!words.contains('\n'), "{words:?}");
+        // A version the read-back could not name is not invented.
+        let unknown = auto_finish_ok_words("0.2.487", None, "");
+        assert!(unknown.contains("the same version"), "{unknown}");
+        assert!(unknown.contains("both halves now match"), "{unknown}");
+    }
+
     /// The wiring, which no pure test can reach: the start-up handshake is the
     /// ONE caller, it runs the SAME backend runner the button runs, at the
     /// default pace, and the automatic path never touches the desktop install.
@@ -3222,6 +3371,18 @@ mod tests {
         assert!(
             automatic.contains("for _ in 0..5"),
             "the restart-and-read wait is not bounded"
+        );
+        // Its two endings are the PURE functions above, not sentences written
+        // at the call site: the failure ending must never say the desktop was
+        // not installed (measured false 2026-11-21 00:28 PT), and the success
+        // ending is only reachable from the in-sync read-back.
+        assert!(
+            automatic.contains("auto_finish_failed_words("),
+            "the automatic finish writes its failure line at the call site"
+        );
+        assert!(
+            automatic.contains("auto_finish_ok_words("),
+            "the automatic finish writes its success line at the call site"
         );
     }
 

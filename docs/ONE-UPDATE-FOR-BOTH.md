@@ -208,7 +208,7 @@ work deliberately did not take:
 |---|---|
 | the backend half: both folders, the refusals, running the tool, reading its verdict | `jarvis-desktop/src-tauri/src/backend_update.rs` |
 | the sequence, the pace and the step report (`updatedBoth`) | `jarvis-desktop/src-tauri/src/update.rs` |
-| the tool: the patcher wrapper, the parallel suites, the ETAs, the fallback | `tools/update_backend.py`, `backend/run_suites.py` (`--jobs`) |
+| the tool: the patcher wrapper, the deploy-route choice, the parallel suites, the ETAs, the fallback | `tools/update_backend.py`, `backend/run_suites.py` (`--jobs`) |
 | the card, the pace choice, the question, the bar and the three endings | `jarvis-desktop/src/settings.html`, `jarvis-desktop/src/settings.js`, `jarvis-desktop/src/settings.css` |
 | the tool's own suite | `backend/test_update_backend.py` |
 | the card's suites | `jarvis-desktop/tests/update-both.mjs` (page + Rust source), and the unit tests in all three Rust modules |
@@ -404,6 +404,49 @@ All three report lines (the version marker, `BESIDE:`, `TOOL DEFAULTS:`) are
 shown verbatim in the backend half's own sentence on the card, and the automatic
 finish puts them on its ending line too. None of them can fail the backend
 update: if a step cannot run, its line says so and the proven patch stands.
+
+### The backend half chooses its route with evidence (measured 2026-11-21 00:25-00:28 PT)
+
+The automatic finish ran on the owner's PC after his installer had put 0.2.487 on
+the desktop, and the backend half **failed after about three minutes**. Its own
+transcript (`…\Desktop program\_jarvis-logs\apply-patches-2026-11-21-002546.txt`)
+ended with **"51 patch(es) will not apply to your files as they are"** and
+**"None of your backend files were changed by this run."** That install is
+**deploy-managed**: its live files come from `tools/reconcile_live_backend.py`
+(the published base plus the HUD deltas), not from a full `apply-patches.ps1`
+run, so the 160-patch stack cannot apply to them. Run by hand, the deploy tool
+finished the same update (VERSION 0.2.487 written from the installed desktop,
+0 refusals) and the app then said IN SYNC.
+
+So `tools/update_backend.py` now chooses the backend half's route **with
+evidence, never a guess**. `apply-patches.ps1` stays the default for a patched
+install. Only when its transcript is that refusal shape - the stack says the
+patches will not apply AND that no backend file was changed, and carries no
+half-updated warning - does the same run continue with
+`tools/reconcile_live_backend.py --apply` on the same backend folder. The deploy
+route does the whole job the patch route did: it runs inside the same update
+lock, the deploy tool writes the `$SHIPPED` bytes and both release markers
+(`VERSION` from the installed desktop, `SOURCE-COMMIT` from the deployed
+commit) with its own backups and rehearsal, and the SAME proof suites then run
+against the live folder at the chosen pace. Success still needs the same proof:
+the live files are this repository's bytes, `VERSION` equals the installed
+desktop's FileVersion, and only then are the two halves claimed to match. A
+refusal from the deploy tool itself is printed **verbatim** and claims nothing;
+a refusal for any other reason (Jarvis still running, a missing file, a
+half-applied stack) keeps the old behaviour and never switches route. One
+`ROUTE:` line on the card says what happened, in the measured words: "the patch
+stack refused 51 hunks on a deployed install; the deploy route carried the
+update".
+
+**The automatic finish's failure line, corrected the same night.** When the
+desktop half is already installed, a failed backend half must not say the
+opposite. The line now reads that Jarvis Desktop 0.2.487 **is installed**, names
+the backend half as the one that did not finish - "the backend is still
+0.2.486, so the two halves still differ" - says the one press that retries it
+("Update everything"), and names the run's own log. It never claims a match.
+`backend_update::backend_failure_words` owns the backend-only half of that
+sentence (the caller owns whether the desktop half was installed), and both
+automatic-finish endings are pure functions held by tests.
 
 **What this deliberately does not do:** it raises no card, approves nothing,
 changes no other setting, touches no network beyond the one local `/api/self`

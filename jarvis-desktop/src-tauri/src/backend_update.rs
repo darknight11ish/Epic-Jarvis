@@ -881,6 +881,47 @@ pub fn beside_lines(tail: &str) -> Vec<String> {
         .collect()
 }
 
+/// The lines the backend half printed naming WHICH route carried its files and
+/// WHY (`ROUTE: ...`), verbatim, in the order it printed them.
+///
+/// MEASURED 2026-11-21 00:25-00:28 PT. A deploy-managed install (its live files
+/// come from `tools/reconcile_live_backend.py`, not from a full patch-stack
+/// run) made the patch program refuse 51 of its 160 patches. The backend half
+/// now falls back to the deploy tool's own `--apply`, and the ONE report line it
+/// prints with the ending says which route ran and why - or, when the deploy
+/// tool refused too, that refusal's own words. Rust keeps every one of them
+/// verbatim and never paraphrases them, so the card can say which route ran
+/// rather than only "done".
+pub fn route_lines(tail: &str) -> Vec<String> {
+    tail.lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("ROUTE:"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The backend half's own ending sentence when it did not finish.
+///
+/// It is about the BACKEND ONLY. Whether the desktop half was installed is the
+/// caller's sentence, because only the caller knows the answer: the in-app
+/// press runs the backend first (so the desktop really was not installed), and
+/// the automatic finish runs AFTER its installer moved the desktop (so it
+/// really was). One sentence for both was measured false on the owner's PC,
+/// 2026-11-21 00:28 PT: "The backend step did not finish, so Jarvis Desktop was
+/// NOT installed on top of it", said about an install where 0.2.487 HAD been
+/// installed. `half_updated` keeps the patch program's own warning verbatim.
+pub fn backend_failure_words(half_updated: bool) -> String {
+    let mut said = "The backend half did not finish.".to_string();
+    if half_updated {
+        said.push_str(
+            " The patch program says some of your backend files WERE changed before it \
+             went wrong, so the backend may be half updated - read the log and follow \
+             what it says to do before starting Jarvis.",
+        );
+    }
+    said
+}
+
 // ---------------------------------------------------------------------------
 // The two sentences, kept as functions so a test can hold them
 // ---------------------------------------------------------------------------
@@ -1398,21 +1439,16 @@ fn run_script(
     let exit_ok = status.is_some_and(|s| s.success());
     let verdict = read_verdict(&tail, exit_ok);
     let mut detail = if !verdict.ok {
-        let mut said = "The backend step did not finish, so Jarvis Desktop was NOT installed \
-                        on top of it."
-            .to_string();
-        if verdict.half_updated {
-            said.push_str(
-                " The patch program says some of your backend files WERE changed before it \
-                 went wrong, so the backend may be half updated - read the log and follow \
-                 what it says to do before starting Jarvis.",
-            );
-        }
-        said
+        // The backend half's own sentence only - see `backend_failure_words`.
+        backend_failure_words(verdict.half_updated)
     } else if verdict.proven {
-        "The backend folder is patched, and the patch program proved it with its tests.".to_string()
+        // Route-neutral on purpose (2026-11-21): the patch program is not the
+        // only route that can carry the backend half - on a deploy-managed
+        // install the deploy tool does - so this sentence must not credit it
+        // for bytes it did not write. The `ROUTE:` note says which route ran.
+        "The backend folder is patched, and the update's own tests proved it.".to_string()
     } else {
-        "The backend folder is patched, but the patch program could not prove every check \
+        "The backend folder is patched, but the update could not prove every check \
          (it says which were skipped in the log). That is not the same as a proven update."
             .to_string()
     };
@@ -1446,7 +1482,11 @@ fn run_script(
     // and `TOOL DEFAULTS:` for the additive config step. Shown verbatim - the
     // owner's config and the copy the desktop compares are where a shipped
     // feature becomes usable - so a step that could not run must be READ.
-    let mut notes = beside_lines(&tail);
+    // `ROUTE:` comes first when it is there: which route carried the files (the
+    // patch stack, or the deploy tool on a deploy-managed install) is the first
+    // thing the card should say about a fallback update.
+    let mut notes = route_lines(&tail);
+    notes.extend(beside_lines(&tail));
     notes.extend(tool_defaults_lines(&tail));
     if !notes.is_empty() {
         detail.push(' ');
@@ -1540,12 +1580,13 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_folder, beside_lines, folder_of_hud, halves_line, known_mode, marker_words,
-        normalise_commit, parse_mode_plan, parse_update_lock, read_verdict, refuse, release_marker,
-        repo_commit, repo_is_at_least_build, setting_text, start_blocked_words, tail_of, tool_args,
-        tool_defaults_lines, unknown_mode_words, update_lock_is_valid, update_running_words,
-        write_release_marker, MarkerEnding, ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD,
-        LOCK_CEILING_SECONDS, LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, VERSION_NAME,
+        backend_failure_words, backend_folder, beside_lines, folder_of_hud, halves_line,
+        known_mode, marker_words, normalise_commit, parse_mode_plan, parse_update_lock,
+        read_verdict, refuse, release_marker, repo_commit, repo_is_at_least_build, route_lines,
+        setting_text, start_blocked_words, tail_of, tool_args, tool_defaults_lines,
+        unknown_mode_words, update_lock_is_valid, update_running_words, write_release_marker,
+        MarkerEnding, ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
+        LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, VERSION_NAME,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
@@ -2253,5 +2294,68 @@ mod tests {
         );
         assert_eq!(refused.len(), 1, "{refused:?}");
         assert!(refused[0].contains("NOT delivered"), "{refused:?}");
+    }
+
+    #[test]
+    fn which_route_carried_the_update_is_kept_verbatim() {
+        // MEASURED 2026-11-21 00:25-00:28 PT: the automatic finish's backend
+        // half ran the patch stack on a deploy-managed install, the stack
+        // refused 51 of 160 patches, and the deploy tool is the route that
+        // works there. The card must say which route ran and why - the tool
+        // prints ONE ROUTE: line with the ending, and Rust keeps it trimmed and
+        // unchanged.
+        let tail = "ALL DONE - the backend is patched and proven\n\
+                    BESIDE: jarvis-visual-spec.json unchanged\n\
+                    ROUTE: the patch stack refused 51 hunk(s) on a deployed install; \
+                    the deploy route carried the update - the live backend now holds this \
+                    repository's bytes at commit abcdef123456 and VERSION 0.2.487, and the \
+                    checks above are the proof.";
+        let lines = route_lines(tail);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].starts_with("ROUTE:"), "{lines:?}");
+        assert!(lines[0].contains("51 hunk(s)"), "{lines:?}");
+        assert!(
+            lines[0].contains("deploy route carried the update"),
+            "{lines:?}"
+        );
+        // The route is NOT folded into another report list: the kinds of line
+        // stay separate, so nothing paraphrases the others.
+        assert_eq!(beside_lines(tail).len(), 1);
+        // More than one is kept in order, not only the last (the parser is the
+        // shape, not a single-sentence match).
+        let two = "ROUTE: first\nBESIDE: x\nROUTE: second";
+        assert_eq!(
+            route_lines(two),
+            vec!["ROUTE: first".to_string(), "ROUTE: second".to_string()]
+        );
+        // A patched install adds no ROUTE line - the default route is not news.
+        assert!(route_lines("ALL DONE - the backend is patched and proven").is_empty());
+    }
+
+    #[test]
+    fn the_backend_half_failure_never_says_the_desktop_was_not_installed() {
+        // The measured wording bug: after the installer moved the desktop to
+        // 0.2.487, the automatic finish failed its backend half and the card
+        // said "The backend step did not finish, so Jarvis Desktop was NOT
+        // installed on top of it" - false, the desktop WAS installed. This
+        // sentence is about the BACKEND only; the desktop half's own step says
+        // whether it was installed, and it is the caller's to say.
+        let words = backend_failure_words(false);
+        assert!(words.contains("backend half"), "{words}");
+        assert!(words.contains("did not finish"), "{words}");
+        for forbidden in [
+            "NOT installed",
+            "was not installed",
+            "nothing was put on top",
+            "Jarvis Desktop",
+        ] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        assert!(!words.contains('\n'), "{words:?}");
+        // The patch program's own half-updated warning is kept verbatim, because
+        // that is the one failure the owner must act on before starting Jarvis.
+        let half = backend_failure_words(true);
+        assert!(half.contains("WERE changed before it went wrong"), "{half}");
+        assert!(half.contains("half updated"), "{half}");
     }
 }
