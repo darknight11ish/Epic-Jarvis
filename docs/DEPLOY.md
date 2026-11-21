@@ -470,6 +470,17 @@ longer claim a reconcile over a patch whose hunks are absent.
   `jarvis_skills.py` are produced by the stack; no copy in this repository is
   their bytes, so their record rows stay red until the patcher runs (or
   `--rebaseline-unprovable` records them deliberately).
+- **Editing a patched base file regenerates `backend/tasks.patch` (2026-11-20,
+  measured).** That patch's hunk LINE NUMBERS are generated from
+  `jarvis-backend/jarvis_hud.py` (`tools/gen_tasks_patch.py`), so any edit to
+  that file before the `/api/tasks` blocks - a helper at the top, a line in the
+  `/api/status` route - shifts them. Each backend CI shard runs
+  `py -3 tools/gen_tasks_patch.py --check` BEFORE the suites and fails on a
+  stale patch. After such an edit run
+  `py -3 tools/gen_tasks_patch.py`, then `py -3 tools/build_patch_history.py`
+  (the patch changed, so its old version must be recorded), and commit both.
+  `gen_picture_card_patch.py --check` tolerates a line-number shift when the
+  context still matches; the tasks generator does not.
 - It never restarts Jarvis. After `--apply`, restart and read the start-up
   banner; the probes only prove the routes answer while the new code is running.
 - `jarvis-backend/` is never copied over the live folder - it is a snapshot of
