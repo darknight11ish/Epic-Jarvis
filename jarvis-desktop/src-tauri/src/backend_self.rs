@@ -157,7 +157,8 @@ pub fn words(desktop: &str, backend: Option<&str>, state: SyncState) -> String {
         SyncState::InSync => format!("Jarvis Desktop {desktop} and the {named} - IN SYNC."),
         SyncState::BackendOlder => format!(
             "MISMATCH: the {named}, but this HUD expects {desktop}. Finish the backend \
-             update - Settings, then Updates, and press Install (that updates both halves)."
+             update - Settings, then Updates, and press Update everything there (that \
+             updates both halves)."
         ),
         SyncState::BackendNewer => format!(
             "The {named} is newer than Jarvis Desktop {desktop}. That is safe - the HUD \
@@ -451,7 +452,12 @@ mod tests {
         assert!(sentence.starts_with("MISMATCH"));
         assert!(sentence.contains("0.2.9"));
         assert!(sentence.contains("0.3.0"));
-        assert!(sentence.contains("Install"), "{sentence}");
+        // MEASURED 2026-11-20: this used to say "press Install" and the Updates
+        // page has no Install button on that path - the backend half is updated
+        // by "Update everything" (the desktop half's own button says Install).
+        // The owner read the instruction and could not follow it.
+        assert!(sentence.contains("Update everything"), "{sentence}");
+        assert!(!sentence.contains("press Install"), "{sentence}");
     }
 
     #[test]
