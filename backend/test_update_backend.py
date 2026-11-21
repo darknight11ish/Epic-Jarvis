@@ -77,6 +77,15 @@ U.SHELL_WHICH = lambda name: (                         # noqa: E731 - a test sta
     r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
     if name == "powershell" else None)
 
+#: The model-lane probes are REAL loopback HTTP against the owner's Ollama in
+#: production; this suite must never touch it (the tool's own docstring promises
+#: the suite never starts a real update). Quiet fakes here; every lane test
+#: below swaps in its own and restores these.
+_QUIET_LANE = {"ok": True, "why": "", "models": []}
+U.read_lane_models = lambda: dict(_QUIET_LANE)         # noqa: E731 - a test stand-in
+U.warm_lane_model = (                                  # noqa: E731 - a test stand-in
+    lambda model, context: {"ok": True, "why": ""})
+
 PASSED, FAILED = [], []
 
 
@@ -102,7 +111,13 @@ def _write_live(backend: Path, files: dict) -> None:
 
 
 def _make_repo(root: Path):
-    """(repo, backend): exactly the shape preflight and verification expect."""
+    """(repo, backend): exactly the shape preflight and verification expect.
+
+    The repository also carries the release's bundled look spec, as a real
+    program folder does: delivery of that spec is content the file half owns
+    (2026-11-21), so every update flow below exercises the real step unless a
+    test injects its own.
+    """
     repo = root / "repo"
     backend = root / "backend"
     (repo / "scripts").mkdir(parents=True)
@@ -119,6 +134,10 @@ def _make_repo(root: Path):
     (repo / "jarvis-backend").mkdir()
     for name, content in NEW.items():
         (repo / "jarvis-backend" / name).write_bytes(content)
+    (repo / "jarvis-desktop" / "src").mkdir(parents=True)
+    (repo / U.VISUAL_SPEC_REL).write_text(
+        json.dumps({"version": 1, "faces": {"robot": {"eyes": "round"}}}),
+        encoding="utf-8")
     backend.mkdir()
     (backend / "jarvis_hud.py").write_text("# the owner's backend\n", encoding="utf-8")
     _write_live(backend, OLD)
@@ -980,6 +999,13 @@ def t_the_5_1_fallback_gets_its_module_path_without_losing_the_caller_env():
           base["PSModulePath"] == r"C:\Program Files\PowerShell\7\Modules", base)
     check("a pwsh child gets the caller's environment unchanged",
           U._child_env(r"C:\Program Files\PowerShell\7\pwsh.exe", base) == base)
+    # A Python child gets ONE extra variable - the one that makes its printout
+    # arrive line by line - and nothing else is touched.
+    py_env = U._child_env(sys.executable, base, python=True)
+    check("a Python child is marked unbuffered, and only that is added",
+          py_env == dict(base, PYTHONUNBUFFERED="1"), py_env)
+    check("... while a shell child is not marked, so its module path is the only change",
+          "PYTHONUNBUFFERED" not in U._child_env(windows, base))
 
 
 def t_the_chosen_shell_and_its_environment_are_what_run_receives():
@@ -1014,13 +1040,22 @@ def t_the_chosen_shell_and_its_environment_are_what_run_receives():
           (code, lines))
 
     seen.clear()
+    before = os.environ.get("PYTHONUNBUFFERED")
     U.subprocess.Popen = fake_popen
     try:
         U._run([sys.executable, "-B", "-c", "pass"], ".", lambda line: None)
     finally:
         U.subprocess.Popen = real_popen
-    check("a non-PowerShell child inherits the caller's env (no override)",
-          "env" in seen and seen.get("env") is None, seen.get("env"))
+    env = seen.get("env") or {}
+    check("a Python child is given an environment that makes it write each line "
+          "at once, so the desktop's live log (and its progress bound) sees it",
+          env.get("PYTHONUNBUFFERED") == "1", seen.get("env"))
+    check("... and the caller's own environment is kept in that copy",
+          env is not None and ("PATH" in env or "Path" in env), env)
+    # A Python child's environment is a COPY: the CALLER's own environment is
+    # untouched, so setting PYTHONUNBUFFERED for a child never leaks upward.
+    check("... without being written back into this process's own environment",
+          os.environ.get("PYTHONUNBUFFERED") == before, os.environ.get("PYTHONUNBUFFERED"))
 
 
 # --------------------------------------------------------------------------
@@ -1887,6 +1922,307 @@ def t_an_unexpected_lock_error_never_stops_the_update():
 
 
 # ==========================================================================
+#   The owner's everyday model lane is recorded and put back (2026-11-21)
+# ==========================================================================
+#
+# Measured on the owner's PC, 2026-11-21, after the same auto-finish run this
+# suite's progress bound was fixed for: the proof suites run against the live
+# backend folder and at least one of them loads a different model on the
+# everyday lane without putting the owner's back. Lane 11436 - whose preset-table
+# row is `qwen3.5:9b` at 196,608 tokens - was left resident on
+# `jarvis-primary:latest` at 16,384, and the field battery's PRESETS row then
+# failed ("the everyday lane is on a model its own preset table declares for it"
+# / "on its one-card model at 196,608"). The owner restored it by hand.
+#
+# The rule these checks hold: the lane's resident model+context is read BEFORE
+# the proof suites and warmed back at the RECORDED context when they leave a
+# different one; a lane that cannot be read restores nothing and says so; and a
+# run the desktop's bound ends is restored from the record it wrote first, by
+# the tool's own `--restore-lane` mode. Nothing here touches the real Ollama:
+# the seam functions are faked for every check.
+#
+# The tool's suite itself must never touch the owner's Ollama: `read_lane_models`
+# and `warm_lane_model` are module-level seams, and the quiet fakes at the top
+# of this file are what every other update flow in this suite runs with.
+
+@contextmanager
+def _lane_seams(read, warm):
+    """Swap the tool's model-lane seams for one check, and put the fakes back."""
+    real_read, real_warm = U.read_lane_models, U.warm_lane_model
+    U.read_lane_models, U.warm_lane_model = read, warm
+    try:
+        yield
+    finally:
+        U.read_lane_models, U.warm_lane_model = real_read, real_warm
+
+
+def _a_lane_handler(repo: Path, backend: Path, lane: dict, *, changed=True):
+    """A patcher + suite runner that leaves the everyday lane switched.
+
+    The measured failure in one line: the suite phase puts a different model on
+    the lane (`changed=True`) and never puts the owner's back.
+    """
+    def handler(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            state["patcher_calls"] = state.get("patcher_calls", 0) + 1
+            for name, content in NEW.items():
+                (backend / name).write_bytes(content)
+            on_line("Rehearsing all 2 on a copy first.")
+            on_line("  ok           a.patch")
+            on_line("DONE - no problems, but NOT fully proven (see below)")
+            return 0
+        # Snapshot what the record held when the suites started (it is removed
+        # once the lane is back, so it cannot be read after the run).
+        if "record_at_first_suite" not in state:
+            path = U.lane_state_path(backend)
+            try:
+                state["record_at_first_suite"] = json.loads(
+                    path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                state["record_at_first_suite"] = None
+        if changed:
+            lane["models"] = [{"model": "jarvis-primary:latest", "context": 16384}]
+        for name in U.suite_names(repo):
+            on_line(f"ok    {name:<34} 0.1s")
+        on_line("3 passed, 0 skipped, 0 failed")
+        return 0
+
+    return handler
+
+
+def t_the_owner_s_everyday_model_lane_is_put_back_after_the_proof_suites():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lane = {"models": [{"model": "qwen3.5:9b", "context": 196608}]}
+    warmed = []
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        lane["models"] = [{"model": model, "context": int(context)}]
+        return {"ok": True, "why": ""}
+
+    fake = FakeRun(_a_lane_handler(repo, backend, lane))
+    said = []
+    with _lane_seams(read, warm):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json")
+    report = "\n".join(said)
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    saved = fake.state.get("record_at_first_suite")
+    check("the lane is recorded BEFORE the proof suites run - the record names "
+          "the owner's own model and context",
+          saved is not None, saved)
+    check("... and the recorded pair is what was resident (qwen3.5:9b at 196608)",
+          isinstance(saved, dict) and saved.get("model") == "qwen3.5:9b"
+          and saved.get("context") == 196608, saved)
+    check("the everyday model is warmed back at its RECORDED context once the "
+          "suites left another one",
+          warmed == [("qwen3.5:9b", 196608)], warmed)
+    check("... the run report says it was restored, in ONE LANE line",
+          len(lane_lines) == 1
+          and "qwen3.5:9b" in lane_lines[0] and "196608" in lane_lines[0]
+          and "jarvis-primary:latest" in lane_lines[0]
+          and "read it back in place" in lane_lines[0], lane_lines)
+    check("... the pre-suite record is gone once the lane is back",
+          not U.lane_state_path(backend).exists())
+    check("... and the backend update itself still proved itself",
+          code == 0 and "ALL DONE - the backend is patched and proven" in report,
+          (code, said[-5:]))
+
+
+def t_a_lane_the_suites_left_alone_is_not_touched():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lane = {"models": [{"model": "qwen3.5:9b", "context": 196608}]}
+    warmed = []
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        return {"ok": True, "why": ""}
+
+    said = []
+    with _lane_seams(read, warm):
+        code = U.update(repo, backend, "responsive",
+                        run=FakeRun(_a_lane_handler(repo, backend, lane, changed=False)),
+                        say=said.append, clock=lambda: 0.0,
+                        timings_path=root / "timings.json")
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    check("a lane the proof suites left on the owner's model is NOT warmed again",
+          code == 0 and warmed == [], (code, warmed))
+    check("... the report says it was left alone, in one LANE line",
+          len(lane_lines) == 1 and "left it alone" in lane_lines[0]
+          and "qwen3.5:9b" in lane_lines[0], lane_lines)
+    check("... and no record is left behind",
+          not U.lane_state_path(backend).exists())
+
+
+def t_an_unreadable_lane_is_reported_and_nothing_is_restored():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lane = {"models": [{"model": "jarvis-primary:latest", "context": 16384}]}
+    warmed = []
+
+    def read():
+        return {"ok": False, "why": "ConnectionRefusedError: [WinError 10061]",
+                "models": []}
+
+    said = []
+    with _lane_seams(read, lambda model, context: warmed.append((model, context))):
+        code = U.update(repo, backend, "responsive",
+                        run=FakeRun(_a_lane_handler(repo, backend, lane, changed=False)),
+                        say=said.append, clock=lambda: 0.0,
+                        timings_path=root / "timings.json")
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    check("a lane that cannot be read is NOT guessed at - no model is named or warmed",
+          warmed == [], warmed)
+    check("... and the report says the lane could not be read and nothing was restored",
+          len(lane_lines) == 1 and "could not be read" in lane_lines[0]
+          and "nothing was restored" in lane_lines[0]
+          and "ConnectionRefusedError" in lane_lines[0], lane_lines)
+    check("... while the backend update itself is unaffected",
+          code == 0 and not U.lane_state_path(backend).exists(), code)
+
+
+def t_a_model_with_no_recorded_context_is_never_warmed():
+    # A preload that names no context is the 2026-10-10 bug: it reloads a model
+    # at Ollama's own 2,048 instead of the lane's window. So a record with no
+    # context restores nothing, even if the suites changed the lane.
+    warmed = []
+    said = []
+    got = U.restore_lane(
+        {"ok": True, "model": "qwen3.5:9b", "context": None},
+        read=lambda: {"ok": True, "why": "",
+                      "models": [{"model": "other", "context": 8192}]},
+        warm=lambda model, context: warmed.append((model, context)) or {"ok": True, "why": ""},
+        say=said.append)
+    check("a recorded model with no recorded context is never warmed without one",
+          got["done"] is True and warmed == []
+          and "did not report a context" in said[0] and "nothing was restored" in said[0],
+          (got, said))
+    # The lane cannot be read AFTER the suites: a blind warm could load a model
+    # whose name this run never recorded, so nothing is restored and the record
+    # is kept for the desktop's retry.
+    said_again = []
+    got_again = U.restore_lane(
+        {"ok": True, "model": "qwen3.5:9b", "context": 196608},
+        read=lambda: {"ok": False, "why": "no answer", "models": []},
+        warm=lambda model, context: {"ok": True, "why": ""},
+        say=said_again.append)
+    check("a lane that cannot be read after the suites restores nothing and says so",
+          got_again["done"] is False and "could not be read after the proof suites"
+          in said_again[0] and "not claimed" in said_again[0], (got_again, said_again))
+
+
+def t_the_record_restores_the_lane_when_the_desktop_ends_the_run():
+    # THE TIMEOUT ENDING. The tool wrote the lane's record before the proof
+    # suites; the desktop's progress bound then ended it before it could restore
+    # anything. The record is what the desktop's `--restore-lane` run uses.
+    root = _make_root()
+    backend = _make_repo(root)[1]
+    lane = {"models": [{"model": "qwen3.5:9b", "context": 196608}]}
+    U.record_lane_state(
+        backend, read=lambda: {"ok": True, "why": "", "models": list(lane["models"])})
+    record_path = U.lane_state_path(backend)
+    saved = json.loads(record_path.read_text(encoding="utf-8"))
+    check("the tool writes the pre-suite record where the desktop looks for it",
+          record_path.is_file() and saved.get("model") == "qwen3.5:9b"
+          and saved.get("context") == 196608, saved)
+
+    lane["models"] = [{"model": "jarvis-primary:latest", "context": 16384}]
+    warmed = []
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        lane["models"] = [{"model": model, "context": int(context)}]
+        return {"ok": True, "why": ""}
+
+    said = []
+    with _lane_seams(read, warm):
+        code = U.main(["--restore-lane", "--backend", str(backend)], say=said.append)
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    check("a run the desktop ended is restored from its record at the recorded pair",
+          code == 0 and warmed == [("qwen3.5:9b", 196608)], (code, warmed))
+    check("... the report says it was restored, in one LANE line",
+          len(lane_lines) == 1 and "read it back in place" in lane_lines[0]
+          and "qwen3.5:9b" in lane_lines[0], lane_lines)
+    check("... and the record is removed, so it can never override a later choice",
+          not record_path.exists())
+    # With no record left there is nothing to say: the tool's own ending had
+    # already put the lane back.
+    said_again = []
+    with _lane_seams(read, warm):
+        code_again = U.main(["--restore-lane", "--backend", str(backend)],
+                            say=said_again.append)
+    check("a restore-mode run with no record left does nothing and says nothing",
+          code_again == 0 and said_again == []
+          and warmed == [("qwen3.5:9b", 196608)], (code_again, said_again))
+
+
+def t_a_failed_restore_is_reported_and_the_record_is_kept_for_the_desktop():
+    root = _make_root()
+    backend = _make_repo(root)[1]
+    record = U.record_lane_state(
+        backend,
+        read=lambda: {"ok": True, "why": "",
+                      "models": [{"model": "qwen3.5:9b", "context": 196608}]})
+    lane = {"models": [{"model": "jarvis-primary:latest", "context": 16384}]}
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    said = []
+    got = U.restore_lane_after_suites(
+        backend, record, read=read,
+        warm=lambda model, context: {"ok": False, "why": "the load was refused"},
+        say=said.append)
+    check("a restore that failed is reported honestly, never claimed as back",
+          got["done"] is False and "failed" in said[0]
+          and "not claimed to be back" in said[0], (got, said))
+    check("... and the record is KEPT for the desktop's one retry",
+          U.lane_state_path(backend).is_file())
+    # The desktop's retry works, and only then is the record removed.
+    warmed = []
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        lane["models"] = [{"model": model, "context": int(context)}]
+        return {"ok": True, "why": ""}
+
+    retried = U.restore_saved_lane(backend, read=read, warm=warm,
+                                   say=lambda line: None)
+    check("the desktop's retry warms the recorded pair back and removes the record",
+          retried == 0 and warmed == [("qwen3.5:9b", 196608)]
+          and not U.lane_state_path(backend).exists(), (retried, warmed))
+
+
+def t_the_model_lane_is_only_ever_read_on_this_pc():
+    check("a loopback OLLAMA_URL is the lane",
+          U.lane_url("http://127.0.0.1:11436") == "http://127.0.0.1:11436")
+    check("... localhost and ::1 are this PC too",
+          U.lane_url("http://localhost:11434/") == "http://localhost:11434"
+          and U.lane_url("http://[::1]:11434") == "http://[::1]:11434")
+    check("... an unset lane is the backend's own loopback default",
+          U.lane_url("") == U.DEFAULT_OLLAMA_URL
+          and U.lane_url(None) == U.DEFAULT_OLLAMA_URL)
+    check("another machine's lane is REFUSED, never contacted",
+          U.lane_url("http://192.168.1.50:11434") is None
+          and U.lane_url("https://example.com") is None
+          and U.lane_url("ftp://127.0.0.1:11434") is None)
+    check("no lane at all is an honest 'not read', not a guess",
+          U.lane_models(url="")["ok"] is False
+          and "loopback" in U.lane_models(url="")["why"])
+
+
+# ==========================================================================
 #   The route is chosen with evidence: the deploy-managed install (2026-11-21)
 # ==========================================================================
 #
@@ -2565,7 +2901,6 @@ SPEC_NEW = {"version": 1, "palette": {"ink": "#111111", "paper": "#fafafa"},
 def _spec_fixture(root: Path, *, shipped=SPEC_NEW, live=SPEC_OLD):
     """(repo, backend, shipped path, live path) with real files on disk."""
     repo, backend = _make_repo(root)
-    (repo / "jarvis-desktop" / "src").mkdir(parents=True)
     shipped_path = repo / U.VISUAL_SPEC_REL
     shipped_path.write_text(json.dumps(shipped, indent=1) + "\n", encoding="utf-8")
     live_path = backend / U.VISUAL_SPEC_NAME
@@ -2663,50 +2998,221 @@ def t_a_look_spec_that_cannot_be_read_is_reported_and_nothing_is_written():
                   for line in said_live), (report_live, said_live))
 
 
-def t_both_release_file_steps_run_only_after_a_proven_update():
+def t_the_look_spec_runs_with_the_file_half_and_the_config_step_only_after_proof():
+    # THE MEASURED 2026-11-21 RUN. The auto-finish started at 11:08:54Z, the
+    # deploy route wrote VERSION 0.2.488 and SOURCE-COMMIT d7003442e, and the
+    # proof suites then legitimately ran ~57+ minutes. The desktop's one-hour
+    # wall clock ended the run at 12:08:54Z, so the release's look spec was
+    # never delivered and every start still said it DISAGREED. The spec now goes
+    # with the FILE half (step 2b), before the suites; the config defaults still
+    # need the whole proof, because they change the owner's own config.
     root = _make_root()
     repo, backend = _make_repo(root)
     ran = []
+    at_first_suite = []
 
     def fake_beside(repo_arg, backend_arg, previous, *, say):
-        ran.append(("beside", previous))
+        ran.append("beside")
+        say("BESIDE: jarvis-visual-spec.json unchanged")
 
     def fake_tools(repo_arg, backend_arg, previous, *, say):
-        ran.append(("tools", previous))
-
-    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
-    said = []
-    code = U.update(repo, backend, "safe", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=root / "timings.json",
-                    previous_release="7add1b7c1d5f",
-                    tool_defaults=fake_tools, beside_files=fake_beside)
-    check("after a PROVEN update both release-file steps run, with the baseline",
-          code == 0 and ran == [("beside", "7add1b7c1d5f"),
-                                ("tools", "7add1b7c1d5f")], (code, ran))
-
-    # A safe-mode failure returns 1 and must not touch the owner's config or spec.
-    root2 = _make_root()
-    repo2, backend2 = _make_repo(root2)
-    ran2 = []
+        ran.append("tools")
+        say("TOOL DEFAULTS: nothing to add")
 
     def handler(cmd, cwd, on_line, state):
         if _is_patcher(cmd):
             for name, content in NEW.items():
-                (backend2 / name).write_bytes(content)
+                (backend / name).write_bytes(content)
             on_line("DONE - no problems, but NOT fully proven (see below)")
             return 0
+        at_first_suite.append(list(ran))
+        for name in U.suite_names(repo):
+            on_line(f"ok    {name:<34} 0.1s")
+        on_line("3 passed, 0 skipped, 0 failed")
+        return 0
+
+    said = []
+    code = U.update(repo, backend, "responsive", run=FakeRun(handler),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    previous_release="7add1b7c1d5f",
+                    tool_defaults=fake_tools, beside_files=fake_beside)
+    check("after a PROVEN update both release-step kinds run, with the baseline",
+          code == 0 and ran == ["beside", "tools"], (code, ran))
+    check("... the look spec is delivered BEFORE the first proof suite runs",
+          at_first_suite == [["beside"]], at_first_suite)
+    check("... and both report lines are in the run's own output",
+          sum("BESIDE:" in line for line in said) == 1
+          and sum("TOOL DEFAULTS:" in line for line in said) == 1, said[-6:])
+
+    # An UNPROVEN update (a skipped check) is still an applied file half: the
+    # spec is delivered, the config step is not - exactly the rule "content,
+    # not proof".
+    root2 = _make_root()
+    repo2, backend2 = _make_repo(root2)
+    ran2 = []
+
+    def fake_beside2(repo_arg, backend_arg, previous, *, say):
+        ran2.append("beside")
+
+    def fake_tools2(repo_arg, backend_arg, previous, *, say):
+        ran2.append("tools")
+
+    code2 = U.update(repo2, backend2, "safe",
+                     run=FakeRun(_staged_handler(repo2, backend2,
+                                                 suites="visible-browser-skip")),
+                     say=lambda line: None, clock=lambda: 0.0,
+                     timings_path=root2 / "timings.json",
+                     previous_release="7add1b7c1d5f",
+                     tool_defaults=fake_tools2, beside_files=fake_beside2)
+    check("an UNPROVEN update still delivers the look spec, and changes no config",
+          code2 == 0 and ran2 == ["beside"], (code2, ran2))
+
+    # A run that never gets past the route (here: a non-deploy-shape refusal,
+    # nothing changed) fails BEFORE the file half is proved, so neither step
+    # runs and the owner's config and spec are untouched.
+    root3 = _make_root()
+    repo3, backend3 = _make_repo(root3)
+    ran3 = []
+
+    def handler3(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            on_line("Jarvis looks like it is still running (pid 42). Close it, "
+                    "then run this again (or add -Force).")
+            on_line(" DONE WITH PROBLEMS - do not trust this update yet")
+            on_line("None of your backend files were changed by this run.")
+            return 1
         on_line("FAIL  test_b.py  0.1s  (exit 1)")
         on_line("2 passed, 0 skipped, 1 failed")
         return 1
 
-    code2 = U.update(repo2, backend2, "safe", run=FakeRun(handler),
+    code3 = U.update(repo3, backend3, "safe", run=FakeRun(handler3),
                      say=lambda line: None, clock=lambda: 0.0,
-                     timings_path=root2 / "timings.json",
+                     timings_path=root3 / "timings.json",
                      previous_release="7add1b7c1d5f",
-                     tool_defaults=lambda *a, **k: ran2.append("tools"),
-                     beside_files=lambda *a, **k: ran2.append("beside"))
-    check("a failed update never runs the release-file steps",
-          code2 == 1 and ran2 == [], (code2, ran2))
+                     tool_defaults=lambda *a, **k: ran3.append("tools"),
+                     beside_files=lambda *a, **k: ran3.append("beside"))
+    check("a run that never proved its files never runs the release-file steps",
+          code3 == 1 and ran3 == [], (code3, ran3))
+
+
+def t_the_look_spec_reaches_the_live_folder_even_when_the_proof_never_finishes():
+    # The measured incident, end to end and with the REAL delivery step: the
+    # deploy route carries the file half (VERSION written, bytes proved) and
+    # then the proof suites never finish - the desktop's bound ends the run.
+    # The owner must still be left with the release's look spec, and the run's
+    # report must say so.
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    seen = {}
+
+    def handler(cmd, cwd, on_line, _state):
+        if _is_patcher(cmd):
+            for line in _MEASURED_REFUSAL:
+                on_line(line)
+            return 1
+        # The suite phase never finishes: an ambiguous runner on every pass,
+        # which is exactly what the desktop's bound does to this tool (its
+        # output stops and the app ends it), from this side of the pipe.
+        seen.setdefault(
+            "spec_at_first_suite",
+            (backend / U.VISUAL_SPEC_NAME).exists()
+            and (backend / U.VISUAL_SPEC_NAME).read_bytes()
+            == (repo / U.VISUAL_SPEC_REL).read_bytes())
+        on_line("ok    test_a.py                       0.1s")
+        return None
+
+    said = []
+    code = U.update(repo, backend, "responsive", run=FakeRun(handler),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend, version="0.2.487"))
+    tail = "\n".join(said)
+    check("a proof phase that never finishes is still an honest failed update",
+          code == 1 and "DONE WITH PROBLEMS" in tail, (code, said[-5:]))
+    check("... and the release's look spec was already delivered BEFORE the "
+          "first proof suite, while the file half was proved",
+          seen.get("spec_at_first_suite") is True, seen)
+    check("... the live copy really is the release's own spec",
+          (backend / U.VISUAL_SPEC_NAME).read_bytes()
+          == (repo / U.VISUAL_SPEC_REL).read_bytes(),
+          (backend / U.VISUAL_SPEC_NAME).read_bytes()[:40])
+    check("... and the run report carries one verbatim BESIDE: line saying what "
+          "reached the PC",
+          sum(1 for line in said if line.startswith("BESIDE: ")) == 1
+          and any(line.startswith("BESIDE: ") and "wrote" in line
+                  and U.VISUAL_SPEC_NAME in line for line in said),
+          [line for line in said if line.startswith("BESIDE: ")])
+
+    # A deploy that never proved the bytes/markers is the other direction: the
+    # spec must NOT be delivered then - the file half is not proved, so nothing
+    # the release owns is written on a claim.
+    root2 = _make_root()
+    repo2, backend2 = _make_repo(root2)
+    before = (repo2 / U.VISUAL_SPEC_REL).read_bytes()
+    said2 = []
+    refused = ("REFUSED: the working tree is at HEAD attacker but --ref deadbeef "
+               "is other")
+    code2 = U.update(repo2, backend2, "responsive",
+                     run=FakeRun(_refusal_then_suites(repo2, backend2)),
+                     say=said2.append, clock=lambda: 0.0,
+                     timings_path=root2 / "timings.json",
+                     deploy=_deploy_refused(refused))
+    check("a deploy that did not prove its bytes+markers delivers no look spec",
+          code2 == 1
+          and not (backend2 / U.VISUAL_SPEC_NAME).exists()
+          and not any(line.startswith("BESIDE:") for line in said2),
+          (code2, [line for line in said2 if line.startswith("BESIDE:")]))
+    check("... and the release's own spec is untouched",
+          (repo2 / U.VISUAL_SPEC_REL).read_bytes() == before)
+
+
+def t_a_look_spec_that_cannot_be_delivered_never_fails_the_update():
+    # The step is content, not proof: a program folder whose desktop spec cannot
+    # be read still finishes the backend half, and says which read failed.
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    (repo / U.VISUAL_SPEC_REL).unlink()
+    said = []
+    code = U.update(repo, backend, "responsive",
+                    run=FakeRun(_staged_handler(repo, backend, suites="ok")),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json")
+    tail = "\n".join(said)
+    check("an undeliverable look spec leaves a PROVEN backend update proven",
+          code == 0 and "ALL DONE - the backend is patched and proven" in tail,
+          (code, said[-5:]))
+    check("... and says exactly which read failed, verbatim",
+          any(line.startswith("BESIDE: ")
+              and "NOT delivered" in line and "could not be read" in line
+              for line in said), [line for line in said if line.startswith("BESIDE:")])
+
+
+def t_the_tool_lines_its_own_printout_so_the_desktop_sees_progress():
+    # The desktop's progress bound tells a working run from a wedged one by
+    # whether the run's log is still growing, so this tool's own printout is
+    # line-buffered. The helper must never break a run on a stream it cannot
+    # reconfigure (a test capture, an old Python).
+    class NoReconfigure:
+        def write(self, _text):
+            pass
+
+        def flush(self):
+            pass
+
+    real = sys.stdout
+    sys.stdout = NoReconfigure()
+    try:
+        U.line_buffered_stdout()          # a stream with no reconfigure: no crash
+    finally:
+        sys.stdout = real
+    check("line buffering never breaks an update on a stream it cannot reconfigure",
+          True)
+    with redirect_stdout(io.StringIO()) as captured:
+        U.line_buffered_stdout()
+        print("one complete line")
+    check("... and a real capture still receives whole lines",
+          captured.getvalue() == "one complete line\n", captured.getvalue())
 
 
 # ==========================================================================

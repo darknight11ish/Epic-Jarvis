@@ -301,17 +301,248 @@ pub fn start_blocked_words(lock: Option<&UpdateLock>) -> Option<String> {
     })
 }
 
-/// How long the patch run may take before it is treated as wedged.
+/// How long the patch run may stay COMPLETELY SILENT before it is treated as
+/// wedged and ended honestly.
 ///
-/// Generous on purpose: a full run applies ~140 patches, copies ~180 shipped
-/// files, runs pip and then the test suites, and the owner's own logs show runs
-/// measured in minutes. An hour is not a deadline anything normal meets; it is
-/// there so a wedged `git` or a pip waiting on a prompt cannot leave a command
-/// pending for the life of the process with nothing said.
-const SCRIPT_LIMIT: Duration = Duration::from_secs(60 * 60);
+/// The bound measures progress, not just the wall clock (fixed 2026-11-21;
+/// before this a single one-hour wall clock killed a healthy run). A run that
+/// keeps printing is alive: every new byte the child writes resets this clock.
+/// The suite phase prints one line per finished suite, and the tool's own
+/// PRINTs are line-buffered, so a healthy sweep never looks quiet for long.
+/// Fifteen minutes is far above the slowest real gap and far below "nothing is
+/// going to happen again".
+const SCRIPT_SILENCE_LIMIT: Duration = Duration::from_secs(15 * 60);
+/// The absolute wall-clock ceiling, well above the measured worst case.
+///
+/// MEASURED: the owner's PC, 2026-11-21 - the deploy route wrote VERSION and
+/// SOURCE-COMMIT at 11:08:54Z and its proof suites legitimately ran ~57+ minutes
+/// against the live folder. The old one-hour bound killed that healthy run at
+/// exactly 12:08:54Z. A 2h8m full run was already recorded on 2026-10-18. Three
+/// hours is above both, so only a genuinely unbounded run meets it.
+const SCRIPT_HARD_CEILING: Duration = Duration::from_secs(3 * 60 * 60);
 const POLL: Duration = Duration::from_millis(400);
 /// How much of the run's own output is kept for the screen that reports it.
 const TAIL_LINES: usize = 60;
+/// How long the after-a-run model-lane restore may take before it is given up
+/// on. The tool bounds its own lane reads and warm itself (5 s to read, up to
+/// 180 s to load a 9B at its window); this is only the guard against a wedged
+/// child - the update is already over and must still say how it ended.
+const LANE_RESTORE_LIMIT: Duration = Duration::from_secs(240);
+
+/// Which bound ended a run that was still going, and the times it ended on.
+///
+/// The run is ended by whichever bound it meets first: the hard wall-clock
+/// ceiling, or the silence stretch. Its own words name the bound and how long
+/// the run had been going, because "it was stopped" the owner can act on only
+/// when it says WHY and AFTER HOW LONG.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunBound {
+    /// The absolute wall-clock ceiling, after `ran`.
+    HardCeiling { ran: Duration },
+    /// No new output for `silent`; the run had been going `ran`.
+    Silence { ran: Duration, silent: Duration },
+}
+
+impl RunBound {
+    /// The clause the ending sentence opens with: which bound ended the run,
+    /// and after how long. Pure.
+    pub fn clause(&self) -> String {
+        match self {
+            RunBound::Silence { ran, silent } => format!(
+                "the silence bound after {} (no new output arrived for {})",
+                duration_words(*ran),
+                duration_words(*silent)
+            ),
+            RunBound::HardCeiling { ran } => format!(
+                "the {}-hour hard ceiling after {}",
+                SCRIPT_HARD_CEILING.as_secs() / 3600,
+                duration_words(*ran)
+            ),
+        }
+    }
+}
+
+/// The run's own sign of life, as a pure state machine: how long it has been
+/// going, and how long since its log last grew.
+///
+/// `observe` is the ONLY place the two bounds are applied, and it takes the
+/// beat and the log's size as plain values, so the rule is a test with an
+/// injected clock and injected output rather than an hour-long wait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunWatch {
+    /// Time since the child was started.
+    ran: Duration,
+    /// Time since the log last gained a byte.
+    silent: Duration,
+    /// The log's size when it was last seen.
+    log_len: u64,
+}
+
+impl RunWatch {
+    /// Starts watching a log that already holds `log_len` bytes.
+    pub fn over(log_len: u64) -> Self {
+        Self {
+            ran: Duration::ZERO,
+            silent: Duration::ZERO,
+            log_len,
+        }
+    }
+
+    /// One observation, `beat` after the previous one: `log_len` is the log's
+    /// size now (`None` when it cannot be read, which is not growth). Output
+    /// that grew is the run's own sign of life, so it resets the silence clock;
+    /// a quiet beat adds to it. Returns the bound when one is reached - the
+    /// hard ceiling first, then the silence stretch.
+    pub fn observe(&mut self, beat: Duration, log_len: Option<u64>) -> Option<RunBound> {
+        self.ran += beat;
+        match log_len {
+            Some(len) if len > self.log_len => {
+                self.log_len = len;
+                self.silent = Duration::ZERO;
+            }
+            _ => self.silent += beat,
+        }
+        if self.ran >= SCRIPT_HARD_CEILING {
+            Some(RunBound::HardCeiling { ran: self.ran })
+        } else if self.silent >= SCRIPT_SILENCE_LIMIT {
+            Some(RunBound::Silence {
+                ran: self.ran,
+                silent: self.silent,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// A duration in the words the owner reads: `2h 8m`, `5m 3s`, `47s`. Whole
+/// seconds; minutes are never shown as "0h", and a whole number of minutes does
+/// not carry a "0s".
+pub fn duration_words(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes}m")
+    } else if minutes > 0 && seconds > 0 {
+        format!("{minutes}m {seconds}s")
+    } else if minutes > 0 {
+        format!("{minutes}m")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+/// The two versions read back AROUND a backend attempt: the desktop that is
+/// installed (this executable's own version), and the backend's shared
+/// `VERSION` marker before and after the run.
+///
+/// This is the re-read every ending reports. The marker is exactly what the
+/// HUD compares - `jarvis_self_portrait._app_version` reads `VERSION` beside
+/// the backend and `/api/self` reports it - so `after == desktop` is the state
+/// in which the NEXT start's handshake will read IN SYNC. It is a FILE read,
+/// not that handshake: the words built from it may promise the read-back but
+/// must never claim it has happened.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VersionReadBack {
+    /// The version this executable runs - the desktop that is installed.
+    pub desktop: String,
+    /// The backend marker before the run, when it could be read.
+    pub before: Option<String>,
+    /// The backend marker after the run, when it could be read.
+    pub after: Option<String>,
+}
+
+impl VersionReadBack {
+    /// The marker names exactly the version this desktop runs.
+    pub fn names_desktop(&self) -> bool {
+        self.after
+            .as_deref()
+            .is_some_and(|after| same_version(after, &self.desktop))
+    }
+
+    /// What the re-read says, in one plain sentence - the honest "what is true
+    /// now" about the two versions. Never a claim that the run proved anything.
+    pub fn facts(&self) -> String {
+        let desktop = self.desktop.trim();
+        match (self.after.as_deref(), self.before.as_deref()) {
+            (Some(after), _) if same_version(after, desktop) => format!(
+                "The backend's VERSION file reads {after}, the version Jarvis Desktop \
+                 {desktop} runs."
+            ),
+            (Some(after), Some(before)) if after.trim() == before.trim() => format!(
+                "The backend's VERSION file still reads {after}, and that is not the \
+                 {desktop} this Jarvis Desktop runs, so the two halves still differ."
+            ),
+            (Some(after), _) => format!(
+                "The backend's VERSION file now reads {after}, which is not the {desktop} \
+                 this Jarvis Desktop runs, so the two halves still differ."
+            ),
+            (None, Some(before)) => format!(
+                "The backend's VERSION file could not be read after the run (before it \
+                 read {before}), so what version it holds now is not claimed."
+            ),
+            (None, None) => "The backend's VERSION file could not be read, so what version \
+                 it holds is not claimed."
+                .to_string(),
+        }
+    }
+}
+
+/// Two version strings name the same release: numeric comparison through the
+/// handshake's own parser, with a trimmed case-insensitive fallback for a
+/// string it cannot parse. `v0.2.488` and `0.2.488` are one release.
+fn same_version(one: &str, other: &str) -> bool {
+    match (
+        crate::backend_self::parse_version(one),
+        crate::backend_self::parse_version(other),
+    ) {
+        (Some(one), Some(other)) => one == other,
+        _ => one.trim().eq_ignore_ascii_case(other.trim()),
+    }
+}
+
+/// The backend's own shared release marker, as it reads NOW: the bare text of
+/// `<backend>/VERSION`. `None` when the file cannot be read or is empty; never
+/// a guess.
+pub fn read_version_marker(backend: &Path) -> Option<String> {
+    std::fs::read_to_string(backend.join(VERSION_NAME))
+        .ok()
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
+/// The one honest ending sentence for a run a bound ended, built ONLY from the
+/// two versions re-read after it ended - never from what the handshake said
+/// before the attempt, and never from the marker's PREVIOUS contents.
+///
+/// When the marker names the installed desktop's version, the files and the
+/// version ARE updated and the line says so plainly; what is incomplete is the
+/// check, and the restart's own handshake is the read-back that may call it IN
+/// SYNC. That is a promise about the next start, never a claim about now.
+/// Every other read-back says exactly what it found. Pure, so every branch is
+/// a test rather than a hope.
+pub fn bound_ending_words(bound: &RunBound, read_back: &VersionReadBack) -> String {
+    let mut words = format!("The patch run was ended by {}.", bound.clause());
+    if read_back.names_desktop() {
+        words.push_str(&format!(
+            " The backend's files and version are updated: its VERSION file reads {}, the \
+             version Jarvis Desktop {} runs. The full check did not finish within the \
+             bound, so the two halves are not claimed to match yet. Restart Jarvis and it \
+             will read IN SYNC.",
+            read_back.after.as_deref().unwrap_or(""),
+            read_back.desktop.trim()
+        ));
+    } else {
+        words.push(' ');
+        words.push_str(&read_back.facts());
+        words.push_str(
+            " The full check did not finish within the bound, so the update is not proven.",
+        );
+    }
+    words
+}
 
 // ---------------------------------------------------------------------------
 // Where the two folders are
@@ -900,6 +1131,43 @@ pub fn route_lines(tail: &str) -> Vec<String> {
         .collect()
 }
 
+/// The lines the backend half printed about the owner's everyday model lane
+/// (`LANE: ...`), verbatim, in the order it printed them.
+///
+/// MEASURED 2026-11-21, the same run this file's progress bound was fixed for:
+/// the proof suites run against the live backend folder, and one of them loads a
+/// different model on the everyday lane without putting the owner's back - lane
+/// 11436 was left on `jarvis-primary:latest` at 16,384 instead of the preset
+/// table's `qwen3.5:9b` at 196,608, and the field battery's PRESETS row then
+/// failed. `tools/update_backend.py` records the lane before the suites and
+/// restores it after them; its one `LANE:` line says which happened (restored,
+/// left alone) or that the lane could not be read and nothing was restored.
+/// Rust keeps it verbatim like the other release report lines.
+pub fn lane_lines(tail: &str) -> Vec<String> {
+    tail.lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("LANE:"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Every verbatim report line the release's own steps printed, in the order
+/// the ending shows them: `ROUTE:` first, then `BESIDE:`, then
+/// `TOOL DEFAULTS:`, then the model lane's `LANE:` line.
+///
+/// Read from the WHOLE run's output, never from the last-60-lines tail: the
+/// look spec is delivered once the file half is proved (2026-11-21) and the
+/// proof suites print for an hour after it, so a run the bound ends would
+/// otherwise lose the one line saying the spec reached the PC. Pure, so the
+/// "not only the tail" rule is a test.
+pub fn notes_of(text: &str) -> Vec<String> {
+    let mut notes = route_lines(text);
+    notes.extend(beside_lines(text));
+    notes.extend(tool_defaults_lines(text));
+    notes.extend(lane_lines(text));
+    notes
+}
+
 /// The backend half's own ending sentence when it did not finish.
 ///
 /// It is about the BACKEND ONLY. Whether the desktop half was installed is the
@@ -1104,10 +1372,60 @@ pub struct Run {
     /// older one-at-a-time patcher was run instead. Said on the card.
     pub used_tool: bool,
     /// The verbatim lines the run printed about the release's own files reaching
-    /// this PC (`BESIDE:` for the look spec, `TOOL DEFAULTS:` for the additive
-    /// config step). The auto-finish puts them on its own ending line too, so an
-    /// update the owner never sees a card for still says what reached the PC.
+    /// this PC (`ROUTE:`, `BESIDE:` for the look spec, `TOOL DEFAULTS:` for the
+    /// additive config step). The auto-finish puts them on its own ending line
+    /// too, so an update the owner never sees a card for still says what reached
+    /// the PC. Read from the WHOLE run output, not the last-60-lines tail.
     pub notes: Vec<String>,
+    /// Which bound ended this attempt, when one did; `None` when the child ended
+    /// by itself. The ending words name the bound and how long the run went.
+    pub bound: Option<RunBound>,
+    /// The two versions read back AROUND this attempt: the installed desktop,
+    /// and the backend's `VERSION` marker before and after it. Every ending
+    /// reports what this says rather than what the pre-run handshake said.
+    pub read_back: VersionReadBack,
+}
+
+impl Run {
+    /// `(state, words)` for this attempt: `"ok"`, `"partial"` or `"failed"`,
+    /// and the sentence the owner is shown.
+    ///
+    /// ONE function for both callers - the press and the automatic finish - so
+    /// a click and a start-up cannot report the same run differently, and the
+    /// re-read is part of the rule rather than a call-site sentence. A bound
+    /// ending is `partial` when the marker read back names the installed
+    /// desktop's version (the files and version are updated; the check is not
+    /// finished) and `failed` when it does not. Pure.
+    pub fn ending(&self) -> (&'static str, String) {
+        if let Some(bound) = self.bound.as_ref() {
+            let state = if self.read_back.names_desktop() {
+                "partial"
+            } else {
+                "failed"
+            };
+            let mut words = bound_ending_words(bound, &self.read_back);
+            if !self.notes.is_empty() {
+                words.push(' ');
+                words.push_str(&self.notes.join(" "));
+            }
+            return (state, words);
+        }
+        // The re-read happens only when a run was really attempted; a refusal
+        // that never started one has an empty desktop version and must not
+        // invent a "the VERSION file could not be read" it never tried to make.
+        let facts = if self.read_back.desktop.trim().is_empty() {
+            String::new()
+        } else {
+            format!(" {}", self.read_back.facts())
+        };
+        if !self.ok {
+            return ("failed", format!("{}{facts}", self.detail));
+        }
+        if self.proven {
+            return ("ok", self.detail.clone());
+        }
+        ("partial", format!("{}{facts}", self.detail))
+    }
 }
 
 /// Puts the two folders in place and runs the chosen pace's update: the repo
@@ -1292,6 +1610,14 @@ fn run_script(
     // answer to that.
     let working_dir = repo.to_path_buf();
 
+    // The two versions every ending is reported against, read BEFORE the run so
+    // the ending can say what really changed. `desktop` is the version this
+    // executable runs - the one an installer put here - and `before` is the
+    // backend's shared marker, the exact number the HUD compares. Neither is a
+    // guess: an unreadable marker stays `None` and the ending says so.
+    let desktop_version = app.package_info().version.to_string();
+    let version_before = read_version_marker(backend);
+
     let mut command = if let Some((program, leading)) = python.as_ref() {
         let mut command = std::process::Command::new(program);
         command.args(leading).args(tool_args(
@@ -1378,16 +1704,40 @@ fn run_script(
         })
     };
 
-    let deadline = Instant::now() + SCRIPT_LIMIT;
-    let mut timed_out = false;
+    // THE BOUND MEASURES PROGRESS, NOT JUST THE CLOCK (fixed 2026-11-21).
+    //
+    // MEASURED on the owner's PC: the deploy route wrote VERSION 0.2.488 and
+    // SOURCE-COMMIT d7003442e at 11:08:54Z, the proof suites then ran against
+    // the live folder, and at 12:08:54Z a single one-hour wall clock killed that
+    // healthy run - both halves were already equal. So the loop watches the
+    // child's own log: every new byte is the run saying it is alive and resets
+    // the silence clock, and only two things end a live run - no new output at
+    // all for [`SCRIPT_SILENCE_LIMIT`], or the absolute
+    // [`SCRIPT_HARD_CEILING`] that no real run can reach. `RunWatch` is pure and
+    // takes the beat and the log's size, so both bounds are tests with an
+    // injected clock and injected output, never an hour-long wait.
+    let mut watch = RunWatch::over(log_len(&capture).unwrap_or(0));
+    let mut last_beat = Instant::now();
+    let mut bound: Option<RunBound> = None;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => {
-                if Instant::now() >= deadline {
+                let now = Instant::now();
+                let beat = now.saturating_duration_since(last_beat);
+                last_beat = now;
+                if let Some(hit) = watch.observe(beat, log_len(&capture)) {
+                    // Said out loud as it happens: WHICH bound ended the run and
+                    // after how long. The same clause opens the ending sentence.
+                    println!(
+                        "[jarvis] backend update: the patch run was ended by {}.",
+                        hit.clause()
+                    );
+                    // Through `proctree`, so `git`, `py` and `patch` go with the
+                    // run rather than being orphaned by the stop.
                     tree.kill();
                     let _ = child.wait();
-                    timed_out = true;
+                    bound = Some(hit);
                     break None;
                 }
                 std::thread::sleep(POLL);
@@ -1415,23 +1765,64 @@ fn run_script(
     let _ = watcher.join();
 
     let bytes = std::fs::read(&capture).unwrap_or_default();
-    let tail = tail_of(&String::from_utf8_lossy(&bytes), TAIL_LINES);
+    let full = String::from_utf8_lossy(&bytes).to_string();
+    let tail = tail_of(&full, TAIL_LINES);
+    // The release's own report lines are read from the WHOLE output, not the
+    // last 60 lines: the look spec is delivered before the proof suites, whose
+    // hour of printing would push its `BESIDE:` line out of the tail - and a
+    // run the bound ends must still carry it (measured 2026-11-21).
+    let mut notes = notes_of(&full);
     // Read, then gone. A run's printout is not something to leave lying in
     // %TEMP%: this repository spent 2026-10-11 clearing out 1,663 folders one
     // suite at a time, and a feature that quietly adds one file per update is
     // the same mistake in a smaller size.
     let _ = std::fs::remove_file(&capture);
 
-    if timed_out {
+    // THE RE-READ ON EVERY ENDING: the marker is read again after the child is
+    // gone, so the ending reports what is true now rather than what the
+    // handshake said before the attempt ("the backend is still 0.2.487" was
+    // measured false at 12:08:54Z while the file read 0.2.488).
+    let read_back = VersionReadBack {
+        desktop: desktop_version,
+        before: version_before,
+        after: read_version_marker(backend),
+    };
+
+    // THE OWNER'S EVERYDAY MODEL LANE, on every ending (measured 2026-11-21):
+    // the proof suites load a different model on it and do not put the owner's
+    // back. The tool restores it on every ending it reaches and prints its one
+    // `LANE:` line; this runs the tool's own `--restore-lane` so a run THIS app
+    // ended (the progress bound kills the tool part-way through the suites) is
+    // restored from the record the tool wrote before them. A normal ending left
+    // no record, so this prints nothing. Never fails the update.
+    if used_tool {
+        for line in restore_lane_if_recorded(python.as_ref(), &tool, backend) {
+            println!("[jarvis] backend update: {line}");
+            notes.push(line);
+        }
+    }
+
+    if let Some(hit) = bound {
+        let progress = live.lock().map(|p| p.clone()).unwrap_or_default();
+        let fallback = progress.fallback == Some(true);
         return Run {
-            detail: format!(
-                "The patch run did not finish within an hour and was stopped. It may have \
-                 been part-way through, so read its log before touching anything: {}",
-                where_the_log_is(&log_dir)
-            ),
+            detail: bound_ending_words(&hit, &read_back),
+            // The files may well have been written before the bound ended the
+            // run - the deploy route writes both markers before its first suite,
+            // and the patch program warns in its own words when it was part-way.
+            // Saying "possibly half updated" is the honest default; the marker
+            // read-back is what says whether the version moved.
             half_updated: true,
             log_dir,
             tail,
+            progress,
+            fallback,
+            notes,
+            used_tool,
+            mode: mode.to_string(),
+            mode_label: mode_label.to_string(),
+            bound: Some(hit),
+            read_back,
             ..Run::default()
         };
     }
@@ -1478,16 +1869,13 @@ fn run_script(
         );
     }
     // The release's own files reaching this PC, as the repo tool reported them
-    // once the update proved itself (2026-11-21): `BESIDE:` for the look spec
-    // and `TOOL DEFAULTS:` for the additive config step. Shown verbatim - the
-    // owner's config and the copy the desktop compares are where a shipped
-    // feature becomes usable - so a step that could not run must be READ.
-    // `ROUTE:` comes first when it is there: which route carried the files (the
-    // patch stack, or the deploy tool on a deploy-managed install) is the first
-    // thing the card should say about a fallback update.
-    let mut notes = route_lines(&tail);
-    notes.extend(beside_lines(&tail));
-    notes.extend(tool_defaults_lines(&tail));
+    // (2026-11-21): `BESIDE:` for the look spec and `TOOL DEFAULTS:` for the
+    // additive config step. Shown verbatim - the owner's config and the copy the
+    // desktop compares are where a shipped feature becomes usable - so a step
+    // that could not run must be READ. `ROUTE:` comes first when it is there:
+    // which route carried the files (the patch stack, or the deploy tool on a
+    // deploy-managed install) is the first thing the card should say about a
+    // fallback update.
     if !notes.is_empty() {
         detail.push(' ');
         detail.push_str(&notes.join(" "));
@@ -1509,6 +1897,80 @@ fn run_script(
         fallback,
         used_tool,
         notes,
+        bound: None,
+        read_back,
+    }
+}
+
+/// The child's log size now, or `None` when it cannot be read.
+///
+/// This is the run's own sign of life; `None` is NOT growth, so a log this PC
+/// briefly refuses to read can never reset the silence clock and let a wedged
+/// run look alive.
+fn log_len(path: &Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|meta| meta.len())
+}
+
+/// After the run's child is gone - whichever way it ended - let the update tool
+/// put the owner's everyday model lane back when THIS app ended the run first.
+///
+/// WHY THIS IS HERE AND NOT ONLY IN THE TOOL (measured 2026-11-21). The proof
+/// suites run against the live backend folder and one of them loads a different
+/// model on the everyday lane without putting the owner's back: lane 11436 was
+/// left on `jarvis-primary:latest` at 16,384 instead of the preset table's
+/// `qwen3.5:9b` at 196,608, and the field battery's PRESETS row then failed.
+/// The tool restores the lane on every ending IT reaches (success, failure, the
+/// safe second pass), but this app owns the run's bound: a timeout kills the
+/// tool part-way through the proof suites, where no `finally` in it can run. So
+/// the tool writes the lane's recorded model+context to its own log folder
+/// BEFORE the suites, and this runs the tool's own `--restore-lane` after ANY
+/// ending. A run that ended normally left no record and the helper prints
+/// nothing; the one `LANE:` line it may print is kept in the report verbatim.
+///
+/// Bounded: the tool bounds its own reads and warm, and this guard only stops a
+/// wedged child from holding up an ending. Never fails the update - a missing
+/// Python or an unreadable answer is an empty list.
+fn restore_lane_if_recorded(
+    python: Option<&(String, Vec<String>)>,
+    tool: &Path,
+    backend: &Path,
+) -> Vec<String> {
+    let Some((program, leading)) = python else {
+        return Vec::new();
+    };
+    let mut command = std::process::Command::new(program);
+    command
+        .args(leading)
+        .arg("-B")
+        .arg(tool)
+        .arg("--restore-lane")
+        .arg("--backend")
+        .arg(backend)
+        .current_dir(backend)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let Ok(mut child) = command.spawn() else {
+        return Vec::new();
+    };
+    let deadline = Instant::now() + LANE_RESTORE_LIMIT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                break;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
+            Err(_) => {
+                let _ = child.kill();
+                break;
+            }
+        }
+    }
+    match child.wait_with_output() {
+        Ok(out) => lane_lines(&String::from_utf8_lossy(&out.stdout)),
+        Err(_) => Vec::new(),
     }
 }
 
@@ -1580,14 +2042,17 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_failure_words, backend_folder, beside_lines, folder_of_hud, halves_line,
-        known_mode, marker_words, normalise_commit, parse_mode_plan, parse_update_lock,
-        read_verdict, refuse, release_marker, repo_commit, repo_is_at_least_build, route_lines,
-        setting_text, start_blocked_words, tail_of, tool_args, tool_defaults_lines,
-        unknown_mode_words, update_lock_is_valid, update_running_words, write_release_marker,
-        MarkerEnding, ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
-        LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, VERSION_NAME,
+        backend_failure_words, backend_folder, beside_lines, bound_ending_words, duration_words,
+        folder_of_hud, halves_line, known_mode, lane_lines, marker_words, normalise_commit,
+        notes_of, parse_mode_plan, parse_update_lock, read_verdict, read_version_marker, refuse,
+        release_marker, repo_commit, repo_is_at_least_build, route_lines, setting_text,
+        start_blocked_words, tail_of, tool_args, tool_defaults_lines, unknown_mode_words,
+        update_lock_is_valid, update_running_words, write_release_marker, MarkerEnding, ModeInfo,
+        Run, RunBound, RunWatch, UpdateLock, Verdict, VersionReadBack, BACKEND_ENV, HUD,
+        LOCK_CEILING_SECONDS, LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS, SCRIPT_HARD_CEILING,
+        SCRIPT_SILENCE_LIMIT, VERSION_NAME,
     };
+    use std::time::Duration;
 
     fn args(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
@@ -1798,17 +2263,433 @@ mod tests {
         assert_eq!(tail_of("", 60), "");
     }
 
-    /// The one path a person never sees until it matters: a run that was given
-    /// up on is reported as possibly half done, not as a clean stop.
+    // ---- the bound measures progress, not just the wall clock (2026-11-21) --
+    //
+    // THE MEASURED FAILURE. The owner's PC, 2026-11-21: the auto-finish's deploy
+    // route wrote VERSION 0.2.488 and SOURCE-COMMIT d7003442e at 11:08:54Z, its
+    // proof suites legitimately ran ~57+ minutes against the live folder, and at
+    // 12:08:54Z - exactly one wall-clock hour after the start - a healthy run
+    // was killed and reported as a half that "did not finish". Every test below
+    // drives the bound with injected beats and injected log sizes, so neither
+    // the progress rule nor the endings need a real hour's wait.
+
     #[test]
-    fn giving_up_on_a_wedged_run_is_not_reported_as_a_clean_one() {
-        let detail = format!(
-            "The patch run did not finish within an hour and was stopped. It may have \
-             been part-way through, so read its log before touching anything: {}",
-            r"C:\backend\_jarvis-logs"
+    fn the_bound_extends_while_the_run_keeps_printing() {
+        // 1h05m of a run that prints every 30 seconds: well past the old
+        // one-hour wall clock, and it must still be alive.
+        let mut watch = RunWatch::over(0);
+        let mut len = 0u64;
+        for beat in 1..=130 {
+            len += 40;
+            assert_eq!(
+                watch.observe(Duration::from_secs(30), Some(len)),
+                None,
+                "a run that is still printing was ended after {beat} beats"
+            );
+        }
+        assert!(
+            watch.ran > Duration::from_secs(60 * 60),
+            "the test did not even pass the old one-hour bound: {:?}",
+            watch.ran
         );
-        assert!(detail.contains("part-way through"));
-        assert!(detail.contains("_jarvis-logs"));
+        // The clock alone never ends a run: it is still alive two hours in,
+        // because every beat brought new output.
+        for _ in 0..110 {
+            len += 40;
+            assert_eq!(
+                watch.observe(Duration::from_secs(30), Some(len)),
+                None,
+                "a run that is still printing was ended before two hours"
+            );
+        }
+        assert!(watch.ran >= Duration::from_secs(2 * 60 * 60));
+    }
+
+    #[test]
+    fn silence_ends_a_run_that_stopped_printing() {
+        // A run that has been going 1h30m and then prints nothing: it is given
+        // the benefit of the doubt until the silence stretch is reached, and
+        // the very next second ends it.
+        let mut watch = RunWatch::over(0);
+        let mut len = 0u64;
+        for _ in 0..90 {
+            len += 40;
+            assert_eq!(
+                watch.observe(Duration::from_secs(60), Some(len)),
+                None,
+                "the run was ended while it was still printing"
+            );
+        }
+        assert_eq!(watch.ran, Duration::from_secs(90 * 60));
+        assert_eq!(
+            watch.observe(Duration::from_secs(14 * 60 + 59), Some(len)),
+            None,
+            "the run was ended one second early"
+        );
+        let ended = watch
+            .observe(Duration::from_secs(1), Some(len))
+            .expect("the silence bound never fired");
+        match ended {
+            RunBound::Silence { ran, silent } => {
+                assert_eq!(silent, SCRIPT_SILENCE_LIMIT, "{silent:?}");
+                assert_eq!(ran, Duration::from_secs(90 * 60) + SCRIPT_SILENCE_LIMIT);
+            }
+            other => panic!("the wrong bound ended a silent run: {other:?}"),
+        }
+        // Output that arrives after a long quiet stretch resets the clock - the
+        // run is alive again, and only the hard ceiling remains.
+        let mut resumed = RunWatch::over(0);
+        assert!(resumed
+            .observe(Duration::from_secs(14 * 60), Some(0))
+            .is_none());
+        assert!(resumed
+            .observe(Duration::from_secs(30), Some(400))
+            .is_none());
+        assert!(
+            resumed
+                .observe(Duration::from_secs(14 * 60), Some(400))
+                .is_none(),
+            "fresh output did not reset the silence clock"
+        );
+    }
+
+    #[test]
+    fn the_hard_ceiling_ends_even_a_chatty_run() {
+        // The absolute stop, well above the measured worst case (the 57-minute
+        // proof stage, the 2h8m full run of 2026-10-18): no real run meets it,
+        // and a run that somehow printed forever still cannot hold the app.
+        let mut watch = RunWatch::over(0);
+        let mut len = 0u64;
+        let mut ended = None;
+        while ended.is_none() {
+            len += 40;
+            ended = watch.observe(Duration::from_secs(30), Some(len));
+        }
+        match ended.expect("the hard ceiling never fired") {
+            RunBound::HardCeiling { ran } => {
+                assert_eq!(ran, SCRIPT_HARD_CEILING, "{ran:?}");
+            }
+            other => panic!("the wrong bound ended a printing run: {other:?}"),
+        }
+        assert!(
+            SCRIPT_HARD_CEILING > Duration::from_secs(2 * 60 * 60),
+            "the ceiling is below the measured 2h8m full run"
+        );
+    }
+
+    #[test]
+    fn the_bound_names_which_one_ended_it_and_after_how_long() {
+        let silence = RunBound::Silence {
+            ran: Duration::from_secs(3600 + 23 * 60),
+            silent: SCRIPT_SILENCE_LIMIT,
+        };
+        let clause = silence.clause();
+        assert!(clause.contains("silence bound"), "{clause}");
+        assert!(clause.contains("1h 23m"), "{clause}");
+        assert!(clause.contains("15m"), "{clause}");
+
+        let hard = RunBound::HardCeiling {
+            ran: SCRIPT_HARD_CEILING,
+        };
+        let clause = hard.clause();
+        assert!(clause.contains("3-hour hard ceiling"), "{clause}");
+        assert!(clause.contains("3h 0m"), "{clause}");
+
+        // The durations the owner reads, never raw seconds or "0h".
+        assert_eq!(duration_words(Duration::from_secs(47)), "47s");
+        assert_eq!(duration_words(Duration::from_secs(15 * 60)), "15m");
+        assert_eq!(duration_words(Duration::from_secs(5 * 60 + 3)), "5m 3s");
+        assert_eq!(
+            duration_words(Duration::from_secs(2 * 3600 + 8 * 60)),
+            "2h 8m"
+        );
+        assert_eq!(duration_words(Duration::ZERO), "0s");
+    }
+
+    // ---- the two versions are re-read on EVERY ending (2026-11-21) --------
+
+    /// The marker read is the one the HUD compares: `VERSION` beside the
+    /// backend, the bare number `/api/self` reports. An unreadable one is
+    /// `None`, never a guess.
+    #[test]
+    fn the_backend_version_is_read_back_from_its_own_marker() {
+        let dir = marker_folder("read-back");
+        std::fs::write(dir.join(VERSION_NAME), "0.2.488\n").expect("the marker");
+        assert_eq!(read_version_marker(&dir).as_deref(), Some("0.2.488"));
+        std::fs::write(dir.join(VERSION_NAME), "   ").expect("an empty marker");
+        assert_eq!(read_version_marker(&dir), None);
+        assert_eq!(read_version_marker(&dir.join("no-such-folder")), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn a_read_back(desktop: &str, before: &str, after: &str) -> VersionReadBack {
+        VersionReadBack {
+            desktop: desktop.to_string(),
+            before: Some(before.to_string()),
+            after: Some(after.to_string()),
+        }
+    }
+
+    fn a_silence() -> RunBound {
+        RunBound::Silence {
+            ran: Duration::from_secs(3600 + 23 * 60),
+            silent: SCRIPT_SILENCE_LIMIT,
+        }
+    }
+
+    #[test]
+    fn a_run_that_updated_the_version_reports_files_and_version_updated_but_check_incomplete() {
+        // THE MEASURED CASE, as words: the deploy wrote VERSION 0.2.488 at
+        // 11:08:54Z, the suites were still running at 12:08:54Z when the run was
+        // stopped, and the pre-run handshake still said 0.2.487. The re-read
+        // after the stop equals the installed desktop, so the ending says the
+        // files and version ARE updated - and that only a restart's handshake
+        // may call it IN SYNC.
+        let read_back = a_read_back("0.2.488", "0.2.487", "0.2.488");
+        assert!(read_back.names_desktop());
+        let words = bound_ending_words(&a_silence(), &read_back);
+        for expected in [
+            "silence bound",
+            "1h 23m",
+            "The backend's files and version are updated",
+            "VERSION file reads 0.2.488",
+            "Jarvis Desktop 0.2.488",
+            "The full check did not finish within the bound",
+            "Restart Jarvis",
+            "will read IN SYNC",
+        ] {
+            assert!(
+                words.contains(expected),
+                "{expected:?} missing from {words}"
+            );
+        }
+        // The false sentence the measured 12:08:54Z line said is impossible now:
+        // the marker read 0.2.488, and no words here claim otherwise.
+        assert!(!words.contains("still 0.2.487"), "{words}");
+        // No claim about NOW from the marker alone: only the restart may say it.
+        for forbidden in ["both halves now match", "now match", "are in sync"] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        assert!(!words.contains('\n'), "{words:?}");
+    }
+
+    #[test]
+    fn a_run_that_wrote_nothing_reports_honestly() {
+        // The failure direction: the marker still reads the OLD version after
+        // the bound ended the run, so the ending says exactly that and never
+        // borrows the updated words.
+        let read_back = a_read_back("0.2.488", "0.2.487", "0.2.487");
+        assert!(!read_back.names_desktop());
+        let words = bound_ending_words(&a_silence(), &read_back);
+        for expected in [
+            "silence bound",
+            "1h 23m",
+            "VERSION file still reads 0.2.487",
+            "two halves still differ",
+            "not proven",
+        ] {
+            assert!(
+                words.contains(expected),
+                "{expected:?} missing from {words}"
+            );
+        }
+        for forbidden in [
+            "files and version are updated",
+            "IN SYNC",
+            "now match",
+            "Restart Jarvis",
+        ] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+    }
+
+    #[test]
+    fn an_unreadable_marker_after_a_bound_is_not_claimed() {
+        let read_back = VersionReadBack {
+            desktop: "0.2.488".to_string(),
+            before: Some("0.2.487".to_string()),
+            after: None,
+        };
+        let words = bound_ending_words(&a_silence(), &read_back);
+        assert!(words.contains("could not be read"), "{words}");
+        assert!(words.contains("not claimed"), "{words}");
+        for forbidden in ["files and version are updated", "IN SYNC", "now match"] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        // The pre-run read is still named as the last thing that was known.
+        assert!(words.contains("0.2.487"), "{words}");
+    }
+
+    #[test]
+    fn a_bound_ending_is_one_pure_rule_for_both_callers() {
+        // State and words come from `Run::ending`, which both the press and the
+        // automatic finish call: `partial` when the marker names the installed
+        // desktop (the files and version are updated; the check is incomplete),
+        // `failed` when it does not.
+        let mut run = Run {
+            bound: Some(a_silence()),
+            read_back: a_read_back("0.2.488", "0.2.487", "0.2.488"),
+            notes: vec!["BESIDE: jarvis-visual-spec.json wrote 73121 bytes".to_string()],
+            ..Run::default()
+        };
+        let (state, words) = run.ending();
+        assert_eq!(state, "partial");
+        assert!(words.contains("files and version are updated"), "{words}");
+        // The release's own report lines ride on the bound's ending too: a run
+        // the bound ended still says the look spec reached the PC.
+        assert!(words.contains("BESIDE:"), "{words}");
+
+        run.read_back = a_read_back("0.2.488", "0.2.487", "0.2.487");
+        let (state, words) = run.ending();
+        assert_eq!(state, "failed");
+        assert!(words.contains("still reads 0.2.487"), "{words}");
+        assert!(!words.contains("files and version are updated"), "{words}");
+
+        // Every other ending reports the same re-read: a plain failure says what
+        // the marker holds now, and a success keeps its own proven words.
+        let failed = Run {
+            ok: false,
+            detail: backend_failure_words(true),
+            read_back: a_read_back("0.2.488", "0.2.487", "0.2.489"),
+            ..Run::default()
+        };
+        let (state, words) = failed.ending();
+        assert_eq!(state, "failed");
+        assert!(
+            words.contains("WERE changed before it went wrong"),
+            "{words}"
+        );
+        assert!(words.contains("VERSION file now reads 0.2.489"), "{words}");
+
+        let proven = Run {
+            ok: true,
+            proven: true,
+            detail: "The backend folder is patched, and the update's own tests proved it."
+                .to_string(),
+            ..Run::default()
+        };
+        let (state, words) = proven.ending();
+        assert_eq!(state, "ok");
+        assert_eq!(
+            words,
+            "The backend folder is patched, and the update's own tests proved it."
+        );
+
+        // A refusal that never started a run must not append a version read it
+        // never attempted - the version may be perfectly fine and in use.
+        let refused = Run {
+            detail: update_running_words(&a_lock(4321, 1000.0, 1000.0)),
+            ..Run::default()
+        };
+        let (state, words) = refused.ending();
+        assert_eq!(state, "failed");
+        assert!(words.contains("already running"), "{words}");
+        assert!(!words.contains("VERSION file"), "{words}");
+        assert!(!words.contains("could not be read"), "{words}");
+    }
+
+    #[test]
+    fn the_release_report_lines_are_read_from_the_whole_run_not_its_tail() {
+        // A suite phase prints for an hour after the look spec is delivered, so
+        // the `BESIDE:` line sits far above the last 60 lines. The notes must
+        // still carry it - a run the bound ends still says the spec reached the
+        // PC. Measured shape of the 2026-11-21 run, abridged.
+        let text = format!(
+            "ROUTE: the patch stack refused 51 hunk(s) on a deployed install\n\
+             BESIDE: jarvis-visual-spec.json wrote 73121 bytes (was 61301 bytes)\n\
+             TOOL DEFAULTS: added and read back: project_create\n\
+             LANE: the proof suites left it on jarvis-primary:latest at 16384; \
+             warmed the recorded qwen3.5:9b at 196608 again and read it back in place.\n{}",
+            "ok    test_some_suite.py               0.1s\n".repeat(400)
+        );
+        assert!(
+            !tail_of(&text, 60).contains("BESIDE:"),
+            "the fixture does not put the line outside the tail"
+        );
+        let notes = notes_of(&text);
+        assert_eq!(notes.len(), 4, "{notes:?}");
+        assert!(notes[0].starts_with("ROUTE:"), "{notes:?}");
+        assert!(notes[1].starts_with("BESIDE:"), "{notes:?}");
+        assert!(notes[2].starts_with("TOOL DEFAULTS:"), "{notes:?}");
+        assert!(notes[3].starts_with("LANE:"), "{notes:?}");
+        assert!(notes[1].contains("73121"), "{notes:?}");
+        // Nothing invented when no step printed anything.
+        assert!(notes_of("ALL DONE - the backend is patched and proven").is_empty());
+    }
+
+    #[test]
+    fn the_model_lane_line_is_kept_verbatim() {
+        // The measured 2026-11-21 lane: the proof suites left lane 11436 on
+        // `jarvis-primary:latest` at 16,384 instead of the preset's `qwen3.5:9b`
+        // at 196,608. The tool's one LANE: line says what it did, and Rust keeps
+        // it word for word - it is not paraphrased or folded into another list.
+        let text = "ALL DONE - the backend is patched and proven\n\
+                    LANE: the proof suites left it on jarvis-primary:latest at 16384; \
+                    warmed the recorded qwen3.5:9b at 196608 again and read it back in place.";
+        let lines = lane_lines(text);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].starts_with("LANE:"), "{lines:?}");
+        assert!(lines[0].contains("qwen3.5:9b"), "{lines:?}");
+        assert!(lines[0].contains("196608"), "{lines:?}");
+        assert!(lines[0].contains("jarvis-primary:latest"), "{lines:?}");
+        // A run whose suites never started adds no lane line - a skipped step is
+        // never reported as "unchanged".
+        assert!(lane_lines("ALL DONE - the backend is patched and proven").is_empty());
+        assert!(lane_lines("LANE: nothing like a real line").len() == 1);
+    }
+
+    #[test]
+    fn the_model_lane_is_restored_after_any_ending_including_the_bound() {
+        // THE TIMEOUT ENDING. This app owns the run's bound and can kill the
+        // tool part-way through the proof suites, so the tool's own restore
+        // cannot run. The wiring that matters: after the child is gone, the
+        // restore is called BEFORE the bound's early return, and the bound's Run
+        // carries the notes - so a timeout ending's report says what happened to
+        // the owner's model lane.
+        let src = include_str!("backend_update.rs");
+        let production = &src[..src.find("#[cfg(test)]").expect("no test module")];
+        let notes_read = production
+            .find("let mut notes = notes_of(&full);")
+            .expect("run_script no longer reads the release report lines");
+        let restore = production
+            .find("restore_lane_if_recorded(")
+            .expect("run_script never restores the model lane");
+        let bound = production
+            .find("if let Some(hit) = bound {")
+            .expect("run_script has no bound ending");
+        assert!(
+            notes_read < restore,
+            "the lane restore runs before the run's own output is read"
+        );
+        assert!(
+            restore < bound,
+            "the bound ending returns before the model lane is restored"
+        );
+        let bound_block = &production[bound..];
+        let bound_block = &bound_block[..bound_block
+            .find("let exit_ok")
+            .expect("the bound block has no end")];
+        assert!(
+            bound_block.contains("notes,"),
+            "the bound ending does not carry the report (a timeout would say \
+             nothing about the model lane):\n{bound_block}"
+        );
+        // Cross-language interface: the flag and prefix this code runs are the
+        // ones the tool implements (the other half of the same test is in
+        // backend/test_update_backend.py).
+        let tool = include_str!("../../../tools/update_backend.py");
+        assert!(
+            tool.contains("\"--restore-lane\""),
+            "tools/update_backend.py has no --restore-lane mode"
+        );
+        assert!(
+            tool.contains("LANE_PREFIX = \"LANE: \""),
+            "tools/update_backend.py prints no LANE: report line"
+        );
+        assert!(
+            production.contains(".arg(\"--restore-lane\")"),
+            "the app never runs the tool's --restore-lane mode"
+        );
     }
 
     // ---- the three paces: the tool's own answer, read back ---------------

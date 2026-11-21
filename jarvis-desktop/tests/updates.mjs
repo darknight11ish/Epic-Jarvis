@@ -319,10 +319,14 @@ await check("CONTROL: the boot-strap run passes the baseline for the release's o
   const backend = read("src-tauri/src/backend_update.rs");
   assert.match(backend, /--previous-release/,
     "backend_update.rs never passes the previous build to the update tool");
-  assert.match(backend, /beside_lines\(&tail\)/,
-    "the look-spec report lines are not shown");
-  assert.match(backend, /tool_defaults_lines\(&tail\)/,
-    "the new-tool-defaults report lines are not shown");
+  // The report lines are read from the WHOLE run output, not the last-60-lines
+  // tail (2026-11-21): the look spec is delivered with the file half, before the
+  // proof suites, and an hour of suite lines would push its BESIDE: line out of
+  // the tail exactly when a run ended by a bound needs it in the report.
+  assert.match(backend, /pub fn notes_of\(/,
+    "backend_update.rs has no single reader for the release's report lines");
+  assert.match(backend, /notes_of\(&full\)/,
+    "the release-file report lines are not read from the whole run");
   assert.match(rust, /previous_release = crate::backend_update::app_commit\(\)/,
     "the in-app press does not pass the running build as the baseline");
   assert.match(rust, /remember_previous_desktop_build\(pending\.app_commit\.as_deref\(\)\)/,
