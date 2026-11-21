@@ -26,6 +26,15 @@
  * - themes: the chart and the private label read in all three themes;
  * - a11y: the tab is on the rail's arrow keys, every control has a name,
  *   the chart is an image with words.
+ * - PM4 (2026-11-21): the plan board above the list - the four columns group
+ *   every work item by its status exactly, a blocked item shows the blocker it
+ *   waits on, the milestone bar is the store's real counts, the project
+ *   selector switches the board, a card opens its objective anchor,
+ *   dependency links, linked PR/note and its `project_events` timeline, the
+ *   Ready List is exactly the ids the route returned, and the one Export
+ *   button uses the PC's existing hub-export action (ONE request, no card class
+ *   named here). The plan payloads are fake, to the route shape the phone PR
+ *   adds; no test opens a socket to the PC.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,22 +42,30 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   APP_WORDS,
+  PLAN_COLUMNS,
+  PLAN_WORDS,
   appProjectBody,
   appTypeWords,
   benchBody,
+  blockerWords,
   chartGeometry,
   chartScale,
   chartSummary,
+  columnOf,
   diffLineKind,
   mergeOffer,
+  milestoneProgress,
   notesFrom,
   pasteBody,
+  planColumns,
   projectMeta,
   readApp,
   readBench,
   readList,
+  readPlan,
   readProject,
   readTask,
+  readyItems,
   taskChange,
   taskTitleBody,
   versionLines,
@@ -204,17 +221,41 @@ const browser = await K.launch();
 const SIZE = { width: 1180, height: 1000 };
 
 /**
+ * An empty plan answer (PM4's `GET /api/projects/<id>/plan`), so every test
+ * written before the plan board existed sees the same list it always saw. A
+ * board test passes `plans` (project id -> the route's answer) instead. The
+ * shape is the one the phone PR's route serves; nothing here comes from the
+ * live backend, and no test opens a socket to it.
+ */
+const EMPTY_PLAN = () => ({
+  ok: true,
+  objective: null,
+  success_criteria: null,
+  status: null,
+  target_date: null,
+  linked_repo: null,
+  linked_note_path: null,
+  slug: null,
+  counts: { milestones: 0, work_items: 0, ready: 0, blocked: 0, edges: 0, events: 0 },
+  milestones: [],
+  work_items: [],
+  ready: [],
+  events: [],
+});
+
+/**
  * The Brain with a stand-in for brain/projects.rs: reads come from the
  * contract file, each change is written down in `window.__pj.calls` and
  * answered with the real backend's answer (an error as Rust hands it on).
  */
-async function projectsTab({ list = C.list_two, projects = null, link = {}, answers = {}, tasks = {}, benchOverrides = {} } = {}) {
+async function projectsTab({ list = C.list_two, projects = null, link = {}, answers = {},
+  tasks = {}, benchOverrides = {}, plans = null, planDefault = EMPTY_PLAN() } = {}) {
   const page = await K.open(browser, base, "brain.html", { link }, SIZE);
   page.on("dialog", (d) => (page.__confirm === false ? d.dismiss() : d.accept()));
-  await page.evaluate(({ list, projects, answers, POSTS, benches, tasks }) => {
+  await page.evaluate(({ list, projects, answers, POSTS, benches, tasks, plans, planDefault }) => {
     const core = window.__TAURI__.core;
     const inner = core.invoke;
-    window.__pj = { list, projects, answers, tasks, calls: [], revealed: false };
+    window.__pj = { list, projects, answers, tasks, plans, planDefault, calls: [], revealed: false };
     const ok = (p) => ({ ...p.body, http: p.status });
     const refuse = (p) => {
       const e = String(p.body.error || "");
@@ -228,6 +269,11 @@ async function projectsTab({ list = C.list_two, projects = null, link = {}, answ
       }
       if (cmd === "projects_read") {
         if (!args.project) return pj.revealed && pj.list.hidden ? pj.full : pj.list;
+        if (args.plan) {
+          const plan = (pj.plans && pj.plans[args.project]) || pj.planDefault;
+          if (!plan) throw "No project plan is available on this PC";
+          return plan;
+        }
         const got = pj.projects[args.project];
         if (!got) throw "No such project, benchmark or number";
         if (args.task) {
@@ -254,7 +300,8 @@ async function projectsTab({ list = C.list_two, projects = null, link = {}, answ
     };
   }, { list, projects: projects || { [LIFE.id]: C.life, [CODING.id]: C.coding }, answers, POSTS, tasks,
        benches: { [benchNamed(LIFE, "Long run").id]: C.bench_run,
-                  [benchNamed(LIFE, "Weight").id]: C.bench_weight, ...benchOverrides } });
+                  [benchNamed(LIFE, "Weight").id]: C.bench_weight, ...benchOverrides },
+       plans, planDefault });
   await page.locator("#tab-projects").click();
   await page.waitForTimeout(400);
   return page;
@@ -1240,6 +1287,316 @@ await check("the sentences the PC shares about apps (projects-cases.json app_wor
     if (k === "refused") assert.ok(OUTCOMES[k].startsWith(W.outcomes[k]), k);
     else assert.equal(OUTCOMES[k], W.outcomes[k], k);
   }
+});
+
+/* ── The plan board (PM4, 2026-11-21) ──────────────────────────────────────
+ * `GET /api/projects/<id>/plan` is the phone PR's additive read (the route
+ * does not exist on this tree yet; docs/ARCHITECTURE.md section 8 records
+ * that). The payloads below are fakes of its exact shape, and every check
+ * fails on the tree before this board existed - that tree drew no board, no
+ * columns, no Ready List and no card detail at all.
+ */
+const PLAN_ITEM = (id, title, status, over = {}) => ({
+  id, project: LIFE.id, milestone: null, title, detail: "", status,
+  priority: null, due_date: null, created: 1790000000.0, changed: 1790000000.0,
+  blocked_by: [], ready: false, executor: "owner", linked_task_id: null,
+  linked_pr_number: null, linked_pr_state: "", linked_ci_status: "", ...over });
+const PLAN_MS = (id, title, status, work, done, over = {}) => ({
+  id, title, status, due_date: null, position: 0,
+  counts: { work_items: work, done }, ...over });
+const PLAN = (over = {}) => ({ ...EMPTY_PLAN(), ...over });
+const PLAN_COUNTS = (over = {}) => ({ ...EMPTY_PLAN().counts, ...over });
+
+const COLUMN_ITEMS = [
+  PLAN_ITEM("p1", "Sketch the route", "backlog"),
+  PLAN_ITEM("p2", "Check the shoes", "ready"),
+  PLAN_ITEM("p3", "Run the long loop", "in_progress"),
+  PLAN_ITEM("p4", "Read the plan card", "waiting_approval"),
+  PLAN_ITEM("p5", "Review the plan", "in_review"),
+  PLAN_ITEM("p6", "Log the first run", "done"),
+  PLAN_ITEM("p7", "Old idea", "cancelled"),
+];
+const BY_STATUS = { planning: ["p1", "p2"], progress: ["p3"], review: ["p4", "p5"],
+  done: ["p6", "p7"] };
+const columnsPlan = PLAN({ work_items: COLUMN_ITEMS,
+  counts: PLAN_COUNTS({ work_items: 7 }) });
+
+await check("the four columns group by status exactly", async () => {
+  // Every status the store has sits in exactly one column, in this order.
+  assert.deepEqual(PLAN_COLUMNS.map((c) => c.id), ["planning", "progress", "review", "done"]);
+  const every = PLAN_COLUMNS.flatMap((c) => c.statuses);
+  assert.deepEqual([...every].sort(), ["backlog", "cancelled", "done", "in_progress",
+    "in_review", "ready", "waiting_approval"].sort());
+  const grouped = planColumns(readPlan(columnsPlan));
+  assert.deepEqual(Object.fromEntries(Object.entries(grouped)
+    .map(([col, items]) => [col, items.map((i) => i.id)])), BY_STATUS);
+  assert.equal(columnOf("cancelled"), "done");
+  assert.equal(columnOf("in_review"), "review");
+  assert.equal(columnOf("an-unknown-status"), "planning", "an unknown status is hidden");
+
+  const page = await projectsTab({ plans: { [LIFE.id]: columnsPlan } });
+  const order = await page.locator("#projects-kanban .pj-col")
+    .evaluateAll((els) => els.map((e) => e.dataset.column));
+  const headers = await page.locator("#projects-kanban .pj-col-title").allInnerTexts();
+  const got = {};
+  for (const col of order) {
+    got[col] = await page.locator(`#projects-kanban .pj-col[data-column="${col}"] .pj-wcard`)
+      .evaluateAll((els) => els.map((e) => e.dataset.id));
+  }
+  const total = await page.locator("#projects-kanban .pj-wcard").count();
+  await page.close();
+  assert.deepEqual(order, ["planning", "progress", "review", "done"]);
+  assert.deepEqual(headers, ["Planning", "In Progress", "In Review / Waiting", "Done"]);
+  assert.deepEqual(got, BY_STATUS);
+  assert.equal(total, 7, "a work item is missing from the board or shown twice");
+  const seen = new Set(Object.values(got).flat());
+  assert.equal(seen.size, 7, "a work item is shown in two columns");
+  assert.equal(PLAN_WORDS.column_review, "In Review / Waiting");
+});
+
+await check("a blocked item shows the blocker it waits on", async () => {
+  const item = PLAN_ITEM("p3", "Draft the plan", "in_progress", {
+    blocked_by: [{ id: "p1", title: "Write the outline", status: "backlog" }] });
+  const plan = PLAN({ work_items: [PLAN_ITEM("p1", "Write the outline", "backlog"), item],
+    counts: PLAN_COUNTS({ work_items: 2 }) });
+  assert.equal(blockerWords(readPlan(plan).items[1]), "Blocked by Write the outline");
+  const page = await projectsTab({ plans: { [LIFE.id]: plan } });
+  const blocked = await page.locator('.pj-wcard[data-id="p3"] .pj-blocker').innerText();
+  const free = await page.locator('.pj-wcard[data-id="p1"] .pj-blocker').count();
+  const text = await page.locator('.pj-wcard[data-id="p3"]').innerText();
+  await page.close();
+  assert.equal(blocked, "Blocked by Write the outline");
+  assert.equal(free, 0, "an unblocked card says it is blocked");
+  assert.match(text, /Draft the plan/);
+});
+
+await check("the milestone bar is the plan's real counts", async () => {
+  const plan = PLAN({
+    milestones: [PLAN_MS("m1", "Training", "done", 2, 2),
+      PLAN_MS("m2", "The race", "active", 2, 0), PLAN_MS("m3", "Recovery", "planned", 1, 0)],
+    work_items: [PLAN_ITEM("p1", "A", "done", { milestone: "m1" }),
+      PLAN_ITEM("p2", "B", "done", { milestone: "m1" }),
+      PLAN_ITEM("p3", "C", "in_progress", { milestone: "m2" }),
+      PLAN_ITEM("p4", "D", "backlog", { milestone: "m2" }),
+      PLAN_ITEM("p5", "E", "ready", { milestone: "m3" })],
+    counts: PLAN_COUNTS({ work_items: 5, milestones: 3 }),
+  });
+  const read = readPlan(plan);
+  assert.deepEqual(milestoneProgress(read), { workDone: 2, workTotal: 5,
+    milestoneDone: 1, milestoneTotal: 3, workPercent: 40, milestonePercent: 33,
+    percent: 33 });
+  // With no milestones to share, the same bar is the work-item share.
+  const noMilestones = readPlan({ ...EMPTY_PLAN(),
+    work_items: [PLAN_ITEM("q1", "A", "done"), PLAN_ITEM("q2", "B", "backlog")],
+    counts: PLAN_COUNTS({ work_items: 2 }) });
+  assert.equal(milestoneProgress(noMilestones).percent, 50);
+  const page = await projectsTab({ plans: { [LIFE.id]: plan } });
+  const now = await page.locator("#projects-progress").getAttribute("aria-valuenow");
+  const label = await page.locator("#projects-progress").getAttribute("aria-valuetext");
+  const words = await page.locator(".pj-progress-words").innerText();
+  const rows = await page.locator(".pj-milestone").evaluateAll((els) => els.map((e) => e.innerText));
+  await page.close();
+  assert.equal(now, "33");
+  assert.ok(label.includes("2 of 5 work items done") && label.includes("1 of 3 milestones done"),
+    label);
+  assert.equal(words, label);
+  assert.equal(rows.length, 3);
+  assert.match(rows[0], /Training[\s\S]*2 of 2/);
+  assert.match(rows[1], /The race[\s\S]*0 of 2/);
+  assert.match(rows[2], /Recovery[\s\S]*0 of 1/);
+});
+
+await check("the selector switches the board's project", async () => {
+  const lifePlan = PLAN({ work_items: [PLAN_ITEM("l1", "Life step", "backlog")],
+    counts: PLAN_COUNTS({ work_items: 1 }) });
+  const codingPlan = PLAN({ work_items: [PLAN_ITEM("c1", "Coding step", "in_progress")],
+    counts: PLAN_COUNTS({ work_items: 1 }) });
+  const page = await projectsTab({ plans: { [LIFE.id]: lifePlan, [CODING.id]: codingPlan } });
+  const before = await page.locator("#projects-board").getAttribute("data-project");
+  const lifeTitles = await page.locator("#projects-kanban .pj-wcard-title").allInnerTexts();
+  await page.locator("#projects-board-select").selectOption(CODING.id);
+  await page.waitForTimeout(400);
+  const after = await page.locator("#projects-board").getAttribute("data-project");
+  const codingTitles = await page.locator("#projects-kanban .pj-wcard-title").allInnerTexts();
+  await page.close();
+  assert.equal(before, LIFE.id);
+  assert.deepEqual(lifeTitles, ["Life step"]);
+  assert.equal(after, CODING.id);
+  assert.deepEqual(codingTitles, ["Coding step"]);
+});
+
+await check("a card opens its objective anchor, dependencies, linked PR/note and timeline", async () => {
+  const plan = PLAN({
+    objective: "Finish the half marathon under two hours.",
+    linked_note_path: "Projects/Half marathon.md",
+    linked_repo: "owner/half-marathon",
+    work_items: [
+      PLAN_ITEM("p1", "Write the outline", "backlog"),
+      PLAN_ITEM("p3", "Draft the plan", "in_progress", {
+        detail: "The first draft.",
+        blocked_by: [{ id: "p1", title: "Write the outline", status: "backlog" }],
+        linked_pr_number: 12, linked_pr_state: "merged", linked_ci_status: "green",
+        executor: "jarvis_local" }),
+      PLAN_ITEM("p9", "Publish it", "backlog", {
+        blocked_by: [{ id: "p3", title: "Draft the plan", status: "in_progress" }] }),
+    ],
+    events: [
+      { id: "e2", at: 1790000200.0, kind: "work_item_status", subject: "p3",
+        detail: { from: "backlog", to: "in_progress" } },
+      { id: "e1", at: 1790000100.0, kind: "work_item_added", subject: "p3",
+        detail: { status: "backlog" } },
+    ],
+    counts: PLAN_COUNTS({ work_items: 3, events: 2 }),
+  });
+  const page = await projectsTab({ plans: { [LIFE.id]: plan } });
+  await page.locator('.pj-wcard[data-id="p3"]').click();
+  await page.waitForTimeout(300);
+  // textContent, not innerText: the labels are drawn uppercase on screen and
+  // the words (not their styling) are what this check is about.
+  const detail = await page.locator("#projects-item").textContent();
+  const focused = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  const events = await page.locator(".pj-event").evaluateAll((els) => els.map((e) => e.innerText));
+  const blocked = await page.locator(".pj-deps-blocked .pj-dep-name").allInnerTexts();
+  const blocks = await page.locator(".pj-deps-blocks .pj-dep-name").allInnerTexts();
+  await page.locator("#projects-item-close").click();
+  await page.waitForTimeout(200);
+  const closed = await page.locator("#projects-item").count();
+  await page.close();
+  assert.equal(focused, "projects-item-heading", "opening a card does not move focus to it");
+  assert.match(detail, /Finish the half marathon under two hours\./);
+  assert.match(detail, /Waiting on[\s\S]*Write the outline/);
+  assert.match(detail, /Blocks[\s\S]*Publish it/);
+  assert.match(detail, /Pull request #12 - merged, checks green/);
+  assert.match(detail, /Note: Projects\/Half marathon\.md/);
+  assert.match(detail, /Jarvis, on this PC/);
+  assert.deepEqual(blocked, ["Write the outline"]);
+  assert.deepEqual(blocks, ["Publish it"]);
+  assert.equal(events.length, 2, "the card's own timeline is not shown");
+  assert.match(events[0], /Status changed/);
+  assert.match(events[0], /Planning → In progress/);
+  assert.match(events[1], /Work item added/);
+  assert.equal(closed, 0, "Close leaves the detail open");
+});
+
+await check("the Export button calls the existing hub-export path once, no second card", async () => {
+  const say = "Waiting for your approval. The note is rebuilt from this project every time.";
+  const page = await projectsTab({ plans: { [LIFE.id]: PLAN() },
+    answers: { export_hub: { status: 202, body: { ok: true, state: "waiting",
+      waiting: true, message: say } } } });
+  const buttons = await page.locator("#projects-export").count();
+  const label = await page.locator("#projects-export").innerText();
+  await page.locator("#projects-export").click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page);
+  const said = await page.locator("#projects-said").innerText();
+  await page.close();
+  assert.equal(buttons, 1, "there is more than one Export button");
+  assert.equal(label, PLAN_WORDS.export);
+  // ONE request, through the command that already exists; the PC raises the
+  // notes editor's own `edit_vault_note` card. The page never names a card
+  // class and never approves one itself.
+  assert.deepEqual(sent, [["projects_write", { action: "export_hub", project: LIFE.id }]]);
+  assert.equal(said, say);
+  const panel = read("src/projects-panel.js");
+  assert.equal((panel.match(/"export_hub"/g) || []).length, 1, "a second export path");
+  assert.ok(!panel.includes("edit_vault_note"), "the page names the card class");
+  assert.doesNotMatch(panel, /invoke\("(approve|deny|decide|resolve)/, "the page answers a card");
+});
+
+await check("the Ready List is exactly the ids the route returned", async () => {
+  const plan = PLAN({
+    work_items: [PLAN_ITEM("p1", "A", "backlog"), PLAN_ITEM("p2", "B", "ready"),
+      PLAN_ITEM("p3", "C", "backlog"), PLAN_ITEM("p4", "D", "ready"),
+      PLAN_ITEM("p5", "E", "backlog")],
+    ready: ["p2", "p4"],
+    counts: PLAN_COUNTS({ work_items: 5, ready: 5 }),
+  });
+  assert.deepEqual(readyItems(readPlan(plan)).map((i) => i.id), ["p2", "p4"]);
+  const page = await projectsTab({ plans: { [LIFE.id]: plan } });
+  const rows = await page.locator("#projects-ready .pj-ready-item")
+    .evaluateAll((els) => els.map((e) => e.dataset.id));
+  const text = await page.locator("#projects-ready").innerText();
+  await page.close();
+  assert.deepEqual(rows, ["p2", "p4"], "the Ready List did not keep the route's order/cap");
+  assert.match(text, /3 more ready steps are not shown here/);
+  for (const id of ["p1", "p3", "p5"]) {
+    assert.ok(!rows.includes(id), `a non-ready item is in the Ready List: ${id}`);
+  }
+});
+
+await check("a status move is ONE call through the store's own status path", async () => {
+  const plan = PLAN({
+    work_items: [PLAN_ITEM("p1", "Write the outline", "backlog"),
+      PLAN_ITEM("p3", "Draft the plan", "in_progress")],
+    counts: PLAN_COUNTS({ work_items: 2 }) });
+  const page = await projectsTab({ plans: { [LIFE.id]: plan },
+    answers: { work_item_status: { status: 200, body: { ok: true, item: {},
+      message: "Moved." } } } });
+  await page.locator('.pj-wcard[data-id="p3"]').click();
+  await page.waitForTimeout(200);
+  await page.locator('#projects-item .pj-moves button[data-status="done"]').click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page);
+  const said = await page.locator("#projects-said").innerText();
+  await page.close();
+  assert.deepEqual(sent, [["projects_write", { action: "work_item_status",
+    project: LIFE.id, item: "p3", body: { status: "done" } }]]);
+  assert.equal(said, "Moved.");
+});
+
+await check("a blocked item's move is refused with the PC's words, not moved", async () => {
+  const refusal = "That work item is blocked by \"Write the outline\", so it was not moved.";
+  const plan = PLAN({
+    work_items: [PLAN_ITEM("p1", "Write the outline", "backlog"),
+      PLAN_ITEM("p3", "Draft the plan", "in_progress", {
+        blocked_by: [{ id: "p1", title: "Write the outline", status: "backlog" }] })],
+    counts: PLAN_COUNTS({ work_items: 2, blocked: 1 }) });
+  const page = await projectsTab({ plans: { [LIFE.id]: plan },
+    answers: { work_item_status: { status: 409,
+      body: { ok: false, error: refusal } } } });
+  await page.locator('.pj-wcard[data-id="p3"]').click();
+  await page.waitForTimeout(200);
+  await page.locator('#projects-item .pj-moves button[data-status="done"]').click();
+  await page.waitForTimeout(500);
+  const said = await page.locator("#projects-said").innerText();
+  // The card is read again and is STILL in its own column: a refusal is never
+  // turned into a silent move by this page.
+  const column = await page.locator('.pj-wcard[data-id="p3"]')
+    .evaluate((e) => e.closest(".pj-col").dataset.column);
+  const status = await page.locator('.pj-wcard[data-id="p3"]').getAttribute("data-status");
+  const sent = await calls(page);
+  await page.close();
+  assert.equal(said, refusal);
+  assert.equal(column, "progress");
+  assert.equal(status, "in_progress");
+  assert.deepEqual(sent, [["projects_write", { action: "work_item_status",
+    project: LIFE.id, item: "p3", body: { status: "done" } }]]);
+});
+
+await check("quick add sends ONE new work item with its title", async () => {
+  const page = await projectsTab({ plans: { [LIFE.id]: PLAN() },
+    answers: { work_item_add: { status: 200, body: { ok: true, item: {},
+      message: "Added." } } } });
+  await page.locator("#projects-item-title").fill("  Plan the water stops ");
+  await page.getByRole("button", { name: PLAN_WORDS.add_item }).click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page);
+  await page.close();
+  assert.deepEqual(sent, [["projects_write", { action: "work_item_add",
+    project: LIFE.id, body: { title: "Plan the water stops" } }]]);
+});
+
+await check("a PC without the plan route says so, and the old list is still there", async () => {
+  const why = "Your PC's Jarvis cannot show a project's plan yet - update it by running "
+    + "apply-patches.ps1 on the PC.";
+  const page = await projectsTab({ plans: {}, planDefault: { ok: true, available: false, why } });
+  const board = await page.locator("#projects-board").innerText();
+  const kanban = await page.locator("#projects-kanban").count();
+  const rows = await page.locator("#projects-root .pj-list .row-title").allInnerTexts();
+  await page.close();
+  assert.ok(board.includes(why), board);
+  assert.equal(kanban, 0, "an empty board was drawn for a PC without the route");
+  assert.deepEqual(rows, ["Half marathon", "Jarvis Desktop"]);
 });
 
 await browser.close();

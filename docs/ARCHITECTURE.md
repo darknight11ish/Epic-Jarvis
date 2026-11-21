@@ -2992,6 +2992,32 @@ backend routes, in both directions; the rest are listed here only.
   nothing to classify: this is the API's half, deliberately one-sided for
   now.
 
+- **The plan board is the desktop's; its plan read and two plan writes are
+  shared with the phone half, and its one-click export is deliberately the
+  desktop's alone** (2026-11-21, PM4; JARVIS-API sections 88.10 and 88.11;
+  `docs/PROJECTS-DESIGN.md`'s PM4 build note). Brain -> Projects now carries a
+  4-column Kanban (Planning | In Progress | In Review / Waiting | Done), a
+  Ready List, a Project Selector, the milestone progress bar and blocker
+  badges; a card opens its objective anchor, dependency links, linked PR/note
+  and `project_events` timeline. It is a READ of
+  `GET /api/projects/<id>/plan`, plus three writes that all go through the
+  store's existing doors: a status move (`POST .../work_items/<id>/status`,
+  the store's own `set_work_item_status` - one event and one Undo receipt, a
+  blocked move refused in the PC's words, never a silent move), a quick add
+  (`POST .../work_items`, title only - a typed task never dates itself) and
+  the one-click hub note. **The phone half is its own pull request (#1436)
+  against the same plan read and the same two plan writes**, so those are
+  `todo` in `tools/check_parity.py` on this tree and become `ported` when both
+  halves have landed - a merge-order fact lead owns, not a one-sided decision.
+  **The export route is different on purpose:** `POST /api/projects/<id>/export`
+  is the desktop Export button's door to the PM2 hub note (ONE
+  `edit_vault_note` card raised by the notes editor, no new card class); the
+  phone gets no export button in this slice because it can already ask Jarvis
+  in chat for the same one-way note, so `check_parity.py` records that route
+  as `deliberate`, not as a missing phone screen. The board builds no
+  multi-column drag-and-drop editor on the phone, per section 6.2: the phone's
+  own Projects list is the summary/next-3/tap-to-done half.
+
 - **Call recording is split by hardware, and each half is one-sided on
   purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
   'record call' ... transcribe it ... identify the speakers ... store all of it
@@ -5417,9 +5443,12 @@ what is missing is only the Settings screen agreeing about who turned it off.
   write, **no card**) and reads a linked `jarvis_tasks.py` job's own state,
   projecting both onto the work item; the digest gains its project section and
   the daily to-do list its read-only work-item rows. Neither app calls the
-  route yet - the Run Step / Sync button is PM4's screen, and when it lands it
-  goes on BOTH apps on this same route, which is why `tools/check_parity.py`
-  lists it as backend-only rather than `planned`. **What PM3 does NOT ship is
+  route yet - PM4's desktop board reads the plan and moves a work item's
+  status through the existing status path, but it deliberately has no Sync
+  button, so the sync route still has no app caller and the Sync/Run Step
+  button is the next slice on BOTH apps on this same route, which is why
+  `tools/check_parity.py` lists it as backend-only rather than `planned`. **What
+  PM3 does NOT ship is
   the dispatch that would create a durable job from a work item.** That is not
   an oversight: `jarvis_tasks.JobList.tick()` has no production caller and no
   background step executor (its own "WHO TICKS IT" audit above and §10), the
@@ -6159,6 +6188,15 @@ they landed):
   windows, which is not that), so none was built. When it is: one gate
   action per setting, tier `ask`, one card each, listed on "What asks
   first" and held by Lockdown.
+- **A "Run Step" button, and a background executor for planned work.** The
+  plan board (2026-11-21, PM4) moves a work item's status by hand through the
+  store's existing status path - one event, one Undo receipt - and reads the
+  job/PR projections PM3 stores, but nothing DISPATCHES a work item into
+  `jarvis_tasks.py`: there is no background step executor, and building a
+  stand-in runner would move rows while nothing ran (PM3's own note in §8 and
+  `decisions.d/2026-11-20-the-plan-store-bridges.md`). The same absence is why
+  the board has no Sync button: `POST /api/projects/<id>/sync` is built and
+  read-only, but no app calls it yet.
 
 **Present, but only on the owner's PC** (not missing, and not in this
 repository either):

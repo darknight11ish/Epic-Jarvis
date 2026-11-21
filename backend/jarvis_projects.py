@@ -5461,6 +5461,12 @@ def export_hub(project_id: str, *, gate_check=None, wait_s=None,
               "replaced": ok and verb == "replaced", "path": note["path"],
               "state": state, "note": note["text"],
               "message": str(out.get("message") or "")}
+    # PM4 (2026-11-21): the notes editor's own receipt/snapshot/job id, when it
+    # gave one, so the desktop's one-click route can hand them back. Nothing
+    # new is written for this: the fields are the editor's own.
+    result["receipt"] = str(out.get("receipt") or "")
+    result["snapshot"] = str(out.get("snapshot") or "")
+    result["job"] = str(out.get("id") or "")
     if not ok:
         result["error"] = (str(out.get("error") or out.get("message")
                                or "the note was not written"))
@@ -5658,6 +5664,8 @@ def parse_route(route: str) -> Optional[tuple]:
         ("result_delete", pid, bid, rid)            .../benchmarks/<bid>/results/<rid>/delete
         ("facts", pid)                              /api/projects/<pid>/facts
         ("fact_forget", pid, fid)                   .../facts/<fid>/forget
+        ("export", pid)                             /api/projects/<pid>/export
+                                                    (PM4, 2026-11-21: POST only)
     """
     if not isinstance(route, str):
         return None
@@ -5681,6 +5689,10 @@ def parse_route(route: str) -> Optional[tuple]:
                  "benchmarks": "benchmarks", "facts": "facts",
                  # PM3 (2026-11-20): the read-only bridge sync - POST only.
                  "sync": "sync"}[p[1]], pid)
+    if len(p) == 2 and p[1] == "export":
+        # PM4 (2026-11-21, desktop half): the one-click hub-note door. POST
+        # only, and it is the notes editor's own card that decides it.
+        return ("export", pid)
     if len(p) == 4 and p[1] == "facts" and p[2] and p[3] == "forget":
         # One fact per request, exactly as the memory routes are: there is no
         # list form of Forget (jarvis_memory's own "used" note says the same).
@@ -5812,6 +5824,11 @@ def handle_post(route: str, body, *, here: bool = False,
             extra = {name: card.get(name) for name in
                      ("fetch", "github", "task_store") if name in card}
             return 200, sync_project(hit[1], body, store=store, **extra)
+        if kind == "export":
+            # PM4 (2026-11-21, desktop half): the ring-fenced one-click hub
+            # note. The ONE card is the notes editor's own; this route raises
+            # no card of its own and writes nothing it decides.
+            return request_export_hub(hit[1], store=store)
         if kind == "shareable":
             return request_shareable(hit[1], body, store=store, **card)
         if kind == "auto_route":
@@ -5944,3 +5961,73 @@ def _reset_for_tests() -> None:
     with _ONE_LOCK:
         _ONE = None
     _ARMED = False
+
+
+# --------------------------------------------------------------------------
+#   The one-click hub export door (PM4, 2026-11-21, desktop half)
+# --------------------------------------------------------------------------
+# The desktop's Export button needs a deterministic door to the EXISTING
+# hub-export action: `project_export_obsidian_hub` (PM2) can only be raised
+# from a model turn, and a one-click button is not a chat turn. This route
+# calls the SAME `export_hub()` above, which writes only through
+# `jarvis_notes_edit`: ONE `edit_vault_note` card, the File Guardian copy
+# first when an existing note is replaced, and the notes editor's own undo
+# receipt for a brand-new note. No new card class, no second writer and no new
+# gate action are added here.
+#
+# THE CARD CANNOT BE SKIPPED FROM HERE. `export_hub` raises the notes editor
+# with provenance "model", which keeps its ONE-card path whatever the
+# owner-direct rule says, and this route passes no gate check of its own - so
+# the only thing that can allow the write is the notes editor's card.
+#
+# APPENDED AT THE END OF THE FILE on purpose: the phone half (pm4-phone) edits
+# this file's GET path in the same wave, and a block here touches none of its
+# lines. `handle_post` calls it; see the ("export", pid) route there.
+
+#: The pending card's own words, when the notes editor answers "waiting".
+EXPORT_WAITING = ("Waiting for your approval. The hub note is written by the notes "
+                  "editor's own card; nothing is written until you approve it.")
+#: The done sentence, when an export finished inside the wait.
+EXPORT_DONE = "Wrote the hub note."
+
+
+def request_export_hub(project_id: str, *, store: Optional[Projects] = None,
+                       gate_check=None, wait_s=None) -> tuple:
+    """POST /api/projects/<id>/export -> (status, body).
+
+    202 while the notes editor's ONE card is waiting, 200 once it ended. A
+    card that said no, timed out or failed is answered with the notes editor's
+    OWN words (never a new sentence that hides it), and nothing was written.
+    An unknown project is the store's KeyError, which the route turns into its
+    404. `gate_check` / `wait_s` are for the tests only; the backend calls
+    this with neither, so the real gate raises the real card."""
+    store = store or get()
+    store.get(project_id)                     # KeyError -> the route's 404
+    kwargs: dict = {}
+    if gate_check is not None:
+        kwargs["gate_check"] = gate_check
+    if wait_s is not None:
+        kwargs["wait_s"] = wait_s
+    out = export_hub(project_id, store=store, **kwargs)
+    state = str(out.get("state") or "")
+    path = str(out.get("path") or "")
+    receipt = str(out.get("receipt") or "")
+    snapshot = str(out.get("snapshot") or "")
+    job = str(out.get("job") or "")
+    if state == "waiting":
+        return 202, {"ok": True, "state": "waiting", "waiting": True,
+                     "created": False, "replaced": False, "path": path,
+                     "receipt": receipt, "snapshot": snapshot, "job": job,
+                     "message": str(out.get("message") or EXPORT_WAITING)}
+    if out.get("ok"):
+        return 200, {"ok": True, "state": state or "saved", "waiting": False,
+                     "created": bool(out.get("created")),
+                     "replaced": bool(out.get("replaced")), "path": path,
+                     "receipt": receipt, "snapshot": snapshot, "job": job,
+                     "message": str(out.get("message") or EXPORT_DONE)}
+    return 200, {"ok": False, "state": state or "failed", "waiting": False,
+                 "created": False, "replaced": False, "path": path,
+                 "receipt": receipt, "snapshot": snapshot, "job": job,
+                 "message": str(out.get("message") or ""),
+                 "error": str(out.get("error") or out.get("message")
+                              or "The note was not written.")}

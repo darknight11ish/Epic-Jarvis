@@ -548,3 +548,360 @@
   color: var(--bad-text);
   font-size: var(--text-xs);
 }
+
+/* ── The plan board (PM4, 2026-11-21; projects-panel.js) ──────────────────
+   A read of the PC's own plan store: four columns, the Ready List, the
+   milestone bar and one card's detail. Every colour is a theme token, so
+   Reactor, Daylight and High Contrast all keep the app's contrast. Nothing
+   here is animated: the plan is a still picture of the store. */
+
+.pj-board {
+  margin: 12px 0 16px;
+  padding: 10px 12px 12px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+}
+
+.pj-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 0 6px;
+}
+
+.pj-selector {
+  margin: 0;
+}
+
+.pj-selector .field {
+  min-width: 12em;
+  margin-left: 8px;
+}
+
+.pj-board-under,
+.pj-export-under {
+  margin: 0 0 8px;
+}
+
+.pj-plan-missing {
+  margin: 6px 0;
+}
+
+/* The objective is the card detail's anchor: first and plain. */
+.pj-objective {
+  color: var(--text);
+}
+
+.pj-progress-box {
+  margin: 10px 0 12px;
+}
+
+.pj-bar {
+  position: relative;
+  height: 10px;
+  margin: 4px 0 4px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.pj-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.pj-mini-bar {
+  display: inline-block;
+  width: 84px;
+  height: 6px;
+  margin-left: 8px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.pj-mini-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.pj-progress-words {
+  margin: 2px 0 6px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-milestones {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.pj-milestone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 3px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.pj-milestone-name {
+  color: var(--text);
+}
+
+.pj-milestone-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The Ready List: two columns of plain rows on a wide window. */
+.pj-ready {
+  margin: 10px 0 12px;
+}
+
+.pj-ready-list {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 2px 16px;
+}
+
+.pj-ready-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 3px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.pj-ready-item .btn {
+  text-align: left;
+  white-space: normal;
+}
+
+/* The four columns. */
+.pj-kanban {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 0;
+}
+
+@media (max-width: 900px) {
+  .pj-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.pj-col {
+  min-width: 0;
+  padding: 6px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+.pj-col-title {
+  display: inline;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.pj-col-count {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-cards {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.pj-wcard {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pj-wcard:hover {
+  border-color: var(--accent);
+}
+
+.pj-wcard:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pj-wcard-title {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pj-wcard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 3px;
+}
+
+.pj-wcard-due,
+.pj-wcard-milestone {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  overflow-wrap: anywhere;
+}
+
+/* A work item another one blocks, marked with the blocker it waits on. Not
+   colour alone: the badge says "Blocked by" in words. */
+.pj-blocker {
+  display: block;
+  margin-top: 3px;
+  color: var(--warn);
+  font-size: var(--text-2xs);
+  overflow-wrap: anywhere;
+}
+
+.pj-col-empty {
+  margin: 0;
+}
+
+/* One card's detail, under the columns. */
+.pj-detail {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+.pj-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pj-detail-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md, 1rem);
+}
+
+.pj-detail-title:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pj-detail-label {
+  margin: 10px 0 2px;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pj-detail-meta {
+  margin: 4px 0 0;
+}
+
+.pj-detail-text {
+  margin: 4px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.pj-deps {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.pj-dep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 2px 0;
+  font-size: var(--text-sm);
+}
+
+.pj-dep-name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.pj-events {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.pj-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 3px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.pj-event-when {
+  min-width: 4em;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-event-kind {
+  color: var(--text);
+}
+
+.pj-event-subject,
+.pj-event-extra {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* The plan board's two writes: one quick add under the columns, and the
+   status moves inside one card's detail. Both are the store's own routes; the
+   page only names a project, a title or a status. */
+.pj-add-item {
+  margin: 10px 0 0;
+}
+
+.pj-moves {
+  margin: 4px 0 0;
+}

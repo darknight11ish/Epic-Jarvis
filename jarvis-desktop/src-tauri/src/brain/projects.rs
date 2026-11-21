@@ -58,6 +58,33 @@ const STALE: &str =
 const UNREADABLE: &str = "Jarvis answered, but not in a way this app can read. Update the \
                           backend by running apply-patches.ps1.";
 
+/// A PC without the plan read (`GET /api/projects/<id>/plan`, added by the
+/// phone half in the same wave). The page says this plainly instead of drawing
+/// an empty plan and calling it the project's plan.
+pub(crate) const PLAN_MISSING: &str = "Your PC's Jarvis cannot show a project's plan yet - \
+                                       update it by running apply-patches.ps1 on the PC.";
+
+/// A PC without the one-click export door (`POST /api/projects/<id>/export`,
+/// this desktop half's own route).
+pub(crate) const EXPORT_MISSING: &str = "Your PC's Jarvis cannot write a project's hub note \
+                                         yet - update it by running apply-patches.ps1 on the PC.";
+
+/// A PC without the work-item write routes (`POST .../work_items` and
+/// `POST .../work_items/<id>/status`, the phone half's).
+pub(crate) const PLAN_WRITE_MISSING: &str = "Your PC's Jarvis cannot change project plan items \
+                                             yet - update it by running apply-patches.ps1 on the PC.";
+
+/// The work-item states the plan store has (backend jarvis_projects.WORK_STATUSES).
+const WORK_STATUSES: &[&str] = &[
+    "backlog",
+    "ready",
+    "in_progress",
+    "waiting_approval",
+    "in_review",
+    "done",
+    "cancelled",
+];
+
 /// A folder is chosen with the picker, never typed into a change.
 const FOLDER_BY_PICKER: &str = "Choose the folder with \"Choose a folder…\".";
 
@@ -78,6 +105,11 @@ pub(crate) const ACTIONS: &[&str] = &[
     "app_task_files",
     "app_task_merge",
     "app_task_discard",
+    // PM4 (2026-11-21): the desktop's own one-click hub note, and the two
+    // plan writes the phone half serves (a status move and a quick add).
+    "export_hub",
+    "work_item_status",
+    "work_item_add",
 ];
 
 /// The most characters a pasted change may hold (design 7.1).
@@ -162,6 +194,11 @@ pub(crate) fn read_path(
     }
 }
 
+/// The GET path for a project's plan (PM4's read; the phone half's route).
+pub(crate) fn plan_path(project: Option<&str>) -> Result<String, String> {
+    Ok(format!("/api/projects/{}/plan", id(project, "project")?))
+}
+
 /// The POST path for one change.
 pub(crate) fn write_path(
     action: &str,
@@ -169,12 +206,14 @@ pub(crate) fn write_path(
     bench: Option<&str>,
     result: Option<&str>,
     task: Option<&str>,
+    item: Option<&str>,
 ) -> Result<String, String> {
     if !ACTIONS.contains(&action) {
         return Err(format!("not a projects change: {action}"));
     }
     let p = || id(project, "project");
     let b = || id(bench, "benchmark");
+    let w = || id(item, "work item");
     Ok(match action {
         "create" => PROJECTS_PATH.to_string(),
         "update" => format!("/api/projects/{}", p()?),
@@ -199,6 +238,13 @@ pub(crate) fn write_path(
             p()?,
             task_id(task)?
         ),
+        // PM4 (2026-11-21). `export_hub` is this desktop's one-click hub
+        // note: it lands on the notes editor's own card. The two plan writes
+        // are the phone half's routes; this window calls them cardless (the
+        // PC decides the tier) so a status move keeps its receipt and Undo.
+        "export_hub" => format!("/api/projects/{}/export", p()?),
+        "work_item_add" => format!("/api/projects/{}/work_items", p()?),
+        "work_item_status" => format!("/api/projects/{}/work_items/{}/status", p()?, w()?),
         _ => return Err(format!("not a projects change: {action}")),
     })
 }
@@ -232,6 +278,38 @@ pub(crate) fn checked_body(
     }
     match action {
         "create" => check_app_choice(obj)?,
+        // PM4 (2026-11-21): the hub note carries nothing but the project.
+        "export_hub" => return Ok(serde_json::json!({})),
+        "work_item_add" => {
+            // The phone half's `POST .../work_items`, through the store's own
+            // door. One title; the PC checks it again and gives it its date,
+            // priority and status defaults.
+            let title = obj
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .trim();
+            if title.is_empty() {
+                return Err("Give the work item a title.".to_string());
+            }
+            if title.chars().count() > MAX_TITLE {
+                return Err(format!(
+                    "A work item title is at most {MAX_TITLE} characters."
+                ));
+            }
+            return Ok(serde_json::json!({ "title": title }));
+        }
+        "work_item_status" => {
+            // The phone half's `POST .../work_items/<id>/status`, through the
+            // store's own `set_work_item_status` (one event and one receipt).
+            // The PC refuses a blocked item in its own words; this only stops
+            // a word it has never heard of.
+            let status = obj.get("status").and_then(|s| s.as_str()).unwrap_or("");
+            if !WORK_STATUSES.contains(&status) {
+                return Err(format!("A work item is {}.", WORK_STATUSES.join(", ")));
+            }
+            return Ok(serde_json::json!({ "status": status }));
+        }
         "app_task_start" => {
             let title = obj
                 .get("title")
@@ -320,6 +398,21 @@ pub(crate) fn read_answer(status: u16, body: &str) -> Result<serde_json::Value, 
     Err(commands::backend_refusal(status, body))
 }
 
+/// [`projects_read`]'s reading of an answer when it asked for a project's plan
+/// (`GET /api/projects/<id>/plan`, PM4). Same rules as [`read_answer`], except
+/// that a PC without the route says so in [`PLAN_MISSING`] and the page draws
+/// no board rather than an empty one.
+pub(crate) fn plan_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body).ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 && !projects_404(body) {
+        return Ok(serde_json::json!({ "ok": true, "available": false,
+            "why": PLAN_MISSING }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
 /// [`projects_write`]'s reading of the answer: the PC's own body on a 2xx
 /// (200 done, 202 a card is up - its `waiting: true` says so), with the
 /// status as `http`; [`PROJECTS_MISSING`] from a PC without the routes; and
@@ -369,7 +462,7 @@ pub(crate) fn redact(mut answer: serde_json::Value) -> serde_json::Value {
 /// said (`ok`, `message`, `waiting`, `http`) stays.
 pub(crate) fn redact_change(mut answer: serde_json::Value) -> serde_json::Value {
     if let Some(obj) = answer.as_object_mut() {
-        for key in ["project", "benchmark", "task"] {
+        for key in ["project", "benchmark", "task", "item", "work_item", "plan"] {
             if obj.remove(key).is_some() {
                 obj.insert("hidden".into(), serde_json::json!(true));
             }
@@ -400,7 +493,8 @@ async fn post(
     write_answer(status, &text)
 }
 
-/// The projects, one project, or one benchmark with its chart points. A read.
+/// The projects, one project, one project's plan, or one benchmark with its
+/// chart points. A read.
 #[tauri::command]
 pub async fn projects_read(
     app: AppHandle,
@@ -408,13 +502,19 @@ pub async fn projects_read(
     bench: Option<String>,
     points: Option<u32>,
     task: Option<String>,
+    plan: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let path = read_path(
-        project.as_deref(),
-        bench.as_deref(),
-        points,
-        task.as_deref(),
-    )?;
+    let wants_plan = plan == Some(true);
+    let path = if wants_plan {
+        plan_path(project.as_deref())?
+    } else {
+        read_path(
+            project.as_deref(),
+            bench.as_deref(),
+            points,
+            task.as_deref(),
+        )?
+    };
     let base = commands::jarvis_base(&app);
     let response = commands::jarvis_client(Some(READ_TIMEOUT))?
         .get(format!("{base}{path}"))
@@ -424,7 +524,11 @@ pub async fn projects_read(
         .map_err(|e| commands::backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let text = response.text().await.unwrap_or_default();
-    let answer = read_answer(status, &text)?;
+    let answer = if wants_plan {
+        plan_answer(status, &text)?
+    } else {
+        read_answer(status, &text)?
+    };
     Ok(if crate::lock::private_hidden(&app) {
         redact(answer)
     } else {
@@ -432,7 +536,8 @@ pub async fn projects_read(
     })
 }
 
-/// ONE change to a project, a benchmark or a number (see the module note).
+/// ONE change to a project, a benchmark, a number, a plan item or the hub
+/// note (see the module note).
 #[tauri::command]
 pub async fn projects_write(
     app: AppHandle,
@@ -441,6 +546,7 @@ pub async fn projects_write(
     bench: Option<String>,
     result: Option<String>,
     task: Option<String>,
+    item: Option<String>,
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let path = write_path(
@@ -449,12 +555,27 @@ pub async fn projects_write(
         bench.as_deref(),
         result.as_deref(),
         task.as_deref(),
+        item.as_deref(),
     )?;
     let body = checked_body(&action, body)?;
     if held_on_stale(&action, &body) && stale(&app) {
         return Err(STALE.to_string());
     }
-    let out = post(&app, &path, &body).await?;
+    let out = match post(&app, &path, &body).await {
+        Ok(out) => out,
+        // A PC without this wave's routes says which one it lacks, rather
+        // than sending the owner to "Projects is missing" for the whole tab.
+        Err(e) if e == PROJECTS_MISSING && action == "export_hub" => {
+            return Err(EXPORT_MISSING.to_string());
+        }
+        Err(e)
+            if e == PROJECTS_MISSING
+                && (action == "work_item_add" || action == "work_item_status") =>
+        {
+            return Err(PLAN_WRITE_MISSING.to_string());
+        }
+        Err(e) => return Err(e),
+    };
     Ok(if crate::lock::private_hidden(&app) {
         redact_change(out)
     } else {
@@ -469,7 +590,7 @@ pub async fn projects_choose_folder(
     app: AppHandle,
     project: String,
 ) -> Result<serde_json::Value, String> {
-    let path = write_path("update", Some(&project), None, None, None)?;
+    let path = write_path("update", Some(&project), None, None, None, None)?;
     if stale(&app) {
         return Err(STALE.to_string());
     }
@@ -600,26 +721,126 @@ mod tests {
         for bad in ["", "../config", "ABCDEF0123456789ABCDEF0123456789", "a b"] {
             assert!(read_path(Some(bad), None, None, None).is_err(), "{bad}");
             assert!(
-                write_path("update", Some(bad), None, None, None).is_err(),
+                write_path("update", Some(bad), None, None, None, None).is_err(),
                 "{bad}"
             );
         }
         assert!(read_path(None, Some(&b), None, None).is_err());
         assert_eq!(
-            write_path("result_delete", Some(&p), Some(&b), Some(&b), None).unwrap(),
+            write_path("result_delete", Some(&p), Some(&b), Some(&b), None, None).unwrap(),
             format!("/api/projects/{p}/benchmarks/{b}/results/{b}/delete")
         );
         assert_eq!(
-            write_path("unmark", Some(&p), Some(&b), None, None).unwrap(),
+            write_path("unmark", Some(&p), Some(&b), None, None, None).unwrap(),
             format!("/api/projects/{p}/benchmarks/{b}/unmark")
         );
-        assert!(write_path("run", Some(&p), Some(&b), None, None).is_err());
+        assert!(write_path("run", Some(&p), Some(&b), None, None, None).is_err());
         for a in ACTIONS {
             assert!(
-                write_path(a, Some(&p), Some(&b), Some(&b), Some(&"a".repeat(12))).is_ok(),
+                write_path(
+                    a,
+                    Some(&p),
+                    Some(&b),
+                    Some(&b),
+                    Some(&"a".repeat(12)),
+                    Some(&"c".repeat(32)),
+                )
+                .is_ok(),
                 "{a}"
             );
         }
+    }
+
+    #[test]
+    fn the_plan_read_and_this_waves_own_routes_are_named_paths() {
+        let p = "0".repeat(31) + "a";
+        let w = "b".repeat(32);
+        assert_eq!(
+            plan_path(Some(&p)).unwrap(),
+            format!("/api/projects/{p}/plan")
+        );
+        assert!(plan_path(None).is_err());
+        assert!(plan_path(Some("nope")).is_err());
+        assert_eq!(
+            write_path("export_hub", Some(&p), None, None, None, None).unwrap(),
+            format!("/api/projects/{p}/export")
+        );
+        assert_eq!(
+            write_path("work_item_add", Some(&p), None, None, None, None).unwrap(),
+            format!("/api/projects/{p}/work_items")
+        );
+        assert_eq!(
+            write_path("work_item_status", Some(&p), None, None, None, Some(&w)).unwrap(),
+            format!("/api/projects/{p}/work_items/{w}/status")
+        );
+        for bad in ["", "abc", &"A".repeat(32), &("a".repeat(31) + "g")] {
+            assert!(
+                write_path("work_item_status", Some(&p), None, None, None, Some(bad)).is_err(),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plan_read_absent_from_an_old_pc_says_so() {
+        let plan = serde_json::json!({ "ok": true, "objective": "x", "work_items": [],
+            "milestones": [], "ready": [], "events": [] });
+        assert_eq!(plan_answer(200, &plan.to_string()).unwrap(), plan);
+        let gone = plan_answer(404, "").unwrap();
+        assert_eq!(gone["available"], false);
+        assert_eq!(gone["why"], PLAN_MISSING);
+        let real_404 = serde_json::json!({ "ok": false, "error": "no such project" });
+        assert_eq!(
+            plan_answer(404, &real_404.to_string()).unwrap_err(),
+            "No such project"
+        );
+        assert!(plan_answer(200, "{nope").is_err());
+    }
+
+    #[test]
+    fn a_plan_item_write_carries_only_its_own_word() {
+        assert_eq!(
+            checked_body(
+                "work_item_add",
+                Some(serde_json::json!({ "title": "  Do it ", "x": 1 }))
+            )
+            .unwrap(),
+            serde_json::json!({ "title": "Do it" })
+        );
+        assert!(checked_body("work_item_add", None).is_err());
+        assert!(checked_body("work_item_add", Some(serde_json::json!({ "title": " " }))).is_err());
+        assert!(checked_body(
+            "work_item_add",
+            Some(serde_json::json!({ "title": "x".repeat(MAX_TITLE + 1) }))
+        )
+        .is_err());
+        assert_eq!(
+            checked_body(
+                "work_item_status",
+                Some(serde_json::json!({ "status": "in_review", "x": 1 }))
+            )
+            .unwrap(),
+            serde_json::json!({ "status": "in_review" })
+        );
+        for bad in ["", "done!", "DONE", "completed"] {
+            assert!(
+                checked_body(
+                    "work_item_status",
+                    Some(serde_json::json!({ "status": bad }))
+                )
+                .is_err(),
+                "{bad}"
+            );
+        }
+        // The hub note carries nothing: the PC builds it from the store.
+        assert_eq!(
+            checked_body("export_hub", Some(serde_json::json!({ "x": 1 }))).unwrap(),
+            serde_json::json!({})
+        );
+        assert_eq!(
+            checked_body("export_hub", None).unwrap(),
+            serde_json::json!({})
+        );
     }
 
     #[test]
@@ -670,6 +891,15 @@ mod tests {
         assert_eq!(hidden["hidden"], true);
         assert_eq!(hidden["http"], 200);
         assert!(!hidden.to_string().contains("26.75"));
+        // PM4 (2026-11-21): a plan read is hidden the same way - no objective,
+        // no item, no blocker.
+        let plan = serde_json::json!({ "ok": true, "objective": "a secret plan",
+            "work_items": [ { "title": "a secret step",
+                "blocked_by": [ { "title": "a secret blocker" } ] } ] });
+        let hidden_plan = redact(plan);
+        assert_eq!(hidden_plan["hidden"], true);
+        let s = hidden_plan.to_string();
+        assert!(!s.contains("secret"), "{s}");
     }
 
     fn app_ids() -> (String, String) {
@@ -680,7 +910,7 @@ mod tests {
     fn app_task_paths_and_only_real_task_ids_reach_a_url() {
         let (p, t) = app_ids();
         assert_eq!(
-            write_path("app_task_start", Some(&p), None, None, None).unwrap(),
+            write_path("app_task_start", Some(&p), None, None, None, None).unwrap(),
             format!("/api/projects/{p}/app/tasks")
         );
         let task_path = format!("/api/projects/{p}/app/tasks/{t}");
@@ -690,10 +920,10 @@ mod tests {
             ("app_task_discard", "discard"),
         ] {
             assert_eq!(
-                write_path(action, Some(&p), None, None, Some(&t)).unwrap(),
+                write_path(action, Some(&p), None, None, Some(&t), None).unwrap(),
                 task_path.clone() + "/" + tail
             );
-            assert!(write_path(action, Some(&p), None, None, None).is_err());
+            assert!(write_path(action, Some(&p), None, None, None, None).is_err());
             for bad in [
                 "",
                 "../merge",
@@ -703,7 +933,7 @@ mod tests {
                 "a/b",
             ] {
                 assert!(
-                    write_path(action, Some(&p), None, None, Some(bad)).is_err(),
+                    write_path(action, Some(&p), None, None, Some(bad), None).is_err(),
                     "{action} {bad}"
                 );
             }
@@ -815,6 +1045,19 @@ mod tests {
         let hidden = redact_change(pasted);
         assert_eq!(hidden["hidden"], true);
         assert!(!hidden.to_string().contains("secretCode"));
+        // PM4: a plan read or a plan write answer hides its item/plan words too.
+        let plan = write_answer(
+            200,
+            &serde_json::json!({ "ok": true,
+            "plan": { "objective": "secret objective" },
+            "item": { "title": "secret step" } })
+            .to_string(),
+        )
+        .unwrap();
+        let hidden_plan = redact_change(plan);
+        assert_eq!(hidden_plan["hidden"], true);
+        let s = hidden_plan.to_string();
+        assert!(!s.contains("secret"), "{s}");
     }
 
     #[test]
