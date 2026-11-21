@@ -236,6 +236,35 @@ def t_the_stale_cloud_override_is_stamped_and_never_rescues_an_unknown():
     check("an unproven identity is never rescued by the override",
           verdict == "fail" and "unproven" in sentence, (verdict, sentence))
 
+
+def t_a_head_commit_in_a_cockpit_row_is_not_an_invented_pr():
+    """MEASURED 2026-11-21 (deploy #6): the instrument failed a correct answer.
+
+    The cockpit answer named exactly one real pull request and said "None of
+    them are ready to merge yet", but it also prints the 40-character head
+    commit - and `numbers_in` read `...b9f1556` and `...c1863ba...` as invented
+    PR numbers 1556 and 1863. The row must read PR numbers the answer NAMES as
+    pull requests (`#1432`, "PR 1432"), never digits inside a sha.
+    """
+    answer = ("1 open pull request(s) on darknight11ish/Epic-Jarvis:\n"
+              "  #1432 feat(updates): one update moves both halves: running - still "
+              "running: backend-windows; head 0a1bf9d58c1a2ddc1863ba4d04c34d810b9f1556; "
+              "base main\n\n"
+              "None of them are ready to merge yet.\n"
+              "Nothing on GitHub changed; this only read. (1 running)")
+    check("the head commit's digits are not read as PR numbers",
+          F.pr_numbers_in(answer) == [1432], F.pr_numbers_in(answer))
+    check("... so nothing is 'invented' for the real single-PR queue",
+          F.invented_pr_numbers(answer, [1432]) == [],
+          F.invented_pr_numbers(answer, [1432]))
+    ok, why = F.empty_answer_ok(answer, [1432])
+    check("... and the measured answer PASSES the none-are-CLEAN row", ok, why)
+    # The negative control: a number the answer really does invent is caught.
+    bad = "3 open pull requests: #1400, #1401 and #9999."
+    check("a made-up PR number is still caught",
+          F.invented_pr_numbers(bad, [1400, 1401]) == [9999],
+          F.invented_pr_numbers(bad, [1400, 1401]))
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":
