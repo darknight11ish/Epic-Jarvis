@@ -1823,11 +1823,57 @@ def t_the_api_doc_190_agrees_with_the_code():
 # --------------------------------------------------------------------------
 
 
+def t_the_cockpit_says_when_nothing_is_ready_to_merge():
+    """MEASURED 2026-11-20 (field finding): every PR open, none mergeable.
+
+    The row list alone read "4 open pull request(s) ... running", the sentence
+    around it fell through to the model, and the model invented four
+    pull-request numbers while the true answer was "none are ready". The
+    cockpit now answers the question in one plain line, and only when its own
+    classifications say so.
+    """
+    listed = [{"number": int(PR_NUMBER), "title": "Fix the tray icon",
+               "head": {"sha": HEAD_SHA}, "base": {"ref": "main"}}]
+    runs = [{"id": str(900 + i), "name": name, "status": "completed",
+             "conclusion": "success",
+             "details_url": f"https://github.com/{REPO_NAME}/actions/runs/77/"
+                            f"job/{500 + i}"}
+            for i, name in enumerate(GH.REQUIRED_CHECKS)]
+    runs.append({"id": "999", "name": "frontend-shard (2/4)",
+                 "status": "in_progress", "conclusion": None,
+                 "details_url": ""})
+    routes = [("/pulls?", (200, json.dumps(listed))),
+              (f"/pulls/{PR_NUMBER}", _pr()),
+              (f"/commits/{HEAD_SHA}/check-runs",
+               (200, json.dumps({"total_count": len(runs), "check_runs": runs})))]
+    with _Token():
+        out = GH.run(GH.plan_scan_prs({"repo": REPO_NAME}),
+                     fetch=Routed(routes), approved=True)
+    text = out.get("text", "")
+    check("the cockpit still reads", out.get("ok") is True, out)
+    check("with nothing ready it SAYS so, in one plain line",
+          "None of them are ready to merge yet." in text, text)
+    check("... and it names only the real pull request, never an invented one",
+          f"#{PR_NUMBER}" in text and "4459" not in text, text)
+    # The control: one fully green pull request, and that line must be absent.
+    routes = [("/pulls?", (200, json.dumps(listed))),
+              (f"/pulls/{PR_NUMBER}", _pr()),
+              (f"/commits/{HEAD_SHA}/check-runs", _all_green())]
+    with _Token():
+        out = GH.run(GH.plan_scan_prs({"repo": REPO_NAME}),
+                     fetch=Routed(routes), approved=True)
+    text = out.get("text", "")
+    check("a merge-ready pull request prints no 'none ready' line",
+          "None of them are ready to merge yet." not in text, text)
+    check("... and is still classed merge-ready", "merge-ready" in text, text)
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {HERE / 'jarvis_agent.py'}")
     with NoSocket():
-        for fn in (t_the_merge_is_merge_commit_only_by_construction,
+        for fn in (t_the_cockpit_says_when_nothing_is_ready_to_merge,
+               t_the_merge_is_merge_commit_only_by_construction,
                    t_the_merge_card_names_what_is_being_merged_and_the_boundary,
                    t_the_merge_refuses_before_sending_anything,
                    t_the_merge_success_sends_the_pinned_body_once,

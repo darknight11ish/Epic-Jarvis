@@ -4968,6 +4968,7 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
             f"{len(prs)} open pull request(s) on {r.repo}:")
     lines = [head]
     counts = {}
+    classified = 0
     for pr in prs:
         number = str(pr.get("number") or "").strip()
         title = _clean_github_text(pr.get("title"), wrap=False)
@@ -5004,6 +5005,7 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
             r.repo, base_ref, sha, fetch, headers, token, runs)
         word, because = _classify(one, runs, plan, problem)
         counts[word] = counts.get(word, 0) + 1
+        classified += 1
         lines.append(f"  #{number} {title}: {word} - "
                      f"{_clean_github_text(because, wrap=False)}; "
                      f"head {sha or '(not named)'}; "
@@ -5012,6 +5014,18 @@ def _run_cockpit(r: Request, fetch: Callable, token: str, headers: dict) -> dict
                       ("merge-ready", "blocked", "conflicted", "running", "draft")
                       if counts.get(k))
     lines.append("")
+    if not counts.get("merge-ready"):
+        # MEASURED 2026-11-20 (field finding): with every pull request open but
+        # NONE ready, the cockpit's row list alone reads as if there might be a
+        # mergeable one, and the answer around it fell through to the model,
+        # which invented numbers. The plain sentence is the answer to the
+        # question actually asked - "are any ready to merge?" - and it is only
+        # ever said from the classifications just made.
+        if classified == len(prs):
+            lines.append("None of them are ready to merge yet.")
+        else:
+            lines.append("None of the ones that could be read is ready to merge "
+                         "yet.")
     lines.append("Nothing on GitHub changed; this only read." +
                  (f" ({total})" if total else ""))
     return {"ok": True, "text": "\n".join(lines)}
