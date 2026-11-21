@@ -35,12 +35,26 @@ WHAT IT DOES, IN ORDER
    `jarvis-backend/`. A mismatch is a failed update, not a warning: it is the
    state where the folder on this PC is not the code this repository says it
    is.
+2b. **Delivers the release's look spec, once the file half is proved.** The
+   desktop bundles `jarvis-desktop/src/jarvis-visual-spec.json`; the live
+   backend folder serves its own copy at `GET /api/visual-spec`, and comparing
+   the two on every start must not warn. That delivery is CONTENT, not proof:
+   it belongs to the release and it happens HERE, before the suites, because a
+   suite phase that runs long (measured: ~57+ minutes on the owner's PC,
+   2026-11-21) must not leave a successful file half with the old spec - which
+   is exactly what the desktop's one-hour bound did that day. It is atomic,
+   backed up and read back; its `BESIDE:` line says what was written or the
+   exact read that failed, and it can never fail the update.
 3. `backend/run_suites.py --backend-path <backend> --jobs <workers>` - the
    SAME suite list CI runs, against the LIVE folder this update just patched,
    with the chosen worker count. The backend is named explicitly (R1,
    2026-10-21): `run_suites.py` ignores the ambient `JARVIS_BACKEND` by
    default, and an update's proof run must never depend on an environment
-   variable. `run_suites.py`'s worker default is 1, so CI is untouched.
+   variable. `run_suites.py`'s worker default is 1, so CI is untouched. Every
+   line is line-buffered on the way out (this tool's own stdout is
+   line-buffered, and a Python child gets `PYTHONUNBUFFERED=1`), because the
+   desktop's progress bound tells a working run from a wedged one by whether
+   the log is still growing.
 4. Records each suite's own time in `<backend>/_jarvis-logs/update-timings.json`
    **per pace** - the same suites take different wall time at 22 workers and at
    1, so a `safe` run is not evidence for `max_speed`. A pace that has not
@@ -1152,7 +1166,20 @@ def _windows_powershell_module_dirs(env) -> list:
     return dirs
 
 
-def _child_env(shell, base=None) -> dict:
+def _is_python_program(program) -> bool:
+    """True for the Python this PC runs the suites with (`python`, `py`, ...).
+
+    Used only to tell the child environment something it must know (line-buffered
+    output); the exact executable is never guessed for starting a program - the
+    commands name it from `sys.executable`/the chosen shell.
+    """
+    name = ntpath.basename(str(program or "")).lower()
+    if name.endswith(".exe"):
+        name = name[:-4]
+    return name == "py" or name.startswith("python")
+
+
+def _child_env(shell, base=None, *, python=False) -> dict:
     """The environment one child gets: the caller's env, never wiped.
 
     For the Windows PowerShell 5.1 fallback the WindowsPowerShell module
@@ -1160,6 +1187,13 @@ def _child_env(shell, base=None) -> dict:
     a child of a pwsh-hosted process can inherit a module path that hides 5.1's
     own modules. A `pwsh` child - and every non-shell child - gets the
     caller's copy unchanged.
+
+    `python=True` marks a Python child and sets `PYTHONUNBUFFERED=1`. MEASURED
+    2026-11-21: a suite sweep's result lines are printed by the suite runner and
+    forwarded by this tool; Python block-buffers a pipe, so without this the
+    desktop's live log (and the update's own progress bound) can see nothing for
+    tens of minutes while the sweep is really working. The desktop tells a
+    healthy run from a wedged one by its output, so each line must land at once.
 
     PSModulePath is a WINDOWS environment value, so its entries are split and
     joined with Windows' own separator (`ntpath.pathsep`, always ';'), never
@@ -1173,6 +1207,8 @@ def _child_env(shell, base=None) -> dict:
             if path not in parts:
                 parts.append(path)
         env["PSModulePath"] = ntpath.pathsep.join(parts)
+    if python:
+        env["PYTHONUNBUFFERED"] = "1"
     return env
 
 
@@ -1788,11 +1824,17 @@ def _run(cmd, cwd, on_line) -> "int | None":
 
     A Windows PowerShell 5.1 child gets `_child_env`'s environment (the
     caller's env with the WindowsPowerShell module dirs appended) so its own
-    cmdlets are discoverable even when the parent was started by pwsh; every
-    other child inherits the caller's environment as before.
+    cmdlets are discoverable even when the parent was started by pwsh. A Python
+    child gets `PYTHONUNBUFFERED=1` so each line it prints arrives at once
+    (see `_child_env`); every other child inherits the caller's environment.
     """
     argv = [str(part) for part in cmd]
-    env = _child_env(argv[0]) if argv and _is_windows_powershell_5(argv[0]) else None
+    env = None
+    if argv:
+        shell = _is_windows_powershell_5(argv[0])
+        python = _is_python_program(argv[0])
+        if shell or python:
+            env = _child_env(argv[0], python=python)
     try:
         child = subprocess.Popen(
             argv, cwd=str(cwd), env=env,
@@ -2026,6 +2068,8 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
     deploy_seconds = 0.0          # the deploy phase's own time, recorded as the
                                   # patch phase's time for the next estimate
     deployed = {}                 # the deploy report (version/ref), once it ran
+    beside_done = False           # the look spec is delivered once the FILE half
+                                  # is proved, before the proof suites (2026-11-21)
     while True:
         attempt_number += 1
         workers = workers_for(attempt_mode, requested_workers)
@@ -2242,6 +2286,25 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             say("DONE WITH PROBLEMS - do not trust this update yet")
             return 1
 
+        # ---- 2b. the release's own look spec ----------------------------
+        # THE SPEC BELONGS TO THE RELEASE, NOT TO THE PROOF (measured
+        # 2026-11-21). On the owner's PC the automatic finish's deploy route
+        # wrote VERSION 0.2.488 and SOURCE-COMMIT d7003442e at 11:08:54Z, then
+        # started the proof suites, which legitimately ran ~57+ minutes against
+        # the live folder. The desktop's one-hour wall clock ended the run at
+        # 12:08:54Z, before this step ever ran, so the owner was left with a
+        # successful file half and the OLD look spec - every start still said
+        # "the look spec DISAGREES". The file half is proved by the deploy's own
+        # bytes+markers check and by `verify_live_files` above; once that has
+        # passed, the spec is delivered HERE, before the suites. A suite that
+        # fails, is skipped, or is ended by a bound can no longer take the
+        # delivery away. Its `BESIDE:` line is the audit; it can never fail the
+        # update, and it never claims the proof.
+        if not beside_done:
+            _release_file_step(beside_files, BESIDE_PREFIX, repo, backend,
+                               previous_release, say)
+            beside_done = True
+
         # ---- 3. the same suites, at this pace ---------------------------
         emit_progress("testing", done=0, total=len(names), failed=0, skipped=0,
                       weightDone=0.0, weightTotal=round(weight_total, 3),
@@ -2359,16 +2422,13 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                 "applied but NOT proven.")
         else:
             say("ALL DONE - the backend is patched and proven")
-            # The proof is in: NOW the release's own files reach the places the
-            # half needs them. Both steps are reported verbatim - the desktop
-            # shows these lines on the card - and neither can fail the update.
-            for step in (beside_files, tool_defaults):
-                try:
-                    step(repo, backend, previous_release, say=say)
-                except Exception as exc:   # noqa: BLE001 - never fail a proven update
-                    say(TOOL_DEFAULTS_PREFIX + "NOT DONE: the release's own files "
-                        f"step failed ({type(exc).__name__}: {exc}); the backend "
-                        "update itself is unaffected")
+            # The proof is in: NOW the release's new tool defaults reach the
+            # owner's own config. (The look spec went EARLIER - step 2b, with the
+            # file half - because its delivery is content, not proof.) The line
+            # is reported verbatim - the desktop shows it on the card - and the
+            # step can never fail the update.
+            _release_file_step(tool_defaults, TOOL_DEFAULTS_PREFIX, repo, backend,
+                               previous_release, say)
         if route == "deploy":
             # The card's audit of WHICH route ran and WHY, printed LAST so it is
             # inside the desktop's own tail window (`backend_update::route_lines`)
@@ -2399,6 +2459,23 @@ def _call(run, cmd, cwd, on_line):
 
 def _failed_count(lines) -> int:
     return sum(1 for line in lines if line.startswith("FAIL  "))
+
+
+def _release_file_step(step, prefix, repo, backend, previous_release, say) -> None:
+    """Run ONE of the release's own file steps; report it, never fail the update.
+
+    The look spec is delivered once the FILE half is proved (step 2b, before the
+    proof suites); the new tool defaults only after the whole update proved
+    itself. Either step can fail to read or write, and then its own `BESIDE:` /
+    `TOOL DEFAULTS:` line says exactly what failed - the backend update stands.
+    A step that raises is reported in its own prefix rather than as a traceback,
+    and never as a failed update.
+    """
+    try:
+        step(repo, backend, previous_release, say=say)
+    except Exception as exc:               # noqa: BLE001 - never fail a proven update
+        say(prefix + "NOT DONE: the release's own files step failed "
+            f"({type(exc).__name__}: {exc}); the backend update itself is unaffected")
 
 
 # ---------------------------------------------------------------------------
@@ -2834,7 +2911,31 @@ def card_shape(plan: dict) -> dict:
             "default": plan["default"]}
 
 
+def line_buffered_stdout() -> None:
+    """Make this tool's own printout arrive one line at a time.
+
+    WHY THIS EXISTS (measured 2026-11-21). The desktop redirects this tool's
+    stdout into a file and reads it as it grows: that file is how the owner sees
+    the update's live progress AND how the desktop tells a healthy run (output
+    still arriving) from a wedged one (nothing for 15 minutes). Python
+    block-buffers stdout when it is not a terminal, so the file used to grow in
+    8 KiB bursts - a working run could look dead for a long stretch. The
+    measured 2026-11-21 run was ended by a wall clock, not by this buffering;
+    the progress bound that replaced that wall clock depends on these lines
+    arriving as they are printed.
+
+    Never fatal: a stream that cannot be reconfigured (a test's StringIO, an
+    old Python) is left exactly as it was - the worse buffering is not worth a
+    crash in the middle of an update.
+    """
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError, OSError):
+        pass
+
+
 def main(argv=None, *, say=print, run=_run) -> int:
+    line_buffered_stdout()
     argv = sys.argv[1:] if argv is None else list(argv)
     try:
         args = parse_args(argv)

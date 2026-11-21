@@ -1865,14 +1865,20 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
     let previous_release = crate::backend_update::app_commit();
     let backend =
         crate::backend_update::run(&app, &mode, &mode_label, previous_release.as_deref()).await;
-    // `proven` is its own answer rather than a flavour of done: a backend that
-    // patched but skipped its own checks is patched, and is not a pass.
-    let backend_step = if !backend.ok {
-        Step::failed(STEP_BACKEND, backend.detail.clone())
-    } else if backend.proven {
-        Step::ok(STEP_BACKEND, backend.detail.clone())
-    } else {
-        Step::partial(STEP_BACKEND, backend.detail.clone())
+    // ONE ENDING RULE FOR BOTH DOORS (2026-11-21). `Run::ending` reads the two
+    // versions re-read AFTER the attempt - the same function the automatic
+    // finish uses - so a press and a start-up cannot report the same run
+    // differently. A run the bound ended is `partial` when its marker read back
+    // as the installed desktop's version (the files and version are updated;
+    // the full check did not finish) and `failed` when it did not, so an old
+    // version is never painted as if it were still there. `proven` stays its
+    // own answer: a backend that patched but skipped its own checks is patched,
+    // and is not a pass.
+    let (backend_state, backend_detail) = backend.ending();
+    let backend_step = match backend_state {
+        "ok" => Step::ok(STEP_BACKEND, backend_detail),
+        "partial" => Step::partial(STEP_BACKEND, backend_detail),
+        _ => Step::failed(STEP_BACKEND, backend_detail),
     }
     .with_log(backend.log_dir.clone(), backend.tail.clone());
     // What the backend half did rides into the desktop half's record, so the
@@ -2090,41 +2096,44 @@ pub fn auto_finish_behind_words(desktop: &str, repo: Option<&str>, build: Option
 /// exact claim was measured false on the owner's PC, 2026-11-21 00:28 PT: after
 /// 0.2.487 was installed, the backend half failed and the HUD said "The backend
 /// step did not finish, so Jarvis Desktop was NOT installed on top of it".
-/// What is incomplete is the BACKEND half; the one press that would retry it is
-/// **Update everything**; and the run's own log is named so its report can be
-/// read. `backend` is the version the handshake read BEFORE the attempt, named
-/// only when it was really read. `detail` is `backend_update::Run::detail` on a
-/// failure: the failure's own specifics, shown verbatim. Its generic "did not
-/// finish" opener is dropped here because this sentence already says it.
 ///
-/// Pure, so both outcomes are tests rather than hopes.
-pub fn auto_finish_failed_words(
-    desktop: &str,
-    backend: Option<&str>,
-    detail: &str,
-    log_dir: Option<&str>,
-) -> String {
-    let mut words = match backend.map(str::trim).filter(|version| !version.is_empty()) {
-        Some(version) => format!(
-            "Jarvis Desktop {desktop} is installed; the backend half is the one that did \
-             not finish. The backend is still {version}, so the two halves still differ. \
-             Press \"Update everything\" to try the backend half again."
-        ),
-        None => format!(
-            "Jarvis Desktop {desktop} is installed; the backend half is the one that did \
-             not finish, so the two halves still differ. Press \"Update everything\" to \
-             try the backend half again."
-        ),
-    };
+/// WHAT THE BACKEND VERSION IS. `detail` is the run's own ending
+/// ([`crate::backend_update::Run::ending`]): it already carries the two
+/// versions RE-READ after the attempt, so this function never restates an old
+/// version as if it were still true - the measured 2026-11-21 12:08:54Z line
+/// said "The backend is still 0.2.487" when the marker read 0.2.488. `log_dir`
+/// names the run's own log. Pure, so both outcomes are tests rather than hopes.
+pub fn auto_finish_failed_words(desktop: &str, detail: &str, log_dir: Option<&str>) -> String {
+    let mut words = format!(
+        "Jarvis Desktop {desktop} is installed; the backend half is the one that did \
+         not finish. Press \"Update everything\" to try the backend half again."
+    );
     let detail = detail.trim();
-    let detail = detail
-        .strip_prefix("The backend half did not finish.")
-        .map(str::trim)
-        .unwrap_or(detail);
     if !detail.is_empty() {
         words.push(' ');
         words.push_str(detail);
     }
+    match log_dir.map(str::trim).filter(|dir| !dir.is_empty()) {
+        Some(dir) => words.push_str(&format!(" The run's own log is in {dir}.")),
+        None => words.push_str(" The run's own log is the printout above."),
+    }
+    words
+}
+
+/// The automatic finish's line for a run a BOUND ended AFTER the file half had
+/// been proved and the marker read back as the installed desktop's own version.
+///
+/// WHAT IS TRUE AND WHAT IS NOT. The desktop half was installed before this
+/// ran, so the line says that first; the bound's own words then say which bound
+/// ended the run, after how long, what the re-read found, and that a restart's
+/// handshake may now read IN SYNC. It never says the two halves now match - the
+/// bound ended the run before the proof suites finished, and only the next
+/// start's own handshake is the read-back that may say IN SYNC. Pure.
+pub fn auto_finish_bound_words(desktop: &str, bound_words: &str, log_dir: Option<&str>) -> String {
+    let mut words = format!(
+        "Jarvis Desktop {desktop} is installed. {}",
+        bound_words.trim()
+    );
     match log_dir.map(str::trim).filter(|dir| !dir.is_empty()) {
         Some(dir) => words.push_str(&format!(" The run's own log is in {dir}.")),
         None => words.push_str(" The run's own log is the printout above."),
@@ -2343,7 +2352,25 @@ async fn finish_backend_half(
     let previous_release = previous_desktop_build().or_else(crate::backend_update::app_commit);
     let backend =
         crate::backend_update::run(app, "responsive", &label, previous_release.as_deref()).await;
-    let (state, mut words) = if !backend.ok {
+    let (state, mut words) = if backend.bound.is_some() {
+        // THE BOUND ENDED IT, NOT THE RUN'S OWN VERDICT (2026-11-21). What is
+        // true is what the two versions read back AFTER it ended, and the one
+        // ending rule (`Run::ending`) says it the same way the press path does.
+        // The desktop half was installed by its installer before this ran, so
+        // the line says that first - never "Jarvis Desktop was NOT installed".
+        let (state, detail) = backend.ending();
+        if state == "partial" {
+            (
+                state,
+                auto_finish_bound_words(&sync.desktop, &detail, backend.log_dir.as_deref()),
+            )
+        } else {
+            (
+                state,
+                auto_finish_failed_words(&sync.desktop, &detail, backend.log_dir.as_deref()),
+            )
+        }
+    } else if !backend.ok {
         // The desktop half was installed by its installer before this ran, so
         // the failure line names the BACKEND half as the incomplete one and the
         // press that would retry it - never "Jarvis Desktop was NOT installed"
@@ -2352,8 +2379,7 @@ async fn finish_backend_half(
             "failed",
             auto_finish_failed_words(
                 &sync.desktop,
-                sync.backend.as_deref(),
-                &backend.detail,
+                &backend.ending().1,
                 backend.log_dir.as_deref(),
             ),
         )
@@ -2364,7 +2390,7 @@ async fn finish_backend_half(
                 "The automatic backend update patched the backend, but could not prove \
                  every check - and an unproven backend is not a pass here, so the two \
                  halves are not claimed to match. {}",
-                backend.detail
+                backend.ending().1
             ),
         )
     } else {
@@ -2688,11 +2714,11 @@ pub fn spawn_startup_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        auto_finish_behind_words, auto_finish_failed_words, auto_finish_ok_words,
-        auto_finish_opening, auto_finish_plan, both_updated, chat_facts, claim_update_both,
-        clear_pending, desktop_half_allowed, desktop_half_trace, desktop_install_gate,
-        ending_words, finish, friendly, install_notice_for, is_update_card, local_stamp,
-        mark_launched, previous_desktop_build, read_pending, reconcile,
+        auto_finish_behind_words, auto_finish_bound_words, auto_finish_failed_words,
+        auto_finish_ok_words, auto_finish_opening, auto_finish_plan, both_updated, chat_facts,
+        claim_update_both, clear_pending, desktop_half_allowed, desktop_half_trace,
+        desktop_install_gate, ending_words, finish, friendly, install_notice_for, is_update_card,
+        local_stamp, mark_launched, previous_desktop_build, read_pending, reconcile,
         remember_previous_desktop_build, same_version, state_of, step_starting, write_pending,
         AutoFinish, AutoFinishAttempts, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
         PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
@@ -3230,7 +3256,7 @@ mod tests {
         assert!(build_only.contains("does not record"), "{build_only}");
     }
 
-    // ---- the automatic finish's two endings (2026-11-21) ------------------
+    // ---- the automatic finish's endings (2026-11-21) ----------------------
 
     #[test]
     fn the_automatic_finish_never_says_the_desktop_was_not_installed() {
@@ -3239,18 +3265,28 @@ mod tests {
         // backend half, and the app said "The backend step did not finish, so
         // Jarvis Desktop was NOT installed on top of it" - false about the half
         // that was installed. The honest line names the incomplete half, the one
-        // press that retries it, and the run's log.
-        let detail = crate::backend_update::backend_failure_words(false);
+        // press that retries it, and the run's log. The version it names is the
+        // one RE-READ after the attempt: a sentence saying "the backend is still
+        // 0.2.486" was measured false at 12:08:54Z, when the marker read 0.2.488.
+        let read_back = crate::backend_update::VersionReadBack {
+            desktop: "0.2.487".to_string(),
+            before: Some("0.2.486".to_string()),
+            after: Some("0.2.486".to_string()),
+        };
+        let detail = format!(
+            "{} {}",
+            crate::backend_update::backend_failure_words(false),
+            read_back.facts()
+        );
         let words = auto_finish_failed_words(
             "0.2.487",
-            Some("0.2.486"),
             &detail,
             Some(
                 r"C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\_jarvis-logs",
             ),
         );
         // What is what: the desktop IS installed; the BACKEND half is the one
-        // that did not finish, and it is still the older version.
+        // that did not finish, and the marker still says the older version.
         assert!(
             words.contains("Jarvis Desktop 0.2.487 is installed"),
             "{words}"
@@ -3262,28 +3298,171 @@ mod tests {
         // The one press that would retry it is named, and the log is named.
         assert!(words.contains("Update everything"), "{words}");
         assert!(words.contains("_jarvis-logs"), "{words}");
-        // The false claim, in every spelling the old sentence used, is gone.
+        // The false claim, in every spelling the old sentence used, is gone -
+        // and so is "the backend is still <old>", which the re-read replaced.
         for forbidden in [
             "Jarvis Desktop was NOT installed",
             "was NOT installed on top",
             "nothing was put on top",
             "The backend step did not finish",
+            "The backend is still",
         ] {
             assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
         }
-        // Nothing here claims the halves match or that an update happened.
-        for forbidden in ["now match", "IN SYNC", "was updated", "is updated"] {
+        // Nothing here claims the halves match.
+        for forbidden in ["now match", "IN SYNC", "both halves"] {
             assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
         }
         assert!(!words.contains('\n'), "{words:?}");
-        // An unknown backend version is still named honestly, and a detail
-        // sentence that is already there is not duplicated.
-        let old = auto_finish_failed_words("0.2.487", None, "", None);
+        // A detail that names no version is still honest, and a log that is
+        // only the printout above is named as that.
+        let old = auto_finish_failed_words("0.2.487", "", None);
         assert!(
             old.contains("The run's own log is the printout above"),
             "{old}"
         );
         assert!(!old.contains("0.2.486"), "{old}");
+    }
+
+    #[test]
+    fn the_automatic_finish_reports_a_bound_that_ended_a_healthy_file_half() {
+        // THE MEASURED FAILURE THIS PR FIXES. 2026-11-21: auto-finish started at
+        // 11:08:54Z; the deploy route wrote VERSION 0.2.488 and SOURCE-COMMIT
+        // d7003442e; the proof suites then legitimately ran ~57+ minutes; at
+        // 12:08:54Z the one-hour wall clock killed the run and the HUD said the
+        // backend half did not finish and "The backend is still 0.2.487" - both
+        // false, the backend read 0.2.488. The ending now reports what the two
+        // versions read back after the stop, says the desktop half is installed,
+        // which bound ended it and after how long, and that the restart's own
+        // handshake - not this line - may say IN SYNC.
+        let read_back = crate::backend_update::VersionReadBack {
+            desktop: "0.2.488".to_string(),
+            before: Some("0.2.487".to_string()),
+            after: Some("0.2.488".to_string()),
+        };
+        let bound = crate::backend_update::RunBound::Silence {
+            ran: std::time::Duration::from_secs(3600 + 23 * 60),
+            silent: std::time::Duration::from_secs(15 * 60),
+        };
+        let detail = crate::backend_update::bound_ending_words(&bound, &read_back);
+        let words = auto_finish_bound_words("0.2.488", &detail, Some(r"C:\backend\_jarvis-logs"));
+        for expected in [
+            "Jarvis Desktop 0.2.488 is installed",
+            "silence bound",
+            "1h 23m",
+            "files and version are updated",
+            "VERSION file reads 0.2.488",
+            "full check did not finish",
+            "Restart Jarvis",
+            "will read IN SYNC",
+            "_jarvis-logs",
+        ] {
+            assert!(
+                words.contains(expected),
+                "{expected:?} missing from {words}"
+            );
+        }
+        for forbidden in [
+            "The backend is still",
+            "still 0.2.487",
+            "both halves now match",
+            "now match",
+            "are in sync",
+            "was NOT installed",
+        ] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        assert!(!words.contains('\n'), "{words:?}");
+    }
+
+    #[test]
+    fn no_success_words_without_the_read_back() {
+        // "both halves now match" exists in exactly ONE shape: the in-sync
+        // handshake read-back, which the caller reaches only after
+        // `restart_and_read` says InSync. A bound's marker read is NOT that
+        // read-back - it may only promise that a restart WILL read IN SYNC - and
+        // a failure never says either.
+        let ok = auto_finish_ok_words("0.2.488", Some("0.2.488"), "");
+        assert!(ok.contains("both halves now match"), "{ok}");
+
+        let read_back = crate::backend_update::VersionReadBack {
+            desktop: "0.2.488".to_string(),
+            before: Some("0.2.487".to_string()),
+            after: Some("0.2.488".to_string()),
+        };
+        let detail = crate::backend_update::bound_ending_words(
+            &crate::backend_update::RunBound::HardCeiling {
+                ran: std::time::Duration::from_secs(3 * 60 * 60),
+            },
+            &read_back,
+        );
+        let bound = auto_finish_bound_words("0.2.488", &detail, None);
+        assert!(bound.contains("will read IN SYNC"), "{bound}");
+        for forbidden in ["both halves now match", "now match", "are in sync"] {
+            assert!(!bound.contains(forbidden), "{forbidden:?} in {bound}");
+        }
+
+        let failed = auto_finish_failed_words("0.2.488", "The run stopped.", None);
+        for forbidden in ["both halves now match", "now match", "IN SYNC"] {
+            assert!(!failed.contains(forbidden), "{forbidden:?} in {failed}");
+        }
+    }
+
+    #[test]
+    fn the_press_and_the_automatic_finish_share_the_bound_and_the_read_back() {
+        // THE ONE RUNNER, ONE BOUND, ONE ENDING. The bound (progress, not wall
+        // clock) lives in `backend_update::RunWatch`, and the state and words of
+        // every ending come from `Run::ending`. BOTH doors call the same runner
+        // and the same ending function, so a press cannot be killed at one hour
+        // while a run is healthy and cannot report a run differently from a
+        // start-up.
+        let backend = include_str!("backend_update.rs");
+        assert!(
+            !backend.contains("SCRIPT_LIMIT"),
+            "a fixed wall-clock limit came back"
+        );
+        assert!(
+            backend.contains("pub fn observe(&mut self")
+                && backend.contains("SCRIPT_SILENCE_LIMIT")
+                && backend.contains("SCRIPT_HARD_CEILING"),
+            "the progress bound is no longer one tested state machine"
+        );
+
+        let src = include_str!("update.rs");
+        let production = &src[..src.find("#[cfg(test)]").expect("no test module")];
+        let press = &production[production
+            .find("pub async fn update_both")
+            .expect("update.rs has no update_both")..];
+        let press = &press[..press
+            .find("// STOP.")
+            .expect("update_both has no early return")];
+        assert!(
+            press.contains("backend.ending()"),
+            "the press path does not use the one ending rule"
+        );
+        let automatic = &production[production
+            .find("pub async fn finish_backend_if_desktop_ahead")
+            .expect("update.rs has no automatic finish")..];
+        let automatic = &automatic[..automatic
+            .find("/// The update a chat message asked for")
+            .expect("the automatic finish has no end")];
+        assert!(
+            automatic.contains("backend.ending()"),
+            "the automatic finish does not use the one ending rule"
+        );
+        assert!(
+            automatic.contains("backend.bound.is_some()"),
+            "the automatic finish no longer recognises a bound ending"
+        );
+        assert!(
+            automatic.contains("auto_finish_bound_words(")
+                && automatic.contains("auto_finish_failed_words("),
+            "the automatic finish writes its bound/failure lines at the call site"
+        );
+        assert!(
+            !press.contains("SCRIPT_LIMIT") && !automatic.contains("SCRIPT_LIMIT"),
+            "a path grew its own wall-clock limit instead of the shared bound"
+        );
     }
 
     #[test]

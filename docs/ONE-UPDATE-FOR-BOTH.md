@@ -379,7 +379,11 @@ is not about code at all:
      `tools/update_backend.py` now compares the release's copy with the live one
      structurally - the same comparison `spec_drift.rs` makes, so formatting
      alone is not a difference - and writes it atomically with a timestamped
-     backup of the old file and a read-back, reported as one `BESIDE:` line;
+     backup of the old file and a read-back, reported as one `BESIDE:` line.
+     **Since 2026-11-21 it is delivered as soon as the FILE half is proved and
+     before the proof suites start** (section 9's last subsection): the spec is
+     content the release owns, not part of the proof, and a suite phase that
+     runs long must not decide whether the owner keeps the old look;
    - **the release's new tool defaults** never reached the owner's own
      `jarvis-framework.toml`: PM2 shipped eight project tools ON in the published
      config, and the live file listed 29 and none of the eight (measured all
@@ -440,13 +444,74 @@ update".
 
 **The automatic finish's failure line, corrected the same night.** When the
 desktop half is already installed, a failed backend half must not say the
-opposite. The line now reads that Jarvis Desktop 0.2.487 **is installed**, names
-the backend half as the one that did not finish - "the backend is still
-0.2.486, so the two halves still differ" - says the one press that retries it
-("Update everything"), and names the run's own log. It never claims a match.
-`backend_update::backend_failure_words` owns the backend-only half of that
-sentence (the caller owns whether the desktop half was installed), and both
-automatic-finish endings are pure functions held by tests.
+opposite. The line reads that Jarvis Desktop 0.2.487 **is installed**, names the
+backend half as the one that did not finish, says what the two versions RE-READ
+after the attempt really say (since 2026-11-21 - see the subsection below; it
+never restates the pre-run version as if it were still true), says the one press
+that retries it ("Update everything"), and names the run's own log. It never
+claims a match. `backend_update::backend_failure_words` owns the backend-only
+half of that sentence (the caller owns whether the desktop half was installed),
+and both automatic-finish endings are pure functions held by tests.
+
+### The bound measures progress, and every ending re-reads the versions (measured 2026-11-21)
+
+**What was measured, to the minute.** At **11:08:54Z** the automatic finish
+started, because Desktop 0.2.488 was ahead of backend 0.2.487. The patcher
+refused, and the deploy route carried the backend half - it wrote
+**`VERSION 0.2.488`** and **`SOURCE-COMMIT d7003442e`**, so the two halves were
+genuinely equal by then. The run then started its proof stage
+(`backend/run_suites.py` against the live folder, Balanced / 14 workers), which
+on that PC legitimately takes **~57+ minutes**. At **12:08:54Z, exactly 60
+minutes after the start**, the app's single one-hour wall clock killed it and
+said: *"automatic backend finish: … The patch run did not finish within an hour
+… The backend half is the one that did not finish. The backend is still
+0.2.487"* - **both claims were false by then**; the backend read 0.2.488. A
+restart logged *"Jarvis Desktop 0.2.488 and the backend 0.2.488 – IN SYNC."*
+The release's look spec was never delivered either (the delivery step ran only
+after the proof, and the bound had already ended the run), so the desktop kept
+warning that the spec DISAGREED until it was copied by hand.
+
+Four rules came out of that, and each is held by tests with injected clocks and
+injected output - no real hour is ever waited for:
+
+1. **The bound measures progress, not just the wall clock.** A run that keeps
+   producing output is alive, and new output resets the silence clock. The only
+   two bounds are a **silence stretch of 15 minutes** with no new output at all,
+   and an absolute **hard ceiling of three hours** - well above the measured
+   57-minute proof stage and the 2h8m full run of 2026-10-18. Whichever one ends
+   the run is named in the words, with how long the run had been going (for
+   example "ended by the silence bound after 1h 23m: no new output arrived for
+   15m 0s"). The same bound and the same runner are used by an "Update
+   everything" press and by the automatic finish, so a click cannot be killed at
+   one hour while the run is healthy. For this to work the run's own log must
+   really grow line by line, so `tools/update_backend.py` line-buffers its
+   stdout and gives a Python child `PYTHONUNBUFFERED=1`.
+2. **On any ending, the two versions are re-read and what is true is reported.**
+   `Run::ending` reads `<backend>/VERSION` before and after the attempt and
+   compares it with the installed desktop's own version. A run a bound ended
+   whose marker read back as the installed desktop's version is reported as
+   `partial` and says: **the backend's files and version are updated; the full
+   check did not finish within the bound; restart Jarvis and it will read IN
+   SYNC.** That "will read IN SYNC" is a promise about the next start, not a
+   claim about now - only a restart's own handshake may say IN SYNC, and the
+   proven path still reaches `both halves now match` only from that handshake.
+   A run that wrote nothing says its marker still reads the old version and the
+   halves still differ. "The backend is still 0.2.487" can never be said when
+   the marker reads 0.2.488; an unreadable marker is reported as unreadable
+   rather than guessed.
+3. **The release's look spec goes with the file half, before the proof suites.**
+   Once the deploy's own bytes+markers proof (and the live-file verification)
+   has passed, `tools/update_backend.py` delivers the spec (step 2b) and only
+   then starts the suites. It is content the release owns, not proof, and its
+   `BESIDE:` line is part of the run report - read from the WHOLE output, not
+   the last 60 lines, so a run a bound ends still says the spec reached the PC.
+   The release's new tool defaults still wait for the whole proof, because they
+   change the owner's own config; the delivery step can never fail the update.
+4. **"Both or neither" is unchanged.** A genuine failure of the deploy (bytes or
+   markers not proved) still claims nothing, delivers no spec, and installs no
+   desktop half; a bound ending is `partial`/`failed`, never `ok`, so a
+   half-finished check cannot paint an update green. No card or approval path
+   changed.
 
 **What this deliberately does not do:** it raises no card, approves nothing,
 changes no other setting, touches no network beyond the one local `/api/self`

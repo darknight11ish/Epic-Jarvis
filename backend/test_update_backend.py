@@ -102,7 +102,13 @@ def _write_live(backend: Path, files: dict) -> None:
 
 
 def _make_repo(root: Path):
-    """(repo, backend): exactly the shape preflight and verification expect."""
+    """(repo, backend): exactly the shape preflight and verification expect.
+
+    The repository also carries the release's bundled look spec, as a real
+    program folder does: delivery of that spec is content the file half owns
+    (2026-11-21), so every update flow below exercises the real step unless a
+    test injects its own.
+    """
     repo = root / "repo"
     backend = root / "backend"
     (repo / "scripts").mkdir(parents=True)
@@ -119,6 +125,10 @@ def _make_repo(root: Path):
     (repo / "jarvis-backend").mkdir()
     for name, content in NEW.items():
         (repo / "jarvis-backend" / name).write_bytes(content)
+    (repo / "jarvis-desktop" / "src").mkdir(parents=True)
+    (repo / U.VISUAL_SPEC_REL).write_text(
+        json.dumps({"version": 1, "faces": {"robot": {"eyes": "round"}}}),
+        encoding="utf-8")
     backend.mkdir()
     (backend / "jarvis_hud.py").write_text("# the owner's backend\n", encoding="utf-8")
     _write_live(backend, OLD)
@@ -980,6 +990,13 @@ def t_the_5_1_fallback_gets_its_module_path_without_losing_the_caller_env():
           base["PSModulePath"] == r"C:\Program Files\PowerShell\7\Modules", base)
     check("a pwsh child gets the caller's environment unchanged",
           U._child_env(r"C:\Program Files\PowerShell\7\pwsh.exe", base) == base)
+    # A Python child gets ONE extra variable - the one that makes its printout
+    # arrive line by line - and nothing else is touched.
+    py_env = U._child_env(sys.executable, base, python=True)
+    check("a Python child is marked unbuffered, and only that is added",
+          py_env == dict(base, PYTHONUNBUFFERED="1"), py_env)
+    check("... while a shell child is not marked, so its module path is the only change",
+          "PYTHONUNBUFFERED" not in U._child_env(windows, base))
 
 
 def t_the_chosen_shell_and_its_environment_are_what_run_receives():
@@ -1014,13 +1031,22 @@ def t_the_chosen_shell_and_its_environment_are_what_run_receives():
           (code, lines))
 
     seen.clear()
+    before = os.environ.get("PYTHONUNBUFFERED")
     U.subprocess.Popen = fake_popen
     try:
         U._run([sys.executable, "-B", "-c", "pass"], ".", lambda line: None)
     finally:
         U.subprocess.Popen = real_popen
-    check("a non-PowerShell child inherits the caller's env (no override)",
-          "env" in seen and seen.get("env") is None, seen.get("env"))
+    env = seen.get("env") or {}
+    check("a Python child is given an environment that makes it write each line "
+          "at once, so the desktop's live log (and its progress bound) sees it",
+          env.get("PYTHONUNBUFFERED") == "1", seen.get("env"))
+    check("... and the caller's own environment is kept in that copy",
+          env is not None and ("PATH" in env or "Path" in env), env)
+    # A Python child's environment is a COPY: the CALLER's own environment is
+    # untouched, so setting PYTHONUNBUFFERED for a child never leaks upward.
+    check("... without being written back into this process's own environment",
+          os.environ.get("PYTHONUNBUFFERED") == before, os.environ.get("PYTHONUNBUFFERED"))
 
 
 # --------------------------------------------------------------------------
@@ -2565,7 +2591,6 @@ SPEC_NEW = {"version": 1, "palette": {"ink": "#111111", "paper": "#fafafa"},
 def _spec_fixture(root: Path, *, shipped=SPEC_NEW, live=SPEC_OLD):
     """(repo, backend, shipped path, live path) with real files on disk."""
     repo, backend = _make_repo(root)
-    (repo / "jarvis-desktop" / "src").mkdir(parents=True)
     shipped_path = repo / U.VISUAL_SPEC_REL
     shipped_path.write_text(json.dumps(shipped, indent=1) + "\n", encoding="utf-8")
     live_path = backend / U.VISUAL_SPEC_NAME
@@ -2663,50 +2688,221 @@ def t_a_look_spec_that_cannot_be_read_is_reported_and_nothing_is_written():
                   for line in said_live), (report_live, said_live))
 
 
-def t_both_release_file_steps_run_only_after_a_proven_update():
+def t_the_look_spec_runs_with_the_file_half_and_the_config_step_only_after_proof():
+    # THE MEASURED 2026-11-21 RUN. The auto-finish started at 11:08:54Z, the
+    # deploy route wrote VERSION 0.2.488 and SOURCE-COMMIT d7003442e, and the
+    # proof suites then legitimately ran ~57+ minutes. The desktop's one-hour
+    # wall clock ended the run at 12:08:54Z, so the release's look spec was
+    # never delivered and every start still said it DISAGREED. The spec now goes
+    # with the FILE half (step 2b), before the suites; the config defaults still
+    # need the whole proof, because they change the owner's own config.
     root = _make_root()
     repo, backend = _make_repo(root)
     ran = []
+    at_first_suite = []
 
     def fake_beside(repo_arg, backend_arg, previous, *, say):
-        ran.append(("beside", previous))
+        ran.append("beside")
+        say("BESIDE: jarvis-visual-spec.json unchanged")
 
     def fake_tools(repo_arg, backend_arg, previous, *, say):
-        ran.append(("tools", previous))
-
-    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
-    said = []
-    code = U.update(repo, backend, "safe", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=root / "timings.json",
-                    previous_release="7add1b7c1d5f",
-                    tool_defaults=fake_tools, beside_files=fake_beside)
-    check("after a PROVEN update both release-file steps run, with the baseline",
-          code == 0 and ran == [("beside", "7add1b7c1d5f"),
-                                ("tools", "7add1b7c1d5f")], (code, ran))
-
-    # A safe-mode failure returns 1 and must not touch the owner's config or spec.
-    root2 = _make_root()
-    repo2, backend2 = _make_repo(root2)
-    ran2 = []
+        ran.append("tools")
+        say("TOOL DEFAULTS: nothing to add")
 
     def handler(cmd, cwd, on_line, state):
         if _is_patcher(cmd):
             for name, content in NEW.items():
-                (backend2 / name).write_bytes(content)
+                (backend / name).write_bytes(content)
             on_line("DONE - no problems, but NOT fully proven (see below)")
             return 0
+        at_first_suite.append(list(ran))
+        for name in U.suite_names(repo):
+            on_line(f"ok    {name:<34} 0.1s")
+        on_line("3 passed, 0 skipped, 0 failed")
+        return 0
+
+    said = []
+    code = U.update(repo, backend, "responsive", run=FakeRun(handler),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    previous_release="7add1b7c1d5f",
+                    tool_defaults=fake_tools, beside_files=fake_beside)
+    check("after a PROVEN update both release-step kinds run, with the baseline",
+          code == 0 and ran == ["beside", "tools"], (code, ran))
+    check("... the look spec is delivered BEFORE the first proof suite runs",
+          at_first_suite == [["beside"]], at_first_suite)
+    check("... and both report lines are in the run's own output",
+          sum("BESIDE:" in line for line in said) == 1
+          and sum("TOOL DEFAULTS:" in line for line in said) == 1, said[-6:])
+
+    # An UNPROVEN update (a skipped check) is still an applied file half: the
+    # spec is delivered, the config step is not - exactly the rule "content,
+    # not proof".
+    root2 = _make_root()
+    repo2, backend2 = _make_repo(root2)
+    ran2 = []
+
+    def fake_beside2(repo_arg, backend_arg, previous, *, say):
+        ran2.append("beside")
+
+    def fake_tools2(repo_arg, backend_arg, previous, *, say):
+        ran2.append("tools")
+
+    code2 = U.update(repo2, backend2, "safe",
+                     run=FakeRun(_staged_handler(repo2, backend2,
+                                                 suites="visible-browser-skip")),
+                     say=lambda line: None, clock=lambda: 0.0,
+                     timings_path=root2 / "timings.json",
+                     previous_release="7add1b7c1d5f",
+                     tool_defaults=fake_tools2, beside_files=fake_beside2)
+    check("an UNPROVEN update still delivers the look spec, and changes no config",
+          code2 == 0 and ran2 == ["beside"], (code2, ran2))
+
+    # A run that never gets past the route (here: a non-deploy-shape refusal,
+    # nothing changed) fails BEFORE the file half is proved, so neither step
+    # runs and the owner's config and spec are untouched.
+    root3 = _make_root()
+    repo3, backend3 = _make_repo(root3)
+    ran3 = []
+
+    def handler3(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            on_line("Jarvis looks like it is still running (pid 42). Close it, "
+                    "then run this again (or add -Force).")
+            on_line(" DONE WITH PROBLEMS - do not trust this update yet")
+            on_line("None of your backend files were changed by this run.")
+            return 1
         on_line("FAIL  test_b.py  0.1s  (exit 1)")
         on_line("2 passed, 0 skipped, 1 failed")
         return 1
 
-    code2 = U.update(repo2, backend2, "safe", run=FakeRun(handler),
+    code3 = U.update(repo3, backend3, "safe", run=FakeRun(handler3),
                      say=lambda line: None, clock=lambda: 0.0,
-                     timings_path=root2 / "timings.json",
+                     timings_path=root3 / "timings.json",
                      previous_release="7add1b7c1d5f",
-                     tool_defaults=lambda *a, **k: ran2.append("tools"),
-                     beside_files=lambda *a, **k: ran2.append("beside"))
-    check("a failed update never runs the release-file steps",
-          code2 == 1 and ran2 == [], (code2, ran2))
+                     tool_defaults=lambda *a, **k: ran3.append("tools"),
+                     beside_files=lambda *a, **k: ran3.append("beside"))
+    check("a run that never proved its files never runs the release-file steps",
+          code3 == 1 and ran3 == [], (code3, ran3))
+
+
+def t_the_look_spec_reaches_the_live_folder_even_when_the_proof_never_finishes():
+    # The measured incident, end to end and with the REAL delivery step: the
+    # deploy route carries the file half (VERSION written, bytes proved) and
+    # then the proof suites never finish - the desktop's bound ends the run.
+    # The owner must still be left with the release's look spec, and the run's
+    # report must say so.
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    seen = {}
+
+    def handler(cmd, cwd, on_line, _state):
+        if _is_patcher(cmd):
+            for line in _MEASURED_REFUSAL:
+                on_line(line)
+            return 1
+        # The suite phase never finishes: an ambiguous runner on every pass,
+        # which is exactly what the desktop's bound does to this tool (its
+        # output stops and the app ends it), from this side of the pipe.
+        seen.setdefault(
+            "spec_at_first_suite",
+            (backend / U.VISUAL_SPEC_NAME).exists()
+            and (backend / U.VISUAL_SPEC_NAME).read_bytes()
+            == (repo / U.VISUAL_SPEC_REL).read_bytes())
+        on_line("ok    test_a.py                       0.1s")
+        return None
+
+    said = []
+    code = U.update(repo, backend, "responsive", run=FakeRun(handler),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json",
+                    deploy=_deploy_ok(backend, version="0.2.487"))
+    tail = "\n".join(said)
+    check("a proof phase that never finishes is still an honest failed update",
+          code == 1 and "DONE WITH PROBLEMS" in tail, (code, said[-5:]))
+    check("... and the release's look spec was already delivered BEFORE the "
+          "first proof suite, while the file half was proved",
+          seen.get("spec_at_first_suite") is True, seen)
+    check("... the live copy really is the release's own spec",
+          (backend / U.VISUAL_SPEC_NAME).read_bytes()
+          == (repo / U.VISUAL_SPEC_REL).read_bytes(),
+          (backend / U.VISUAL_SPEC_NAME).read_bytes()[:40])
+    check("... and the run report carries one verbatim BESIDE: line saying what "
+          "reached the PC",
+          sum(1 for line in said if line.startswith("BESIDE: ")) == 1
+          and any(line.startswith("BESIDE: ") and "wrote" in line
+                  and U.VISUAL_SPEC_NAME in line for line in said),
+          [line for line in said if line.startswith("BESIDE: ")])
+
+    # A deploy that never proved the bytes/markers is the other direction: the
+    # spec must NOT be delivered then - the file half is not proved, so nothing
+    # the release owns is written on a claim.
+    root2 = _make_root()
+    repo2, backend2 = _make_repo(root2)
+    before = (repo2 / U.VISUAL_SPEC_REL).read_bytes()
+    said2 = []
+    refused = ("REFUSED: the working tree is at HEAD attacker but --ref deadbeef "
+               "is other")
+    code2 = U.update(repo2, backend2, "responsive",
+                     run=FakeRun(_refusal_then_suites(repo2, backend2)),
+                     say=said2.append, clock=lambda: 0.0,
+                     timings_path=root2 / "timings.json",
+                     deploy=_deploy_refused(refused))
+    check("a deploy that did not prove its bytes+markers delivers no look spec",
+          code2 == 1
+          and not (backend2 / U.VISUAL_SPEC_NAME).exists()
+          and not any(line.startswith("BESIDE:") for line in said2),
+          (code2, [line for line in said2 if line.startswith("BESIDE:")]))
+    check("... and the release's own spec is untouched",
+          (repo2 / U.VISUAL_SPEC_REL).read_bytes() == before)
+
+
+def t_a_look_spec_that_cannot_be_delivered_never_fails_the_update():
+    # The step is content, not proof: a program folder whose desktop spec cannot
+    # be read still finishes the backend half, and says which read failed.
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    (repo / U.VISUAL_SPEC_REL).unlink()
+    said = []
+    code = U.update(repo, backend, "responsive",
+                    run=FakeRun(_staged_handler(repo, backend, suites="ok")),
+                    say=said.append, clock=lambda: 0.0,
+                    timings_path=root / "timings.json")
+    tail = "\n".join(said)
+    check("an undeliverable look spec leaves a PROVEN backend update proven",
+          code == 0 and "ALL DONE - the backend is patched and proven" in tail,
+          (code, said[-5:]))
+    check("... and says exactly which read failed, verbatim",
+          any(line.startswith("BESIDE: ")
+              and "NOT delivered" in line and "could not be read" in line
+              for line in said), [line for line in said if line.startswith("BESIDE:")])
+
+
+def t_the_tool_lines_its_own_printout_so_the_desktop_sees_progress():
+    # The desktop's progress bound tells a working run from a wedged one by
+    # whether the run's log is still growing, so this tool's own printout is
+    # line-buffered. The helper must never break a run on a stream it cannot
+    # reconfigure (a test capture, an old Python).
+    class NoReconfigure:
+        def write(self, _text):
+            pass
+
+        def flush(self):
+            pass
+
+    real = sys.stdout
+    sys.stdout = NoReconfigure()
+    try:
+        U.line_buffered_stdout()          # a stream with no reconfigure: no crash
+    finally:
+        sys.stdout = real
+    check("line buffering never breaks an update on a stream it cannot reconfigure",
+          True)
+    with redirect_stdout(io.StringIO()) as captured:
+        U.line_buffered_stdout()
+        print("one complete line")
+    check("... and a real capture still receives whole lines",
+          captured.getvalue() == "one complete line\n", captured.getvalue())
 
 
 # ==========================================================================
