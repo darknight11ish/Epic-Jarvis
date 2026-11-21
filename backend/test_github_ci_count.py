@@ -392,6 +392,31 @@ def t_two_red_runs_are_counted_as_two():
           "CI: failure" in text and "audit: failure" in text, text)
 
 
+def t_green_checks_with_a_still_going_run_say_still_going():
+    """RULING 5.2: checks green is not "everything finished" while a run is going.
+
+    Every check run on the head commit passed, and one workflow run on the same
+    commit has not finished. The answer must say the checks are green AND that
+    the run is still going - it must never call that run failing.
+    """
+    checks = json.dumps({"total_count": 2, "check_runs": [
+        {"id": 1, "name": "backend", "status": "completed",
+         "conclusion": "success"},
+        {"id": 2, "name": "audit", "status": "completed",
+         "conclusion": "success"}]})
+    fake = _fake(runs=_runs(_run(4242, "CI", conclusion=None,
+                                 status="in_progress")), checks=checks)
+    out = _run_one("pr", "7", fetch=fake)
+    text = out.get("text", "")
+    check("green checks are reported as finished successfully",
+          "Every check on pull request #7" in text
+          and "finished successfully" in text, text)
+    check("... and the still-going run is said to be still going",
+          "one ci run on that same commit is still going" in text.lower(), text)
+    check("... and it is never called failing",
+          "failed" not in text.lower() and "failing" not in text.lower(), text)
+
+
 def t_failed_and_pending_runs_are_grouped_separately():
     """RULING 5.2: a failed run under the failing half, a pending one apart.
 
@@ -547,6 +572,7 @@ if __name__ == "__main__":
                t_two_still_going_runs_are_named_and_counted_as_pending,
                t_one_red_run_is_never_called_more_than_one,
                t_two_red_runs_are_counted_as_two,
+               t_green_checks_with_a_still_going_run_say_still_going,
                t_failed_and_pending_runs_are_grouped_separately,
                t_the_check_run_failure_is_still_the_authority_when_readable,
                t_an_unreadable_check_runs_answer_is_said_not_guessed,

@@ -7164,7 +7164,8 @@ def _ci_pending_runs_clause(pending: list) -> str:
     if not pending:
         return ""
     verb = "is" if len(pending) == 1 else "are"
-    return (f"\n{_ci_runs_count(pending)} on that same commit {verb} still "
+    count = _ci_runs_count(pending)
+    return (f"\n{count[0].upper() + count[1:]} on that same commit {verb} still "
             f"going: {_ci_run_names(pending)}. Nothing is known about them yet "
             f"- ask again when they finish.")
 
