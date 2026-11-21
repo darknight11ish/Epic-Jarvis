@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -104,6 +106,12 @@ internal fun ProjectsSection(
     var plansMissing by remember { mutableStateOf(false) }
     var quickWords by remember { mutableStateOf("") }
     var quickTargetId by remember { mutableStateOf<String?>(null) }
+    // Ruling 5.7: a Done tap on an item whose plan read still shows a linked PR
+    // open or a linked job running/waiting asks ONCE first - the task and the
+    // warning whose "Mark done anyway" is the one tap that sends.
+    var confirmDone by remember {
+        mutableStateOf<Pair<ProjectPlan.Task, ProjectPlan.DoneStep.Ask>?>(null)
+    }
 
     // A card this screen caused is answered elsewhere; read again when the
     // queue changes while one waits.
@@ -221,6 +229,15 @@ internal fun ProjectsSection(
         }
     }
 
+    /**
+     * The ONE status change a Done tap makes, once no warning stands in its way.
+     * The request is built by [ProjectPlan.doneStep] - never here, and never a
+     * second time on the confirm path: there is one builder and one route.
+     */
+    fun markDone(request: ProjectPlan.Request) {
+        change("work_item_status", request.path, request.body, ProjectPlan.w("done_said"))
+    }
+
     Section(Projects.w("title"), trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
             val shownList = list
@@ -259,7 +276,10 @@ internal fun ProjectsSection(
                     // PM4: Next 3 ready tasks, from the PC's own ready order and
                     // capped at ProjectPlan.READY_CAP - the same cap the voice
                     // answer keeps. A tap on Done is ONE status change through
-                    // the store's existing path (its own receipt/Undo).
+                    // the store's existing path (its own receipt/Undo); when the
+                    // plan read still shows the item's linked PR open or its
+                    // linked job running/waiting, the tap asks once first and
+                    // sends only on "Mark done anyway" (ruling 5.7).
                     Gap(10)
                     Label(ProjectPlan.w("ready_title"))
                     val readyTasks = ProjectPlan.readyTasks(plans.values)
@@ -301,12 +321,10 @@ internal fun ProjectsSection(
                                             )
                                         },
                                         onClick = {
-                                            val req = ProjectPlan.doneRequest(t.projectId, t.id)
-                                            if (req == null) {
-                                                said = "Not changed."
-                                            } else {
-                                                change("work_item_status", req.path, req.body,
-                                                    ProjectPlan.w("done_said"))
+                                            when (val step = ProjectPlan.doneStep(t.projectId, t.item)) {
+                                                null -> said = "Not changed."
+                                                is ProjectPlan.DoneStep.Send -> markDone(step.request)
+                                                is ProjectPlan.DoneStep.Ask -> confirmDone = t to step
                                             }
                                         },
                                     )
@@ -440,6 +458,28 @@ internal fun ProjectsSection(
                 Gap(6)
                 Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
                     modifier = Modifier.liveStatus())
+            }
+            // Ruling 5.7: one confirmation before a Done tap whose work item has
+            // a linked PR still open or a linked job still running/waiting. The
+            // warning is the plan read's own words (ProjectPlan.doneStep); "Mark
+            // done anyway" sends the SAME one request the immediate tap would
+            // have sent, and "Cancel" only puts the dialog away - nothing else.
+            confirmDone?.let { (_, step) ->
+                AlertDialog(
+                    onDismissRequest = { confirmDone = null },
+                    text = { Text(step.warning.message) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmDone = null
+                            markDone(step.request)
+                        }) { Text(step.warning.confirm) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDone = null }) {
+                            Text(step.warning.cancel)
+                        }
+                    },
+                )
             }
         }
     }

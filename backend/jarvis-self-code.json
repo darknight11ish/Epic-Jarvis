@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "fdc800d8940571149506296b5f85ca9e14621d1e",
- "built_at": "2026-11-20T22:12:04-08:00",
+ "ref": "c96e1c52a70d86850a5fef43486f38cb0badbfd6",
+ "built_at": "2026-11-21T10:34:58-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1210,6 +1210,7 @@
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Pictures.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/PlainErrors.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Progress.kt",
+    "jarvis-client/app/src/main/java/com/jarvis/client/net/ProjectPlan.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Projects.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/PromptCoach.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Protected.kt",
@@ -1733,6 +1734,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/PrivateAloudContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PrivateAloudTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ProgressTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/ProjectPlanTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/ProjectsTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PromptCoachGateTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/PromptCoachTest.kt",
@@ -1959,7 +1961,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 1040,
+   "file_count": 1042,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -3952,6 +3954,7 @@
     "backend/test_email_draft.py",
     "backend/test_email_send.py",
     "backend/test_embedding_guard.py",
+    "backend/test_enable_new_tools.py",
     "backend/test_energy.py",
     "backend/test_events_pump.py",
     "backend/test_extraction_wiring.py",
@@ -4474,7 +4477,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 733,
+   "file_count": 734,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -5365,6 +5368,7 @@
     "tools/check_zero_jargon.py",
     "tools/clean-worktree-targets.ps1",
     "tools/deploy_hud_whitelist.py",
+    "tools/enable_new_tools.py",
     "tools/field_battery.py",
     "tools/fieldtest_run.py",
     "tools/find-flat-regions.ps1",
@@ -5609,7 +5613,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 558,
+   "file_count": 559,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -6168,111 +6172,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "fdc800d8940571149506296b5f85ca9e14621d1e",
-   "date": "2026-11-20",
-   "subject": "chore(generated): refresh the recent-changes module and the docs size"
+   "sha": "c96e1c52a70d86850a5fef43486f38cb0badbfd6",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1444 from darknight11ish/chore/roll-decisions-2-2026-11-21"
   },
   {
-   "sha": "3c8f0747f1411c1e5d70e7185b6bac314388afe2",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1428 from darknight11ish/chore/roll-decisions-2026-11-20-late"
+   "sha": "9c386a7ce0e4811501e16856a3c89e894be8ead2",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1443 from darknight11ish/chore/roll-changelog-2-2026-11-21"
   },
   {
-   "sha": "8f0df2681362dc6dd75ccb75eb25fe74ca7cedc7",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1427 from darknight11ish/chore/roll-changelog-2026-11-20-late"
+   "sha": "de020ae480dc7be8ad053fbd435d1733003969a1",
+   "date": "2026-11-21",
+   "subject": "docs(decisions): roll the one fragment into docs/DECISIONS.md"
   },
   {
-   "sha": "d83cf9e80f56cd4de203acca53ff5dc31fd97995",
-   "date": "2026-11-20",
-   "subject": "chore(decisions): roll the ten fragments into DECISIONS.md"
+   "sha": "f2c925c587229841f2fafa6dc2ca077525e712fd",
+   "date": "2026-11-21",
+   "subject": "docs(changelog): roll the one fragment into CHANGELOG.md"
   },
   {
-   "sha": "e59fb9171265d789b26818c72afe6bb56354b74f",
-   "date": "2026-11-20",
-   "subject": "chore(changelog): roll the ten fragments into CHANGELOG.md"
+   "sha": "0c3559b7593bfa7ed3fa2046e992be6c9421d87d",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1442 from darknight11ish/fix/the-proof-stage-says-it-is-alive-2026-11-21"
   },
   {
-   "sha": "faf028cd024c139b99ff1e77a3b4e509980fa2f7",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1424 from darknight11ish/feat/phone-listener-in-status-2026-11-20"
+   "sha": "dabb0c6276a43b24e77a7fa21c7f93269388b1bb",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1441 from darknight11ish/chore/roll-decisions-2026-11-21"
   },
   {
-   "sha": "5cba21b2a1e628ab0eba9a75b5bd14f65575bd97",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1426 from darknight11ish/fix/the-cockpit-says-when-nothing-is-ready-2026-11-20"
+   "sha": "e5847254a5cd6d4534405dbd8d5fa0982b329494",
+   "date": "2026-11-21",
+   "subject": "fix: the proof stage says it is alive so the silence bound ends only a real hang"
   },
   {
-   "sha": "97edfab81dd41258eb499cc6c4e7a4a36f905c66",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1425 from darknight11ish/fix/the-update-card-reads-its-folders-2026-11-20"
+   "sha": "4fcd311ad7607fb420d1ee097a7f8d0f9cf6e357",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1440 from darknight11ish/chore/roll-changelog-2026-11-21"
   },
   {
-   "sha": "fa3842b376a6cb7497257a587c7ea535c9cdeb25",
-   "date": "2026-11-20",
-   "subject": "merge: carry main into the phone-listener status change"
+   "sha": "5c85e41859ed370a230d70b52ace4a025174705c",
+   "date": "2026-11-21",
+   "subject": "docs(decisions): roll the 10 fragments into docs/DECISIONS.md"
   },
   {
-   "sha": "955b59ecab2a7cdb69062f434a6beda0355a5f53",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1423 from darknight11ish/fix/the-deploy-carries-the-three-hud-deltas-2026-11-20"
+   "sha": "613c697a7ccf5a5baca68584d9ecefd3aa00fcbe",
+   "date": "2026-11-21",
+   "subject": "docs(changelog): roll the 10 fragments into CHANGELOG.md"
   },
   {
-   "sha": "fc5888b2f91a0e4adc7ad3f02b8fddcc33615f54",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1420 from darknight11ish/feat/the-plan-store-has-tools-2026-11-20"
+   "sha": "9d08a772d7a8a8ffb3f21049a1c1e6d85fe08df4",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1439 from darknight11ish/fix/the-finish-measures-progress-2026-11-21"
   },
   {
-   "sha": "f33f359241acdd135941c372bb729083ce50c581",
-   "date": "2026-11-20",
-   "subject": "fix(github): the cockpit says when nothing is ready to merge"
+   "sha": "60efb1c66d780671d63902402e530909cf49f3eb",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1438 from darknight11ish/feat/projects-kanban-ready-list-2026-11-21"
   },
   {
-   "sha": "ca56d010d60bc93e61c941f34a85ec6491760cfc",
-   "date": "2026-11-20",
-   "subject": "ci: re-run on main after the base retarget (no content change)"
+   "sha": "ed12346ee8609fcd8c8809096d3569ae646440ea",
+   "date": "2026-11-21",
+   "subject": "fix: put the owner's everyday model lane back after the proof suites"
   },
   {
-   "sha": "cf8df3b358d0e197b31c12924e6f9380703859eb",
-   "date": "2026-11-20",
-   "subject": "chore: drop two helper scripts that git add -A picked up (not part of this change)"
+   "sha": "38358ff8bf8db98e85bf30d68bf913c61b0bcd9c",
+   "date": "2026-11-21",
+   "subject": "test: the release-file report lines are read from the whole run, not its tail"
   },
   {
-   "sha": "2541ecc55d827501a88e9d6d1c06b47f144cb01a",
-   "date": "2026-11-20",
-   "subject": "fix(updates): the card reads the folders it saved, and names the real button"
+   "sha": "6ca2cd958a11702d7cd241cbce6fb9a3178cde37",
+   "date": "2026-11-21",
+   "subject": "merge: carry main (the phone PM4 half, #1436) into the desktop plan board"
   },
   {
-   "sha": "7221eb0e935fcf605dd462d862584959f92dfdd7",
-   "date": "2026-11-20",
-   "subject": "fix(patches): regenerate tasks.patch after the base HUD grows (2026-11-20)"
+   "sha": "b5e42d94eb1ceea58cc6e54f16ff1787b79c8787",
+   "date": "2026-11-21",
+   "subject": "fix: the update's bound measures progress, and every ending re-reads both versions"
   },
   {
-   "sha": "4d8d80b3208fa064e0a23f4e7c9fd276c2b7dd87",
-   "date": "2026-11-20",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/phone-listener-in-status-2026-11-20"
+   "sha": "039a63914cb7c834a41b4c091f665dc1fe353bb4",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1436 from darknight11ish/feat/projects-phone-ready-list-2026-11-21"
   },
   {
-   "sha": "c08196c47e4af40aa1d619aa1bedee10091f5c56",
-   "date": "2026-11-20",
-   "subject": "Merge pull request #1419 from darknight11ish/feat/hud-router-strikes-2026-11-20"
+   "sha": "6e234facd94c98e4dc44107097a2da4c0444c7ab",
+   "date": "2026-11-21",
+   "subject": "Merge pull request #1437 from darknight11ish/fix/the-deploy-route-can-actually-load-2026-11-21"
   },
   {
-   "sha": "45e877d8767736939e1aa9426d5199ccb6a790bd",
-   "date": "2026-11-20",
-   "subject": "feat(hud): the phone listener is visible and honest in /api/status (2026-11-20)"
+   "sha": "6d74fb99f82c1b1b7fbc088ca692b1d0f584e8ab",
+   "date": "2026-11-21",
+   "subject": "fix(projects): plain words in the phone's error lines (the zero-jargon ratchet)"
   },
   {
-   "sha": "64f14845e8d9ef948d6f87bbae759fda5b386f6a",
-   "date": "2026-11-20",
-   "subject": "fix(test): the retirement-wiring copy of the more_tools pin moves to 560 (2026-11-20)"
+   "sha": "a0bd3e647025884a2feb4359e26a99977fca9317",
+   "date": "2026-11-21",
+   "subject": "fix(desktop): the plan board's command keeps its flat IPC arguments (clippy)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1502
+   "files": 1503
   },
   {
    "path": "jarvis-desktop/",
@@ -6282,7 +6286,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 1000
+   "files": 1002
   },
   {
    "path": "docs/",
@@ -6297,7 +6301,7 @@
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 310
+   "files": 311
   },
   {
    "path": "videos/",
@@ -6391,8 +6395,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5507,
-  "covered": 5019,
+  "tracked_files": 5511,
+  "covered": 5023,
   "excluded": 488,
   "subsystems": 27
  },

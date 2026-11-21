@@ -192,6 +192,18 @@ PLAN_WORDS = {
     "done": "Done",
     "done_said": "Marked done.",
     "done_row": "Mark {title} in {project} done",
+    # Ruling 5.7 (2026-11-21): the one-tap warning before a Done tap when the
+    # plan read still shows a live link - one PR, one job, both, and the two
+    # buttons. "Mark done anyway" is the confirmation; "Cancel" sends nothing.
+    "done_warning_pr": "Linked PR #{n} is still open",
+    "done_warning_job": "The linked job is still running",
+    "done_warning_job_waiting": "The linked job is still waiting on you",
+    "done_warning_both": "Linked PR #{n} is still open, and the linked job is still running",
+    "done_warning_both_waiting": (
+        "Linked PR #{n} is still open, and the linked job is still waiting on you"),
+    "done_warning_ask": "{why} - mark done anyway?",
+    "done_anyway": "Mark done anyway",
+    "done_cancel": "Cancel",
     "quick_title": "Quick add a task",
     "quick_placeholder": "The task, in your words",
     "quick_under": "It is saved exactly as you type it, with no date added.",

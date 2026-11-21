@@ -5496,6 +5496,16 @@ what is missing is only the Settings screen agreeing about who turned it off.
   the PC's is unchanged: choosing a coding project's folder, writing a
   benchmark's command, the 1-click Obsidian export (that page's own
   `edit_vault_note` card, PM4 desktop), and every "what asks first" rule.
+  **Ruling 5.7 (2026-11-21) adds the one question inside that surface:** a Done
+  tap on a work item whose plan read still shows a linked PR open, or a linked
+  durable job still running/waiting, shows ONE confirmation naming it ("Linked
+  PR #42 is still open - mark done anyway?"), and its "Mark done anyway" is the
+  SAME one status change with the same receipt while "Cancel" sends nothing. An
+  unlinked item, a merged/closed PR and a link whose state the PC has not read
+  yet tap through at once - a missing link state never asks, and nothing is
+  hard-blocked. The phone reads this from the plan read it already has: the
+  PR's own projected state, and PM3's job-to-status projection
+  (`in_progress`/`waiting_approval`); no route, card class or state is added.
   NOT-TESTABLE on this desk: the Compose screen drawing on a real phone - the
   JVM suite proves the parsers, the cap, the single request per tap against the
   real answers, and source-pins the screen's calls; only a device shows the

@@ -403,7 +403,10 @@ class ProjectPlanTest {
         assertTrue("each project's plan is one read", plate.contains("ProjectPlan.planPath"))
         assertTrue("the ready list comes from the plan read", plate.contains("ProjectPlan.readyTasks"))
         assertTrue("the spoken summary is the same data, capped", plate.contains("ProjectPlan.spoken"))
-        assertTrue("the tap is the tested builder", plate.contains("ProjectPlan.doneRequest"))
+        assertTrue("the tap is the tested builder, warning and all",
+            plate.contains("ProjectPlan.doneStep"))
+        assertTrue("the one request a Done tap sends is the tested builder",
+            plate.contains("markDone(step.request)"))
         assertTrue("Quick Add is the tested builder", plate.contains("ProjectPlan.addRequest"))
         assertTrue("a tap posts the one existing status change",
             plate.contains("change(\"work_item_status\""))
