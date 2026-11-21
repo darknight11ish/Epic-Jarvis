@@ -728,6 +728,21 @@ def t_hygiene():
              # jarvis_gate.py not at all, so it rewrites nothing this patch wrote, and
              # it sits immediately before plugin-loader.patch, the last entry of all.
              "local-model-guard.patch",
+             # router-strikes.patch (2026-11-20, ruling 6.1's HUD half): SEVEN
+             # hunks, all in jarvis_hud.py - the relay's local-failure recorder, the
+             # clear on a successful local turn, and `conversation=` on the router
+             # call. No gate list entry, no tier row, no _RISK row, no _TOOL_ACTIONS
+             # line, and no hunk in jarvis_gate.py, so it rewrites nothing this patch
+             # wrote; it sits immediately before plugin-loader.patch, the last entry.
+             "router-strikes.patch",
+             # crisis-route.patch (2026-11-20, ruling 5.2): ONE hunk in jarvis_hud.py -
+             # the crisis turn's route header gains `crisis: true` and, where a cloud
+             # lane was in play or the taint gate held the turn, `cloud_refused:
+             # "crisis"`. No gate is weakened, no gate list entry, tier row, _RISK
+             # row or _TOOL_ACTIONS line changes, and it has no jarvis_gate.py hunk, so
+             # it rewrites nothing this patch wrote; it sits immediately before
+             # plugin-loader.patch, the last entry.
+             "crisis-route.patch",
              "skill-scan-wiring.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order

@@ -1,0 +1,108 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1617,6 +1617,48 @@
+     return _Refused(_private_refusal())
+ 
+ 
++def _note_local_failure(lane: str, local_model: str, conversation) -> None:
++    """Record ONE local relay failure for a conversation, and nothing else.
++
++    router-strikes.patch (2026-11-20, external review ruling 6.1's HUD half):
++    `jarvis_router.note_local_failure()` and `choose(conversation=, coding=)`
++    shipped in #1408, and NOTHING CALLED THEM. This is the relay's own
++    local-failure point: a turn the local model could not answer was recorded
++    here, so the THIRD attempt at a coding turn in the same conversation may
++    reach a cloud lane under 0.40 - after every safety gate has still run, and
++    still only with the owner's yes / this PC's standing switch.
++
++    A cloud lane is never recorded: only a local attempt that produced no
++    usable answer is evidence about the local model. Nothing is decided here,
++    nothing is sent, and only the conversation id is kept - `jarvis_router`
++    stores a count, never a word.
++    """
++    if lane != local_model:
++        return
++    try:
++        import jarvis_router
++        jarvis_router.note_local_failure(conversation)
++    except Exception:
++        pass
++
++
++def _clear_local_failures(lane: str, local_model: str, conversation) -> None:
++    """A local turn really produced an answer: forget its conversation's count.
++
++    router-strikes.patch (2026-11-20, ruling 6.1). Two failures are evidence
++    the local model cannot answer a coding question; a later success is
++    evidence it can answer THIS conversation again, so the count starts over.
++    A cloud lane clears nothing, and a failure never clears anything.
++    """
++    if lane != local_model:
++        return
++    try:
++        import jarvis_router
++        jarvis_router.reset_local_failures(conversation)
++    except Exception:
++        pass
++
++
+ def _temporary_chat(body) -> bool:
+     if _private_chat(body):
+         # private-chat.patch: a private chat is a temporary chat too - memory,
+@@ -5243,6 +5243,7 @@
+             return
+         except Exception as exc:
+             try:
++                _note_local_failure(lane, local_model, _conversation)
+                 # chat-stream.patch: what to DO, first. The cloud line used
+                 # to say "Start it with `uv run jarvis serve`" - a program
+                 # this setup never installs.
+@@ -5264,3 +5264,4 @@
++        _conversation = body.get("conversation_id") or ""
+         lane = decision.lane
+         upstream = None
+         first_error = None
+@@ -5666,6 +5666,15 @@
+                     # leaving, by returning rather than raising, so only an
+                     # answer that really finished is recorded.
+                     _turn = _turn or {}
++                    # router-strikes.patch (2026-11-20): the local answering
++                    # loop reports a failed turn by RETURNING a summary with no
++                    # finish_reason (Ollama down, model missing, a tool-loop bug),
++                    # and a real answer by returning one. A client that went away
++                    # is neither: nobody is there to record it for.
++                    if _turn.get("finish_reason"):
++                        _clear_local_failures(lane, local_model, _conversation)
++                    elif not _turn.get("client_gone"):
++                        _note_local_failure(lane, local_model, _conversation)
+                     # chat-history.patch: the answer and the tools that ran,
+                     # for this PC's record of the turn (in `finally`, below).
+                     _history["turn"] = _turn
+@@ -5798,6 +5798,7 @@
+                         # cut off by the phone dropping out never reaches here.
+                         if _speed is not None:
+                             _speed.finish(lane)
++                        _clear_local_failures(lane, local_model, _conversation)
+                     except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+                         # The phone dropped off mid-stream. Headers are already
+                         # sent, so there is nothing to report down a socket that
+@@ -5810,5 +5810,6 @@
+                         _abort(upstream)
+                         return
+         except urllib.error.HTTPError as exc:
++            _note_local_failure(lane, local_model, _conversation)
+             self._send(exc.code, {
+                 "error": exc.read().decode("utf-8", "replace")[:600],
+@@ -5974,6 +5974,12 @@
+                 # answered before the private check, the budget and the offer:
+                 # there is nothing to ask about a turn that cannot go.
+                 has_file=_file_turn(body),
++                # router-strikes.patch: the router keys the 2-strike
++                # fallback on THIS conversation id, so two local failures
++                # in one chat can let a coding turn's third attempt reach
++                # the cloud. A chat with no id shares the empty key; a new
++                # id starts at zero by construction.
++                conversation=body.get("conversation_id") or "",
+             )
+             if jarvis_side_memory and decision.gate == "unavailable":
+                 decision.reason = "escalation off while Jarvis injects memory itself"
