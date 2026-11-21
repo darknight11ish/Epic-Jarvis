@@ -584,15 +584,17 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     the 26-line `/api/deny` note block 2026-11-06's PR 2 added to that same
     route, and the 128 lines the 2026-11-19 project-chat lane added above the
     anchor - the `/api/chat` project id and its refusal, the project memory
-    scoping, and the project context block). **526 lines sit before this
-    anchor now** - 128 more than the 398 this pin was last measured at; that
-    398 was itself 26 more than the 323 before it plus the 47 the memory-latch
-    change of 2026-11-17 added to the HUD above it, plus the 2 that PR #1330's
-    own ollama-URL change added to `jarvis-backend/jarvis_hud.py`. All of these
-    are lines the HUD gained, so the generated number moved by the lines added,
-    not by anything the patch does. The committed patch says
+    scoping, and the project context block). **681 lines sit before this
+    anchor now** - 155 more than the 526 this pin was last measured at; the
+    526 was itself 128 more than the 398 before it, which was 26 more than the
+    323 plus the 47 the memory-latch change of 2026-11-17 added to the HUD
+    above it, plus the 2 that PR #1330's own ollama-URL change added to
+    `jarvis-backend/jarvis_hud.py`. The 155 on 2026-11-20 are the phone-facing
+    listener's block in the published base HUD (ruling 5.1) - lines the HUD
+    gained, so the generated number moved by the lines added, not by anything
+    the patch does. The committed patch says
     `@@ -6591,3 +6591,25 @@` and the generator derives
-    `@@ -7117,3 +7117,25 @@`. Both files are 29 lines and line 3 is the only
+    `@@ -7272,3 +7272,25 @@`. Both files are 29 lines and line 3 is the only
     difference. That made CI red on EVERY branch, including ones that never
     touch this patch - while the 143-patch rehearsal passed with the stale
     number, which is the proof it applies.
@@ -633,13 +635,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     check("the committed patch's header is the stale one this was measured on",
           committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
     check("the generated header is the one this was measured on",
-          generated[2] == b"@@ -7117,3 +7117,25 @@", generated[2])
+          generated[2] == b"@@ -7272,3 +7272,25 @@", generated[2])
 
     ok, summary, why = gen.check(have, want)
     check("the committed patch PASSES the semantic check even though its hunk "
-          "header is 526 lines stale", ok, why)
+          "header is 681 lines stale", ok, why)
     check("... and the skew is reported, not swallowed",
-          ok and "526 line(s)" in (summary or ""), summary)
+          ok and "681 line(s)" in (summary or ""), summary)
 
     def must_fail(label, bad):
         ok, summary, why = gen.check(bad, want)

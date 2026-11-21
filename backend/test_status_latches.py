@@ -136,6 +136,13 @@ def _status(*, gate=_UNSET, cache=None, poll=None) -> dict:
         "jarvis_injects_memory": lambda: False,
         "re": __import__("re"),
         "jarvis_gate": GATE if gate is _UNSET else gate,
+        # Ruling 5.1: the route also builds the phone-facing listener field.
+        # The lifted block has no module around it, so the two helpers are
+        # stubs here; the field itself is proven in its own suite
+        # (test_phone_listener_status.py), which drives the real HUD module.
+        "_phone_listener_status": lambda: {"configured": False, "listening": False,
+                                           "bind_address": None},
+        "_phone_listener_degraded": lambda _status: [],
     }
     source = ("def _route(self, path):\n"
               + textwrap.indent(textwrap.dedent(_route_block()), "    "))

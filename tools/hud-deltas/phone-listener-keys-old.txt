@@ -1,0 +1,2 @@
+                "busy_reason": _busy_reason_for_status(),
+            })

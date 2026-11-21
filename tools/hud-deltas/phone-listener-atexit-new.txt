@@ -1,0 +1,2 @@
+    atexit.register(_release_gpu)
+    atexit.register(_phone_listener_clear)

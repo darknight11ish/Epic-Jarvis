@@ -169,6 +169,58 @@ def t_the_recorder_cannot_pass_a_false_check():
           row["fail"] == 1 and row["pass"] == 1, row)
 
 
+def t_phone_listener_field_is_the_preflight_s_authority():
+    """Ruling 5.1: PREFLIGHT reads /api/status's `phone_listener`, when it exists.
+
+    The listener is a second HUD process started in the DESKTOP's environment;
+    this battery cannot see that environment, so the HUD's own field is the only
+    honest word. Fake payloads drive the pure decision, then the preflight block
+    is checked to read the field BEFORE its settings fallback.
+    """
+    absent, probs = F.phone_listener_verdict(None)
+    check("no phone_listener field -> absent (an older HUD, never a guess)",
+          absent == "absent" and probs == [], (absent, probs))
+    absent, _p = F.phone_listener_verdict("not an object either")
+    check("... and a non-object field is absent too", absent == "absent", absent)
+
+    off, probs = F.phone_listener_verdict(
+        {"configured": False, "listening": False, "bind_address": None})
+    check("configured false -> off (an honest SKIP, not a failure)",
+          off == "off" and probs == [], (off, probs))
+
+    ok, probs = F.phone_listener_verdict(
+        {"configured": True, "listening": True,
+         "bind_address": "100.75.21.228:4719"})
+    check("configured and listening -> ok", ok == "ok" and probs == [], (ok, probs))
+
+    broken, probs = F.phone_listener_verdict(
+        {"configured": True, "listening": False,
+         "bind_address": "100.75.21.228:4719"})
+    check("configured but not listening -> broken, never ok",
+          broken == "broken", (broken, probs))
+    check("... and the problem NAMES the address the phone cannot reach",
+          probs and "100.75.21.228:4719" in probs[0]
+          and "offline" in probs[0], probs)
+    broken, probs = F.phone_listener_verdict(
+        {"configured": True, "listening": False, "bind_address": None})
+    check("... with no address, it still FAILS and names the port",
+          broken == "broken" and any("4719" in p for p in probs), probs)
+
+    # The section itself must READ the field, before the settings fallback.
+    source = Path(F.__file__).read_text(encoding="utf-8")
+    start = source.index("def section_preflight(")
+    end = source.index("\ndef ", start + 1)
+    block = source[start:end]
+    check("PREFLIGHT asks /api/status for the field", '"/api/status"' in block
+          and '.get("phone_listener")' in block)
+    check("... and decides with phone_listener_verdict()", "phone_listener_verdict(" in block)
+    check("... and a broken field is an EXPECT (FAIL), not an info line",
+          "REC.expect(\"the phone-facing listener configured on this PC answers\",\n"
+          "                   False" in block, block[:400])
+    check("... the settings-based two-address check remains the absent-field fallback",
+          "two_address_verdict(bind" in block
+          and block.index("phone_listener_verdict(") < block.index("two_address_verdict(bind"))
+
 
 def t_the_stale_cloud_override_is_stamped_and_never_rescues_an_unknown():
     verdict, sentence = F.stale_decision("FRESH", False)

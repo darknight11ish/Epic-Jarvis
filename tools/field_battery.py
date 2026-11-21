@@ -235,6 +235,37 @@ def two_address_verdict(bind: str, local_code: int, remote_code: int) -> tuple:
     return ("ok" if not problems else "broken"), problems
 
 
+def phone_listener_verdict(field) -> tuple:
+    """(state, problems) for `/api/status`'s own `phone_listener` field.
+
+    Ruling 5.1 (2026-11-20) makes the HUD the authority on the phone-facing
+    listener, because THAT is the process that can see it: the listener is a
+    second `jarvis_hud.py` started with `JARVIS_HUD_BIND` in the DESKTOP's
+    environment, which this battery cannot read. So when the field exists it is
+    read before anything is inferred from settings:
+
+      * `{"configured": true, "listening": false}` -> "broken", and the problem
+        names the configured address. This is the outage the row exists for:
+        the phones are offline while localhost still looks healthy.
+      * `{"configured": true, "listening": true}` -> "ok".
+      * `{"configured": false, ...}` -> "off": no phone listener is configured
+        on this install, which is an honest SKIP, not a failure.
+      * missing/not an object -> "absent": an older HUD that does not publish
+        the field. The caller falls back to the settings-based two-address
+        check it has always done; absence is never guessed at.
+    """
+    if not isinstance(field, dict):
+        return "absent", []
+    if not field.get("configured"):
+        return "off", []
+    address = str(field.get("bind_address") or "").strip()
+    named = address or f"the configured phone address on port {PORT}"
+    if field.get("listening"):
+        return "ok", []
+    return "broken", [f"phone_listener says a listener is configured at {named} "
+                      f"but nothing answers there (the phones are offline)"]
+
+
 def address_answers(host: str, port: int = PORT) -> int:
     """The HTTP status the HUD answers at `host:port`, or 0 when nothing does.
 
@@ -816,24 +847,41 @@ def section_preflight():
     REC.expect("the spend ledger is readable (read-only)", ledger_ok,
                str(MONEY_FILE) if ledger_ok else ledger_why)
 
-    # THE TWO-ADDRESS CHECK (2026-11-20). The phone-facing listener is a SECOND
-    # HUD process; a restart that loses it leaves the desktop healthy on
-    # localhost while both phones are offline - measured twice. When remote
-    # access is configured, both addresses must answer.
+    # THE PHONE-FACING LISTENER (2026-11-20). It is a SECOND HUD process; a
+    # restart that loses it leaves the desktop healthy on localhost while both
+    # phones are offline - measured twice. Ruling 5.1 makes /api/status the
+    # authority, because the HUD that answers can see the listener's own state
+    # file and probe the socket; this battery runs in ITS environment and cannot
+    # see the desktop's. So the field is read FIRST and trusted when present.
     bind = remote_bind()
     STATE["remote_bind"] = bind
-    if not bind:
-        # No row can be demanded when the install says loopback only: the phone
-        # listener on this PC is started by the desktop app with JARVIS_HUD_BIND
-        # in ITS environment, which this process cannot see. The durable fix is
-        # the HUD reporting phone_listener on /api/status (ruling 5.5, unbuilt).
-        REC.info("remote access is not configured in the settings this battery "
-                 "can read (bind_address is loopback), so there is no second "
+    _pstatus, _pdoc, _, _perr = http_json("/api/status")
+    field = (_pdoc or {}).get("phone_listener") if isinstance(_pdoc, dict) else None
+    state, problems = phone_listener_verdict(field)
+    STATE["phone_listener"] = field
+    if state == "ok":
+        REC.expect(f"the phone-facing listener at {field.get('bind_address')} "
+                   f"answers (reported by /api/status)", True)
+    elif state == "broken":
+        # FAIL, never SKIP: a configured listener that does not answer is the
+        # outage this row was written for, and the problem names the address.
+        REC.expect("the phone-facing listener configured on this PC answers",
+                   False, "; ".join(problems))
+    elif state == "off":
+        REC.info("no phone-facing listener is configured on this install "
+                 "(/api/status says configured: false), so there is no second "
                  "address to check here")
+    elif not bind:
+        # An older HUD with no phone_listener key. Fall back to the settings
+        # this process can read; a listener started in the desktop's environment
+        # is invisible from here, so this remains an honest SKIP.
+        REC.info("remote access is not configured in the settings this battery "
+                 "can read and /api/status carries no phone_listener field, so "
+                 "there is no second address to check here")
     else:
         local_code = address_answers("127.0.0.1")
         remote_code = address_answers(bind)
-        state, problems = two_address_verdict(bind, local_code, remote_code)
+        two_address_verdict(bind, local_code, remote_code)   # the same shape, kept honest
         REC.expect(f"the phone-facing listener answers on {bind}:{PORT}",
                    remote_code != 0, f"nothing answered on {bind}:{PORT}")
         REC.expect("... and localhost answers alongside it",

@@ -1,0 +1,2 @@
+    httpd = _HudServer((bind, HUD_PORT), RequestHandler)
+    _install_shutdown(httpd)
