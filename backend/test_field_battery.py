@@ -3,10 +3,11 @@
 What this proves, with NO HUD, NO network and NO token:
 
 1. `tools/field_battery.py --self-test` runs in a fresh process and exits 0,
-   reporting all 30 cases as expected. That self-test is the battery's own
+   reporting all 37 cases as expected. That self-test is the battery's own
    negative control: it feeds the exact honest answers the build gives AND
    wrong shapes (an invented PR number, a claim with no PR, a wrong defect
-   count) and requires the wrong ones to FAIL.
+   count, a still-going check called a failure) and requires the wrong ones to
+   FAIL.
 2. The two-address preflight's decision is a pure function and it fails when a
    configured non-loopback address answers nothing - the row that would have
    caught the two phone outages - while it is "off" when remote access is not
@@ -51,7 +52,7 @@ def t_the_offline_self_test_runs_and_passes():
                                               "OLLAMA_URL": ""})
     out = (proc.stdout or "") + (proc.stderr or "")
     check("--self-test exits 0 in a fresh process", proc.returncode == 0, out[-800:])
-    check("... and reports all 30 cases as expected", "30/30 self-test cases as expected" in out,
+    check("... and reports all 37 cases as expected", "37/37 self-test cases as expected" in out,
           out[-400:])
     check("... with its explicit PASS result line",
           "RESULT: PASS" in out and "wrong answers still refused" in out, out[-300:])

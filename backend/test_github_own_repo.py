@@ -925,8 +925,8 @@ def t_the_live_battery_tool_calls_answer_real_data():
         BATTERY[3][0], fetch=fetch)
     check("battery 4: the running checks are really read",
           steps[0]["ran"] is True and result.get("ok") is True
-          and ("in_progress" in str(result.get("text", "")).lower()
-               or "did not finish" in str(result.get("text", "")).lower()),
+          and "still going" in str(result.get("text", "")).lower()
+          and "did not finish" not in str(result.get("text", "")).lower(),
           result)
 
     # 5. "What is the latest commit on main in Epic-Jarvis?" - the newest run
