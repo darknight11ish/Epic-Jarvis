@@ -538,6 +538,9 @@ pub async fn projects_read(
 
 /// ONE change to a project, a benchmark, a number, a plan item or the hub
 /// note (see the module note).
+// One optional argument per thing a change can name; Tauri's IPC needs them
+// flat, so the count is the contract with the page rather than a tidy-up.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn projects_write(
     app: AppHandle,
