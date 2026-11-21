@@ -345,13 +345,46 @@ pub struct Where {
     pub blocked: Option<String>,
 }
 
-fn setting(app: &AppHandle, key: &str) -> Option<String> {
-    app.store(commands::SETTINGS_STORE)
-        .ok()
-        .and_then(|store| store.get(key))
-        .and_then(|value| value.as_str().map(str::to_string))
-        .map(|value| value.trim().to_string())
+/// The string at `key` in a settings tree, in either shape the store holds.
+///
+/// MEASURED 2026-11-20: the desktop updated itself to 0.2.484 and then could
+/// not update the backend, saying it did not know where the Jarvis program
+/// folder was, while the settings file really held
+/// `"updates": {"repo_folder": "C:\\Users\\...\\Epic-Jarvis-main"}`. The
+/// store plugin (tauri-plugin-store 2.5) looks up a key LITERALLY, so a dotted
+/// key read misses a value nested under `updates`, and an older copy of this
+/// page wrote the nested shape. Both shapes are therefore read here: the
+/// literal key first (the shape `save_folders` writes), then the dotted path.
+pub(crate) fn setting_text(tree: &serde_json::Value, key: &str) -> Option<String> {
+    let literal = tree.get(key).and_then(|value| value.as_str());
+    let nested = || {
+        let mut parts = key.split('.');
+        let first = parts.next()?;
+        let mut node = tree.get(first)?;
+        for part in parts {
+            node = node.get(part)?;
+        }
+        node.as_str()
+    };
+    literal
+        .or_else(nested)
+        .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn setting(app: &AppHandle, key: &str) -> Option<String> {
+    let store = app.store(commands::SETTINGS_STORE).ok()?;
+    // The plugin's `get` takes one literal key, so the two shapes are gathered
+    // into one small tree and one tested reader decides between them.
+    let first = key.split('.').next().unwrap_or(key);
+    let mut tree = serde_json::Map::new();
+    for name in [key, first] {
+        if let Some(value) = store.get(name) {
+            tree.insert(name.to_string(), value);
+        }
+    }
+    setting_text(&serde_json::Value::Object(tree), key)
 }
 
 /// The backend folder, in the order that trusts the owner's own typing first.
@@ -1250,14 +1283,57 @@ pub fn set_update_folders(
 mod tests {
     use super::{
         backend_folder, folder_of_hud, halves_line, known_mode, normalise_commit, parse_mode_plan,
-        parse_update_lock, read_verdict, refuse, repo_commit, start_blocked_words, tail_of,
-        tool_args, unknown_mode_words, update_lock_is_valid, update_running_words, ModeInfo,
-        UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS, LOCK_CLOCK_SKEW_SECONDS,
-        LOCK_HEARTBEAT_SECONDS,
+        parse_update_lock, read_verdict, refuse, repo_commit, setting_text, start_blocked_words,
+        tail_of, tool_args, unknown_mode_words, update_lock_is_valid, update_running_words,
+        ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
+        LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    // ---- the two shapes the settings file holds (measured 2026-11-20) ----
+
+    #[test]
+    fn a_folder_saved_nested_is_read_back() {
+        // The measured shape on the owner's PC: the page wrote the dotted path
+        // as a tree, and the deploy read it as a literal key, so it found
+        // nothing and refused to update the backend.
+        let tree = serde_json::json!({
+            "updates": {
+                "repo_folder": r"C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main",
+                "backend_folder": r"C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program",
+            }
+        });
+        assert_eq!(
+            setting_text(&tree, "updates.repo_folder").as_deref(),
+            Some(r"C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"),
+        );
+        assert_eq!(
+            setting_text(&tree, "updates.backend_folder").as_deref(),
+            Some(r"C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"),
+        );
+    }
+
+    #[test]
+    fn a_folder_saved_as_a_literal_key_is_still_read() {
+        // The shape this module's own `save_folders` writes.
+        let tree = serde_json::json!({"updates.repo_folder": r"D:\Jarvis"});
+        assert_eq!(
+            setting_text(&tree, "updates.repo_folder").as_deref(),
+            Some(r"D:\Jarvis")
+        );
+    }
+
+    #[test]
+    fn an_empty_or_missing_folder_is_never_a_guess() {
+        let empty = serde_json::json!({"updates": {"repo_folder": "   "}});
+        assert_eq!(setting_text(&empty, "updates.repo_folder"), None);
+        let missing = serde_json::json!({"updates": {}});
+        assert_eq!(setting_text(&missing, "updates.repo_folder"), None);
+        let other = serde_json::json!({"updates": {"repo_folder": 3}});
+        assert_eq!(setting_text(&other, "updates.repo_folder"), None);
     }
 
     // ---- never guessing at a folder -------------------------------------
