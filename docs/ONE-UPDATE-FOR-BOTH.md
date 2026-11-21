@@ -577,3 +577,108 @@ injected output - no real hour is ever waited for:
 changes no other setting, touches no network beyond the one local `/api/self`
 read, and never fetches anything from GitHub. It is the owner's own update
 action continuing, not a new one.
+
+### The proof is bounded, and a deploy-managed install is recognised before it starts (Gemini rulings 5.1, 5.2 and 5.5, 2026-11-21)
+
+The owner's standing rule is that an update finishes - and the ruling that came
+out of the measured runs is why: an end-user update must complete in **minutes,
+not over an hour**. Two changes deliver that, and neither moves a file
+differently.
+
+**5.1 - the proof stage is a bounded post-update subset.** Both in-app paths
+(the "Update everything" press and the automatic finish) run
+`tools/update_backend.py`; both used to run `backend/run_suites.py` over the
+whole CI suite list as their proof, which on this PC is **~48-65 minutes**
+(measured 2026-11-21: the desktop's bound ended a healthy one at 48m 10s). The
+default proof is now the bounded subset below, **9 checks in 4 phases**, and it
+is the only thing the app runs. `--full-proof` keeps today's full sweep,
+unchanged, for a manual developer run - and only that run's ending words claim
+the full check.
+
+What the bounded proof checks, by phase, with the exact command beside it:
+
+| phase | check | the real command |
+|---|---|---|
+| module imports | `py_compile` every module this repository ships whole, from the LIVE folder | in-process `py_compile` (compiled to a throwaway folder, so the install gains no `__pycache__`) |
+| module imports | import every shipped module from the LIVE folder | `python -B -c <import-all source> <live backend> <module names>` - one fresh child, every failure printed by name |
+| instant API answers | the live HUD answers `/api/version`, `/api/status`, `/api/presets` | the LIVE folder's own `jarvis_hud.py` started on a spare loopback port with a one-shot token, three token-carrying GETs, then stopped |
+| live invariants | the egress gate census | `python -B tools/check_egress_gate.py` |
+| live invariants | the approval gate's egress rules | `python -B backend/run_suites.py test_gate_egress.py --backend-path <live> --jobs 1 --ignore-update-lock` |
+| live invariants | the deploy tool's contract | `python -B backend/run_suites.py test_reconcile_live_backend.py --backend-path <live> ...` |
+| live invariants | Projects still work | `python -B backend/run_suites.py test_projects.py --backend-path <live> ...` |
+| look spec & config | the live look spec is the release's copy | structural compare of `<live>/jarvis-visual-spec.json` against `jarvis-desktop/src/jarvis-visual-spec.json` (the same compare `spec_drift.rs` makes) |
+| look spec & config | the live config reads | the live `jarvis-framework.toml` parsed through the same `[tools].enabled` reader the tool-defaults step uses |
+
+**Every command above already existed** - the three invariant suites are named
+by bare file name through the real runner, exactly as the full sweep names them,
+and the egress census is the existing checker. Nothing is a reimplementation,
+and the one generated command is the small import-all child (there is no
+existing command that imports every shipped module from the live folder).
+
+**The ending is honest.** The file half (bytes and release markers) is proved
+exactly as before, and the look spec is still delivered with it. A bounded pass
+ends:
+
+> ALL DONE - the backend is patched and proven by the bounded checks (9 of 9):
+> a subset, not the full suite. The bounded checks were: module imports,
+> instant API answers, live invariants, look spec & config. The full sweep is a
+> developer run only: --full-proof.
+
+That is a claim about the subset and says so in the sentence; it is never "the
+full check passed", and the unqualified full-sweep line is printed only by
+`--full-proof`. ("Both or neither" is untouched: the desktop still reads
+"patched and proven" from the line, and the app path's proof IS the bounded
+pass.)
+
+**The app's bounds are unchanged.** The five-minute proof heartbeat (#1442) is
+still there for a quiet child and for the `--full-proof` sweep; a healthy
+bounded run finishes in a few minutes, so no bound can fire on it.
+
+**5.2 - the card gets real progress, not a percentage.** While the subset runs
+the tool prints exactly one shape per check:
+
+```
+PROOF: Step 2/4 - instant API answers - 1 of 1
+```
+
+`N/4` is the phase (there are four real ones), the phase name is printed
+verbatim, and `x of y` counts the checks done in that phase. The bar is fed the
+same completed work, so it can only reach 100% from the tool's own final verdict.
+
+**5.5 - the deploy-managed install is recognised BEFORE anything runs.** The
+measured failure (2026-11-21 00:25 PT) lost about three minutes to a refusal
+that could have been predicted: the live folder is deploy-managed, so the
+160-patch stack rehearsed on a copy, refused 51 hunks, changed nothing, and only
+then did `tools/reconcile_live_backend.py --apply` carry the update. Now the
+install type is checked first, from **evidence only**:
+
+- **deploy-managed** when the live folder has `SOURCE-COMMIT` sitting beside
+  `VERSION` (the two markers only the deploy tool writes together), and/or at
+  least one `_jarvis-deploy-backup-tool-*` backup folder. Then the deploy tool
+  is the PRIMARY route - the patch stack is never started, so its guaranteed
+  refusal is skipped;
+- **legacy patch-only** when neither is there. Then `scripts/apply-patches.ps1`
+  runs first exactly as before, and the measured mid-run refusal fallback to the
+  deploy route is unchanged.
+
+The decision is never guessed: `SOURCE-COMMIT` without `VERSION` is not "beside
+VERSION", a lone `VERSION` is not evidence (the app writes one too), and
+nothing is read from a folder's name. A deploy refusal is printed **verbatim**,
+claims nothing and does **not** fall back to the patch stack that refuses by
+construction. One `ROUTE:` line says which route carried the update and why,
+e.g. *"this install is deploy-managed (SOURCE-COMMIT sits beside VERSION
+(d7003442e)); the deploy route carried the update - the live backend now holds
+this repository's bytes at commit d7003442e and VERSION 0.2.492, and the
+bounded checks above passed (9 of 9); they are a subset, not the full suite."*
+
+**Held by tests** (`backend/test_update_backend.py`, every new check fails on the
+tree before this change): the bounded subset is what the app path runs and the
+full sweep only runs with the flag; every bounded check's command is named and
+driven (the heavy ones through fakes); the four phase lines are the card's exact
+shape; a quiet phase is heartbeated inside the five minutes while a healthy one
+is not; `py_compile` and the import-all child really fail on a broken live
+module; a deploy-managed fixture takes reconcile first with NO patch run; a
+patch-only fixture still runs the patch stack; a deploy refusal is verbatim with
+one ROUTE line and no fallback; and the bounded ending never claims the full
+check. "Both or neither" is untouched: nothing here installs, approves or starts
+anything else.

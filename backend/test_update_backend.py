@@ -35,12 +35,32 @@ under 30 seconds):
     with no invented `null`s, and the final words are the ones the existing
     Rust `read_verdict` already understands ("ALL DONE - the backend is patched
     and proven" / "DONE - no problems, but NOT fully proven" / "DONE WITH
-    PROBLEMS").
+    PROBLEMS");
+  * THE APP PATH'S PROOF IS BOUNDED (Gemini rulings 5.1/5.2, 2026-11-21). The
+    default proof stage is the bounded post-update subset - named in
+    `bounded_proof_plan`: `py_compile` + imports for every shipped module, the
+    live HUD's `/api/version` + `/api/status` + `/api/presets`, the egress
+    census, and the gate/egress/reconcile/projects suites - and `--full-proof`
+    is the only thing that runs the full suite list. The four phases print
+    exactly `PROOF: Step N/4 - <phase> - x of y`, a quiet stretch inside one is
+    still heartbeated, and a bounded pass never claims the full check (its
+    ending says "proven by the bounded checks ... a subset, not the full
+    suite");
+  * THE ROUTE IS DETECTED UP FRONT (Gemini ruling 5.5, 2026-11-21). A
+    deploy-managed install is recognised from `SOURCE-COMMIT` beside `VERSION`
+    and/or a `_jarvis-deploy-backup-tool-*` folder, and takes
+    `reconcile_live_backend.py` as the PRIMARY route - the patch stack is never
+    started, so its guaranteed ~3-minute 51-hunk refusal is not paid. A legacy
+    patch-only install still runs the patch stack first, and a deploy refusal is
+    reported verbatim with one `ROUTE:` line and no patch fallback.
 
 EVERY GUARD IS BITE-PROVEN in the task report: the tool was mutated once per
 guard, this suite was run, the named check here went red, and the bytes were
-restored. The checks are written so each names what broke rather than only
-reporting a count.
+restored. Every one of the bounded-proof and route-detection tests was also run
+against the tree BEFORE this change and failed there, as it should: the bounded
+proof, its plan, its flag, the phase lines, the honest ending and the up-front
+route detection did not exist. The checks are written so each names what broke
+rather than only reporting a count.
 
 Nothing here touches the owner's backend folder, starts a patch run, or reads
 `~/.openjarvis`. Runs anywhere: standard library only.
@@ -313,7 +333,7 @@ def t_an_unknown_mode_is_refused_before_anything_runs():
     fake = FakeRun(_staged_handler(repo, backend))
     try:
         U.update(repo, backend, "turbo", run=fake, say=lambda line: None,
-                 clock=lambda: 0.0, timings_path=root / "timings.json")
+                 clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
         got = "ran"
     except U.UpdateRefused as exc:
         got = "refused"
@@ -370,7 +390,7 @@ def t_the_safe_mode_can_never_be_parallel():
     fake = FakeRun(_staged_handler(repo, backend))
     said = []
     code = U.update(repo, backend, "safe", timings_path=root / "timings.json",
-                    run=fake, say=said.append, clock=lambda: 0.0)
+                    run=fake, say=said.append, clock=lambda: 0.0, full_proof=True)
     suite_calls = [cmd for cmd in fake.calls if not _is_patcher(cmd)]
     check("a safe-mode run finishes ok", code == 0, code)
     check("... and its one suite command asks for exactly one worker",
@@ -758,7 +778,7 @@ def t_a_visible_browser_skip_is_not_reported_as_a_missing_owner_file():
     fake = FakeRun(_staged_handler(repo, backend, suites="visible-browser-skip"))
     said = []
     code = U.update(repo, backend, "safe", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=root / "timings.json")
+                    clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     text = "\n".join(said)
     check("the update still ends unproven, never failed",
           code == 0 and "DONE - no problems, but NOT fully proven" in text,
@@ -826,7 +846,7 @@ def t_a_failed_quick_pass_restores_then_reruns_the_safe_way():
     fake = FakeRun(_staged_handler(repo, backend, suites="fail-first"))
     said = []
     code = U.update(repo, backend, "responsive", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=root / "timings.json")
+                    clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     commands = fake.calls
     patchers = [cmd for cmd in commands if _is_patcher(cmd)]
     suites = [cmd for cmd in commands if not _is_patcher(cmd)]
@@ -862,7 +882,7 @@ def t_an_ambiguous_or_crashed_quick_run_also_falls_back():
         fake = FakeRun(_staged_handler(repo, backend, suites=kind))
         said = []
         code = U.update(repo, backend, "max_speed", run=fake, say=said.append,
-                        clock=lambda: 0.0, timings_path=root / "timings.json")
+                        clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
         suites = [cmd for cmd in fake.calls if not _is_patcher(cmd)]
         check(f"a {kind} quick run falls back instead of claiming a result",
               code == 0 and len(suites) == 2 and _jobs_of(suites[1]) == 1,
@@ -878,7 +898,7 @@ def t_a_live_file_mismatch_falls_back_and_is_not_ignored():
                                    patch_first_bad=True))
     said = []
     code = U.update(repo, backend, "responsive", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=root / "timings.json")
+                    clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
     check("a wrong live file is a fallback, never a warning that carries on",
           code == 0 and len(patchers) == 2, (code, len(patchers)))
@@ -905,7 +925,7 @@ def t_a_safe_mode_failure_is_reported_and_not_rerun():
     fake = FakeRun(handler)
     said = []
     code = U.update(repo, backend, "safe", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=root / "timings.json")
+                    clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
     suites = [cmd for cmd in fake.calls if not _is_patcher(cmd)]
     check("a safe-mode failure is reported as problems, not retried",
@@ -929,7 +949,7 @@ def t_the_commands_are_the_patcher_and_the_runner_and_nothing_else():
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
     expected_shell = U.shell_choice()
     U.update(repo, backend, "responsive", run=fake, say=lambda line: None,
-             clock=lambda: 0.0, timings_path=root / "timings.json")
+             clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     patcher = fake.calls[0]
     check("the first process is the one patcher script, with -SkipTests",
           _is_patcher(patcher) and "-SkipTests" in patcher
@@ -1291,7 +1311,7 @@ def t_the_tool_refuses_before_a_process_starts_when_the_folders_are_wrong():
         try:
             U.update(one_repo, one_backend, "responsive", run=fake,
                      say=lambda line: None, clock=lambda: 0.0,
-                     timings_path=root / "timings.json")
+                     timings_path=root / "timings.json", full_proof=True)
             got = "ran"
         except U.UpdateRefused as exc:
             got = exc.code
@@ -1348,7 +1368,7 @@ def t_the_update_records_the_measured_times_for_the_next_estimate():
     path = root / "timings.json"
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
     U.update(repo, backend, "responsive", run=fake, say=lambda line: None,
-             clock=lambda: 0.0, timings_path=path)
+             clock=lambda: 0.0, timings_path=path, full_proof=True)
     stored = U.pace_timings(U.load_timings(path), "responsive")
     check("after a proven update the per-suite times are recorded for its pace",
           stored["suites"] == {"test_a.py": 0.1, "test_b.py": 0.1,
@@ -1439,7 +1459,7 @@ def t_the_bar_events_are_monotonic_and_only_the_verdict_reaches_full():
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
     said = []
     U.update(repo, backend, "responsive", run=fake, say=said.append,
-             clock=lambda: 0.0, timings_path=path)
+             clock=lambda: 0.0, timings_path=path, full_proof=True)
     events = _events(said)
     fractions = [event["fraction"] for event in events]
     check("every event carries the bar's real fraction",
@@ -1472,7 +1492,7 @@ def t_a_fallback_resets_the_bar_only_with_the_second_pass_label():
     fake = FakeRun(_staged_handler(repo, backend, suites="fail-first"))
     said = []
     U.update(repo, backend, "responsive", run=fake, say=said.append,
-             clock=lambda: 0.0, timings_path=root / "timings.json")
+             clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     events = _events(said)
     fallbacks = [event for event in events if event["phase"] == "fallback"]
     check("the explicit fallback event starts the bar again at zero",
@@ -1830,7 +1850,7 @@ def t_the_update_holds_the_lock_and_releases_it_on_every_way_out():
     fake = WatchingRun(_staged_handler(repo, backend, suites="ok"))
     said = []
     code = U.update(repo, backend, "responsive", run=fake, say=said.append,
-                    clock=time.time, timings_path=root / "timings.json")
+                    clock=time.time, timings_path=root / "timings.json", full_proof=True)
     check("a normal update takes the lock before its first child process",
           fake.lock_states and all(state is True for state in fake.lock_states),
           fake.lock_states)
@@ -1843,7 +1863,7 @@ def t_the_update_holds_the_lock_and_releases_it_on_every_way_out():
         raise RuntimeError("the patcher could not be started")
     said = []
     code = U.update(repo, backend, "safe", run=exploding, say=said.append,
-                    clock=lambda: 1000.0, timings_path=root / "timings.json")
+                    clock=lambda: 1000.0, timings_path=root / "timings.json", full_proof=True)
     check("a crashed child still releases the lock (the finally ran)",
           code == 1 and not lock.exists(), (code, lock.exists()))
 
@@ -1852,7 +1872,7 @@ def t_the_update_holds_the_lock_and_releases_it_on_every_way_out():
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
     try:
         U.update(repo, backend, "responsive", run=fake, say=lambda line: None,
-                 clock=lambda: time.time(), timings_path=root / "timings.json")
+                 clock=lambda: time.time(), timings_path=root / "timings.json", full_proof=True)
         refused = None
     except U.UpdateRefused as exc:
         refused = exc
@@ -1897,7 +1917,7 @@ def t_the_heartbeat_keeps_a_long_update_s_alive():
 
     fake = HeartbeatWatchingRun(_staged_handler(repo, backend, suites="ok"))
     code = U.update(repo, backend, "safe", run=fake, say=lambda line: None,
-                    clock=clock, timings_path=root / "timings.json")
+                    clock=clock, timings_path=root / "timings.json", full_proof=True)
     check("three suites at 1700s each would expire a 30-minute lock without the "
           "heartbeat - with it, every check after a suite is still valid",
           code == 0 and seen == [True, True, True], (code, seen))
@@ -1928,7 +1948,7 @@ def t_the_lock_stays_valid_through_a_30_minute_patch_phase():
 
     fake = PatchWatchingRun(_staged_handler(repo, backend, suites="ok"))
     code = U.update(repo, backend, "safe", run=fake, say=lambda line: None,
-                    clock=clock, timings_path=root / "timings.json")
+                    clock=clock, timings_path=root / "timings.json", full_proof=True)
     check("a 30-minute patch phase does not make a live update's lock stale",
           code == 0 and seen and all(valid for valid, _why in seen), (code, seen))
     check("... because the patch phase's own progress lines refreshed it",
@@ -1962,7 +1982,7 @@ def t_a_live_update_older_than_the_ceiling_is_not_stale():
 
     fake = LongRunWatcher(_staged_handler(repo, backend, suites="ok"))
     code = U.update(repo, backend, "safe", run=fake, say=lambda line: None,
-                    clock=clock, timings_path=root / "timings.json")
+                    clock=clock, timings_path=root / "timings.json", full_proof=True)
     check("a live run longer than 3 hours keeps its lock valid (heartbeats are "
           "fresh; the ceiling is renewed)",
           code == 0 and states and all(valid for _t, valid, _why in states)
@@ -2117,7 +2137,7 @@ def t_an_unexpected_lock_error_never_stops_the_update():
     U.acquire_lock = boom
     try:
         code = U.update(repo, backend, "safe", run=fake, say=said.append,
-                        clock=time.time, timings_path=root / "timings.json")
+                        clock=time.time, timings_path=root / "timings.json", full_proof=True)
     finally:
         U.acquire_lock = real
     check("a raising lock check is a NOTE, not a crashed update",
@@ -2214,7 +2234,7 @@ def t_the_owner_s_everyday_model_lane_is_put_back_after_the_proof_suites():
     said = []
     with _lane_seams(read, warm):
         code = U.update(repo, backend, "responsive", run=fake, say=said.append,
-                        clock=lambda: 0.0, timings_path=root / "timings.json")
+                        clock=lambda: 0.0, timings_path=root / "timings.json", full_proof=True)
     report = "\n".join(said)
     lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
     saved = fake.state.get("record_at_first_suite")
@@ -2257,7 +2277,7 @@ def t_a_lane_the_suites_left_alone_is_not_touched():
         code = U.update(repo, backend, "responsive",
                         run=FakeRun(_a_lane_handler(repo, backend, lane, changed=False)),
                         say=said.append, clock=lambda: 0.0,
-                        timings_path=root / "timings.json")
+                        timings_path=root / "timings.json", full_proof=True)
     lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
     check("a lane the proof suites left on the owner's model is NOT warmed again",
           code == 0 and warmed == [], (code, warmed))
@@ -2283,7 +2303,7 @@ def t_an_unreadable_lane_is_reported_and_nothing_is_restored():
         code = U.update(repo, backend, "responsive",
                         run=FakeRun(_a_lane_handler(repo, backend, lane, changed=False)),
                         say=said.append, clock=lambda: 0.0,
-                        timings_path=root / "timings.json")
+                        timings_path=root / "timings.json", full_proof=True)
     lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
     check("a lane that cannot be read is NOT guessed at - no model is named or warmed",
           warmed == [], warmed)
@@ -2580,7 +2600,7 @@ def t_the_measured_deployed_install_finishes_by_the_deploy_route():
     said = []
     code = U.update(repo, backend, "responsive", run=fake, say=said.append,
                     clock=lambda: 0.0, timings_path=root / "timings.json",
-                    deploy=_deploy_ok(backend, calls=deploys))
+                    deploy=_deploy_ok(backend, calls=deploys), full_proof=True)
     patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
     suites = [cmd for cmd in fake.calls if not _is_patcher(cmd)]
     tail = "\n".join(said)
@@ -2630,7 +2650,7 @@ def t_a_patched_install_never_takes_the_deploy_route():
     said = []
     code = U.update(repo, backend, "responsive", run=fake, say=said.append,
                     clock=lambda: 0.0, timings_path=root / "timings.json",
-                    deploy=_deploy_ok(backend, calls=deploys))
+                    deploy=_deploy_ok(backend, calls=deploys), full_proof=True)
     check("an install the patch stack can apply is UNCHANGED: no deploy route",
           code == 0 and deploys == [], (code, deploys))
     check("... and no ROUTE line is printed for it",
@@ -2659,7 +2679,7 @@ def t_a_refusal_for_another_reason_is_not_routed_around():
     code = U.update(repo, backend, "responsive", run=FakeRun(handler),
                     say=said.append, clock=lambda: 0.0,
                     timings_path=root / "timings.json",
-                    deploy=_deploy_ok(backend, calls=deploys))
+                    deploy=_deploy_ok(backend, calls=deploys), full_proof=True)
     check("a refusal the deploy route is not evidence for is reported, not routed",
           code == 1 and deploys == [], (code, deploys))
     check("... with the patch program's own final line and no ROUTE claim",
@@ -2679,7 +2699,7 @@ def t_a_deploy_route_refusal_is_reported_verbatim_and_claims_nothing():
                     run=FakeRun(_refusal_then_suites(repo, backend)),
                     say=said.append, clock=lambda: 0.0,
                     timings_path=root / "timings.json",
-                    deploy=_deploy_refused(refused_line))
+                    deploy=_deploy_refused(refused_line), full_proof=True)
     tail = "\n".join(said)
     check("a deploy-tool refusal is an honest failure, never a claimed update",
           code == 1 and "ALL DONE" not in tail
@@ -2848,7 +2868,7 @@ def t_the_deploy_route_keeps_the_lock_pace_and_timings():
     fake = FakeRun(_refusal_then_suites(repo, backend))
     said = []
     code = U.update(repo, backend, "safe", run=fake, say=said.append,
-                    clock=lambda: 0.0, timings_path=timings, deploy=deploy)
+                    clock=lambda: 0.0, timings_path=timings, deploy=deploy, full_proof=True)
     check("the deploy route runs INSIDE the update lock, and the lock is released",
           code == 0 and seen.get("lock_held_during_deploy") is True
           and not lock.exists(), (code, seen, lock.exists()))
@@ -2867,7 +2887,7 @@ def t_the_deploy_route_s_safe_second_pass_does_not_undo_the_deploy():
     said = []
     code = U.update(repo, backend, "responsive", run=fake, say=said.append,
                     clock=lambda: 0.0, timings_path=root / "timings.json",
-                    deploy=_deploy_ok(backend, calls=deploys))
+                    deploy=_deploy_ok(backend, calls=deploys), full_proof=True)
     tail = "\n".join(said)
     check("a failed quick check on the deploy route falls back to one worker",
           code == 0 and "ALL DONE" in tail
@@ -2909,7 +2929,7 @@ def t_an_unproven_deploy_route_update_is_not_reported_as_proved():
     code = U.update(repo, backend, "responsive", run=FakeRun(handler),
                     say=said.append, clock=lambda: 0.0,
                     timings_path=root / "timings.json",
-                    deploy=_deploy_ok(backend))
+                    deploy=_deploy_ok(backend), full_proof=True)
     tail = "\n".join(said)
     check("a deploy-route update with a skipped check is NOT reported as proved",
           code == 0 and "NOT fully proven" in tail and "ALL DONE" not in tail,
@@ -3093,7 +3113,7 @@ def t_the_config_step_missing_from_a_release_is_reported_and_never_fatal():
     said2 = []
     code = U.update(repo2, backend2, "safe", run=fake, say=said2.append,
                     clock=lambda: 0.0, timings_path=root / "timings.json",
-                    previous_release="7add1b7c1d5f")
+                    previous_release="7add1b7c1d5f", full_proof=True)
     check("... and a failed/reported config step never fails the backend update",
           code == 0 and any(line.startswith("TOOL DEFAULTS:") for line in said2),
           (code, [line for line in said2 if line.startswith("TOOL DEFAULTS:")]))
@@ -3242,7 +3262,7 @@ def t_the_look_spec_runs_with_the_file_half_and_the_config_step_only_after_proof
                     say=said.append, clock=lambda: 0.0,
                     timings_path=root / "timings.json",
                     previous_release="7add1b7c1d5f",
-                    tool_defaults=fake_tools, beside_files=fake_beside)
+                    tool_defaults=fake_tools, beside_files=fake_beside, full_proof=True)
     check("after a PROVEN update both release-step kinds run, with the baseline",
           code == 0 and ran == ["beside", "tools"], (code, ran))
     check("... the look spec is delivered BEFORE the first proof suite runs",
@@ -3270,7 +3290,7 @@ def t_the_look_spec_runs_with_the_file_half_and_the_config_step_only_after_proof
                      say=lambda line: None, clock=lambda: 0.0,
                      timings_path=root2 / "timings.json",
                      previous_release="7add1b7c1d5f",
-                     tool_defaults=fake_tools2, beside_files=fake_beside2)
+                     tool_defaults=fake_tools2, beside_files=fake_beside2, full_proof=True)
     check("an UNPROVEN update still delivers the look spec, and changes no config",
           code2 == 0 and ran2 == ["beside"], (code2, ran2))
 
@@ -3297,7 +3317,7 @@ def t_the_look_spec_runs_with_the_file_half_and_the_config_step_only_after_proof
                      timings_path=root3 / "timings.json",
                      previous_release="7add1b7c1d5f",
                      tool_defaults=lambda *a, **k: ran3.append("tools"),
-                     beside_files=lambda *a, **k: ran3.append("beside"))
+                     beside_files=lambda *a, **k: ran3.append("beside"), full_proof=True)
     check("a run that never proved its files never runs the release-file steps",
           code3 == 1 and ran3 == [], (code3, ran3))
 
@@ -3332,7 +3352,7 @@ def t_the_look_spec_reaches_the_live_folder_even_when_the_proof_never_finishes()
     code = U.update(repo, backend, "responsive", run=FakeRun(handler),
                     say=said.append, clock=lambda: 0.0,
                     timings_path=root / "timings.json",
-                    deploy=_deploy_ok(backend, version="0.2.487"))
+                    deploy=_deploy_ok(backend, version="0.2.487"), full_proof=True)
     tail = "\n".join(said)
     check("a proof phase that never finishes is still an honest failed update",
           code == 1 and "DONE WITH PROBLEMS" in tail, (code, said[-5:]))
@@ -3363,7 +3383,7 @@ def t_the_look_spec_reaches_the_live_folder_even_when_the_proof_never_finishes()
                      run=FakeRun(_refusal_then_suites(repo2, backend2)),
                      say=said2.append, clock=lambda: 0.0,
                      timings_path=root2 / "timings.json",
-                     deploy=_deploy_refused(refused))
+                     deploy=_deploy_refused(refused), full_proof=True)
     check("a deploy that did not prove its bytes+markers delivers no look spec",
           code2 == 1
           and not (backend2 / U.VISUAL_SPEC_NAME).exists()
@@ -3383,7 +3403,7 @@ def t_a_look_spec_that_cannot_be_delivered_never_fails_the_update():
     code = U.update(repo, backend, "responsive",
                     run=FakeRun(_staged_handler(repo, backend, suites="ok")),
                     say=said.append, clock=lambda: 0.0,
-                    timings_path=root / "timings.json")
+                    timings_path=root / "timings.json", full_proof=True)
     tail = "\n".join(said)
     check("an undeliverable look spec leaves a PROVEN backend update proven",
           code == 0 and "ALL DONE - the backend is patched and proven" in tail,
@@ -3419,6 +3439,562 @@ def t_the_tool_lines_its_own_printout_so_the_desktop_sees_progress():
         print("one complete line")
     check("... and a real capture still receives whole lines",
           captured.getvalue() == "one complete line\n", captured.getvalue())
+
+
+# ==========================================================================
+#   The bounded post-update proof (Gemini rulings 5.1/5.2, 2026-11-21)
+# ==========================================================================
+#
+# THE RULING. The in-app auto-finish and the press path both run this tool, and
+# both must finish in minutes: the proof stage is a BOUNDED post-update smoke +
+# invariant subset (module imports + py_compile, the live HUD's /api/version +
+# /api/status + /api/presets, look-spec agreement, gate/egress/reconcile/projects
+# smoke checks), not the ~48-65-minute full suite list. `--full-proof` keeps the
+# full sweep for a manual developer run. While the subset runs the Updates card
+# gets `PROOF: Step N/4 - <phase> - x of y` lines (ruling 5.2), with the existing
+# five-minute heartbeat underneath for a quiet stretch.
+#
+# EVERY CHECK HERE FAILS ON THE TREE BEFORE THIS CHANGE: the bounded proof, its
+# plan, the flag, the phase lines and the honest ending did not exist.
+#
+# ONE HONEST LIMIT, SAID HERE RATHER THAN DISCOVERED LATER: the Rust app still
+# reads its "proven" verdict off the words "patched and proven", so the bounded
+# ending keeps that phrase - and then says, in the same sentence, that this is
+# the bounded subset and not the full suite. The desktop's card/verdict wording
+# is another lane's file (`backend_update.rs` was not edited here).
+
+BOUNDED_INPROCESS_CHECKS = ("compile_shipped_modules", "probe_live_hud",
+                            "look_spec_agreement", "live_config_reads")
+
+
+@contextmanager
+def _fake_proof_checks(*, fail=None, calls=None):
+    """Fake the bounded proof's in-process checks; the heavy ones never run.
+
+    The child-command checks (the import-all command, the egress census and the
+    three invariant suites) still go through the injected `run`, so their real
+    commands are driven; these five are the heavy in-process ones, and a fake
+    for each is what "each bounded check's command named and run with fakes for
+    the heavy ones" means. Every fake records its name in `calls`.
+    """
+    originals = {name: getattr(U, name) for name in BOUNDED_INPROCESS_CHECKS}
+
+    def fake_for(name):
+        def fake(*args, **kwargs):
+            if calls is not None:
+                calls.append(name)
+            ok = fail != name
+            return {"ok": ok, "why": "" if ok else "the fixture refused this check",
+                    "failed": [], "checked": 1, "answered": 3, "total": 3,
+                    "routes": {}, "tools": 1, "same": "bytes"}
+
+        return fake
+
+    try:
+        for name in originals:
+            setattr(U, name, fake_for(name))
+        yield calls
+    finally:
+        for name, fn in originals.items():
+            setattr(U, name, fn)
+
+
+def _bounded_handler(repo: Path, backend: Path, *, patch=True):
+    """A fake runner for the bounded app path, and nothing else.
+
+    It answers exactly the commands the bounded proof names - the patcher (only
+    when this fixture is a legacy patch-only install), the import-all child, the
+    egress census and `run_suites.py <one suite>` - and raises on anything else,
+    so a bounded run that started a full sweep or an unknown program fails the
+    test rather than passing by accident.
+    """
+    def handler(cmd, cwd, on_line, state):
+        argv = [str(part) for part in cmd]
+        if _is_patcher(cmd):
+            state["patcher_calls"] = state.get("patcher_calls", 0) + 1
+            if not patch:
+                raise AssertionError(
+                    "the patch stack must NOT run on a deploy-managed install")
+            stamp = "2026-11-21-000001"
+            backup = backend / f"_jarvis-backup-{stamp}"
+            backup.mkdir(parents=True, exist_ok=True)
+            for name in OLD:
+                (backup / name).write_bytes((backend / name).read_bytes())
+            for name, content in NEW.items():
+                (backend / name).write_bytes(content)
+            on_line("Rehearsing all 2 on a copy first.")
+            on_line("  ok           a.patch")
+            on_line("DONE - no problems, but NOT fully proven (see below)")
+            return 0
+        state.setdefault("commands", []).append(argv)
+        if any(part.endswith("run_suites.py") for part in argv):
+            state.setdefault("suite_commands", []).append(argv)
+            named = [part for part in argv if part.startswith("test_")
+                     and part.endswith(".py")]
+            if not named:
+                raise AssertionError(
+                    "the bounded proof must never start the full sweep: " + repr(argv))
+            name = named[-1]
+            state.setdefault("suite_names", []).append(name)
+            on_line(f"ok    {name:<34} 0.1s")
+            on_line("1 passed, 0 skipped, 0 failed")
+            return 0
+        if "-c" in argv and U.PROOF_IMPORT_SOURCE in argv:
+            state["import_calls"] = state.get("import_calls", 0) + 1
+            on_line("imported 3 of 3 shipped modules from the fixture backend")
+            return 0
+        if any(part.endswith("check_egress_gate.py") for part in argv):
+            state["egress_calls"] = state.get("egress_calls", 0) + 1
+            on_line("ok every outbound host mention is accounted for")
+            return 0
+        raise AssertionError(
+            "the bounded proof started an unknown command: " + repr(argv[:4]))
+
+    return handler
+
+
+def _mark_deploy_managed(backend: Path, *, commit="d7003442e", backups=1) -> None:
+    """The two pieces of evidence the deploy tool writes, and nothing else."""
+    (Path(backend) / "VERSION").write_bytes(b"0.2.491")
+    (Path(backend) / U.SOURCE_COMMIT_NAME).write_text(
+        json.dumps({"commit": commit}) + "\n", encoding="utf-8")
+    for index in range(backups):
+        (Path(backend) / f"{U.DEPLOY_BACKUP_PREFIX}2026-11-21-00000{index}"
+         ).mkdir(parents=True, exist_ok=True)
+
+
+def t_the_bounded_proof_is_named_and_runs_the_required_real_commands():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    plan = U.bounded_proof_plan(repo, backend)
+    by_id = {row["id"]: row for row in plan}
+    ids = [row["id"] for row in plan]
+    check("the bounded proof has the four real phases, in the card's order",
+          [phase["name"] for phase in U.BOUNDED_PROOF_PHASES]
+          == ["module imports", "instant API answers", "live invariants",
+              "look spec & config"], U.BOUNDED_PROOF_PHASES)
+    check("... and every check names one of them",
+          all(0 <= row["phase"] < len(U.BOUNDED_PROOF_PHASES) for row in plan))
+    check("the subset starts with py_compile and the shipped-module imports",
+          ids[:2] == ["py_compile", "imports"], ids)
+    check("... checks the live HUD's three instant routes", "live_hud" in ids)
+    check("... runs the gate/egress/reconcile/projects smoke checks",
+          {"egress", "gate_egress", "reconcile_live_backend", "projects"}
+          <= set(ids), ids)
+    check("... and proves the look spec and the live config",
+          {"look_spec", "config"} <= set(ids), ids)
+    import_command = by_id["imports"]["command"]
+    check("the import check is ONE real command: python -B -c <import-all> <live> <names>",
+          import_command[:3] == [sys.executable, "-B", "-c"]
+          and import_command[3] == U.PROOF_IMPORT_SOURCE
+          and import_command[4] == str(backend), import_command[:4])
+    check("... naming every module this repository ships whole, and no beside-file",
+          json.loads(import_command[-1]) == ["one", "two", "jarvis_gate"],
+          json.loads(import_command[-1]))
+    check("the egress smoke check is the existing census tool",
+          Path(by_id["egress"]["command"][-1]).name == "check_egress_gate.py",
+          by_id["egress"]["command"])
+    for suite in U.BOUNDED_INVARIANT_SUITES:
+        row = by_id[suite[len("test_"):-len(".py")]]
+        check(f"the {suite} smoke check runs through the real suite runner",
+              any(str(part).endswith("run_suites.py") for part in row["command"])
+              and "--backend-path" in row["command"]
+              and str(backend) in row["command"]
+              and suite in row["command"], row["command"])
+    check("the bounded plan is 9 checks in 4 phases (2/1/4/2)",
+          [sum(1 for row in plan if row["phase"] == index) for index in range(4)]
+          == [2, 1, 4, 2] and len(plan) == 9,
+          [sum(1 for row in plan if row["phase"] == index) for index in range(4)])
+
+
+def t_the_app_path_runs_the_bounded_proof_and_never_the_full_sweep():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_bounded_handler(repo, backend))
+    calls = []
+    said = []
+    with _fake_proof_checks(calls=calls):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json")
+    tail = "\n".join(said)
+    check("the app path finishes on the bounded proof", code == 0, (code, said[-8:]))
+    check("... every in-process check ran exactly once, with its fake",
+          calls == list(BOUNDED_INPROCESS_CHECKS), calls)
+    check("... the invariant smoke checks are the three named real suites",
+          fake.state.get("suite_names") == list(U.BOUNDED_INVARIANT_SUITES),
+          fake.state.get("suite_names"))
+    check("... the import-all child ran once, with the shipped module names",
+          fake.state.get("import_calls") == 1, fake.state.get("import_calls"))
+    check("... and the egress census ran once",
+          fake.state.get("egress_calls") == 1, fake.state.get("egress_calls"))
+    full = [cmd for cmd in fake.state.get("suite_commands", [])
+            if not any(part.startswith("test_") for part in cmd)]
+    check("... and the FULL suite sweep (a run_suites call naming no suite) "
+          "was never started", full == [], full)
+    check("... the four phases each printed their PROOF: Step line",
+          all(f"PROOF: Step {index}/4 - {phase['name']}" in tail
+              for index, phase in enumerate(U.BOUNDED_PROOF_PHASES, 1)))
+    check("... the ending claims the BOUNDED checks by number, never the full check",
+          "ALL DONE - the backend is patched and proven by the bounded checks "
+          "(9 of 9): a subset, not the full suite." in tail, said[-4:])
+    check("... and the exact full-sweep ending was NOT printed",
+          "ALL DONE - the backend is patched and proven" not in
+          [line.strip() for line in said],
+          [line for line in said if line.startswith("ALL DONE")])
+    check("... the ending names the developer flag that runs the full sweep",
+          "--full-proof" in tail)
+    check("... and no hour-scale ETA is claimed for a bounded run",
+          "Estimated from the times recorded on this PC" not in tail
+          and "First run: no times recorded on this PC yet" not in tail, said[:8])
+
+
+def t_the_full_sweep_runs_only_with_the_developer_flag():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    said = []
+    code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json",
+                    full_proof=True)
+    tail = "\n".join(said)
+    check("--full-proof still runs the FULL suite list, at the chosen pace",
+          code == 0 and fake.state.get("suite_calls") == 1
+          and fake.state.get("suite_jobs") == [14],
+          (code, fake.state.get("suite_calls"), fake.state.get("suite_jobs")))
+    check("... and its ending is the full-sweep line, unchanged",
+          "ALL DONE - the backend is patched and proven" in tail, said[-4:])
+    check("... no bounded subset is run in full-proof mode",
+          "PROOF: Step " not in tail and "bounded checks" not in tail)
+    check("... and its plan still carries the measured/unmeasured ETA words",
+          "Estimated from the times recorded on this PC" in tail
+          or "First run: no times recorded on this PC yet" in tail, said[:10])
+    parsed = U.parse_args(["--repo", "r", "--backend", "b", "--full-proof"])
+    check("the command line flag is --full-proof", parsed["full_proof"] is True)
+    check("... and it is OFF on the app path unless a developer asks",
+          U.parse_args(["--repo", "r", "--backend", "b"])["full_proof"] is False)
+    check("... and the usage line names it", "--full-proof" in U._usage())
+
+
+def t_the_bounded_proof_prints_the_card_s_step_lines_per_phase():
+    import re as _re
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_bounded_handler(repo, backend))
+    said = []
+    with _fake_proof_checks():
+        result = U.bounded_proof(repo, backend, say=said.append, run=fake,
+                                 clock=lambda: 0.0)
+    pattern = _re.compile(
+        r"^PROOF: Step (\d)/4 - (module imports|instant API answers|"
+        r"live invariants|look spec & config) - (\d+) of (\d+)$")
+    step_lines = [line for line in said if line.startswith(U.PROOF_STEP_PREFIX)]
+    parsed = [pattern.match(line) for line in step_lines]
+    check("the bounded proof passed every check", result["ok"] is True
+          and result["passed"] == result["total"] == 9, result)
+    check("every PROOF line is the card's exact shape, with four phases",
+          len(step_lines) == 13 and all(parsed), step_lines)
+    order = ["module imports", "instant API answers", "live invariants",
+             "look spec & config"]
+    phases = [match.group(2) for match in parsed]
+    check("... the four real phases, in order", phases ==
+          [name for name in order for _ in range(
+              sum(1 for match in parsed if match.group(2) == name))], phases)
+    for name in order:
+        rows = [match for match in parsed if match.group(2) == name]
+        check(f"... {name!r} opens at 0 of N and closes at N of N",
+              rows[0].group(3) == "0" and rows[0].group(4) == str(len(rows) - 1)
+              and rows[-1].group(3) == rows[-1].group(4), [m.groups() for m in rows])
+    check("... the phase counts are the plan's own checks (2/1/4/2)",
+          [len([match for match in parsed if match.group(2) == name]) - 1
+           for name in order] == [2, 1, 4, 2],
+          [len([match for match in parsed if match.group(2) == name]) - 1
+           for name in order])
+    check("... and the closing line counts every check",
+          parsed[-1].group(3) == parsed[-1].group(4) == "2", parsed[-1].groups())
+
+
+def t_a_quiet_bounded_phase_is_heartbeated_but_a_healthy_one_is_not():
+    class Clock:
+        def __init__(self):
+            self.t = 0.0
+
+        def __call__(self):
+            return self.t
+
+        def advance(self, seconds):
+            self.t += float(seconds)
+
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_bounded_handler(repo, backend))
+    clock = Clock()
+    said = []
+    with _fake_proof_checks():
+        def slow_compile(*args, **kwargs):
+            clock.advance(301.0)          # one quiet stretch, four seconds early
+            return {"ok": True, "checked": 1, "failed": []}
+
+        U.compile_shipped_modules = slow_compile
+        result = U.bounded_proof(repo, backend, say=said.append, run=fake,
+                                 clock=clock)
+    heartbeat = [line for line in said
+                 if line.startswith(U.PROOF_HEARTBEAT_PREFIX + "still running")]
+    steps = [index for index, line in enumerate(said)
+             if line.startswith(U.PROOF_STEP_PREFIX)]
+    beats = [index for index, line in enumerate(said)
+             if line.startswith(U.PROOF_HEARTBEAT_PREFIX + "still running")]
+    check("the bounded proof still passes with one long, quiet check",
+          result["ok"] is True, result)
+    check("a quiet stretch inside a phase is heartbeated, inside the five minutes",
+          len(heartbeat) == 1 and "5m 0" in heartbeat[0], heartbeat)
+    check("... and the heartbeat keeps the documented line shape",
+          heartbeat and heartbeat[0].startswith(
+              "PROOF: still running - 5m 01s elapsed, checking the backend "
+              "against the live folder"), heartbeat)
+    check("... it lands BETWEEN that phase's own PROOF: Step lines",
+          steps and steps[0] < beats[0] < steps[2], (steps, beats))
+    check("the heartbeat interval is still well inside the app's 15-minute silence "
+          "bound", U.PROOF_HEARTBEAT_SECONDS == 300.0
+          and U.PROOF_HEARTBEAT_SECONDS * 3 <= 15 * 60, U.PROOF_HEARTBEAT_SECONDS)
+
+    # A healthy bounded run - every check quick - prints no heartbeat at all:
+    # nothing here is near the five minutes, so no app bound can fire on it.
+    healthy = []
+    repo2, backend2 = _make_repo(_make_root())
+    fake2 = FakeRun(_bounded_handler(repo2, backend2))
+    with _fake_proof_checks():
+        U.bounded_proof(repo2, backend2, say=healthy.append, run=fake2,
+                        clock=lambda: 0.0)
+    check("... and a healthy bounded run prints no heartbeat at all",
+          not any(line.startswith(U.PROOF_HEARTBEAT_PREFIX + "still running")
+                  for line in healthy),
+          [line for line in healthy if line.startswith("PROOF:")][:4])
+
+
+def t_the_py_compile_check_compiles_the_live_folders_own_bytes():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    for name in ("one.py", "two.py", "jarvis_gate.py"):
+        (backend / name).write_text("value = 1\n", encoding="utf-8")
+    good = U.compile_shipped_modules(repo, backend)
+    check("every shipped module compiles from the live folder",
+          good["ok"] is True and good["checked"] == 3 and good["failed"] == [],
+          good)
+    check("... and the check writes no __pycache__ into the live folder",
+          not list(backend.rglob("__pycache__")),
+          list(backend.rglob("__pycache__")))
+    (backend / "two.py").write_text("def broken(:\n", encoding="utf-8")
+    bad = U.compile_shipped_modules(repo, backend)
+    check("a broken LIVE module is a failed check, named by its file",
+          bad["ok"] is False and any("two.py" in line for line in bad["failed"]),
+          bad)
+    (backend / "two.py").write_text("value = 2\n", encoding="utf-8")
+    (backend / "jarvis_gate.py").unlink()
+    missing = U.compile_shipped_modules(repo, backend)
+    check("a shipped module missing from the live folder is a failure too",
+          missing["ok"] is False
+          and any("jarvis_gate.py" in line for line in missing["failed"]),
+          missing)
+    (backend / "jarvis_gate.py").write_text("value = 3\n", encoding="utf-8")
+    result = U.import_shipped_modules(repo, backend)
+    check("every shipped module imports from the live folder in one child",
+          result["ok"] is True and result["checked"] == 3, result)
+    (backend / "jarvis_gate.py").write_text(
+        "raise ImportError('the gate is broken')\n", encoding="utf-8")
+    broken = U.import_shipped_modules(repo, backend)
+    check("... and an import that raises is a failed check, named by module",
+          broken["ok"] is False
+          and any("FAIL import jarvis_gate" in line for line in broken["lines"]),
+          broken)
+
+
+def t_the_live_hud_probe_is_an_honest_failure_without_a_hud():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    result = U.probe_live_hud(backend / "not-a-backend", say=lambda line: None)
+    check("a folder with no jarvis_hud.py is an honest failed check, never a pass",
+          result["ok"] is False and result["answered"] == 0
+          and "jarvis_hud.py" in result["why"], result)
+    check("... and the probe's own routes are the three instant ones",
+          result["total"] == 3, result)
+
+
+def t_a_bounded_ending_never_claims_the_full_check():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_bounded_handler(repo, backend))
+    said = []
+    with _fake_proof_checks():
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json")
+    tail = "\n".join(said)
+    ending = [line for line in said if line.startswith("ALL DONE")]
+    check("a bounded pass exits ok and says so in the bounded words",
+          code == 0 and ending
+          and ending[-1].startswith(
+              "ALL DONE - the backend is patched and proven by the bounded "
+              "checks ("), ending)
+    check("... it is a claim about the subset, never the full check",
+          "a subset, not the full suite" in ending[-1]
+          and "the full check passed" not in tail.lower(), ending)
+    check("... and the exact full-sweep ending is never printed for it",
+          "ALL DONE - the backend is patched and proven" not in
+          [line.strip() for line in said], ending)
+    check("... while still containing the words the desktop's read_verdict uses, "
+          "so 'both or neither' reads the same", "patched and proven" in ending[-1])
+    check("... and it tells a developer the one command that runs the full sweep",
+          "--full-proof" in ending[-1] or "--full-proof" in tail, ending)
+
+
+# ==========================================================================
+#   The deploy-managed install is detected up front (Gemini ruling 5.5)
+# ==========================================================================
+#
+# THE RULING. Check SOURCE-COMMIT up front: if the install is deploy-managed,
+# run tools/reconcile_live_backend.py as the PRIMARY route (skipping the
+# guaranteed ~3-minute 51-hunk refusal), and fall back to apply-patches.ps1 only
+# for a legacy patch-only install. Never guess; a deploy refusal is reported
+# verbatim; one ROUTE: line names the route and why; "both or neither" is
+# untouched.
+#
+# EVERY CHECK HERE FAILS ON THE TREE BEFORE THIS CHANGE: there was no up-front
+# detection, so a deploy-managed fixture ran the patch stack first.
+
+
+def t_a_deploy_managed_install_is_detected_from_evidence_up_front():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    plain = U.deploy_managed_evidence(backend)
+    check("a legacy patch-only install shows NO deploy evidence",
+          plain["managed"] is False and plain["why"] == "", plain)
+    (backend / "VERSION").write_bytes(b"0.2.491")
+    version_only = U.deploy_managed_evidence(backend)
+    check("VERSION alone is NOT deploy evidence (the app writes it too)",
+          version_only["managed"] is False, version_only)
+    (backend / U.SOURCE_COMMIT_NAME).write_text(
+        json.dumps({"commit": "d7003442e"}) + "\n", encoding="utf-8")
+    marker = U.deploy_managed_evidence(backend)
+    check("SOURCE-COMMIT beside VERSION IS deploy evidence",
+          marker["managed"] is True and "SOURCE-COMMIT" in marker["why"]
+          and "d7003442e" in marker["why"], marker)
+    check("... and the ROUTE words name that evidence, never a guess",
+          "this install is deploy-managed" in U.deploy_primary_words(marker)
+          and "SOURCE-COMMIT" in U.deploy_primary_words(marker),
+          U.deploy_primary_words(marker))
+
+    root2 = _make_root()
+    _, backups_only = _make_repo(root2)
+    (backups_only / f"{U.DEPLOY_BACKUP_PREFIX}2026-11-21-000000").mkdir()
+    backup_evidence = U.deploy_managed_evidence(backups_only)
+    check("a _jarvis-deploy-backup-tool-* folder ALONE is deploy evidence too",
+          backup_evidence["managed"] is True
+          and U.DEPLOY_BACKUP_PREFIX in backup_evidence["why"], backup_evidence)
+
+    root3 = _make_root()
+    _, marker_only = _make_repo(root3)
+    (marker_only / U.SOURCE_COMMIT_NAME).write_text(
+        json.dumps({"commit": "d7003442e"}) + "\n", encoding="utf-8")
+    lonely = U.deploy_managed_evidence(marker_only)
+    check("SOURCE-COMMIT without VERSION is not 'beside VERSION', so not evidence",
+          lonely["managed"] is False, lonely)
+
+
+def t_a_deploy_managed_install_takes_reconcile_first_with_no_patch_run():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    _mark_deploy_managed(backend)
+    fake = FakeRun(_bounded_handler(repo, backend, patch=False))
+    deploys = []
+    calls = []
+    said = []
+    with _fake_proof_checks(calls=calls):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_deploy_ok(backend, calls=deploys))
+    tail = "\n".join(said)
+    patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
+    route_lines = [line for line in said if line.startswith(U.ROUTE_PREFIX)]
+    check("a detected deploy-managed install finishes through the deploy route",
+          code == 0 and deploys and len(deploys) == 1, (code, deploys, said[-8:]))
+    check("... the patch stack was NEVER started, so its 51-hunk refusal was "
+          "skipped rather than paid", patchers == [] and "patcher_calls" not in fake.state,
+          patchers)
+    check("... the deploy tool ran on the SAME backend folder",
+          deploys[0]["backend"] == str(backend)
+          and deploys[0]["repo"] == str(repo), deploys)
+    check("... ONE ROUTE line names the evidence and why the deploy route ran",
+          len(route_lines) == 1
+          and "this install is deploy-managed" in route_lines[0]
+          and "SOURCE-COMMIT sits beside VERSION" in route_lines[0]
+          and "the deploy route carried the update" in route_lines[0],
+          route_lines)
+    check("... and the report says the refusal was detected up front",
+          "detected from evidence on disk before anything runs" in tail
+          and "guaranteed refusal is skipped" in tail, said[-10:])
+    check("... the bounded proof then ran on the deployed bytes, as the app path",
+          fake.state.get("import_calls") == 1
+          and fake.state.get("suite_names") == list(U.BOUNDED_INVARIANT_SUITES),
+          fake.state.get("suite_names"))
+    check("... and the bounded ending is the deploy route's own",
+          "proven by the bounded checks (9 of 9)" in tail
+          and "ROUTE: this install is deploy-managed" in tail, said[-4:])
+
+
+def t_a_legacy_patch_only_install_still_runs_the_patch_stack():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_bounded_handler(repo, backend))
+    deploys = []
+    said = []
+    with _fake_proof_checks():
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_deploy_ok(backend, calls=deploys))
+    tail = "\n".join(said)
+    check("a legacy patch-only install is patched by the patch stack, as before",
+          code == 0 and fake.state.get("patcher_calls") == 1,
+          (code, fake.state.get("patcher_calls")))
+    check("... and the deploy route is never touched for it", deploys == [], deploys)
+    check("... and no ROUTE line is printed for it",
+          not any(line.startswith(U.ROUTE_PREFIX) for line in said),
+          [line for line in said if "ROUTE" in line])
+    check("... and it proves itself with the bounded subset and the honest ending",
+          "proven by the bounded checks (9 of 9)" in tail, said[-4:])
+
+
+def t_a_deploy_refusal_on_the_detected_route_is_verbatim_and_never_falls_back():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    _mark_deploy_managed(backend)
+    refused_line = ("REFUSED: the working tree is at HEAD attacker but --ref "
+                    "deadbeef is other, so this tool will not run from a "
+                    "different commit")
+    fake = FakeRun(_bounded_handler(repo, backend, patch=False))
+    said = []
+    with _fake_proof_checks():
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_deploy_refused(refused_line))
+    tail = "\n".join(said)
+    patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
+    route_lines = [line for line in said if line.startswith(U.ROUTE_PREFIX)]
+    check("a deploy refusal on the detected route is an honest failure",
+          code == 1 and "ALL DONE" not in tail
+          and "DONE WITH PROBLEMS" in tail, (code, said[-6:]))
+    check("... the deploy tool's own refusal is reported VERBATIM",
+          refused_line in tail, [line for line in said if "REFUSED" in line])
+    check("... the patch stack is never tried as a fallback (it refuses by "
+          "construction on this install)", patchers == [], patchers)
+    check("... and no proof check runs for a route that did not finish",
+          fake.state.get("suite_names") is None
+          and fake.state.get("import_calls") is None, fake.state)
+    check("... with exactly ONE ROUTE line: detected, and the deploy did not finish",
+          len(route_lines) == 1 and "this install is deploy-managed" in route_lines[0]
+          and "the deploy route did not finish" in route_lines[0], route_lines)
+    check("... and nothing is written or claimed as updated",
+          all((backend / name).read_bytes() == OLD[name] for name in OLD)
+          and (backend / "VERSION").read_text(encoding="utf-8") == "0.2.491",
+          {name: (backend / name).read_bytes() for name in OLD})
 
 
 # ==========================================================================

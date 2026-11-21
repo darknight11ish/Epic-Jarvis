@@ -45,38 +45,56 @@ WHAT IT DOES, IN ORDER
    is exactly what the desktop's one-hour bound did that day. It is atomic,
    backed up and read back; its `BESIDE:` line says what was written or the
    exact read that failed, and it can never fail the update.
-3. `backend/run_suites.py --backend-path <backend> --jobs <workers>` - the
-   SAME suite list CI runs, against the LIVE folder this update just patched,
-   with the chosen worker count. The backend is named explicitly (R1,
-   2026-10-21): `run_suites.py` ignores the ambient `JARVIS_BACKEND` by
-   default, and an update's proof run must never depend on an environment
-   variable. `run_suites.py`'s worker default is 1, so CI is untouched. Every
-   line is line-buffered on the way out (this tool's own stdout is
-   line-buffered, and a Python child gets `PYTHONUNBUFFERED=1`), because the
-   desktop's progress bound tells a working run from a wedged one by whether
-   the log is still growing.
-3a. **The proof stage says it is alive.** One proof suite can print nothing for
-   more than 15 minutes between suite boundaries (measured on the owner's PC,
-   2026-11-21: the desktop's 15-minute silence bound ended a HEALTHY run at
-   48m 10s), so while the suites child is quiet this tool prints a `PROOF:`
-   line of its own at least every five minutes. That makes the desktop's
-   silence bound mean what it should - the tool AND its suites both stopped,
-   a real hang - instead of "one suite is slow". The heartbeat is the fix; the
-   bound is not raised. Real child output still flows through unchanged.
+3. **PROVES IT, ON A BOUNDED SUBSET (Gemini ruling 5.1, 2026-11-21).** The app
+   path - the desktop's "Update everything" press AND its automatic finish, which
+   both run this tool - used to run the same suite list CI runs. On the owner's
+   PC that list takes ~48-65 minutes, and an end-user update must finish in
+   minutes. So the default proof stage is the **bounded post-update proof**: a
+   few minutes that checks module imports and `py_compile` for every module this
+   repository ships whole, the live HUD's instant answers (`/api/version`,
+   `/api/status`, `/api/presets`), cheap core invariant checks that already
+   exist (`tools/check_egress_gate.py`, `backend/test_gate_egress.py`,
+   `backend/test_reconcile_live_backend.py`, `backend/test_projects.py`), and
+   the look spec and config the release owns. The full 48-65 minute sweep is
+   still run - by a developer, by hand, with **`--full-proof`** - and only that
+   run's ending words claim the full check. A bounded pass is always reported as
+   a claim about the subset: *"ALL DONE - the backend is patched and proven by
+   the bounded checks (9 of 9): a subset, not the full suite."* The file half
+   (bytes + release markers) is proved exactly as it always was, before this.
+   The bounded proof runs against the LIVE folder this update just patched,
+   explicitly, with the same rule as the suites: the backend is named, so no
+   environment variable can redirect it.
+3a. **The proof stage says it is alive.** One long check can print nothing for
+   minutes (measured on the owner's PC, 2026-11-21: the desktop's 15-minute
+   silence bound ended a HEALTHY full-sweep run at 48m 10s), so while a proof
+   child is quiet this tool prints a `PROOF:` line of its own at least every
+   five minutes. The bounded proof itself finishes well inside those five
+   minutes, so a healthy bounded run never depends on the heartbeat; it stays
+   for the `--full-proof` sweep and for a genuinely slow check. The heartbeat is
+   the fix; the app's bound is not raised. Real child output still flows through
+   unchanged.
 3b. **The owner's everyday model lane is recorded and put back.** The proof
-   suites run against the live folder, and at least one of them loads a
-   different model on the everyday lane without putting the owner's back
+   runs against the live folder, and at least one of the full suite's checks
+   loads a different model on the everyday lane without putting the owner's back
    (measured 2026-11-21: lane 11436 was left on `jarvis-primary:latest` at
    16,384 instead of `qwen3.5:9b` at 196,608, and the field battery's PRESETS
-   row failed). Before the suites this tool reads the lane's resident
+   row failed). Before the proof this tool reads the lane's resident
    model+context from `GET /api/ps` (`OLLAMA_URL`, loopback only) and writes
-   that record into `<backend>/_jarvis-logs/`; after them it warms the recorded
-   model at the recorded context when the suites left a different one. One
+   that record into `<backend>/_jarvis-logs/`; after it warms the recorded
+   model at the recorded context when the proof left a different one. One
    `LANE:` line says which happened, or that the lane could not be read and
    nothing was restored. The record is left behind only when a restore failed
    or could not be checked, and the desktop's `--restore-lane` retries it after
    a run its own bound ended - which is what makes the timeout ending restore
-   the lane too.
+   the lane too. (The bounded proof starts the live HUD on a spare port for its
+   instant-answers check, so this bracket covers it exactly as it covers the
+   full sweep.)
+3c. **The progress line the Updates card shows (ruling 5.2).** While the bounded
+   proof runs it prints exactly `PROOF: Step N/4 - <phase> - x of y`, with the
+   four phases named in `BOUNDED_PROOF_PHASES`: module imports, instant API
+   answers, live invariants, look spec & config. `N` is the phase, `4` the
+   number of phases, and `x of y` is the checks done in that phase - so the card
+   never shows a made-up percentage.
 4. Records each suite's own time in `<backend>/_jarvis-logs/update-timings.json`
    **per pace** - the same suites take different wall time at 22 workers and at
    1, so a `safe` run is not evidence for `max_speed`. A pace that has not
@@ -131,28 +149,36 @@ ETA", and the safe pass is what the update is judged by. A failure in `safe`
 mode itself is reported and not re-run, because re-running the same checks the
 same way is not a second opinion.
 
-STEP 1's ROUTE IS CHOSEN WITH EVIDENCE (2026-11-21)
+STEP 1's ROUTE IS CHOSEN WITH EVIDENCE (2026-11-21; ruling 5.5)
 
-`scripts/apply-patches.ps1` is the route for a normally patched install, and it
-stays the default. But some installs are DEPLOY-MANAGED: their live files come
-from `tools/reconcile_live_backend.py` (the published base plus the HUD deltas),
-so the full patch stack rejects a few dozen of its hunks. Measured on the
-owner's own PC at 2026-11-21 00:25-00:28 PT: the automatic finish ran, the stack
-rehearsed on a copy and printed "51 patch(es) will not apply to your files as
-they are" / "None of your backend files were changed by this run.", and the
+`scripts/apply-patches.ps1` is the route for a legacy patch-only install, and it
+stays the first route for one. But some installs are DEPLOY-MANAGED: their live
+files come from `tools/reconcile_live_backend.py` (the published base plus the
+HUD deltas), so the full patch stack rejects a few dozen of its hunks. Measured
+on the owner's own PC at 2026-11-21 00:25-00:28 PT: the automatic finish ran, the
+stack rehearsed on a copy and printed "51 patch(es) will not apply to your files
+as they are" / "None of your backend files were changed by this run.", and the
 backend half was reported as failed even though the deploy tool - run by hand -
-finished the same update with 0 refusals. When that exact refusal shape is in
-the transcript (`patch_refusal`), the same run continues with the deploy tool's
-own `--apply` (`deploy_route`), verifies the live files and the `VERSION` marker
-against the installed desktop, and runs the SAME suites at the chosen pace. Any
-other refusal keeps the old behaviour; the deploy tool's own refusal is reported
-verbatim and never becomes a claim. The `ROUTE:` lines say which route carried
-the update and why.
+finished the same update with 0 refusals.
+
+**Since ruling 5.5 the install type is checked UP FRONT, before any program
+runs.** `deploy_managed_evidence` reads only things the deploy tool itself
+writes and nothing else does: `SOURCE-COMMIT` sitting beside `VERSION` in the
+live folder, and/or a `_jarvis-deploy-backup-tool-*` folder. When that evidence
+is there the deploy tool's own `--apply` (`deploy_route`) is the PRIMARY route -
+the ~three-minute 51-hunk refusal is skipped, not paid. Only an install with
+NEITHER evidence (a legacy patch-only install) starts with the patch stack; if
+that stack then refuses in the measured shape, the same run continues with the
+deploy route - the measured fallback is unchanged. A deploy-tool refusal is
+printed verbatim and never becomes a claim, and a detected deploy route does NOT
+fall back to a patch stack that refuses by construction. The ONE `ROUTE:` line
+says which route carried the update and why: either the evidence that chose the
+deploy route, or the refusal that switched to it.
 
 WHAT IT WRITES, AND WHAT IT DOES NOT
 
 - Writes: the patcher's own `_jarvis-backup-*` folders (by the patcher), its
-  own logs (by the patcher), `update-timings.json` beside them, the pre-suite
+  own logs (by the patcher), `update-timings.json` beside them, the pre-proof
   model-lane record beside them (`lane-before-proof-suites.json`, removed once
   the lane is back), and the `update-in-progress.lock` in the folder Jarvis
   keeps its own data in (it is removed when the update ends; a crash leaves it
@@ -160,26 +186,37 @@ WHAT IT WRITES, AND WHAT IT DOES NOT
   On the deploy route the write is the deploy tool's own: its
   `_jarvis-deploy-backup-tool-*` folders and journal, the `$SHIPPED` modules,
   the HUD deltas and the release markers `VERSION` and `SOURCE-COMMIT`.
+  The bounded proof writes nothing into the install: it compiles the live
+  modules to a throwaway folder and imports them in a child process. It does
+  start the LIVE folder's `jarvis_hud.py` on a spare loopback port for its
+  instant-answers check, for a few seconds and then stops it - the HUD's own
+  normal start-up (its logs, its read-only config reads) is all it does, and no
+  route is written, no card raised and no approval given.
   Nothing else, nowhere else.
 - Does NOT write: `scripts/apply-patches.ps1` or any other repository file,
   the desktop app's settings, or anything else in the owner's
   `~/.openjarvis`.
 - Talks to exactly ONE network address, and only on this PC: the owner's own
   Ollama lane at `OLLAMA_URL` (loopback only; a non-loopback value is refused
-  and nothing is restored), to read `/api/ps` and warm back the recorded model.
-  Nothing leaves the machine, no proxy is used for it, and no other request is
-  made. The only processes it starts are PowerShell (the patcher, and the
-  deploy tool's own read of the installed desktop's FileVersion) and Python
-  (`run_suites.py`, and its own `--restore-lane` mode for the desktop).
+  and nothing is restored), to read `/api/ps` and warm back the recorded model -
+  plus the bounded proof's own three GETs, on a loopback port of its own making,
+  to the live HUD it just started. Nothing leaves the machine, no proxy is used
+  for either, and no other request is made. The only processes it starts are
+  PowerShell (the patcher, and the deploy tool's own read of the installed
+  desktop's FileVersion), Python (`run_suites.py`, the bounded proof's
+  import-all child and the live HUD it starts, and its own `--restore-lane` mode
+  for the desktop), and `tools/check_egress_gate.py` as a Python child.
 
 THE EVENTS
 
 The desktop card is already event-driven: it tails this tool's output and
 `update_progress.rs` reads it. So besides plain lines for the log, this tool
 prints one `JARVIS-EVENT {json}` line per progress change - phase, counts, the
-refined ETA, the mode, and whether the safe fallback is now running. The
+refined ETA (full proof only; the bounded proof has no hour-scale ETA to refine,
+so it sends none), the mode, and whether the safe fallback is now running. The
 desktop shows those; a terminal shows them too, and they are the only machine
-interface.
+interface. The bounded proof's own progress is the `PROOF: Step N/4 - <phase> -
+x of y` lines (ruling 5.2), which the card shows while it runs.
 
 `--modes-json` prints the three modes and their current ETA ranges as one JSON
 object (that is what the desktop's Updates card reads before the owner picks a
@@ -192,9 +229,11 @@ import json
 import math
 import ntpath
 import os
+import py_compile
 import queue
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -1627,6 +1666,111 @@ def refusal_route_words(refusal: dict) -> str:
     return "the patch stack refused to apply on a deployed install"
 
 
+# ---------------------------------------------------------------------------
+#   The route is detected UP FRONT on a deploy-managed install (ruling 5.5)
+# ---------------------------------------------------------------------------
+#
+# WHY (Gemini ruling 5.5, 2026-11-21). The measured automatic finish of
+# 2026-11-21 00:25 PT lost ~three minutes to a REFUSAL it could have predicted:
+# the live folder is deploy-managed, so the full 160-patch stack rehearsed on a
+# copy and refused 51 hunks, changed nothing, and only then did the deploy route
+# carry the update. Ruling 5.5: **check the install type UP FRONT** - if the
+# live folder is deploy-managed, run `tools/reconcile_live_backend.py --apply`
+# DIRECTLY as the primary route and skip the guaranteed refusal; fall back to
+# `scripts/apply-patches.ps1` only for a legacy patch-only install.
+#
+# THE DETECTION IS EVIDENCE, NEVER A GUESS. Only two things on the owner's own
+# PC are written by the deploy tool and by nothing else (see
+# `tools/reconcile_live_backend.py`'s marker and backup steps):
+#   * `SOURCE-COMMIT` sitting BESIDE `VERSION` in the live folder - the two
+#     release markers the deploy writes together. The patch program never
+#     writes SOURCE-COMMIT, and the app's own `VERSION` marker step never does
+#     either, so both files together are deploy evidence; one alone is not.
+#   * at least one `_jarvis-deploy-backup-tool-*` folder in the live folder -
+#     the deploy tool's own backups, named by that tool and by nothing else.
+# Any other folder shape (a patched install with a `VERSION` file, an older
+# install with neither) is a LEGACY PATCH-ONLY install: the patch stack runs
+# first exactly as before, and the measured refusal shape remains the evidence
+# that switches the run mid-way (that behaviour is unchanged).
+#
+# A DEPLOY REFUSAL IS STILL REPORTED VERBATIM AND CLAIMS NOTHING. When the
+# detected deploy route refuses, the run does NOT fall back to the patch stack:
+# on a deploy-managed install that stack is the route that refuses by
+# construction, so trying it would only add the ~3 minutes this ruling exists
+# to avoid. The deploy tool's own words are printed, one `ROUTE:` line says
+# which route ran and why, and "both or neither" is untouched.
+
+#: The deploy tool's own backup folder prefix (`tools/reconcile_live_backend.py`
+#: writes `_jarvis-deploy-backup-tool-<stamp>`). Matched, never imported.
+DEPLOY_BACKUP_PREFIX = "_jarvis-deploy-backup-tool-"
+#: The deploy tool's own commit marker, written BESIDE the release `VERSION`.
+SOURCE_COMMIT_NAME = "SOURCE-COMMIT"
+
+
+def deploy_managed_evidence(backend) -> dict:
+    """Is this live folder DEPLOY-MANAGED, and on what evidence? Never a guess.
+
+    Returns `{"managed": bool, "why": <the evidence in words>, "backups": [...]}`.
+    `managed` is True only when at least one of the two evidence kinds above is
+    really there. `why` is always written for a human to check: it names the
+    marker and its value, or the deploy backup folder count. When nothing is
+    there, `why` is empty and the caller falls back to the legacy patch route -
+    this function never guesses an install type from a folder's name, a missing
+    file or a failure to read one.
+    """
+    backend = Path(backend)
+    reasons = []
+    version = backend / "VERSION"
+    source = backend / SOURCE_COMMIT_NAME
+    if version.is_file() and source.is_file():
+        digest = _read_text(source)
+        # The deploy tool writes SOURCE-COMMIT as JSON (`{"commit": "<sha>", ...}`),
+        # so the ROUTE line names the COMMIT, not the first twelve characters of
+        # a JSON document. An unreadable shape is quoted as it is, never guessed.
+        try:
+            parsed = json.loads(digest) if digest else None
+        except ValueError:
+            parsed = None
+        shown = (str(parsed.get("commit") or "").strip()
+                 if isinstance(parsed, dict) else "")
+        if shown:
+            reasons.append(
+                f"SOURCE-COMMIT sits beside VERSION ({shown[:12]})")
+        elif digest:
+            reasons.append(
+                f"SOURCE-COMMIT sits beside VERSION ({digest[:12]})")
+        else:
+            reasons.append(
+                "SOURCE-COMMIT sits beside VERSION (the file is empty)")
+    backups = []
+    try:
+        backups = sorted(
+            entry.name for entry in backend.iterdir()
+            if entry.is_dir() and entry.name.startswith(DEPLOY_BACKUP_PREFIX))
+    except OSError:
+        backups = []
+    if backups:
+        reasons.append(
+            f"{len(backups)} {DEPLOY_BACKUP_PREFIX}* backup folder(s) are here "
+            f"({backups[-1]})")
+    return {"managed": bool(reasons), "why": "; ".join(reasons),
+            "backups": backups}
+
+
+def deploy_primary_words(evidence: dict) -> str:
+    """The `ROUTE:` sentence's first half for a DETECTED deploy-managed install.
+
+    The measured sentence this must read like: *"this install is deploy-managed
+    (SOURCE-COMMIT sits beside VERSION (d7003442e)); the deploy route carried
+    the update"*. The evidence is the detector's own words, never re-invented.
+    """
+    why = str(evidence.get("why") or "").strip()
+    if why:
+        return f"this install is deploy-managed ({why}), so the deploy route is its route"
+    return "this install is deploy-managed, so the deploy route is its route"
+
+
+
 def suite_result(exit_code, lines) -> dict:
     """What the suite run says, in counts. An unreadable answer is ambiguous.
 
@@ -2440,6 +2584,523 @@ def restore_saved_lane(backend, *, read=None, warm=None, say=print,
 
 
 # ---------------------------------------------------------------------------
+#   The bounded post-update proof (Gemini rulings 5.1 and 5.2, 2026-11-21)
+# ---------------------------------------------------------------------------
+#
+# WHY. The in-app auto-finish AND the "Update everything" press both run this
+# tool, and both used to run the FULL suite list as their proof stage. On the
+# owner's PC that list takes ~48-65 minutes (measured 2026-11-21: a healthy
+# proof stage was ended by the app's bound at 48m 10s). An end-user update must
+# finish in minutes, not over an hour, so the app's proof is now a BOUNDED
+# post-update smoke + invariant subset of a few minutes. The full sweep is still
+# there for a developer by hand: `--full-proof`.
+#
+# WHAT THE BOUNDED PROOF CHECKED (ruling 5.1's own list), IN FOUR REAL PHASES:
+#
+#   1. module imports          every module this repository ships whole is
+#                              `py_compile`d from the LIVE folder, then every
+#                              one of them is imported from it in one fresh
+#                              Python process - a syntax error or a missing
+#                              import is the whole backend down, so it goes
+#                              first;
+#   2. instant API answers     the LIVE folder's own `jarvis_hud.py` is started
+#                              on a spare loopback port with a one-shot token,
+#                              and `/api/version`, `/api/status` and
+#                              `/api/presets` must each answer 200 - the three
+#                              instant routes every screen reads;
+#   3. live invariants         the real, cheap checks that already exist and
+#                              prove the core promises this update must not
+#                              break: `tools/check_egress_gate.py` (every
+#                              outbound host still names the egress gate),
+#                              `backend/test_gate_egress.py` (the approval gate's
+#                              own egress rules), `backend/test_reconcile_live_backend.py`
+#                              (the deploy tool's contract) and
+#                              `backend/test_projects.py` (Projects still work);
+#   4. look spec & config      the release's own content is really in place: the
+#                              live `jarvis-visual-spec.json` is the release's
+#                              copy (structural compare, as `spec_drift.rs`
+#                              makes), and the live `jarvis-framework.toml`
+#                              parses and its `[tools].enabled` list reads.
+#
+# THE FILE HALF IS UNCHANGED. Bytes and release markers are still proved by
+# `verify_live_files` and the deploy's own read-back, before this proof starts.
+# The look spec is still DELIVERED with the file half (step 2b), never by this
+# proof; phase 4 only verifies it.
+#
+# HONEST ENDING. A bounded pass is a claim about THIS SUBSET and nothing more:
+# the ending words say "proven by the bounded checks (N of N)" and name the full
+# sweep as the thing that was not run. The full-sweep ending
+# ("ALL DONE - the backend is patched and proven") is printed only by
+# `--full-proof`. The desktop's `read_verdict` still reads "patched and proven"
+# in the bounded line, because the bounded pass IS the app path's proof - but
+# the line itself never pretends the full check ran.
+#
+# THE PROGRESS LINE (ruling 5.2). While the subset runs, the Updates card gets
+# exactly one shape per check:
+#
+#     PROOF: Step 2/4 - instant API answers - 1 of 1
+#
+# (`Step <phase>/<4 phases> - <phase name> - <checks done> of <checks in phase>`;
+# the phase's `0 of N` line opens it). The five-minute heartbeat from #1442 is
+# unchanged and still covers a quiet child, so no app bound can fire on a
+# healthy bounded run; the bounded proof itself is expected to finish in a few
+# minutes, well inside it.
+
+#: The four real phases, in order. `PROOF: Step N/4` uses the index (N) and the
+#: total here (M), and the phase's `name` is printed verbatim on the card.
+BOUNDED_PROOF_PHASES = (
+    {"id": "imports", "name": "module imports"},
+    {"id": "answers", "name": "instant API answers"},
+    {"id": "invariants", "name": "live invariants"},
+    {"id": "spec", "name": "look spec & config"},
+)
+#: The prefix and shape of the progress line the Updates card shows (ruling 5.2).
+PROOF_STEP_PREFIX = "PROOF: Step "
+PROOF_STEP_SHAPE = ("PROOF: Step {step}/{steps} - {phase} - {done} of {total}")
+#: The cheap checks phase 3 runs, each by its BARE suite name through the real
+#: runner (`backend/run_suites.py <name> --backend-path <live>`), the same way
+#: the full sweep names them - so nothing here is a reimplementation.
+BOUNDED_INVARIANT_SUITES = (
+    "test_gate_egress.py",
+    "test_reconcile_live_backend.py",
+    "test_projects.py",
+)
+#: The egress gate census, a real command that already exists.
+EGRESS_CHECKER_REL = Path("tools") / "check_egress_gate.py"
+#: How long the live HUD may take to answer its first request before the
+#: instant-answers check is a failure. The HUD imports the whole backend at
+#: start-up; selftest.py gives it 30 seconds, and this is generous without
+#: letting a truly wedged start-up sit inside the bounded proof.
+PROOF_HUD_START_SECONDS = 60.0
+#: One HTTP read against the live HUD, once it is up.
+PROOF_HUD_READ_TIMEOUT = 10.0
+#: How many failed module/route names a line shows before it summarises.
+PROOF_SHOW_LIMIT = 8
+
+#: The import check's child program. It imports EVERY module this repository
+#: ships whole from the live folder in one fresh process, prints every failure
+#: by name, and exits non-zero when any of them failed. Passed to
+#: `python -B -c` as one argument, so it is an auditable command and no new
+#: tracked file is invented for it.
+PROOF_IMPORT_SOURCE = """\
+import importlib, json, sys
+live, names = sys.argv[1], json.loads(sys.argv[2])
+sys.path.insert(0, live)
+failed = []
+for name in names:
+    try:
+        importlib.import_module(name)
+    except BaseException as exc:
+        failed.append(f"{name}: {type(exc).__name__}: {exc}")
+for line in failed:
+    print("FAIL import " + line)
+print(f"imported {len(names) - len(failed)} of {len(names)} shipped modules from {live}")
+sys.exit(1 if failed else 0)
+"""
+
+
+def shipped_module_names(repo) -> list:
+    """Every MODULE name this repository ships whole, from `_where.py`'s SHIPPED.
+
+    `shipped_leaves` already reads the authoritative tuple the patcher copies;
+    this keeps only the `.py` entries (the beside-files such as the HUD's HTML
+    are not modules) and de-duplicates, so the import check names exactly what
+    this repository says it ships. Never guessed from a folder listing."""
+    names = []
+    for leaf in shipped_leaves(repo):
+        if not leaf.endswith(".py"):
+            continue
+        name = leaf[:-3]
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def bounded_proof_plan(repo, backend) -> list:
+    """The bounded proof's checks, in order, with the phase each belongs to.
+
+    Pure: building the plan starts nothing and touches no file. Each check is a
+    dict with `id` (stable, for the report and the tests), `phase` (index into
+    `BOUNDED_PROOF_PHASES`), `what` (the owner words), and either `command` (the
+    EXACT argv a child process is started with) or `inprocess` (the name of the
+    in-process check, which never starts a program). Every program named here
+    already exists in this repository or is the running Python's standard
+    library - the plan invents no checker.
+    """
+    repo, backend = Path(repo), Path(backend)
+    modules = shipped_module_names(repo)
+    suites = suites_command(repo, 1, backend)
+    checks = [
+        {"id": "py_compile", "phase": 0, "inprocess": "compile",
+         "what": "py_compile every module this repository ships whole, from "
+                 "the live folder"},
+        {"id": "imports", "phase": 0,
+         "what": f"import every one of the {len(modules)} shipped modules from "
+                 "the live folder",
+         "command": [sys.executable, "-B", "-c", PROOF_IMPORT_SOURCE,
+                     str(backend), json.dumps(modules)]},
+        {"id": "live_hud", "phase": 1, "inprocess": "live_hud",
+         "what": "the live HUD on a spare loopback port answers "
+                 "/api/version, /api/status and /api/presets"},
+        {"id": "egress", "phase": 2,
+         "what": "the egress gate census (every outbound host names the gate)",
+         "command": [sys.executable, "-B",
+                     str(repo / EGRESS_CHECKER_REL)]},
+    ]
+    for suite in BOUNDED_INVARIANT_SUITES:
+        checks.append(
+            {"id": suite[len("test_"):-len(".py")], "phase": 2,
+             "what": f"the {suite} smoke checks",
+             "command": suites + [suite]})
+    checks.extend([
+        {"id": "look_spec", "phase": 3, "inprocess": "look_spec",
+         "what": "the live look spec is the release's copy (structural compare)"},
+        {"id": "config", "phase": 3, "inprocess": "config",
+         "what": "the live jarvis-framework.toml parses and its [tools].enabled "
+                 "list reads"},
+    ])
+    return checks
+
+
+def compile_shipped_modules(repo, backend) -> dict:
+    """`py_compile` every module this repository ships whole, FROM THE LIVE FOLDER.
+
+    Compiled to a throwaway folder (`cfile=`), so the live folder gains no
+    `__pycache__` from this check; the bytes compiled are the live folder's, so
+    a file that arrived broken is caught here. Returns `{"ok", "checked",
+    "failed"}`; a module missing from the live folder is a failure too - the
+    file half should have proved it present, and this is the second witness.
+    """
+    leaves = [leaf for leaf in shipped_leaves(repo) if leaf.endswith(".py")]
+    work = Path(tempfile.mkdtemp(prefix="jarvis-proof-compile-"))
+    failed = []
+    try:
+        for index, leaf in enumerate(leaves):
+            path = Path(backend) / leaf
+            if not path.is_file():
+                failed.append(f"{leaf}: missing from {Path(backend)}")
+                continue
+            target = work / f"{index:04d}-{leaf}"
+            try:
+                py_compile.compile(str(path), cfile=str(target), doraise=True)
+            except py_compile.PyCompileError as exc:
+                failed.append(f"{leaf}: {getattr(exc, 'msg', '') or exc}")
+            except OSError as exc:
+                failed.append(f"{leaf}: {type(exc).__name__}: {exc}")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    return {"ok": not failed, "checked": len(leaves), "failed": failed}
+
+
+def import_shipped_modules(repo, backend, *, run=None) -> dict:
+    """Import every shipped module from the live folder, in ONE fresh process.
+
+    The child is the exact command the plan names (`python -B -c
+    <PROOF_IMPORT_SOURCE> <live> <names>`); it prints each module that failed
+    and exits non-zero if any did. Kept in a child on purpose: importing 340+
+    modules into this tool's own process would leak their state into an update.
+    """
+    run = run or _run
+    names = shipped_module_names(repo)
+    command = [sys.executable, "-B", "-c", PROOF_IMPORT_SOURCE,
+               str(Path(backend)), json.dumps(names)]
+    lines = []
+    code = _call(run, command, Path(repo), lines.append)
+    return {"ok": code == 0, "checked": len(names), "code": code,
+            "lines": lines}
+
+
+def _free_loopback_port() -> int:
+    """A port free on this PC right now, for the proof's own short-lived HUD."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def _proof_hud_get(base: str, path: str, token: str):
+    """One token-carrying GET to the proof HUD, with NO proxy (loopback only)."""
+    request = urllib.request.Request(
+        base + path,
+        headers={"X-Jarvis-Token": token, "X-Jarvis-Client": "hud",
+                 "Origin": base})
+    with _lane_opener().open(request, timeout=PROOF_HUD_READ_TIMEOUT) as reply:
+        return reply.status, reply.read()
+
+
+def probe_live_hud(backend, *, say=print) -> dict:
+    """Start the LIVE folder's own HUD on a spare loopback port; read three routes.
+
+    WHY IT IS BUILT HERE. There is no existing command that starts the live
+    HUD and reads exactly `/api/version`, `/api/status` and `/api/presets`;
+    `backend/selftest.py` starts one but reads a different route list, so it
+    cannot answer this ruling's question. This is the smallest real command that
+    does: the HUD file is the LIVE folder's own (`<backend>/jarvis_hud.py`, the
+    bytes the file half just proved), the port is spare so a Jarvis already
+    running is not disturbed, and the token is one-shot and never printed.
+
+    READ-ONLY ROUTES ONLY. Three GETs, all to this PC's own loopback port. The
+    HUD is stopped in a `finally`, including on failure. A route that does not
+    answer 200 is a failure for that route, never a pass: the count is what the
+    phase reports, so the card sees "2 of 3" rather than a claim.
+    """
+    backend = Path(backend)
+    routes = ("/api/version", "/api/status", "/api/presets")
+    hud = backend / "jarvis_hud.py"
+    if not hud.is_file():
+        return {"ok": False, "answered": 0, "total": len(routes),
+                "routes": {}, "why": f"there is no jarvis_hud.py in {backend}"}
+    port = _free_loopback_port()
+    token = "update-proof-" + os.urandom(8).hex()
+    env = dict(os.environ)
+    env.update({"JARVIS_HUD_PORT": str(port), "HUD_TOKEN": token,
+                "JARVIS_HUD_BIND": "127.0.0.1"})
+    base = f"http://127.0.0.1:{port}"
+    try:
+        child = subprocess.Popen(
+            [sys.executable, "-B", str(hud)], cwd=str(backend), env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        return {"ok": False, "answered": 0, "total": len(routes), "routes": {},
+                "why": f"the live HUD could not be started ({type(exc).__name__}: {exc})"}
+    try:
+        up = False
+        deadline = time.monotonic() + PROOF_HUD_START_SECONDS
+        while time.monotonic() < deadline:
+            if child.poll() is not None:
+                break
+            try:
+                _proof_hud_get(base, "/api/version", token)
+                up = True
+                break
+            except Exception:                 # noqa: BLE001 - still starting
+                time.sleep(0.5)
+        if not up:
+            return {"ok": False, "answered": 0, "total": len(routes),
+                    "routes": {},
+                    "why": f"the live HUD on {base} did not answer /api/version "
+                           f"within {int(PROOF_HUD_START_SECONDS)}s"}
+        answers = {}
+        for path in routes:
+            try:
+                code, _body = _proof_hud_get(base, path, token)
+                answers[path] = int(code)
+            except urllib.error.HTTPError as exc:
+                answers[path] = int(exc.code)
+            except Exception:                 # noqa: BLE001 - not answering is the answer
+                answers[path] = None
+        answered = sum(1 for code in answers.values() if code == 200)
+        for path in routes:
+            shown = "no answer" if answers[path] is None else answers[path]
+            say(f"  {path} -> {shown}")
+        return {"ok": answered == len(routes), "answered": answered,
+                "total": len(routes), "routes": answers,
+                "why": "" if answered == len(routes) else
+                       "not every instant route answered 200"}
+    finally:
+        try:
+            child.terminate()
+            child.wait(timeout=10)
+        except Exception:                     # noqa: BLE001 - never a crash
+            try:
+                child.kill()
+            except Exception:                 # noqa: BLE001
+                pass
+
+
+def look_spec_agreement(repo, backend) -> dict:
+    """The live look spec IS the release's copy, compared structurally.
+
+    The same comparison `jarvis-desktop/src-tauri/src/spec_drift.rs` makes and
+    `deliver_visual_spec` already delivers by: two files that differ only in
+    whitespace or key order agree. It is a READ here - delivery belongs to the
+    file half (step 2b), never to the proof. A missing or unreadable live copy
+    is a failure, never a pass.
+    """
+    shipped_path = Path(repo) / VISUAL_SPEC_REL
+    live_path = Path(backend) / VISUAL_SPEC_NAME
+    try:
+        shipped = shipped_path.read_bytes()
+    except OSError as exc:
+        return {"ok": False,
+                "why": f"the release's copy could not be read at {shipped_path} "
+                       f"({type(exc).__name__})"}
+    shipped_doc, why = _json_structure(shipped)
+    if shipped_doc is None:
+        return {"ok": False, "why": f"the release's copy is {why}"}
+    try:
+        live = live_path.read_bytes()
+    except FileNotFoundError:
+        return {"ok": False,
+                "why": f"the live copy is absent at {live_path}"}
+    except OSError as exc:
+        return {"ok": False,
+                "why": f"the live copy could not be read ({type(exc).__name__})"}
+    if live == shipped:
+        return {"ok": True, "why": "", "same": "bytes"}
+    live_doc, why = _json_structure(live)
+    if live_doc is None:
+        return {"ok": False, "why": f"the live copy is {why}"}
+    if live_doc == shipped_doc:
+        return {"ok": True, "why": "", "same": "structure"}
+    return {"ok": False,
+            "why": f"the live copy at {live_path} is not this release's look spec"}
+
+
+def live_config_reads(backend) -> dict:
+    """The live `jarvis-framework.toml` parses and its `[tools].enabled` reads.
+
+    The owner's own config is never written by this tool (`enable_new_tools.py`
+    owns that, after the proof). The bounded proof only proves the release's
+    config is readable at all, through the SAME reader the tool-defaults step
+    uses, so the two can never disagree about what the file says.
+    """
+    names, why = framework_tool_defaults_in(Path(backend) / FRAMEWORK_NAME)
+    if names is None:
+        return {"ok": False, "why": why}
+    return {"ok": True, "why": "", "tools": len(names)}
+
+
+def _bounded_check_output(check, repo, backend, *, run, say):
+    """Run ONE check (a child command or one in-process check); (ok, detail)."""
+    ident = check.get("id") or ""
+    if check.get("command") is not None:
+        lines = []
+
+        def on_line(line: str) -> None:
+            lines.append(line)
+            say(line)
+
+        code = _call(run, check["command"], Path(repo), on_line)
+        if code == 0:
+            return True, ""
+        failed = [line for line in lines
+                  if line.startswith("FAIL") or line.startswith("REFUSED")
+                  or "not a suite name" in line]
+        return False, (failed[0] if failed else f"exit {code!r}")
+    # The in-process checks. Their default functions are looked up at CALL time
+    # (not captured at import), so a test can put a fake on this module exactly
+    # the way it fakes the lane probes - the heavy checks are never run for real
+    # in the suite.
+    if ident == "py_compile":
+        result = (bounded_proof._checks.get("compile")
+                  or compile_shipped_modules)(repo, backend)
+        if result["failed"]:
+            for line in result["failed"][:PROOF_SHOW_LIMIT]:
+                say("  FAIL py_compile " + line)
+            return False, result["failed"][0]
+        say(f"  py_compile: {result['checked']} module(s) this repository ships "
+            "whole compiled from the live folder")
+        return True, ""
+    if ident == "live_hud":
+        result = (bounded_proof._checks.get("live_hud")
+                  or probe_live_hud)(backend, say=say)
+        if result["ok"]:
+            say(f"  the live HUD answered {result['answered']} of "
+                f"{result['total']} instant routes")
+            return True, ""
+        return False, result.get("why") or "the live HUD did not answer"
+    if ident == "look_spec":
+        result = (bounded_proof._checks.get("look_spec")
+                  or look_spec_agreement)(repo, backend)
+        if result["ok"]:
+            same = result.get("same") or "bytes"
+            say(f"  look spec: the live copy is the release's copy (same {same})")
+            return True, ""
+        return False, result.get("why") or "the look spec disagrees"
+    if ident == "config":
+        result = (bounded_proof._checks.get("config")
+                  or live_config_reads)(backend)
+        if result["ok"]:
+            say(f"  config: the live {FRAMEWORK_NAME} reads "
+                f"({result['tools']} tool(s) enabled)")
+            return True, ""
+        return False, result.get("why") or "the live config could not be read"
+    return False, f"no check is registered under {ident!r}"
+
+
+def bounded_proof(repo, backend, *, say=print, run=None, clock=None,
+                  on_progress=None, probe=None, compile_check=None,
+                  spec_check=None, config_check=None) -> dict:
+    """Run the bounded post-update proof; the app path's proof stage.
+
+    Prints the `PROOF: Step N/4 - <phase> - x of y` lines (ruling 5.2) and the
+    heartbeat from #1442, which is created here so a quiet stretch inside a
+    phase is still covered. Returns `{"ok", "passed", "total", "checks",
+    "phases"}`; `checks` carries each check's id, phase, words and result, so
+    the caller can report exactly which subset passed instead of claiming a
+    full check.
+
+    The heavy/in-process checks are injectable (`probe`, `compile_check`,
+    `spec_check`, `config_check`, and `run` for child commands), which is how
+    the suite drives every branch without starting a real backend or running a
+    343-module import.
+    """
+    run = run or _run
+    clock = clock or time.monotonic
+    plan = bounded_proof_plan(repo, backend)
+    phases = len(BOUNDED_PROOF_PHASES)
+    bounded_proof._checks = {
+        "compile": compile_check,
+        "live_hud": probe,
+        "look_spec": spec_check,
+        "config": config_check,
+    }
+    total = len(plan)
+    started = float(clock())
+    heartbeat = _ProofHeartbeat(say, started)
+    say(f"Bounded proof: {total} check(s) in {phases} phases - a subset of the "
+        "full suite, a few minutes, not the 48-65 minute sweep.")
+    say(f"  the checks are: {', '.join(check['what'] for check in plan)}")
+    results = []
+    done_overall = 0
+    try:
+        for phase_index, phase in enumerate(BOUNDED_PROOF_PHASES):
+            checks = [check for check in plan if check["phase"] == phase_index]
+            say(PROOF_STEP_SHAPE.format(
+                step=phase_index + 1, steps=phases, phase=phase["name"],
+                done=0, total=len(checks)))
+            heartbeat.saw_output(clock())
+            for done_in_phase, check in enumerate(checks, 1):
+                ok, detail = _bounded_check_output(
+                    check, repo, backend, run=run, say=say)
+                results.append({"id": check["id"], "phase": phase["name"],
+                                "what": check["what"], "ok": bool(ok),
+                                "detail": detail})
+                done_overall += 1
+                if on_progress is not None:
+                    on_progress(done_overall, total, results)
+                # A check that ran long and printed nothing is exactly what the
+                # heartbeat is for: beat BEFORE the next PROOF line, so a quiet
+                # stretch is covered even when the next thing said is progress.
+                heartbeat.beat(clock())
+                say(PROOF_STEP_SHAPE.format(
+                    step=phase_index + 1, steps=phases, phase=phase["name"],
+                    done=done_in_phase, total=len(checks)))
+                # The PROOF line itself is output: it restarts the heartbeat's
+                # quiet clock, exactly as a real child line does.
+                heartbeat.saw_output(clock())
+    finally:
+        bounded_proof._checks = {}
+    passed = sum(1 for row in results if row["ok"])
+    failed = [row for row in results if not row["ok"]]
+    if failed:
+        say(f"BOUNDED PROOF: {passed} of {total} check(s) passed; "
+            f"{len(failed)} failed: " + ", ".join(row["id"] for row in failed))
+    else:
+        say(f"BOUNDED PROOF: all {total} check(s) passed - this is the bounded "
+            "subset, not the full suite.")
+    return {"ok": not failed, "passed": passed, "total": total,
+            "checks": results, "phases": phases}
+
+
+#: Set by `bounded_proof` while it runs; the in-process check names point at the
+#: caller's injected fakes (empty between runs, so nothing leaks from one update
+#: to the next). A dict, not module globals, so a failed run cannot leave a
+#: fake wired in.
+bounded_proof._checks = {}
+
+
+# ---------------------------------------------------------------------------
 #   The update itself
 # ---------------------------------------------------------------------------
 
@@ -2518,7 +3179,7 @@ def _deploy_safe_words() -> str:
 
 def update(repo, backend, mode: str, *, requested_workers=None, timings_path=None,
            say=print, run=_run, clock=time.time, lock_file=None,
-           previous_release=None,
+           previous_release=None, full_proof=False,
            tool_defaults=None, beside_files=None, deploy=None) -> int:
     """Run one backend update at `mode`'s pace; return 0 only when it proved it.
 
@@ -2527,14 +3188,25 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     cannot prove itself, restore the newest backup and do the same three steps
     with one worker, and judge the update by that second pass.
 
-    THE ROUTE IS CHOSEN WITH EVIDENCE. `apply-patches.ps1` is the default, and a
-    patched install never takes any other route. When its transcript is the
-    deploy-managed refusal (`patch_refusal`), the same run continues with
-    `deploy_route` - `tools/reconcile_live_backend.py --apply` - which is the
-    route that works on a PC whose live files are deploy-managed (measured
-    2026-11-21 00:25 PT). A deploy-tool refusal is reported verbatim and nothing
-    is claimed; `deploy` is injectable so both outcomes are tests rather than
-    hopes.
+    THE PROOF STAGE IS BOUNDED ON THE APP PATH (Gemini ruling 5.1, 2026-11-21).
+    The in-app auto-finish and the "Update everything" press both run this
+    tool, and both must finish in minutes: the default proof stage is the
+    bounded post-update subset (`bounded_proof`) - module imports, the live
+    HUD's instant answers, the cheap core invariant checks, and the look spec
+    and config the release owns. `full_proof=True` (the command line's
+    `--full-proof`) keeps today's full 48-65 minute suite sweep for a developer
+    running it by hand, and its ending words are the only ones that claim the
+    full check.
+
+    THE ROUTE IS CHOSEN WITH EVIDENCE (Gemini ruling 5.5, 2026-11-21).
+    `apply-patches.ps1` stays the route for a legacy patch-only install. A
+    DEPLOY-MANAGED install is detected up front from evidence on disk
+    (`deploy_managed_evidence`), and its route is `deploy_route` -
+    `tools/reconcile_live_backend.py --apply` - directly, skipping the
+    guaranteed 51-hunk refusal. A deploy-tool refusal is reported verbatim and
+    nothing is claimed; `deploy` is injectable so both outcomes are tests
+    rather than hopes. The mid-run refusal fallback is unchanged for a
+    patch-only install whose stack refuses in the measured shape.
 
     THE EXCLUSIVE LOCK is taken HERE, before a file is patched and before the
     suites start, and released on every way out (the `finally`); the suites this
@@ -2542,8 +3214,6 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     `--ignore-update-lock`), everything else on the PC is not. A live lock held
     by another update is a refusal (`UpdateRefused("update_running", ...)`)
     naming its pid, pace and start time. `lock_file` overrides the path; when
-    only `timings_path` is given (a caller naming its own state folder, which is
-    `lock_file` overrides the path; when
     only `timings_path` is given (a caller naming its own state folder, which is
     how the tests keep the owner's `~/.openjarvis` untouched), the lock sits
     BESIDE that file rather than in the shared settings folder.
@@ -2554,9 +3224,10 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     build with no recorded commit) means that step says which read it could not
     do and adds nothing - it never guesses.
 
-    Exit codes: 0 = no problems (proven or, with skips, unproven - the words
-    say which), 1 = problems/ambiguous/failed. The desktop's `read_verdict`
-    already distinguishes proven from unproven off the final words.
+    Exit codes: 0 = no problems (proven, or with skips, unproven - the words
+    say which; a bounded pass says it is a subset), 1 = problems/ambiguous/
+    failed. The desktop's `read_verdict` already distinguishes proven from
+    unproven off the final words.
     """
     repo = Path(repo)
     backend = Path(backend)
@@ -2593,7 +3264,7 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
                               previous_release=previous_release,
                               tool_defaults=tool_defaults,
                               beside_files=beside_files,
-                              deploy=deploy,
+                              deploy=deploy, full_proof=bool(full_proof),
                               lock_file=target if taken.get("ok") else None)
     finally:
         if taken.get("ok"):
@@ -2605,10 +3276,15 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
 
 def _update_locked(repo, backend, mode: str, *, requested_workers,
                    timings_path=None, say=print, run=_run, clock=time.time,
-                   lock_file=None, previous_release=None,
+                   lock_file=None, previous_release=None, full_proof=False,
                    tool_defaults=None, beside_files=None, deploy=None) -> int:
     """The update itself. The lock is already held by `update()`; `lock_file`
-    is refreshed as suites finish (the heartbeat) and released by the caller."""
+    is refreshed as suites finish (the heartbeat) and released by the caller.
+
+    `full_proof` is the developer's `--full-proof`: False (the app path) runs
+    the bounded subset, True keeps today's full suite sweep and its ending
+    words. The route and the file half are identical either way.
+    """
     tool_defaults = tool_defaults or enable_new_tool_defaults
     beside_files = beside_files or deliver_visual_spec
     deploy = deploy or deploy_route
@@ -2616,41 +3292,66 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
     backend = Path(backend)
     spec = mode_spec(mode)                 # unknown mode: refused here, first
     names = suite_names(repo)
+    # THE APP PATH'S PROOF IS THE BOUNDED SUBSET (ruling 5.1). The plan is built
+    # ONCE, before anything is patched: its checks and their exact commands are
+    # what the run reports, and building it starts nothing.
+    proof_plan = [] if full_proof else bounded_proof_plan(repo, backend)
+    # THE ROUTE IS DETECTED BEFORE ANY PROGRAM RUNS (ruling 5.5). Evidence only:
+    # a deploy-managed live folder takes the deploy tool directly; anything else
+    # is the legacy patch-only install and starts with the patch stack exactly
+    # as before. `evidence` is what the ROUTE line says, never a re-guess.
+    evidence = deploy_managed_evidence(backend)
     path = Path(timings_path) if timings_path is not None else timings_path_for(backend)
     timings = pace_timings(load_timings(path), mode)
     plan = estimate(mode, names, timings, requested=requested_workers)
     first_patch, first_suite, first_share = plan_split(timings, names, requested_workers)
     emit_event(say, "reading", mode=mode, workers=requested_workers,
-               suiteCount=len(names), measured=plan["measured"],
+               suiteCount=len(proof_plan) or len(names),
+               measured=(plan["measured"] if full_proof else None),
                fraction=0.0)
-    emit_event(say, "plan", mode=mode, workers=requested_workers,
-               etaSeconds=plan["eta_seconds"], etaLowSeconds=plan["eta_low_seconds"],
-               etaHighSeconds=plan["eta_high_seconds"], measured=plan["measured"],
-               suiteCount=len(names), patchSeconds=first_patch,
-               suiteSeconds=first_suite, patchShare=round(first_share, 4),
-               fraction=0.0)
-    say(f"Update pace: {spec['label']} ({mode}), {requested_workers} suite(s) at a time.")
-    if plan["measured"]:
-        say(f"Estimated from the times recorded on this PC: about "
-            f"{_minutes(plan['eta_low_seconds'])}-{_minutes(plan['eta_high_seconds'])}.")
+    if full_proof:
+        emit_event(say, "plan", mode=mode, workers=requested_workers,
+                   etaSeconds=plan["eta_seconds"], etaLowSeconds=plan["eta_low_seconds"],
+                   etaHighSeconds=plan["eta_high_seconds"], measured=plan["measured"],
+                   suiteCount=len(names), patchSeconds=first_patch,
+                   suiteSeconds=first_suite, patchShare=round(first_share, 4),
+                   fraction=0.0)
     else:
-        say(f"First run: no times recorded on this PC yet, so this is a guess "
-            f"({_minutes(plan['eta_low_seconds'])}-{_minutes(plan['eta_high_seconds'])}), "
-            "not a measurement. It will be measured and refined as the checks finish.")
+        emit_event(say, "plan", mode=mode, workers=requested_workers,
+                   suiteCount=len(proof_plan), fraction=0.0)
+    say(f"Update pace: {spec['label']} ({mode}), {requested_workers} suite(s) at a time.")
+    if full_proof:
+        if plan["measured"]:
+            say(f"Estimated from the times recorded on this PC: about "
+                f"{_minutes(plan['eta_low_seconds'])}-{_minutes(plan['eta_high_seconds'])}.")
+        else:
+            say(f"First run: no times recorded on this PC yet, so this is a guess "
+                f"({_minutes(plan['eta_low_seconds'])}-{_minutes(plan['eta_high_seconds'])}), "
+                "not a measurement. It will be measured and refined as the checks finish.")
+        say("Full proof mode: the whole suite list runs (~48-65 minutes on this PC). "
+            "A manual developer run only; the app's own update runs the bounded "
+            "check.")
+    else:
+        say(f"Proof: the bounded post-update check ({len(proof_plan)} checks in "
+            f"{len(BOUNDED_PROOF_PHASES)} phases, a few minutes), not the full "
+            "suite. The full sweep is a developer run only: --full-proof.")
 
     attempt_mode = mode
     attempt_number = 0
     fell_back = False
-    #: What carried this update's files: "patch" (the default, a patched
-    #: install) or "deploy" (the measured fallback for a deployed install). The
-    #: safe second pass re-runs the checks without re-running the route.
-    route = "patch"
-    deploy_words = ""             # the ROUTE sentence, once the deploy route ran
+    #: What carried this update's files: "deploy" (detected deploy-managed, or
+    #: the measured refusal fallback) or "patch" (a legacy patch-only install).
+    #: The safe second pass re-runs the checks without re-running the route.
+    route = "deploy" if evidence["managed"] else "patch"
+    deploy_words = (deploy_primary_words(evidence) if evidence["managed"] else "")
     deploy_seconds = 0.0          # the deploy phase's own time, recorded as the
                                   # patch phase's time for the next estimate
     deployed = {}                 # the deploy report (version/ref), once it ran
     beside_done = False           # the look spec is delivered once the FILE half
-                                  # is proved, before the proof suites (2026-11-21)
+                                  # is proved, before the proof (2026-11-21)
+    if evidence["managed"]:
+        say(f"ROUTE  {deploy_words}; it is detected from evidence on disk before "
+            "anything runs, so the patch stack's guaranteed refusal is skipped.")
     while True:
         attempt_number += 1
         workers = workers_for(attempt_mode, requested_workers)
@@ -2663,6 +3364,9 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
         pass_max = [0.0]
         pass_label = "second pass (safe mode)" if fell_back else None
         measured_now = plan["measured"]
+        # The bounded proof's progress is its own completed checks, not the full
+        # list's weights: the bar must not pretend the sweep is running.
+        bar_share = 0.0 if not full_proof else this_share
 
         def emit_progress(phase: str, **fields) -> dict:
             """One progress event with the bar's real fraction clamped by the
@@ -2679,14 +3383,86 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             return emit_event(say, phase, mode=attempt_mode, workers=workers,
                               fallback=fallback_flag, **fields)
 
-        emit_progress("plan", etaSeconds=plan["eta_seconds"],
-                      etaLowSeconds=plan["eta_low_seconds"],
-                      etaHighSeconds=plan["eta_high_seconds"],
-                      measured=measured_now, suiteCount=len(names),
-                      patchSeconds=patch_est, suiteSeconds=suite_est,
-                      patchShare=round(this_share, 4), fraction=0.0)
+        if full_proof:
+            emit_progress("plan", etaSeconds=plan["eta_seconds"],
+                          etaLowSeconds=plan["eta_low_seconds"],
+                          etaHighSeconds=plan["eta_high_seconds"],
+                          measured=measured_now, suiteCount=len(names),
+                          patchSeconds=patch_est, suiteSeconds=suite_est,
+                          patchShare=round(this_share, 4), fraction=0.0)
+        else:
+            emit_progress("plan", suiteCount=len(proof_plan), fraction=0.0)
 
-        # ---- 1. the route: patch, or the deploy fallback -----------------
+        # ---- 1. the route: deploy (detected or fallback), or the patch stack
+        def run_deploy_phase(words: str) -> bool:
+            """Run the deploy tool on the same folder; False when it did not finish.
+
+            Shared by the two ways this update reaches the deploy route: the
+            UP-FRONT detection of a deploy-managed install (ruling 5.5) and the
+            measured patch-stack refusal on a legacy install (2026-11-21). The
+            deploy tool's own output flows through verbatim; on failure the ONE
+            `ROUTE:` line is printed here, and on success it is printed with the
+            ending, so the card always gets exactly one audit sentence.
+            """
+            nonlocal deploy_words, deploy_seconds, patch_seconds
+            deploy_words = words
+            say("")
+            say(f"NOTE  {words}; the deploy route is running "
+                "(tools\\reconcile_live_backend.py --apply) on the same "
+                f"backend folder ({backend}).")
+            emit_progress(
+                "patching", done=0, total=None, failed=0,
+                note="the deploy route is carrying the update",
+                measured=measured_now,
+                fraction=phase_fraction("patching", patch_share=bar_share,
+                                        patch_done=0, patch_total=None))
+            last_deploy_beat = [clock()]
+
+            def on_deploy(line: str) -> None:
+                say(line)
+                if (lock_file is not None
+                        and clock() - last_deploy_beat[0]
+                        >= LOCK_PATCH_HEARTBEAT_SECONDS):
+                    refresh_lock(path=lock_file, now=clock())
+                    last_deploy_beat[0] = clock()
+
+            deploy_start = clock()
+            try:
+                report = deploy(repo, backend, say=on_deploy)
+            except UpdateRefused as exc:
+                report = {"ok": False, "why": exc.message, "lines": []}
+            except Exception as exc:           # noqa: BLE001 - never a crash
+                report = {
+                    "ok": False,
+                    "why": f"the deploy route itself failed "
+                           f"({type(exc).__name__}: {exc})",
+                    "lines": [],
+                }
+            deploy_seconds = max(0.0, clock() - deploy_start)
+            patch_seconds = deploy_seconds
+            deployed.clear()
+            deployed.update(report)
+            if lock_file is not None:
+                refresh_lock(path=lock_file, now=clock())
+            if not deployed.get("ok"):
+                why = deployed.get("why") or "it printed no verdict"
+                emit_progress(
+                    "done", verdict="problems", fallback=fell_back,
+                    note="the deploy route did not finish either; nothing "
+                         "is claimed as updated",
+                    fraction=None)
+                say("")
+                say(ROUTE_PREFIX + f"{deploy_words}; the deploy route did not "
+                    f"finish: {why}")
+                if deployed.get("lines"):
+                    say("  the deploy tool's own report is above, verbatim.")
+                say("DONE WITH PROBLEMS - do not trust this update yet")
+                return False
+            # The deploy tool's own `RESULT: PASS` line is above; the ONE
+            # `ROUTE:` sentence for this update is printed with the ending,
+            # after the live files and the proof have proved it.
+            return True
+
         if route == "deploy" and fell_back:
             # The safe second pass after the deploy route: the bytes were
             # already proved (the deploy's own step-1 compare, then
@@ -2694,6 +3470,12 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             # refused once - would only repeat the refusal, and restoring a
             # backup would undo the deploy. Only the checks run again.
             patch_seconds = deploy_seconds
+        elif route == "deploy":
+            # RULING 5.5: the evidence said this install is deploy-managed, so
+            # the deploy tool is the PRIMARY route and the patch stack is never
+            # started - the ~3-minute 51-hunk refusal is skipped, not paid.
+            if not run_deploy_phase(deploy_words):
+                return 1
         else:
             patch_start = clock()
             counter = _PatchCounter()
@@ -2727,7 +3509,7 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                     failed=counter.failed,
                     etaSeconds=None if remaining is None else int(round(remaining)),
                     measured=attempt_timings.get("patch_seconds") is not None,
-                    fraction=phase_fraction("patching", patch_share=this_share,
+                    fraction=phase_fraction("patching", patch_share=bar_share,
                                             patch_done=counter.done,
                                             patch_total=counter.total),
                 )
@@ -2742,72 +3524,17 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             if not verdict["ok"]:
                 refusal = patch_refusal(patch_lines)
                 if refusal["refused"]:
-                    # ---- 1b. the deploy route -----------------------------
+                    # ---- 1b. the deploy route (measured fallback) ----------
                     # The patch stack refused to APPLY and changed nothing.
                     # `patch_refusal` says why only THAT shape switches; here
                     # the same update continues with the deploy tool's own
                     # `--apply`, whose refusal (if it makes one) is reported
-                    # verbatim and claims nothing.
+                    # verbatim and claims nothing. A deploy-managed install
+                    # never reaches this branch: ruling 5.5 detects it up front
+                    # and skips the refusal entirely.
                     route = "deploy"
-                    deploy_words = refusal_route_words(refusal)
-                    say("")
-                    # A STATUS line, not the report: the ONE `ROUTE:` line that
-                    # names what happened is printed with the ending, so Rust's
-                    # tail and the card carry one audit sentence, not a running
-                    # commentary.
-                    say(f"NOTE  {deploy_words}; the deploy route is running "
-                        "(tools\\reconcile_live_backend.py --apply) on the same "
-                        f"backend folder ({backend}).")
-                    emit_progress(
-                        "patching", done=0, total=None, failed=0,
-                        note="the patch stack refused; the deploy route is carrying "
-                             "the update",
-                        measured=measured_now,
-                        fraction=phase_fraction("patching", patch_share=this_share,
-                                                patch_done=0, patch_total=None))
-                    last_deploy_beat = [clock()]
-
-                    def on_deploy(line: str) -> None:
-                        say(line)
-                        if (lock_file is not None
-                                and clock() - last_deploy_beat[0]
-                                >= LOCK_PATCH_HEARTBEAT_SECONDS):
-                            refresh_lock(path=lock_file, now=clock())
-                            last_deploy_beat[0] = clock()
-
-                    deploy_start = clock()
-                    try:
-                        deployed = deploy(repo, backend, say=on_deploy)
-                    except UpdateRefused as exc:
-                        deployed = {"ok": False, "why": exc.message, "lines": []}
-                    except Exception as exc:       # noqa: BLE001 - never a crash
-                        deployed = {
-                            "ok": False,
-                            "why": f"the deploy route itself failed "
-                                   f"({type(exc).__name__}: {exc})",
-                            "lines": [],
-                        }
-                    deploy_seconds = max(0.0, clock() - deploy_start)
-                    patch_seconds = deploy_seconds
-                    if lock_file is not None:
-                        refresh_lock(path=lock_file, now=clock())
-                    if not deployed.get("ok"):
-                        why = deployed.get("why") or "it printed no verdict"
-                        emit_progress(
-                            "done", verdict="problems", fallback=fell_back,
-                            note="the deploy route did not finish either; nothing "
-                                 "is claimed as updated",
-                            fraction=None)
-                        say("")
-                        say(ROUTE_PREFIX + f"{deploy_words}; the deploy route did "
-                            f"not finish: {why}")
-                        if deployed.get("lines"):
-                            say("  the deploy tool's own report is above, verbatim.")
-                        say("DONE WITH PROBLEMS - do not trust this update yet")
+                    if not run_deploy_phase(refusal_route_words(refusal)):
                         return 1
-                    # The deploy tool's own `RESULT: PASS` line is above; the
-                    # ONE `ROUTE:` sentence for this update is printed with the
-                    # ending, after the live files and the suites have proved it.
                 else:
                     # Any other refusal keeps today's behaviour exactly: put
                     # back what the run touched, claim nothing.
@@ -2829,7 +3556,7 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
 
         # ---- 2. verify the live files -----------------------------------
         emit_progress("verifying", measured=measured_now,
-                      fraction=phase_fraction("verifying", patch_share=this_share))
+                      fraction=phase_fraction("verifying", patch_share=bar_share))
         problems = verify_live_files(repo, backend)
         if problems and route == "deploy":
             # The deploy route compared and wrote these bytes itself, so a
@@ -2896,62 +3623,108 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
         # desktop can restore it even when this tool is ended by its bound.
         lane_record = record_lane_state(backend)
 
-        # ---- 3. the same suites, at this pace ---------------------------
-        emit_progress("testing", done=0, total=len(names), failed=0, skipped=0,
-                      weightDone=0.0, weightTotal=round(weight_total, 3),
-                      etaSeconds=plan["eta_seconds"],
-                      measured=measured_now,
-                      fraction=phase_fraction("testing", patch_share=this_share,
-                                              weight_done=0.0,
-                                              weight_total=weight_total))
+        # ---- 3. the proof: the bounded subset (app) or the full sweep (dev)
         durations = {}
         suite_lines = []
         done_names = []
+        bounded_result = None
+        if full_proof:
+            emit_progress("testing", done=0, total=len(names), failed=0, skipped=0,
+                          weightDone=0.0, weightTotal=round(weight_total, 3),
+                          etaSeconds=plan["eta_seconds"],
+                          measured=measured_now,
+                          fraction=phase_fraction("testing", patch_share=bar_share,
+                                                  weight_done=0.0,
+                                                  weight_total=weight_total))
 
-        def on_suite(line: str) -> None:
-            suite_lines.append(line)
-            say(line)
-            got = parse_suite_line(line)
-            if got is not None:
-                name, seconds = got
-                durations[name] = seconds
-                done_names.append(name)
-                if lock_file is not None:
-                    # THE HEARTBEAT: every finished suite says this update is
-                    # still alive, so a 2-hour safe run never expires its own
-                    # lock at minute 31 (the design's one crucial refinement).
-                    refresh_lock(path=lock_file, now=clock())
-                weight_done[0] += weights.get(name, PLACEHOLDER_SUITE_SECONDS)
-                eta = live_eta(attempt_mode, names, attempt_timings, done_names,
-                               durations, requested=requested_workers)
+            def on_suite(line: str) -> None:
+                suite_lines.append(line)
+                say(line)
+                got = parse_suite_line(line)
+                if got is not None:
+                    name, seconds = got
+                    durations[name] = seconds
+                    done_names.append(name)
+                    if lock_file is not None:
+                        # THE HEARTBEAT: every finished suite says this update is
+                        # still alive, so a 2-hour safe run never expires its own
+                        # lock at minute 31 (the design's one crucial refinement).
+                        refresh_lock(path=lock_file, now=clock())
+                    weight_done[0] += weights.get(name, PLACEHOLDER_SUITE_SECONDS)
+                    eta = live_eta(attempt_mode, names, attempt_timings, done_names,
+                                   durations, requested=requested_workers)
+                    emit_progress(
+                        "testing", done=eta["done"], total=len(names),
+                        failed=_failed_count(suite_lines),
+                        weightDone=round(weight_done[0], 3),
+                        weightTotal=round(weight_total, 3),
+                        etaSeconds=eta["eta_seconds"],
+                        etaLowSeconds=eta["eta_low_seconds"],
+                        etaHighSeconds=eta["eta_high_seconds"],
+                        measured=eta["measured"],
+                        fraction=phase_fraction("testing", patch_share=bar_share,
+                                                weight_done=weight_done[0],
+                                                weight_total=weight_total))
+
+            try:
+                suites_exit = _call(run, suites_command(repo, workers, backend), repo, on_suite)
+            finally:
+                # EVERY ending of this tool's own run puts the lane back, including
+                # a failed or unproven suite phase and the safe second pass. If this
+                # process is ended before it can (the desktop's bound), the record
+                # written above lets the desktop's --restore-lane do it.
+                restore_lane_after_suites(backend, lane_record, say=say)
+            result = suite_result(suites_exit, suite_lines)
+
+        else:
+            # THE APP PATH'S PROOF (ruling 5.1): the bounded subset, whose lines
+            # are already the PROOF: Step ones this module prints. The bar's
+            # fraction is completed checks out of the subset's own total, so it
+            # can only reach 100% from the tool's own final verdict.
+            emit_progress(
+                "testing", done=0, total=len(proof_plan), failed=0, skipped=0,
+                weightDone=0.0, weightTotal=float(len(proof_plan)),
+                fraction=phase_fraction("testing", patch_share=bar_share,
+                                        weight_done=0.0,
+                                        weight_total=float(len(proof_plan))))
+
+            def on_bounded_progress(done_overall, total, rows) -> None:
                 emit_progress(
-                    "testing", done=eta["done"], total=len(names),
-                    failed=_failed_count(suite_lines),
-                    weightDone=round(weight_done[0], 3),
-                    weightTotal=round(weight_total, 3),
-                    etaSeconds=eta["eta_seconds"],
-                    etaLowSeconds=eta["eta_low_seconds"],
-                    etaHighSeconds=eta["eta_high_seconds"],
-                    measured=eta["measured"],
-                    fraction=phase_fraction("testing", patch_share=this_share,
-                                            weight_done=weight_done[0],
-                                            weight_total=weight_total))
+                    "testing", done=done_overall, total=total,
+                    failed=sum(1 for row in rows if not row["ok"]),
+                    weightDone=float(done_overall),
+                    weightTotal=float(total),
+                    fraction=phase_fraction("testing", patch_share=bar_share,
+                                            weight_done=float(done_overall),
+                                            weight_total=float(total)))
 
-        try:
-            suites_exit = _call(run, suites_command(repo, workers, backend), repo, on_suite)
-        finally:
-            # EVERY ending of this tool's own run puts the lane back, including
-            # a failed or unproven suite phase and the safe second pass. If this
-            # process is ended before it can (the desktop's bound), the record
-            # written above lets the desktop's --restore-lane do it.
-            restore_lane_after_suites(backend, lane_record, say=say)
-        result = suite_result(suites_exit, suite_lines)
+            try:
+                bounded_result = bounded_proof(
+                    repo, backend, say=say, run=run, clock=clock,
+                    on_progress=on_bounded_progress)
+            finally:
+                # EVERY ending of this tool's own run puts the lane back: the
+                # live HUD this proof starts, and the checks, read the same
+                # folder the proof suites did.
+                restore_lane_after_suites(backend, lane_record, say=say)
+            result = {
+                "ok": bounded_result["ok"],
+                "failed": not bounded_result["ok"],
+                "failed_names": [row["id"] for row in bounded_result["checks"]
+                                 if not row["ok"]],
+                "skipped_suites": [],
+                "visible_browser_suites": [],
+                "ambiguous": False,
+                "unproven": False,      # the bounded subset never claims the full check
+                "summary": None,
+            }
         if not result["ok"]:
             if attempt_mode != "safe":
                 fell_back = True
                 pass_label = "second pass (safe mode)"
                 reason = ("worker_ambiguous" if result["ambiguous"]
-                          else "suite_failed")
+                          else ("check_failed" if bounded_result is not None
+                                else "suite_failed"))
                 if route == "deploy":
                     # The deploy route's safe second opinion: the files are
                     # already proved to be this repository's own bytes, so a
@@ -2991,7 +3764,8 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                          "way; this result is that safe pass." if fell_back else None)
         emit_progress("done", verdict="unproven" if unproven else "ok",
                       fallback=fell_back, note=fallback_note,
-                      measured=bool(durations), fraction=1.0)
+                      measured=(bool(durations) if full_proof else None),
+                      fraction=1.0)
         say("")
         if fell_back:
             say("The quick check hit a problem, so it was re-run the safe way, and "
@@ -3019,7 +3793,23 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             say("  note: The checks were not all run to the end, so this update is "
                 "applied but NOT proven.")
         else:
-            say("ALL DONE - the backend is patched and proven")
+            if bounded_result is not None:
+                # THE BOUNDED ENDING SAYS EXACTLY WHAT RAN (ruling 5.1). It is a
+                # claim about the subset - never "the full check passed" - and
+                # it names the developer flag that would run the full sweep. The
+                # desktop's `read_verdict` still reads "patched and proven" from
+                # the line (the bounded pass IS the app path's proof), so "both
+                # or neither" is untouched, while a person reading it is told
+                # the truth in the same breath.
+                say("ALL DONE - the backend is patched and proven by the bounded "
+                    f"checks ({bounded_result['passed']} of "
+                    f"{bounded_result['total']}): a subset, not the full suite.")
+                say("  The bounded checks were: " + ", ".join(
+                    BOUNDED_PROOF_PHASES[i]["name"]
+                    for i in range(len(BOUNDED_PROOF_PHASES)))
+                    + ". The full sweep is a developer run only: --full-proof.")
+            else:
+                say("ALL DONE - the backend is patched and proven")
             # The proof is in: NOW the release's new tool defaults reach the
             # owner's own config. (The look spec went EARLIER - step 2b, with the
             # file half - because its delivery is content, not proof.) The line
@@ -3031,11 +3821,19 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             # The card's audit of WHICH route ran and WHY, printed LAST so it is
             # inside the desktop's own tail window (`backend_update::route_lines`)
             # and shown verbatim. A deploy-route update is never reported in the
-            # patch route's clothes: the refusal that switched it is named, and
-            # so are the bytes and marker the deploy actually proved.
+            # patch route's clothes: the evidence that chose it (or the refusal
+            # that switched to it) is named, and so are the bytes and marker the
+            # deploy actually proved.
             say("")
-            proof = ("and the checks above are the proof" if not unproven
-                     else "but the checks did not prove the whole update")
+            if bounded_result is not None:
+                proof = (f"and the bounded checks above passed "
+                         f"({bounded_result['passed']} of "
+                         f"{bounded_result['total']}); they are a subset, not the "
+                         "full suite")
+            elif not unproven:
+                proof = "and the checks above are the proof"
+            else:
+                proof = "but the checks did not prove the whole update"
             say(ROUTE_PREFIX + f"{deploy_words}; the deploy route carried the update - "
                 f"the live backend now holds this repository's bytes at commit "
                 f"{str(deployed.get('ref') or '')[:12]} and VERSION "
@@ -3437,8 +4235,8 @@ def _minutes(seconds: int) -> str:
 
 def _usage() -> str:
     return ("usage: update_backend.py --repo <program folder> --backend <backend folder> "
-            "[--mode max_speed|responsive|safe] [--workers N] [--modes-json] "
-            "[--timings PATH] [--previous-release COMMIT]; or "
+            "[--mode max_speed|responsive|safe] [--workers N] [--full-proof] "
+            "[--modes-json] [--timings PATH] [--previous-release COMMIT]; or "
             "update_backend.py --restore-lane --backend <backend folder>")
 
 
@@ -3448,7 +4246,7 @@ def parse_args(argv) -> dict:
     `argparse` would exit on its own with a usage line; this tool's refusals are
     read by the owner, so they are written like the rest of the card's words."""
     out = {"mode": DEFAULT_MODE, "workers": None, "modes_json": False,
-           "restore_lane": False,
+           "restore_lane": False, "full_proof": False,
            "repo": None, "backend": None, "timings": None,
            "previous_release": None}
     rest = list(argv)
@@ -3462,6 +4260,9 @@ def parse_args(argv) -> dict:
             continue
         if word == "--restore-lane":
             out["restore_lane"] = True
+            continue
+        if word == "--full-proof":
+            out["full_proof"] = True
             continue
         if word in ("--repo", "--backend", "--mode", "--workers", "--timings",
                     "--previous-release"):
@@ -3558,7 +4359,8 @@ def main(argv=None, *, say=print, run=_run) -> int:
         return update(args["repo"], args["backend"], args["mode"],
                       requested_workers=args["workers"],
                       timings_path=args["timings"], say=say, run=run,
-                      previous_release=args["previous_release"])
+                      previous_release=args["previous_release"],
+                      full_proof=args["full_proof"])
     except UpdateRefused as exc:
         print(f"REFUSED  {exc.message}", file=sys.stderr)
         return 2
