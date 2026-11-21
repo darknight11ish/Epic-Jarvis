@@ -718,8 +718,9 @@ fn main() {
             // address for the QR code, start / watch / cancel a pairing
             // (the QR code drawn in Rust; the window hidden from screen
             // capture while a code shows), the device list, Remove ONE
-            // device, label ONE device (docs/MULTI-DEVICE-DESIGN.md), and
-            // retire / bring back the old shared key. Settings window only.
+            // device, label ONE device (docs/MULTI-DEVICE-DESIGN.md), retire /
+            // bring back the old shared key, and the dry-run-first clean-up of
+            // duplicate/inactive devices. Settings window only.
             "pair_phone_address",
             "pair_start",
             "pair_session",
@@ -728,6 +729,11 @@ fn main() {
             "devices_remove",
             "devices_label",
             "devices_shared",
+            // The owner's dry-run-first clean-up of duplicate/inactive devices
+            // (Gemini ruling 5.6, 2026-11-21): the dry run is a READ; the
+            // confirm is an ACTION that ends in the PC's own `devices_cleanup`
+            // approval card. Settings window only.
+            "devices_cleanup",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.

@@ -873,6 +873,15 @@ permissions = [
   "allow-devices-remove",
   "allow-devices-label",
   "allow-devices-shared",
+  # "Clean up duplicate/inactive devices" (the owner's ruling 5.6, 2026-11-21).
+  # The dry run is a READ: it answers what WOULD be removed (names and how long
+  # since each was last seen), preserves anything active in the last 30 days,
+  # and removes nothing - so it is never held on a stale link. The confirm is an
+  # ACTION that ends in the PC's OWN `devices_cleanup` approval card (202
+  # `{"waiting": true}` while it waits, 200 `{"removed", "kept"}` after the
+  # owner answers), so it is held on a stale link in Rust. Nothing here prunes
+  # on load or on a timer: the owner presses, reads, and confirms.
+  "allow-devices-cleanup",
   # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain, and
   # the Humour switch beside it (the owner's decision, 2026-09-27). Wording
   # only; no card either way; held on a stale link in Rust.

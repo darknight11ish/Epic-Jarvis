@@ -20,6 +20,12 @@
  *    the list; Remove ONE device (immediate, after "are you sure?"); Retire
  *    the old shared key for other devices (immediate), or Bring it back
  *    (one card plus Windows Hello; held on a stale link).
+ *  - devices_cleanup({dryRun}) (2026-11-21): the "clean up duplicate/inactive
+ *    devices" door. A dry run is a READ and answers the would-remove list
+ *    (names + `last_seen_days`); the confirm is an ACTION that ends in the PC's
+ *    own `devices_cleanup` card and answers the removed/kept counts (or
+ *    `waiting`, when the card has just been raised). See the section below the
+ *    device list: the page never removes a device without that confirm.
  *
  * The approval card itself - "Jarvis wants to connect a new device" - is
  * never answered here. It shows in the Jarvis bar and the widget like every
@@ -79,6 +85,13 @@ const el = {
   close: $("dv-close"),
   list: $("dv-list"),
   status: $("dv-status"),
+  clean: $("dv-clean"),
+  cleanStatus: $("dv-clean-status"),
+  cleanPanel: $("dv-clean-panel"),
+  cleanWords: $("dv-clean-words"),
+  cleanList: $("dv-clean-list"),
+  cleanApply: $("dv-clean-apply"),
+  cleanCancel: $("dv-clean-cancel"),
   sharedLine: $("dv-shared-line"),
   sharedSigned: $("dv-shared-signed"),
   retire: $("dv-retire"),
@@ -269,6 +282,14 @@ function paint() {
   // because a device holds a key of its own. It can no longer pair anything.
   const sharedGone = Boolean(view.shared && (view.shared.retired || view.shared.first_pair_only));
   placeOldKey(sharedGone ? "hidden" : "moved");
+
+  // The cleanup buttons: the dry run is a read, the confirm is an action that
+  // ends in the PC's own card - so the confirm waits for a live link, exactly
+  // like "Bring it back" does, and neither can be pressed during another
+  // device action.
+  if (el.clean) el.clean.disabled = busy;
+  if (el.cleanCancel) el.cleanCancel.disabled = busy;
+  if (el.cleanApply) el.cleanApply.disabled = busy || !live();
 }
 
 async function loadList() {
@@ -379,6 +400,132 @@ async function bringBack() {
       : "Done.", "ok");
   } catch (error) {
     say(el.sharedStatus, problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await loadList();
+}
+
+/* ── Cleaning up duplicate/inactive devices (2026-11-21) ───────────────
+ *
+ * The owner's housekeeping ask, kept owner-first: pressing the button asks the
+ * PC what it WOULD remove (`devices_cleanup {dryRun: true}` ->
+ * `POST /api/devices/cleanup {"dry_run": true}`) and shows that answer here -
+ * names and how long ago each was last seen. A device active in the last 30
+ * days is a KEEP the PC makes, never a choice this page re-derives: the list it
+ * draws is `would_remove` exactly, and `keep_active_30d` is said as the reason
+ * nothing else is offered. Only the confirm applies it, and that press is held
+ * on a live link because it ends in the PC's own `devices_cleanup` approval
+ * card; the answer is either the card waiting (nothing has been removed yet) or
+ * the removed/kept counts. This page never removes a device of its own accord,
+ * never loops over `devices_remove`, and never prunes on a timer or on load.
+ */
+
+/** The last dry-run answer on screen, or null. */
+let cleanupPlan = null;
+
+/** One row of `would_remove`, in words. The PC sends `last_seen_days`; this page
+ *  never re-derives the 30-day preservation itself (the PC's `keep_active_30d`
+ *  is the decision, and the rows it offers are the whole "would remove" list). */
+function cleanupRowWords(row) {
+  const name = String((row && row.name) || (row && row.id) || "a device");
+  const days = row && Number.isFinite(row.last_seen_days) ? row.last_seen_days : null;
+  if (days === null) return `${name} - never seen`;
+  if (days <= 0) return `${name} - last seen today`;
+  return `${name} - last seen ${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function paintCleanupPlan(plan) {
+  const rows = plan && Array.isArray(plan.would_remove) ? plan.would_remove : [];
+  const total = plan && Number.isFinite(plan.total) ? plan.total : rows.length;
+  const keep = plan && Number.isFinite(plan.keep_active_30d) ? plan.keep_active_30d : 0;
+  if (el.cleanWords) {
+    el.cleanWords.textContent = rows.length
+      ? `${total} device${total === 1 ? "" : "s"} paired. ${keep} active in the last ` +
+        `30 day${keep === 1 ? "" : "s"} ${keep === 1 ? "is" : "are"} kept. ` +
+        `${rows.length} would be removed after you confirm - and the removal ` +
+        `asks on a card first:`
+      : `Nothing to clean up: ${total} device${total === 1 ? "" : "s"} paired, and ` +
+        `every one has been active in the last 30 days.`;
+  }
+  if (el.cleanList) {
+    el.cleanList.replaceChildren(...rows.map((row) => {
+      const li = node("li", "sc-gpu dv-clean-row", cleanupRowWords(row));
+      return li;
+    }));
+  }
+  if (el.cleanApply) {
+    el.cleanApply.hidden = rows.length === 0;
+    el.cleanApply.textContent = rows.length
+      ? `Remove ${rows.length} device${rows.length === 1 ? "" : "s"}…`
+      : "Remove them…";
+    el.cleanApply.disabled = busy || !live();
+  }
+  if (el.cleanPanel) el.cleanPanel.hidden = false;
+}
+
+function clearCleanupPlan() {
+  cleanupPlan = null;
+  if (el.cleanPanel) el.cleanPanel.hidden = true;
+  if (el.cleanWords) el.cleanWords.textContent = "";
+  if (el.cleanList) el.cleanList.replaceChildren();
+  if (el.cleanApply) el.cleanApply.hidden = true;
+}
+
+/** The dry run: read-only, says exactly what the PC would do. */
+async function cleanupDryRun() {
+  if (busy) return;
+  busy = true;
+  say(el.cleanStatus, "Asking your PC what it would remove…");
+  paint();
+  try {
+    const plan = await call("devices_cleanup", { dryRun: true });
+    if (!plan || plan.ok === false) {
+      say(el.cleanStatus, problemWords(plan || "The PC did not answer."), "bad");
+      clearCleanupPlan();
+    } else {
+      cleanupPlan = plan;
+      say(el.cleanStatus, "");
+      paintCleanupPlan(plan);
+    }
+  } catch (error) {
+    say(el.cleanStatus, problemWords(error), "bad");
+    clearCleanupPlan();
+  } finally {
+    busy = false;
+    paint();
+  }
+}
+
+/** The confirm: the only press that changes anything. The PC raises its own
+ *  card, so the answer may be "waiting" - and then nothing has been removed. */
+async function cleanupApply() {
+  const rows = cleanupPlan && Array.isArray(cleanupPlan.would_remove)
+    ? cleanupPlan.would_remove : [];
+  if (!cleanupPlan || rows.length === 0 || busy) return;
+  if (!live()) {
+    say(el.cleanStatus, STALE, "bad");
+    return;
+  }
+  busy = true;
+  say(el.cleanStatus,
+    `Asking your PC to remove ${rows.length} device${rows.length === 1 ? "" : "s"}. ` +
+    `It will ask on a card first; nothing is removed until you answer.`);
+  paint();
+  try {
+    const out = await call("devices_cleanup", { dryRun: false }, "action");
+    if (out && out.waiting) {
+      say(el.cleanStatus,
+        "Waiting for your approval on the card. Nothing has been removed yet.", "warn");
+    } else {
+      const removed = out && Number.isFinite(out.removed) ? out.removed : rows.length;
+      const kept = out && Number.isFinite(out.kept) ? out.kept : 0;
+      say(el.cleanStatus,
+        `Removed ${removed} device${removed === 1 ? "" : "s"}; kept ${kept}.`, "ok");
+    }
+    clearCleanupPlan();
+  } catch (error) {
+    say(el.cleanStatus, problemWords(error), "bad");
   } finally {
     busy = false;
   }
@@ -547,6 +694,17 @@ if (el.section) {
     el.close.addEventListener("click", closePanel);
     el.retire.addEventListener("click", retire);
     el.bringBack.addEventListener("click", bringBack);
+    // "Clean up duplicate/inactive devices": dry run first, then the confirm.
+    // Nothing here runs on load, on a timer or on an event - it is the owner's
+    // press, once, and the PC's own card still has the last word.
+    if (el.clean) el.clean.addEventListener("click", cleanupDryRun);
+    if (el.cleanCancel) {
+      el.cleanCancel.addEventListener("click", () => {
+        clearCleanupPlan();
+        say(el.cleanStatus, "");
+      });
+    }
+    if (el.cleanApply) el.cleanApply.addEventListener("click", cleanupApply);
     el.addressChange.addEventListener("click", () => {
       address = { ...address, editing: true };
       el.address.value = address.value;

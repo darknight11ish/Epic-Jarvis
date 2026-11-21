@@ -88,12 +88,13 @@
  * top of the list."* Ranking by the words on the card already put Updates first
  * for "update"/"updates", but not for the words a person naturally types for it:
  * "upgrade" is on no card this page prints, and "version" is on half of them, so
- * About outranked Updates. So for a query made only of [`UPDATE_WORDS`] the
- * Updates card is placed first even when its own text does not contain the
- * query, and it is shown even when no card's text matches at all - one obvious
- * top row, whatever the owner called the thing. A query with any other word in
- * it is left to the ordinary ranking, so this can never reorder an unrelated
- * search.
+ * About outranked Updates. So for a query made only of [`UPDATE_WORDS`] - or one
+ * of the update phrases ("check now", the card's own button name), plus the
+ * handshake's own words "sync" and "mismatch" - the Updates card is placed first
+ * even when its own text does not contain the query, and it is shown even when
+ * no card's text matches at all - one obvious top row, whatever the owner called
+ * the thing. A query with any other word in it is left to the ordinary ranking,
+ * so this can never reorder an unrelated search.
  *
  * @module settings-search
  */
@@ -148,12 +149,26 @@ export const UPDATE_WORDS = Object.freeze([
   "updaters",
   "version",
   "versions",
+  // The two words the version handshake prints when the halves differ, and
+  // what an owner types when he has just seen that line.
+  "sync",
+  "mismatch",
 ]);
 
-/** Is this query only update words? Pure - the pin's whole rule, testable. */
+/**
+ * Whole phrases that ask for the Updates card even though one of their words is
+ * not an update word. "check now" is the card's own button name (`update-check`
+ * prints "Check now"), so it is the obvious thing to search after reading a
+ * card that says "press Check now".
+ */
+const UPDATE_PHRASES = Object.freeze(["check now", "check for updates", "check for update"]);
+
+/** Is this query only update words (or one of the update phrases)? Pure - the
+ *  pin's whole rule, testable. */
 export function asksForUpdates(query) {
   const q = normalise(query);
   if (!q) return false;
+  if (UPDATE_PHRASES.includes(q)) return true;
   const tokens = q.split(" ").filter(Boolean);
   return tokens.length > 0 && tokens.every((token) => UPDATE_WORDS.includes(token));
 }

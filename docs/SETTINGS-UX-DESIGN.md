@@ -122,6 +122,51 @@ a search result, so this changes only what a search draws and in what order.
 The pin is a rule about the WORD, not a permanent reordering: with the box empty
 the page is exactly the page it was, and clearing the box restores it.
 
+### The handshake's own words, and a banner above every card (2026-11-21)
+
+The same day's ruling (Gemini 5.4) added two words to that vocabulary and one
+thing the page says where nobody has to scroll for it.
+
+- **`sync` and `mismatch` are update words too.** They are what the version line
+  prints when the two halves differ, so they are what the owner types after
+  reading it; `check now` (the card's own button name) is a whole-phrase entry
+  for the same reason. They are in the same one list (`UPDATE_WORDS` + the
+  phrases), so the Settings results and the app-wide Find list still cannot
+  disagree, and a query with any other word in it is still ranked as before.
+- **A banner at the TOP of Settings** (above every card) appears while the
+  backend half is behind or a backend half is being finished right now. It names
+  both versions and carries one link, "Go to Updates", that opens the card whose
+  buttons fix it. It is a view of the same handshake the card reads - not a
+  second state - and it clears in place, with no reload and no restart, once a
+  read-back says IN SYNC with nothing running: the page re-reads the pair when
+  the window comes back, when a run starts or ends, and on a slow beat while the
+  banner is visible. It is deliberately NOT shown for a backend that is NEWER,
+  two schemes that cannot be compared, or a backend that cannot be reached,
+  because "Update everything" is not what fixes any of those.
+- **A run that has written the file half does not read "Up to date."** The
+  VERSION file moves before the run's own checks finish, so the version
+  read-back can say IN SYNC while the run is still going (the measured 0.2.492
+  proof run ended by the 3-hour ceiling at 20:32:11Z). In that window the card
+  says the two halves are not claimed to match YET and names the read-back that
+  settles it: restart Jarvis and the next handshake reads IN SYNC.
+
+### "Clean up duplicate/inactive devices" (2026-11-21, ruling 5.6)
+
+The Devices card gained one housekeeping control after the owner's phone kept
+pairing fresh rows while dead ones stayed. Its whole shape is the owner's own
+"show me first" rule:
+
+- pressing **"Clean up duplicate/inactive devices"** does a **dry run**: the PC
+  answers what WOULD be removed, and the page lists those names with how many
+  days ago each was last seen. Anything active within 30 days is preserved by
+  the PC itself and is never offered; the count kept is said as the reason;
+- **nothing happens on load, on a timer, or device by device.** Only the confirm
+  press applies it, and that press ends in the PC's own `devices_cleanup`
+  approval card (202 while the card waits, "nothing has been removed yet"; 200
+  with the removed/kept counts after the owner answers);
+- a **stale link** blocks the confirm (it ends in a card) and never the dry run
+  (it only reads), which is the same rule Pair a phone and Bring it back follow.
+
 ## What deliberately does not change
 
 - **No setting is added, removed, renamed, moved or hidden permanently.**

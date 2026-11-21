@@ -3017,6 +3017,20 @@ backend routes, in both directions; the rest are listed here only.
   multi-column drag-and-drop editor on the phone, per section 6.2: the phone's
   own Projects list is the summary/next-3/tap-to-done half.
 
+- **Cleaning up duplicate/inactive devices is the desktop's button for now**
+  (2026-11-21, Gemini ruling 5.6). Settings -> Devices on the desktop offers
+  "Clean up duplicate/inactive devices": a dry run asks the PC what WOULD be
+  removed (names and how long ago each was last seen), the PC itself preserves
+  anything active within 30 days, nothing is pruned on load or on a timer, and
+  only the confirm applies it - ending in the PC's own `devices_cleanup`
+  approval card (`POST /api/devices/cleanup`: dry run answers the would-remove
+  list; the confirm answers 202 while the card waits and 200 with the
+  removed/kept counts after the owner answers). **The phone's Settings ->
+  Devices keeps the list and Remove it already has and gains no clean-up button
+  in this slice**, so `tools/check_parity.py` records the route as `deliberate`;
+  the phone half is its own follow-up against the same contract, not a decision
+  that the phone never gets it.
+
 - **Call recording is split by hardware, and each half is one-sided on
   purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
   'record call' ... transcribe it ... identify the speakers ... store all of it
