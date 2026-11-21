@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    'A money record that cannot be read is refused, not crashed on, and a GitHub search that failed says so instead of reporting nothing found',
-    "The patched-base file can be refreshed, and the two hand shims on the live `jarvis_models.py` are replaced by the published base's own definitions",
-    'A note-edit card no longer demands Windows Hello on the live install, and the repair tool can finally carry the row that fixes it',
-    'General Uncensored swaps to the measured uncensored 30B MoE',
-    'A deterministic answer lane now answers the chat even when the request carries no provenance tag',
+    'The Update card can read the folders it saved, and names the real button',
+    'The switches now tell the truth: every control the two 2026-11-19 state-drift audits proved was lying about its state',
+    'The plan store has tools, and the import fills it from the work already on this PC',
+    'The deploy carries all three HUD deltas, and a false "already present" is fixed',
+    'The pull request cockpit answers "is anything ready to merge?"',
 )
 
 
