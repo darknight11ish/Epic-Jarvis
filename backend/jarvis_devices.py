@@ -2626,7 +2626,8 @@ ACTIVE_SECONDS = ACTIVE_DAYS * 24 * 60 * 60
 CLEANUP_RESULT_SECONDS = 120
 
 CLEANUP_WORDS = {
-    "bad_request": 'need {"dry_run": true} or {"dry_run": false} and nothing else',
+    "bad_request": ('say whether this is a dry run (true) or a real cleanup (false), '
+                    'and nothing else'),
     "waiting": ("Waiting for your approval on this PC. Nothing is removed unless you "
                 "approve the card."),
     "denied": ("You said no on the card, so nothing was removed. The device list is "
@@ -2839,9 +2840,11 @@ def _cleanup_decide(pid: str, you: str, gate: Callable, tier_of: Callable,
         v = gate(CLEANUP_ACTION, detail, text)
         outcome, why = _verdict(v, CLEANUP_ACTION, tier_of)
     except LookupError:
-        outcome, why = "refused", CLEANUP_WORDS["tier"]
+        outcome = "refused"
+        why = CLEANUP_WORDS["tier"]
     except Exception as exc:
-        outcome, why = "refused", f"the approval gate failed ({type(exc).__name__})"
+        outcome = "refused"
+        why = f"the approval gate failed ({type(exc).__name__})"
     with _CL_LOCK:
         current = _CL.get("id") == pid
     if not current:
