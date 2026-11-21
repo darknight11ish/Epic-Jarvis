@@ -469,7 +469,11 @@ said: *"automatic backend finish: … The patch run did not finish within an hou
 restart logged *"Jarvis Desktop 0.2.488 and the backend 0.2.488 – IN SYNC."*
 The release's look spec was never delivered either (the delivery step ran only
 after the proof, and the bound had already ended the run), so the desktop kept
-warning that the spec DISAGREED until it was copied by hand.
+warning that the spec DISAGREED until it was copied by hand. The same run left
+the owner's **everyday model lane** switched, too (lane 11436 held
+`jarvis-primary:latest` at 16,384 instead of the preset table's `qwen3.5:9b`
+at 196,608, and the field battery's PRESETS row failed afterwards); the owner
+warmed it back by hand.
 
 Four rules came out of that, and each is held by tests with injected clocks and
 injected output - no real hour is ever waited for:
@@ -512,6 +516,30 @@ injected output - no real hour is ever waited for:
    desktop half; a bound ending is `partial`/`failed`, never `ok`, so a
    half-finished check cannot paint an update green. No card or approval path
    changed.
+5. **The owner's everyday model lane is put back.** Measured the same day,
+   after the same auto-finish: the proof suites run against the live backend
+   folder and at least one of them loads a different model on the **everyday
+   lane** without putting the owner's back. Lane 11436 - whose preset table row
+   is `qwen3.5:9b` at 196,608 tokens - was left resident on
+   `jarvis-primary:latest` at 16,384, and the field battery's PRESETS row then
+   failed (*"the everyday lane is on a model its own preset table declares for
+   it"* / *"on its one-card model at 196,608"*). So the suites are bracketed:
+   before they start, `tools/update_backend.py` reads the lane's resident
+   model+context from `GET /api/ps` on `OLLAMA_URL` (loopback only - it never
+   reaches another machine) and writes that record into the backend's own
+   `_jarvis-logs` folder; after them it warms the recorded model at the
+   recorded context when the suites left a different one. Warming always names
+   the context the lane itself reported - a preload without one would reload
+   the model at Ollama's own small default (the measured 2026-10-10 2,048-token
+   bug). One `LANE:` line in the run report says which happened (restored / left
+   alone) or that the lane could not be read, in which case **nothing is
+   restored and no model is invented**. The record is what makes the timeout
+   ending safe: the desktop owns the run's bound and can kill the tool
+   mid-suite, so after **any** ending the app runs the tool's own
+   `--restore-lane` mode from that record (the tool's normal endings remove the
+   record once the lane is back; a failed restore leaves it for that one
+   retry, and the app always removes it afterwards so a stale record can never
+   override a model the owner picks later).
 
 **What this deliberately does not do:** it raises no card, approves nothing,
 changes no other setting, touches no network beyond the one local `/api/self`

@@ -323,6 +323,11 @@ const SCRIPT_HARD_CEILING: Duration = Duration::from_secs(3 * 60 * 60);
 const POLL: Duration = Duration::from_millis(400);
 /// How much of the run's own output is kept for the screen that reports it.
 const TAIL_LINES: usize = 60;
+/// How long the after-a-run model-lane restore may take before it is given up
+/// on. The tool bounds its own lane reads and warm itself (5 s to read, up to
+/// 180 s to load a 9B at its window); this is only the guard against a wedged
+/// child - the update is already over and must still say how it ended.
+const LANE_RESTORE_LIMIT: Duration = Duration::from_secs(240);
 
 /// Which bound ended a run that was still going, and the times it ended on.
 ///
@@ -1126,9 +1131,29 @@ pub fn route_lines(tail: &str) -> Vec<String> {
         .collect()
 }
 
+/// The lines the backend half printed about the owner's everyday model lane
+/// (`LANE: ...`), verbatim, in the order it printed them.
+///
+/// MEASURED 2026-11-21, the same run this file's progress bound was fixed for:
+/// the proof suites run against the live backend folder, and one of them loads a
+/// different model on the everyday lane without putting the owner's back - lane
+/// 11436 was left on `jarvis-primary:latest` at 16,384 instead of the preset
+/// table's `qwen3.5:9b` at 196,608, and the field battery's PRESETS row then
+/// failed. `tools/update_backend.py` records the lane before the suites and
+/// restores it after them; its one `LANE:` line says which happened (restored,
+/// left alone) or that the lane could not be read and nothing was restored.
+/// Rust keeps it verbatim like the other release report lines.
+pub fn lane_lines(tail: &str) -> Vec<String> {
+    tail.lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("LANE:"))
+        .map(str::to_string)
+        .collect()
+}
+
 /// Every verbatim report line the release's own steps printed, in the order
 /// the ending shows them: `ROUTE:` first, then `BESIDE:`, then
-/// `TOOL DEFAULTS:`.
+/// `TOOL DEFAULTS:`, then the model lane's `LANE:` line.
 ///
 /// Read from the WHOLE run's output, never from the last-60-lines tail: the
 /// look spec is delivered once the file half is proved (2026-11-21) and the
@@ -1139,6 +1164,7 @@ pub fn notes_of(text: &str) -> Vec<String> {
     let mut notes = route_lines(text);
     notes.extend(beside_lines(text));
     notes.extend(tool_defaults_lines(text));
+    notes.extend(lane_lines(text));
     notes
 }
 
@@ -1745,7 +1771,7 @@ fn run_script(
     // last 60 lines: the look spec is delivered before the proof suites, whose
     // hour of printing would push its `BESIDE:` line out of the tail - and a
     // run the bound ends must still carry it (measured 2026-11-21).
-    let notes = notes_of(&full);
+    let mut notes = notes_of(&full);
     // Read, then gone. A run's printout is not something to leave lying in
     // %TEMP%: this repository spent 2026-10-11 clearing out 1,663 folders one
     // suite at a time, and a feature that quietly adds one file per update is
@@ -1761,6 +1787,20 @@ fn run_script(
         before: version_before,
         after: read_version_marker(backend),
     };
+
+    // THE OWNER'S EVERYDAY MODEL LANE, on every ending (measured 2026-11-21):
+    // the proof suites load a different model on it and do not put the owner's
+    // back. The tool restores it on every ending it reaches and prints its one
+    // `LANE:` line; this runs the tool's own `--restore-lane` so a run THIS app
+    // ended (the progress bound kills the tool part-way through the suites) is
+    // restored from the record the tool wrote before them. A normal ending left
+    // no record, so this prints nothing. Never fails the update.
+    if used_tool {
+        for line in restore_lane_if_recorded(python.as_ref(), &tool, backend) {
+            println!("[jarvis] backend update: {line}");
+            notes.push(line);
+        }
+    }
 
     if let Some(hit) = bound {
         let progress = live.lock().map(|p| p.clone()).unwrap_or_default();
@@ -1871,6 +1911,69 @@ fn log_len(path: &Path) -> Option<u64> {
     std::fs::metadata(path).ok().map(|meta| meta.len())
 }
 
+/// After the run's child is gone - whichever way it ended - let the update tool
+/// put the owner's everyday model lane back when THIS app ended the run first.
+///
+/// WHY THIS IS HERE AND NOT ONLY IN THE TOOL (measured 2026-11-21). The proof
+/// suites run against the live backend folder and one of them loads a different
+/// model on the everyday lane without putting the owner's back: lane 11436 was
+/// left on `jarvis-primary:latest` at 16,384 instead of the preset table's
+/// `qwen3.5:9b` at 196,608, and the field battery's PRESETS row then failed.
+/// The tool restores the lane on every ending IT reaches (success, failure, the
+/// safe second pass), but this app owns the run's bound: a timeout kills the
+/// tool part-way through the proof suites, where no `finally` in it can run. So
+/// the tool writes the lane's recorded model+context to its own log folder
+/// BEFORE the suites, and this runs the tool's own `--restore-lane` after ANY
+/// ending. A run that ended normally left no record and the helper prints
+/// nothing; the one `LANE:` line it may print is kept in the report verbatim.
+///
+/// Bounded: the tool bounds its own reads and warm, and this guard only stops a
+/// wedged child from holding up an ending. Never fails the update - a missing
+/// Python or an unreadable answer is an empty list.
+fn restore_lane_if_recorded(
+    python: Option<&(String, Vec<String>)>,
+    tool: &Path,
+    backend: &Path,
+) -> Vec<String> {
+    let Some((program, leading)) = python else {
+        return Vec::new();
+    };
+    let mut command = std::process::Command::new(program);
+    command
+        .args(leading)
+        .arg("-B")
+        .arg(tool)
+        .arg("--restore-lane")
+        .arg("--backend")
+        .arg(backend)
+        .current_dir(backend)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let Ok(mut child) = command.spawn() else {
+        return Vec::new();
+    };
+    let deadline = Instant::now() + LANE_RESTORE_LIMIT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                break;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
+            Err(_) => {
+                let _ = child.kill();
+                break;
+            }
+        }
+    }
+    match child.wait_with_output() {
+        Ok(out) => lane_lines(&String::from_utf8_lossy(&out.stdout)),
+        Err(_) => Vec::new(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -1940,8 +2043,8 @@ pub fn set_update_folders(
 mod tests {
     use super::{
         backend_failure_words, backend_folder, beside_lines, bound_ending_words, duration_words,
-        folder_of_hud, halves_line, known_mode, marker_words, normalise_commit, notes_of,
-        parse_mode_plan, parse_update_lock, read_verdict, read_version_marker, refuse,
+        folder_of_hud, halves_line, known_mode, lane_lines, marker_words, normalise_commit,
+        notes_of, parse_mode_plan, parse_update_lock, read_verdict, read_version_marker, refuse,
         release_marker, repo_commit, repo_is_at_least_build, route_lines, setting_text,
         start_blocked_words, tail_of, tool_args, tool_defaults_lines, unknown_mode_words,
         update_lock_is_valid, update_running_words, write_release_marker, MarkerEnding, ModeInfo,
@@ -2494,7 +2597,9 @@ mod tests {
         let text = format!(
             "ROUTE: the patch stack refused 51 hunk(s) on a deployed install\n\
              BESIDE: jarvis-visual-spec.json wrote 73121 bytes (was 61301 bytes)\n\
-             TOOL DEFAULTS: added and read back: project_create\n{}",
+             TOOL DEFAULTS: added and read back: project_create\n\
+             LANE: the proof suites left it on jarvis-primary:latest at 16384; \
+             warmed the recorded qwen3.5:9b at 196608 again and read it back in place.\n{}",
             "ok    test_some_suite.py               0.1s\n".repeat(400)
         );
         assert!(
@@ -2502,13 +2607,89 @@ mod tests {
             "the fixture does not put the line outside the tail"
         );
         let notes = notes_of(&text);
-        assert_eq!(notes.len(), 3, "{notes:?}");
+        assert_eq!(notes.len(), 4, "{notes:?}");
         assert!(notes[0].starts_with("ROUTE:"), "{notes:?}");
         assert!(notes[1].starts_with("BESIDE:"), "{notes:?}");
         assert!(notes[2].starts_with("TOOL DEFAULTS:"), "{notes:?}");
+        assert!(notes[3].starts_with("LANE:"), "{notes:?}");
         assert!(notes[1].contains("73121"), "{notes:?}");
         // Nothing invented when no step printed anything.
         assert!(notes_of("ALL DONE - the backend is patched and proven").is_empty());
+    }
+
+    #[test]
+    fn the_model_lane_line_is_kept_verbatim() {
+        // The measured 2026-11-21 lane: the proof suites left lane 11436 on
+        // `jarvis-primary:latest` at 16,384 instead of the preset's `qwen3.5:9b`
+        // at 196,608. The tool's one LANE: line says what it did, and Rust keeps
+        // it word for word - it is not paraphrased or folded into another list.
+        let text = "ALL DONE - the backend is patched and proven\n\
+                    LANE: the proof suites left it on jarvis-primary:latest at 16384; \
+                    warmed the recorded qwen3.5:9b at 196608 again and read it back in place.";
+        let lines = lane_lines(text);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].starts_with("LANE:"), "{lines:?}");
+        assert!(lines[0].contains("qwen3.5:9b"), "{lines:?}");
+        assert!(lines[0].contains("196608"), "{lines:?}");
+        assert!(lines[0].contains("jarvis-primary:latest"), "{lines:?}");
+        // A run whose suites never started adds no lane line - a skipped step is
+        // never reported as "unchanged".
+        assert!(lane_lines("ALL DONE - the backend is patched and proven").is_empty());
+        assert!(lane_lines("LANE: nothing like a real line").len() == 1);
+    }
+
+    #[test]
+    fn the_model_lane_is_restored_after_any_ending_including_the_bound() {
+        // THE TIMEOUT ENDING. This app owns the run's bound and can kill the
+        // tool part-way through the proof suites, so the tool's own restore
+        // cannot run. The wiring that matters: after the child is gone, the
+        // restore is called BEFORE the bound's early return, and the bound's Run
+        // carries the notes - so a timeout ending's report says what happened to
+        // the owner's model lane.
+        let src = include_str!("backend_update.rs");
+        let production = &src[..src.find("#[cfg(test)]").expect("no test module")];
+        let notes_read = production
+            .find("let mut notes = notes_of(&full);")
+            .expect("run_script no longer reads the release report lines");
+        let restore = production
+            .find("restore_lane_if_recorded(")
+            .expect("run_script never restores the model lane");
+        let bound = production
+            .find("if let Some(hit) = bound {")
+            .expect("run_script has no bound ending");
+        assert!(
+            notes_read < restore,
+            "the lane restore runs before the run's own output is read"
+        );
+        assert!(
+            restore < bound,
+            "the bound ending returns before the model lane is restored"
+        );
+        let bound_block = &production[bound..];
+        let bound_block = &bound_block[..bound_block
+            .find("let exit_ok")
+            .expect("the bound block has no end")];
+        assert!(
+            bound_block.contains("notes,"),
+            "the bound ending does not carry the report (a timeout would say \
+             nothing about the model lane):\n{bound_block}"
+        );
+        // Cross-language interface: the flag and prefix this code runs are the
+        // ones the tool implements (the other half of the same test is in
+        // backend/test_update_backend.py).
+        let tool = include_str!("../../../tools/update_backend.py");
+        assert!(
+            tool.contains("\"--restore-lane\""),
+            "tools/update_backend.py has no --restore-lane mode"
+        );
+        assert!(
+            tool.contains("LANE_PREFIX = \"LANE: \""),
+            "tools/update_backend.py prints no LANE: report line"
+        );
+        assert!(
+            production.contains(".arg(\"--restore-lane\")"),
+            "the app never runs the tool's --restore-lane mode"
+        );
     }
 
     // ---- the three paces: the tool's own answer, read back ---------------

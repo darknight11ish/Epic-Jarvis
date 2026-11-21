@@ -55,6 +55,20 @@ WHAT IT DOES, IN ORDER
    line-buffered, and a Python child gets `PYTHONUNBUFFERED=1`), because the
    desktop's progress bound tells a working run from a wedged one by whether
    the log is still growing.
+3b. **The owner's everyday model lane is recorded and put back.** The proof
+   suites run against the live folder, and at least one of them loads a
+   different model on the everyday lane without putting the owner's back
+   (measured 2026-11-21: lane 11436 was left on `jarvis-primary:latest` at
+   16,384 instead of `qwen3.5:9b` at 196,608, and the field battery's PRESETS
+   row failed). Before the suites this tool reads the lane's resident
+   model+context from `GET /api/ps` (`OLLAMA_URL`, loopback only) and writes
+   that record into `<backend>/_jarvis-logs/`; after them it warms the recorded
+   model at the recorded context when the suites left a different one. One
+   `LANE:` line says which happened, or that the lane could not be read and
+   nothing was restored. The record is left behind only when a restore failed
+   or could not be checked, and the desktop's `--restore-lane` retries it after
+   a run its own bound ended - which is what makes the timeout ending restore
+   the lane too.
 4. Records each suite's own time in `<backend>/_jarvis-logs/update-timings.json`
    **per pace** - the same suites take different wall time at 22 workers and at
    1, so a `safe` run is not evidence for `max_speed`. A pace that has not
@@ -130,9 +144,11 @@ the update and why.
 WHAT IT WRITES, AND WHAT IT DOES NOT
 
 - Writes: the patcher's own `_jarvis-backup-*` folders (by the patcher), its
-  own logs (by the patcher), `update-timings.json` beside them, and the
-  `update-in-progress.lock` in the folder Jarvis keeps its own data in (it is
-  removed when the update ends; a crash leaves it to the dead-pid rule).
+  own logs (by the patcher), `update-timings.json` beside them, the pre-suite
+  model-lane record beside them (`lane-before-proof-suites.json`, removed once
+  the lane is back), and the `update-in-progress.lock` in the folder Jarvis
+  keeps its own data in (it is removed when the update ends; a crash leaves it
+  to the dead-pid rule).
   On the deploy route the write is the deploy tool's own: its
   `_jarvis-deploy-backup-tool-*` folders and journal, the `$SHIPPED` modules,
   the HUD deltas and the release markers `VERSION` and `SOURCE-COMMIT`.
@@ -140,9 +156,13 @@ WHAT IT WRITES, AND WHAT IT DOES NOT
 - Does NOT write: `scripts/apply-patches.ps1` or any other repository file,
   the desktop app's settings, or anything else in the owner's
   `~/.openjarvis`.
-- Does NOT talk to the network. The only processes it starts are PowerShell
-  (the patcher, and the deploy tool's own read of the installed desktop's
-  FileVersion) and Python (`run_suites.py`).
+- Talks to exactly ONE network address, and only on this PC: the owner's own
+  Ollama lane at `OLLAMA_URL` (loopback only; a non-loopback value is refused
+  and nothing is restored), to read `/api/ps` and warm back the recorded model.
+  Nothing leaves the machine, no proxy is used for it, and no other request is
+  made. The only processes it starts are PowerShell (the patcher, and the
+  deploy tool's own read of the installed desktop's FileVersion) and Python
+  (`run_suites.py`, and its own `--restore-lane` mode for the desktop).
 
 THE EVENTS
 
@@ -170,6 +190,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 KIND = "update_backend"
@@ -188,6 +210,57 @@ ROUTE_PREFIX = "ROUTE: "
 #: The deploy tool that is the route on a deploy-managed install. It is in the
 #: same folder as this tool, and is called in-process rather than reimplemented.
 DEPLOY_TOOL_REL = Path("tools") / "reconcile_live_backend.py"
+
+# ---------------------------------------------------------------------------
+#   The owner's everyday model lane - recorded before the proof suites
+# ---------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (measured 2026-11-21, the same auto-finish run this file's
+# progress bound was fixed for). The proof suites run against the LIVE backend
+# folder, and at least one of them loads a different model on the everyday lane
+# and never puts the owner's model back. Measured after that run: lane 11436 -
+# the everyday lane, whose preset-table row is `qwen3.5:9b` at 196,608 tokens -
+# was left resident on `jarvis-primary:latest` at 16,384, and the field
+# battery's PRESETS row then failed ("the everyday lane is on a model its own
+# preset table declares for it" / "on its one-card model at 196,608"). The owner
+# restored it by hand.
+#
+# So the suites are bracketed: the lane's resident model+context is read before
+# they start, and put back - warmed at the RECORDED context, nothing invented -
+# when they leave a different one. The one `LANE:` line says which of those
+# happened, or that the lane could not be read and nothing was restored.
+#
+# THE TIMEOUT CASE. The desktop owns the run's bound and can end this tool at
+# any moment, so a `finally` here is not enough: the record is written to
+# `LANE_STATE_NAME` BEFORE the suites, and the desktop runs `--restore-lane`
+# after a run that ended without this tool putting the lane back. That is what
+# makes a timeout ending (or a crash) still restore it. The record is removed
+# once the lane is back or already matched; a failed restore leaves it for the
+# desktop's one retry, which always removes it (so a stale record can never
+# override a model the owner picked later).
+#
+# NEVER A GUESS. The lane is `OLLAMA_URL` - the one address the chat uses - and
+# only when it names THIS PC: the update's lane hygiene never reaches another
+# machine, and it sends only a model name and the context the lane itself
+# reported. When the lane could not be read, nothing is restored.
+
+#: The model lane the chat uses when `OLLAMA_URL` is unset: the live backend's
+#: own default (`jarvis_models.DEFAULT_OLLAMA_URL`), so the two cannot disagree.
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+#: The only host names that mean "the model on this PC".
+LANE_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+#: Where the pre-suite lane record lives, inside the backend's own log folder.
+LANE_STATE_NAME = "lane-before-proof-suites.json"
+#: The report prefix for the lane's one line.
+LANE_PREFIX = "LANE: "
+#: `/api/ps` is a read; five seconds is generous for a loopback answer.
+LANE_READ_TIMEOUT = 5.0
+#: Warming a 9B at 196,608 tokens can take a while; this is the bound the live
+#: backend's own preload uses (`jarvis_power_switch.EverydayOllama.load`).
+LANE_WARM_TIMEOUT = 180.0
+#: A record older than this is not trusted: a model the owner picked long after
+#: a crashed run must never be overwritten by an old restore.
+LANE_RECORD_MAX_AGE_SECONDS = 6 * 60 * 60
 
 #: The opt-in the four visible-browser suites and run_suites.py share. It is
 #: named in the skip note so an intentional opt-out is never described as a
@@ -1859,6 +1932,313 @@ def _run(cmd, cwd, on_line) -> "int | None":
 
 
 # ---------------------------------------------------------------------------
+#   The owner's everyday model lane: read, put back, report
+# ---------------------------------------------------------------------------
+
+def lane_url(env=None) -> "str | None":
+    """The everyday lane's URL, or None when it does not name THIS PC.
+
+    `OLLAMA_URL` is the backend's own setting - the one address the chat uses -
+    and it is honoured only when it is loopback: this step must never reach
+    another machine's models. An unset/blank value falls back to the same
+    loopback default the live backend uses (`jarvis_models.DEFAULT_OLLAMA_URL`),
+    because that is the address the backend itself would talk to.
+    """
+    raw = (os.environ.get("OLLAMA_URL") if env is None else env) or ""
+    raw = raw.strip() or DEFAULT_OLLAMA_URL
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+    except ValueError:
+        return None
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return None
+    if parsed.hostname.lower() not in LANE_LOOPBACK_HOSTS:
+        return None
+    return raw.rstrip("/")
+
+
+def _lane_opener():
+    """An opener with NO proxy, so a configured internet proxy cannot swallow a
+    127.0.0.1 request (`jarvis_local_http` exists for the same reason in the
+    live backend, which this tool must not import)."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def lane_models(url=None, *, timeout=LANE_READ_TIMEOUT) -> dict:
+    """The everyday lane's resident models, as `GET /api/ps` reports them.
+
+    `{"ok": bool, "why": str, "models": [{"model": name, "context": N}]}`. The
+    two numbers are the same ones the field battery's PRESETS row and
+    `jarvis_power_switch` read. An answer that cannot be read is `ok=False` with
+    the reason; the caller then restores nothing and says so, and no model name
+    is ever invented.
+    """
+    target = url if url is not None else lane_url()
+    if not target:
+        return {"ok": False, "why": "OLLAMA_URL is not a loopback address on this PC",
+                "models": []}
+    request = urllib.request.Request(target + "/api/ps")
+    try:
+        with _lane_opener().open(request, timeout=timeout) as reply:
+            body = json.loads(reply.read().decode("utf-8", "replace") or "{}")
+    except Exception as exc:               # noqa: BLE001 - a read never stops an update
+        return {"ok": False, "why": f"{type(exc).__name__}: {exc}"[:200], "models": []}
+    models = []
+    for entry in (body or {}).get("models") or []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or entry.get("model") or "").strip()
+        if not name:
+            continue
+        context = entry.get("context_length")
+        models.append({
+            "model": name,
+            "context": int(context) if isinstance(context, (int, float)) and context > 0 else None,
+        })
+    return {"ok": True, "why": "", "models": models}
+
+
+def lane_warm(model, context, url=None, *, timeout=LANE_WARM_TIMEOUT) -> dict:
+    """Load `model` at `context` on the everyday lane. {"ok": bool, "why": str}.
+
+    The request is the owner's own preload shape (`jarvis_power_switch.
+    EverydayOllama.load` / `jarvis_agent.warm_everyday`): `POST /api/generate`
+    with the model and `options.num_ctx`, and NO keep_alive (Ollama's own
+    setting stays in charge). A body WITHOUT a context is never sent - that is
+    the 2026-10-10 bug that silently reloaded the everyday lane at 2,048 instead
+    of its 196,608 window.
+    """
+    target = url if url is not None else lane_url()
+    if not target:
+        return {"ok": False, "why": "OLLAMA_URL is not a loopback address on this PC"}
+    if not model:
+        return {"ok": False, "why": "no model was recorded"}
+    try:
+        num_ctx = int(context)
+    except (TypeError, ValueError):
+        num_ctx = 0
+    if num_ctx <= 0:
+        return {"ok": False, "why": "the recorded context is not a positive number"}
+    body = json.dumps({"model": str(model), "options": {"num_ctx": num_ctx}}).encode("utf-8")
+    request = urllib.request.Request(
+        target + "/api/generate", data=body,
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with _lane_opener().open(request, timeout=timeout) as reply:
+            reply.read()
+    except Exception as exc:               # noqa: BLE001 - a warm never stops an update
+        return {"ok": False, "why": f"{type(exc).__name__}: {exc}"[:200]}
+    return {"ok": True, "why": ""}
+
+
+#: The lane probes the update flow calls. Functions at module level so a test can
+#: put a fake here (the same shape `SHELL_WHICH` uses at the top of the suite) -
+#: the tool's suite must never touch the owner's real Ollama.
+def read_lane_models() -> dict:
+    """The everyday lane's resident models now. A seam: tests put a fake here."""
+    return lane_models()
+
+
+def warm_lane_model(model, context) -> dict:
+    """Load the recorded model at the recorded context. A seam: tests replace it."""
+    return lane_warm(model, context)
+
+
+def lane_state_path(backend) -> Path:
+    """Where the pre-suite lane record lives: inside the backend's own logs."""
+    return Path(backend) / LOG_DIR / LANE_STATE_NAME
+
+
+def _lane_resident(probe) -> "tuple | None":
+    """(model, context) from one `lane_models`-shaped answer, or None when empty."""
+    for entry in (probe or {}).get("models") or []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("model") or "").strip()
+        if not name:
+            continue
+        context = entry.get("context")
+        if not (isinstance(context, (int, float)) and context > 0):
+            context = None
+        return name, context
+    return None
+
+
+def record_lane_state(backend, *, read=None, path=None) -> dict:
+    """Read the everyday lane and WRITE the record before the proof suites.
+
+    Returns the record (also what was written): `ok` (the read answered),
+    `why` (when it did not), `model`/`context` (what was resident, either may be
+    None), and `recordedAt`. A read that failed is recorded with its reason, so
+    a run the desktop ends can still say why nothing was restored - and so a
+    record can never be mistaken for "the lane was empty". Writing the record is
+    best-effort: an unwritable log folder does not fail the backend update.
+    """
+    read = read or read_lane_models
+    target = Path(path) if path is not None else lane_state_path(backend)
+    try:
+        probe = read()
+    except Exception as exc:               # noqa: BLE001 - a read never stops an update
+        probe = {"ok": False, "why": f"{type(exc).__name__}: {exc}", "models": []}
+    resident = _lane_resident(probe) if probe.get("ok") else None
+    record = {
+        "recordedAt": time.time(),
+        "ok": bool(probe.get("ok")),
+        "why": str(probe.get("why") or ""),
+        "model": resident[0] if resident else None,
+        "context": resident[1] if resident else None,
+    }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f"{target.name}.tmp-{os.getpid()}")
+        temporary.write_text(json.dumps(record), encoding="utf-8")
+        os.replace(temporary, target)
+    except OSError:
+        pass                            # the update's own restoring still works
+    return record
+
+
+def restore_lane(record, *, read=None, warm=None, say=print) -> dict:
+    """Put the recorded everyday model back if the proof suites left another one.
+
+    One decision function over the injected `read`/`warm` calls, so the four
+    cases are tests rather than hopes. It always prints exactly ONE `LANE:` line
+    - the run report must say what was done - and never raises. Returns
+    `{"done": bool}`: `done` is False exactly when the lane could not be
+    restored or could not be checked, which is when the record is left for the
+    desktop's one retry.
+
+    NEVER A GUESS: an unreadable record restores nothing; a lane that cannot be
+    read after the suites restores nothing (a blind warm could load a model
+    whose name this run never recorded); a recorded model with no recorded
+    context is not warmed at all (that is the 2026-10-10 2,048-token bug).
+    """
+    read = read or read_lane_models
+    warm = warm or warm_lane_model
+
+    def tell(line: str) -> None:
+        say(LANE_PREFIX + line)
+
+    if not record.get("ok"):
+        tell("the everyday lane could not be read before the proof suites "
+             f"({record.get('why') or 'no answer'}); nothing was restored.")
+        return {"done": True}
+    model = str(record.get("model") or "").strip()
+    context = record.get("context")
+    if not model:
+        tell("the everyday lane had no model resident before the proof suites; "
+             "nothing was restored.")
+        return {"done": True}
+    if not (isinstance(context, (int, float)) and context > 0):
+        tell(f"the everyday lane held {model} before the proof suites but did not "
+             "report a context it was loaded at - warming it without one would "
+             f"reload it at a smaller window, so nothing was restored.")
+        return {"done": True}
+
+    try:
+        after = read()
+    except Exception as exc:               # noqa: BLE001 - never a crash
+        after = {"ok": False, "why": f"{type(exc).__name__}: {exc}", "models": []}
+    if not after.get("ok"):
+        tell(f"the everyday lane could not be read after the proof suites "
+             f"({after.get('why') or 'no answer'}), so whether {model} at "
+             f"{int(context)} is still resident is not claimed; nothing was restored.")
+        return {"done": False}
+    resident = _lane_resident(after)
+    if resident and resident[0] == model and resident[1] == int(context):
+        tell(f"the everyday lane still holds {model} at {int(context)} - the proof "
+             "suites left it alone.")
+        return {"done": True}
+    was = ("left it with no model resident" if not resident else
+           f"left it on {resident[0]}"
+           + (f" at {resident[1]}" if resident[1] else ""))
+    try:
+        warmed = warm(model, int(context))
+    except Exception as exc:               # noqa: BLE001 - never a crash
+        warmed = {"ok": False, "why": f"{type(exc).__name__}: {exc}"}
+    if not warmed.get("ok"):
+        tell(f"the proof suites {was}; warming the recorded {model} at "
+             f"{int(context)} failed ({warmed.get('why') or 'no answer'}), so the "
+             "lane is not claimed to be back.")
+        return {"done": False}
+    try:
+        again = read()
+    except Exception as exc:               # noqa: BLE001 - never a crash
+        again = {"ok": False, "why": f"{type(exc).__name__}: {exc}", "models": []}
+    back = _lane_resident(again) if again.get("ok") else None
+    if back and back[0] == model and back[1] == int(context):
+        tell(f"the proof suites {was}; warmed the recorded {model} at "
+             f"{int(context)} again and read it back in place.")
+        return {"done": True}
+    if back:
+        reads = f"the lane now reads {back[0]}" + (f" at {back[1]}" if back[1] else "")
+    elif again.get("ok"):
+        reads = "the lane now reads no model resident"
+    else:
+        reads = f"the lane could not be read to check ({again.get('why') or 'no answer'})"
+    tell(f"the proof suites {was}; warmed the recorded {model} at {int(context)} "
+         f"again, but {reads}, so it is not claimed to be back.")
+    return {"done": False}
+
+
+def restore_lane_after_suites(backend, record, *, read=None, warm=None,
+                              say=print, path=None) -> dict:
+    """`restore_lane`, then forget the record once the lane is back.
+
+    A `done: False` restore leaves the record behind on purpose: the desktop
+    runs `--restore-lane` after a run that ends before this tool can, and that
+    is its retry.
+    """
+    result = restore_lane(record, read=read, warm=warm, say=say)
+    if result.get("done"):
+        target = Path(path) if path is not None else lane_state_path(backend)
+        try:
+            target.unlink()
+        except OSError:
+            pass
+    return result
+
+
+def restore_saved_lane(backend, *, read=None, warm=None, say=print,
+                       path=None, now=None) -> int:
+    """`--restore-lane`: the desktop's restore after a run it ended itself.
+
+    Reads the record written before the proof suites and restores the lane from
+    it. A missing record prints nothing (this tool's own ending already put the
+    lane back). The record is ALWAYS removed after this one attempt, even when
+    the restore failed or the record could not be read - so a stale record can
+    never override a model the owner picks later. Returns 0 always: the update
+    is over, and the one `LANE:` line is the report.
+    """
+    target = Path(path) if path is not None else lane_state_path(backend)
+    if not target.is_file():
+        return 0
+    try:
+        record = json.loads(target.read_text(encoding="utf-8"))
+        if not isinstance(record, dict):
+            record = {}
+    except (OSError, ValueError):
+        record = {}
+    try:
+        target.unlink()
+    except OSError:
+        pass
+    if not record:
+        say(LANE_PREFIX + "the record of the model lane left by the proof run is "
+            "unreadable, so nothing was restored.")
+        return 0
+    stamp = record.get("recordedAt")
+    age = (now if now is not None else time.time()) - stamp if isinstance(stamp, (int, float)) else None
+    if age is None or age > LANE_RECORD_MAX_AGE_SECONDS or age < -60:
+        say(LANE_PREFIX + "the record of the model lane left by the proof run is "
+            f"not from this run (older than {LANE_RECORD_MAX_AGE_SECONDS // 3600} "
+            "hours), so nothing was restored from it.")
+        return 0
+    restore_lane(record, read=read, warm=warm, say=say)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 #   The update itself
 # ---------------------------------------------------------------------------
 
@@ -2305,6 +2685,16 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                                previous_release, say)
             beside_done = True
 
+        # ---- 2c. the owner's everyday model lane ------------------------
+        # THE SUITES RUN AGAINST THE LIVE FOLDER, AND ONE OF THEM LOADS A MODEL
+        # ON THE OWNER'S EVERYDAY LANE AND DOES NOT PUT IT BACK (measured
+        # 2026-11-21: lane 11436 was left on `jarvis-primary:latest` at 16,384
+        # instead of `qwen3.5:9b` at 196,608, and the field battery's PRESETS row
+        # failed). The lane is recorded HERE - before the proof suites - and put
+        # back right after them, and the record is written to disk so the
+        # desktop can restore it even when this tool is ended by its bound.
+        lane_record = record_lane_state(backend)
+
         # ---- 3. the same suites, at this pace ---------------------------
         emit_progress("testing", done=0, total=len(names), failed=0, skipped=0,
                       weightDone=0.0, weightTotal=round(weight_total, 3),
@@ -2346,7 +2736,14 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                                             weight_done=weight_done[0],
                                             weight_total=weight_total))
 
-        suites_exit = _call(run, suites_command(repo, workers, backend), repo, on_suite)
+        try:
+            suites_exit = _call(run, suites_command(repo, workers, backend), repo, on_suite)
+        finally:
+            # EVERY ending of this tool's own run puts the lane back, including
+            # a failed or unproven suite phase and the safe second pass. If this
+            # process is ended before it can (the desktop's bound), the record
+            # written above lets the desktop's --restore-lane do it.
+            restore_lane_after_suites(backend, lane_record, say=say)
         result = suite_result(suites_exit, suite_lines)
         if not result["ok"]:
             if attempt_mode != "safe":
@@ -2840,7 +3237,8 @@ def _minutes(seconds: int) -> str:
 def _usage() -> str:
     return ("usage: update_backend.py --repo <program folder> --backend <backend folder> "
             "[--mode max_speed|responsive|safe] [--workers N] [--modes-json] "
-            "[--timings PATH] [--previous-release COMMIT]")
+            "[--timings PATH] [--previous-release COMMIT]; or "
+            "update_backend.py --restore-lane --backend <backend folder>")
 
 
 def parse_args(argv) -> dict:
@@ -2849,6 +3247,7 @@ def parse_args(argv) -> dict:
     `argparse` would exit on its own with a usage line; this tool's refusals are
     read by the owner, so they are written like the rest of the card's words."""
     out = {"mode": DEFAULT_MODE, "workers": None, "modes_json": False,
+           "restore_lane": False,
            "repo": None, "backend": None, "timings": None,
            "previous_release": None}
     rest = list(argv)
@@ -2859,6 +3258,9 @@ def parse_args(argv) -> dict:
             raise SystemExit(0)
         if word == "--modes-json":
             out["modes_json"] = True
+            continue
+        if word == "--restore-lane":
+            out["restore_lane"] = True
             continue
         if word in ("--repo", "--backend", "--mode", "--workers", "--timings",
                     "--previous-release"):
@@ -2871,7 +3273,7 @@ def parse_args(argv) -> dict:
         if word.startswith("--"):
             raise UpdateRefused("bad_argument", f"I do not know the option {word!r}.")
         raise UpdateRefused("bad_argument", f"I do not know what to do with {word!r}.")
-    if not out["repo"]:
+    if not out["restore_lane"] and not out["repo"]:
         raise UpdateRefused("bad_argument", "--repo is needed: the folder that holds "
                                            "scripts\\apply-patches.ps1.")
     if not out["backend"]:
@@ -2939,6 +3341,12 @@ def main(argv=None, *, say=print, run=_run) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     try:
         args = parse_args(argv)
+        if args["restore_lane"]:
+            # The desktop's after-a-killed-run restore: the record was written
+            # before the proof suites and the desktop ends this tool by its own
+            # bound, so the lane is put back here. A run that ended normally has
+            # no record left and this prints nothing.
+            return restore_saved_lane(args["backend"], say=say)
         mode_spec(args["mode"])            # unknown mode refused before anything
         if args["modes_json"]:
             data = mode_plan(args["repo"], args["backend"],

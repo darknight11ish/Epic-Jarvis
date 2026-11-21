@@ -77,6 +77,15 @@ U.SHELL_WHICH = lambda name: (                         # noqa: E731 - a test sta
     r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
     if name == "powershell" else None)
 
+#: The model-lane probes are REAL loopback HTTP against the owner's Ollama in
+#: production; this suite must never touch it (the tool's own docstring promises
+#: the suite never starts a real update). Quiet fakes here; every lane test
+#: below swaps in its own and restores these.
+_QUIET_LANE = {"ok": True, "why": "", "models": []}
+U.read_lane_models = lambda: dict(_QUIET_LANE)         # noqa: E731 - a test stand-in
+U.warm_lane_model = (                                  # noqa: E731 - a test stand-in
+    lambda model, context: {"ok": True, "why": ""})
+
 PASSED, FAILED = [], []
 
 
@@ -1910,6 +1919,307 @@ def t_an_unexpected_lock_error_never_stops_the_update():
           (code, said[:3]))
     check("... and the update still patched and proved itself",
           code == 0 and U.verify_live_files(repo, backend) == [])
+
+
+# ==========================================================================
+#   The owner's everyday model lane is recorded and put back (2026-11-21)
+# ==========================================================================
+#
+# Measured on the owner's PC, 2026-11-21, after the same auto-finish run this
+# suite's progress bound was fixed for: the proof suites run against the live
+# backend folder and at least one of them loads a different model on the
+# everyday lane without putting the owner's back. Lane 11436 - whose preset-table
+# row is `qwen3.5:9b` at 196,608 tokens - was left resident on
+# `jarvis-primary:latest` at 16,384, and the field battery's PRESETS row then
+# failed ("the everyday lane is on a model its own preset table declares for it"
+# / "on its one-card model at 196,608"). The owner restored it by hand.
+#
+# The rule these checks hold: the lane's resident model+context is read BEFORE
+# the proof suites and warmed back at the RECORDED context when they leave a
+# different one; a lane that cannot be read restores nothing and says so; and a
+# run the desktop's bound ends is restored from the record it wrote first, by
+# the tool's own `--restore-lane` mode. Nothing here touches the real Ollama:
+# the seam functions are faked for every check.
+#
+# The tool's suite itself must never touch the owner's Ollama: `read_lane_models`
+# and `warm_lane_model` are module-level seams, and the quiet fakes at the top
+# of this file are what every other update flow in this suite runs with.
+
+@contextmanager
+def _lane_seams(read, warm):
+    """Swap the tool's model-lane seams for one check, and put the fakes back."""
+    real_read, real_warm = U.read_lane_models, U.warm_lane_model
+    U.read_lane_models, U.warm_lane_model = read, warm
+    try:
+        yield
+    finally:
+        U.read_lane_models, U.warm_lane_model = real_read, real_warm
+
+
+def _a_lane_handler(repo: Path, backend: Path, lane: dict, *, changed=True):
+    """A patcher + suite runner that leaves the everyday lane switched.
+
+    The measured failure in one line: the suite phase puts a different model on
+    the lane (`changed=True`) and never puts the owner's back.
+    """
+    def handler(cmd, cwd, on_line, state):
+        if _is_patcher(cmd):
+            state["patcher_calls"] = state.get("patcher_calls", 0) + 1
+            for name, content in NEW.items():
+                (backend / name).write_bytes(content)
+            on_line("Rehearsing all 2 on a copy first.")
+            on_line("  ok           a.patch")
+            on_line("DONE - no problems, but NOT fully proven (see below)")
+            return 0
+        # Snapshot what the record held when the suites started (it is removed
+        # once the lane is back, so it cannot be read after the run).
+        if "record_at_first_suite" not in state:
+            path = U.lane_state_path(backend)
+            try:
+                state["record_at_first_suite"] = json.loads(
+                    path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                state["record_at_first_suite"] = None
+        if changed:
+            lane["models"] = [{"model": "jarvis-primary:latest", "context": 16384}]
+        for name in U.suite_names(repo):
+            on_line(f"ok    {name:<34} 0.1s")
+        on_line("3 passed, 0 skipped, 0 failed")
+        return 0
+
+    return handler
+
+
+def t_the_owner_s_everyday_model_lane_is_put_back_after_the_proof_suites():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lane = {"models": [{"model": "qwen3.5:9b", "context": 196608}]}
+    warmed = []
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        lane["models"] = [{"model": model, "context": int(context)}]
+        return {"ok": True, "why": ""}
+
+    fake = FakeRun(_a_lane_handler(repo, backend, lane))
+    said = []
+    with _lane_seams(read, warm):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json")
+    report = "\n".join(said)
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    saved = fake.state.get("record_at_first_suite")
+    check("the lane is recorded BEFORE the proof suites run - the record names "
+          "the owner's own model and context",
+          saved is not None, saved)
+    check("... and the recorded pair is what was resident (qwen3.5:9b at 196608)",
+          isinstance(saved, dict) and saved.get("model") == "qwen3.5:9b"
+          and saved.get("context") == 196608, saved)
+    check("the everyday model is warmed back at its RECORDED context once the "
+          "suites left another one",
+          warmed == [("qwen3.5:9b", 196608)], warmed)
+    check("... the run report says it was restored, in ONE LANE line",
+          len(lane_lines) == 1
+          and "qwen3.5:9b" in lane_lines[0] and "196608" in lane_lines[0]
+          and "jarvis-primary:latest" in lane_lines[0]
+          and "read it back in place" in lane_lines[0], lane_lines)
+    check("... the pre-suite record is gone once the lane is back",
+          not U.lane_state_path(backend).exists())
+    check("... and the backend update itself still proved itself",
+          code == 0 and "ALL DONE - the backend is patched and proven" in report,
+          (code, said[-5:]))
+
+
+def t_a_lane_the_suites_left_alone_is_not_touched():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lane = {"models": [{"model": "qwen3.5:9b", "context": 196608}]}
+    warmed = []
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        return {"ok": True, "why": ""}
+
+    said = []
+    with _lane_seams(read, warm):
+        code = U.update(repo, backend, "responsive",
+                        run=FakeRun(_a_lane_handler(repo, backend, lane, changed=False)),
+                        say=said.append, clock=lambda: 0.0,
+                        timings_path=root / "timings.json")
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    check("a lane the proof suites left on the owner's model is NOT warmed again",
+          code == 0 and warmed == [], (code, warmed))
+    check("... the report says it was left alone, in one LANE line",
+          len(lane_lines) == 1 and "left it alone" in lane_lines[0]
+          and "qwen3.5:9b" in lane_lines[0], lane_lines)
+    check("... and no record is left behind",
+          not U.lane_state_path(backend).exists())
+
+
+def t_an_unreadable_lane_is_reported_and_nothing_is_restored():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lane = {"models": [{"model": "jarvis-primary:latest", "context": 16384}]}
+    warmed = []
+
+    def read():
+        return {"ok": False, "why": "ConnectionRefusedError: [WinError 10061]",
+                "models": []}
+
+    said = []
+    with _lane_seams(read, lambda model, context: warmed.append((model, context))):
+        code = U.update(repo, backend, "responsive",
+                        run=FakeRun(_a_lane_handler(repo, backend, lane, changed=False)),
+                        say=said.append, clock=lambda: 0.0,
+                        timings_path=root / "timings.json")
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    check("a lane that cannot be read is NOT guessed at - no model is named or warmed",
+          warmed == [], warmed)
+    check("... and the report says the lane could not be read and nothing was restored",
+          len(lane_lines) == 1 and "could not be read" in lane_lines[0]
+          and "nothing was restored" in lane_lines[0]
+          and "ConnectionRefusedError" in lane_lines[0], lane_lines)
+    check("... while the backend update itself is unaffected",
+          code == 0 and not U.lane_state_path(backend).exists(), code)
+
+
+def t_a_model_with_no_recorded_context_is_never_warmed():
+    # A preload that names no context is the 2026-10-10 bug: it reloads a model
+    # at Ollama's own 2,048 instead of the lane's window. So a record with no
+    # context restores nothing, even if the suites changed the lane.
+    warmed = []
+    said = []
+    got = U.restore_lane(
+        {"ok": True, "model": "qwen3.5:9b", "context": None},
+        read=lambda: {"ok": True, "why": "",
+                      "models": [{"model": "other", "context": 8192}]},
+        warm=lambda model, context: warmed.append((model, context)) or {"ok": True, "why": ""},
+        say=said.append)
+    check("a recorded model with no recorded context is never warmed without one",
+          got["done"] is True and warmed == []
+          and "did not report a context" in said[0] and "nothing was restored" in said[0],
+          (got, said))
+    # The lane cannot be read AFTER the suites: a blind warm could load a model
+    # whose name this run never recorded, so nothing is restored and the record
+    # is kept for the desktop's retry.
+    said_again = []
+    got_again = U.restore_lane(
+        {"ok": True, "model": "qwen3.5:9b", "context": 196608},
+        read=lambda: {"ok": False, "why": "no answer", "models": []},
+        warm=lambda model, context: {"ok": True, "why": ""},
+        say=said_again.append)
+    check("a lane that cannot be read after the suites restores nothing and says so",
+          got_again["done"] is False and "could not be read after the proof suites"
+          in said_again[0] and "not claimed" in said_again[0], (got_again, said_again))
+
+
+def t_the_record_restores_the_lane_when_the_desktop_ends_the_run():
+    # THE TIMEOUT ENDING. The tool wrote the lane's record before the proof
+    # suites; the desktop's progress bound then ended it before it could restore
+    # anything. The record is what the desktop's `--restore-lane` run uses.
+    root = _make_root()
+    backend = _make_repo(root)[1]
+    lane = {"models": [{"model": "qwen3.5:9b", "context": 196608}]}
+    U.record_lane_state(
+        backend, read=lambda: {"ok": True, "why": "", "models": list(lane["models"])})
+    record_path = U.lane_state_path(backend)
+    saved = json.loads(record_path.read_text(encoding="utf-8"))
+    check("the tool writes the pre-suite record where the desktop looks for it",
+          record_path.is_file() and saved.get("model") == "qwen3.5:9b"
+          and saved.get("context") == 196608, saved)
+
+    lane["models"] = [{"model": "jarvis-primary:latest", "context": 16384}]
+    warmed = []
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        lane["models"] = [{"model": model, "context": int(context)}]
+        return {"ok": True, "why": ""}
+
+    said = []
+    with _lane_seams(read, warm):
+        code = U.main(["--restore-lane", "--backend", str(backend)], say=said.append)
+    lane_lines = [line for line in said if line.startswith(U.LANE_PREFIX)]
+    check("a run the desktop ended is restored from its record at the recorded pair",
+          code == 0 and warmed == [("qwen3.5:9b", 196608)], (code, warmed))
+    check("... the report says it was restored, in one LANE line",
+          len(lane_lines) == 1 and "read it back in place" in lane_lines[0]
+          and "qwen3.5:9b" in lane_lines[0], lane_lines)
+    check("... and the record is removed, so it can never override a later choice",
+          not record_path.exists())
+    # With no record left there is nothing to say: the tool's own ending had
+    # already put the lane back.
+    said_again = []
+    with _lane_seams(read, warm):
+        code_again = U.main(["--restore-lane", "--backend", str(backend)],
+                            say=said_again.append)
+    check("a restore-mode run with no record left does nothing and says nothing",
+          code_again == 0 and said_again == []
+          and warmed == [("qwen3.5:9b", 196608)], (code_again, said_again))
+
+
+def t_a_failed_restore_is_reported_and_the_record_is_kept_for_the_desktop():
+    root = _make_root()
+    backend = _make_repo(root)[1]
+    record = U.record_lane_state(
+        backend,
+        read=lambda: {"ok": True, "why": "",
+                      "models": [{"model": "qwen3.5:9b", "context": 196608}]})
+    lane = {"models": [{"model": "jarvis-primary:latest", "context": 16384}]}
+
+    def read():
+        return {"ok": True, "why": "", "models": list(lane["models"])}
+
+    said = []
+    got = U.restore_lane_after_suites(
+        backend, record, read=read,
+        warm=lambda model, context: {"ok": False, "why": "the load was refused"},
+        say=said.append)
+    check("a restore that failed is reported honestly, never claimed as back",
+          got["done"] is False and "failed" in said[0]
+          and "not claimed to be back" in said[0], (got, said))
+    check("... and the record is KEPT for the desktop's one retry",
+          U.lane_state_path(backend).is_file())
+    # The desktop's retry works, and only then is the record removed.
+    warmed = []
+
+    def warm(model, context):
+        warmed.append((model, int(context)))
+        lane["models"] = [{"model": model, "context": int(context)}]
+        return {"ok": True, "why": ""}
+
+    retried = U.restore_saved_lane(backend, read=read, warm=warm,
+                                   say=lambda line: None)
+    check("the desktop's retry warms the recorded pair back and removes the record",
+          retried == 0 and warmed == [("qwen3.5:9b", 196608)]
+          and not U.lane_state_path(backend).exists(), (retried, warmed))
+
+
+def t_the_model_lane_is_only_ever_read_on_this_pc():
+    check("a loopback OLLAMA_URL is the lane",
+          U.lane_url("http://127.0.0.1:11436") == "http://127.0.0.1:11436")
+    check("... localhost and ::1 are this PC too",
+          U.lane_url("http://localhost:11434/") == "http://localhost:11434"
+          and U.lane_url("http://[::1]:11434") == "http://[::1]:11434")
+    check("... an unset lane is the backend's own loopback default",
+          U.lane_url("") == U.DEFAULT_OLLAMA_URL
+          and U.lane_url(None) == U.DEFAULT_OLLAMA_URL)
+    check("another machine's lane is REFUSED, never contacted",
+          U.lane_url("http://192.168.1.50:11434") is None
+          and U.lane_url("https://example.com") is None
+          and U.lane_url("ftp://127.0.0.1:11434") is None)
+    check("no lane at all is an honest 'not read', not a guess",
+          U.lane_models(url="")["ok"] is False
+          and "loopback" in U.lane_models(url="")["why"])
 
 
 # ==========================================================================
