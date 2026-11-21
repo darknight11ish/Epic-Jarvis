@@ -296,13 +296,14 @@ def t_the_pm4_plan_rows_read_the_counts_they_carry():
 
 
 def t_the_pm4_section_is_registered_in_the_battery():
-    """A section that exists but never runs is not a field test."""
+    """A section that exists but never runs is not a field test.
+
+    Membership in the module-level SECTIONS constant is checked, not this
+    file's source text: reading source in a suite is a counted source pin and
+    the pin ratchet would (rightly) go up for it.
+    """
     check("the PM4 section exists", callable(getattr(F, "section_pm4", None)))
-    source = (HERE.parent / "tools" / "field_battery.py").read_text(encoding="utf-8")
-    after_main = source.split("def main(")[1] if "def main(" in source else ""
-    check("... and main() runs it", "section_pm4," in after_main)
-    check("... and it is named in the section list alphabetically-ish region",
-          "section_pm4" in source, "the file does not mention it")
+    check("... and one run executes it", F.section_pm4 in F.SECTIONS)
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

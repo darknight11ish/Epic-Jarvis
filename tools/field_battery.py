@@ -3841,6 +3841,34 @@ def section_bounded_cloud():
     REC.end("PASS", "the escalated answer is bounded and a medium question stays local")
 
 
+#: The battery's sections, in the order one run executes them. A module-level
+#: constant so a test can prove a section is REGISTERED without reading this
+#: file's source text (a source read is a counted source pin).
+SECTIONS = [
+    section_preflight,
+    section_build,
+    section_cloud_escalation,
+    section_cloud_efficiency,
+    section_cloud_privacy,
+    section_github,
+    section_capabilities,
+    section_cap_exact,
+    section_presets,
+    section_notes,
+    section_favourites,
+    section_cloud_settings,
+    section_defects,
+    section_pictures,
+    section_audio,
+    section_lane_service,
+    section_fallback,
+    section_project_answers,
+    section_project_chat,
+    section_pm4,
+    section_bounded_cloud,
+]
+
+
 def main(only=None, allow_stale_cloud=False):
     print("=" * 78)
     print("JARVIS FIELD BATTERY - one run against the DEPLOYED build")
@@ -3855,29 +3883,7 @@ def main(only=None, allow_stale_cloud=False):
     print("  other row is read-only or writes only its own throwaway artifact, removed again.")
     print("  a token, key or private fact is never printed.")
 
-    sections = [
-        section_preflight,
-        section_build,
-        section_cloud_escalation,
-        section_cloud_efficiency,
-        section_cloud_privacy,
-        section_github,
-        section_capabilities,
-        section_cap_exact,
-        section_presets,
-        section_notes,
-        section_favourites,
-        section_cloud_settings,
-        section_defects,
-        section_pictures,
-        section_audio,
-        section_lane_service,
-        section_fallback,
-        section_project_answers,
-        section_project_chat,
-        section_pm4,
-        section_bounded_cloud,
-    ]
+    sections = list(SECTIONS)
     if only:
         wanted = [sec for sec in sections if sec.__name__ == only]
         if not wanted:
