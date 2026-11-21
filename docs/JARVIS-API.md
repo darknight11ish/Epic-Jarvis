@@ -19643,6 +19643,102 @@ transport with no card and no GitHub write; the ready read-out capped at 3;
 owner-direct write; and no invented date anywhere. Each new test was written
 first and failed on the tree it was written against.
 
+### 88.10 The plan read and the phone's two work-item writes (added 2026-11-21, PM4)
+
+The owner-approved PM4 phone slice: a clean **Projects list** + the **Next 3
+ready tasks** + **Tap to Mark Done / Quick Add**, deliberately NOT a
+multi-column draggable Kanban. The desktop's PM4 page reads the SAME plan read
+for its board (the board itself is that page's, not this route's). Nothing here
+runs anything, reads GitHub, adds a model tool, invents a date or adds a card
+class.
+
+**Routes.**
+
+| Route | Method | Body | Answers |
+|---|---|---|---|
+| `/api/projects/<id>/plan` | GET | - | **200** the plan view below; **404** an unknown project, in the store's usual words |
+| `/api/projects/<id>/work_items` | POST | one work item the owner typed: `{"title"}` and **nothing else** (Quick Add sends exactly the owner's words; any other field - `due_date` included - is refused, so this door can never date a task or set its state) | **200** `{"ok": true, "item": work_item, "message": "Added \"...\"."}`; **400** the store's own refusal in words (a missing title, any other field) |
+| `/api/projects/<id>/work_items/<wid>/status` | POST | `{"status": "done"}` (one of the store's five states) | **200** `{"ok": true, "changed": bool, "item": work_item, "message"}`; **404** an unknown project or an item that is not in that project, in the store's own sentence ("There is no work item with that id."); **400** a status outside the five |
+
+**The plan read** (`GET /api/projects/<id>/plan`) is the one read the phone's
+Projects screen and the desktop's PM4 page build from. It is additive: the
+frozen `GET /api/projects/<id>` view of §88.2 is untouched (PM2's "no shape
+change" note stands), and this route serves the plan store's own read:
+
+```
+{"ok": true, "available": true,
+ "objective": null | "the owner's words",
+ "success_criteria": null | str,
+ "status": null | "planned" | "active" | "paused" | "done" | "archived",
+ "target_date": null | "YYYY-MM-DD",
+ "linked_repo": null | str, "linked_note_path": null | str, "slug": null | str,
+ "counts": {"milestones", "work_items", "ready", "blocked", "edges", "events": int},
+ "milestones": [{"id", "title", "status", "due_date": null | "YYYY-MM-DD",
+                 "position", "counts": {"work_items", "done"}}],
+ "work_items": [{"id", "project", "milestone", "title", "detail", "status",
+                 "priority": null | int, "due_date": null | "YYYY-MM-DD",
+                 "created", "changed", "blocked_by": [{"id", "title", "status"}],
+                 "ready": bool, "executor", "linked_task_id",
+                 "linked_pr_number", "linked_pr_state", "linked_ci_status"}],
+ "ready": ["<work item id>", ...],
+ "events": [{"id", "at", "kind", "subject", "detail"}]}
+```
+
+Every value is the store's own: a missing date is `null` and is NEVER filled in
+(the anti-hallucination rule, §88.7), a milestone's progress is its own items
+(`work_items` and `done`), and a project with no plan rows reads as the honest
+empty - `objective: null`, empty lists, zero counts - never a made-up row.
+`ready` is `ready_next()`'s own order for this project (priority, then due date,
+then written order), capped at **20** ids; `counts.ready` is the TRUE total, so
+a screen can say "there is more" without a second read. `events` is the
+append-only log's newest **100** rows, newest first. **The read writes
+nothing:** no row, no event, no receipt, no GitHub read - it is in the same
+card-free read tier as `GET /api/projects/<id>` beside it, and it does not
+create `projects.db` when there is none (that is the same 404 as an unknown
+project).
+
+**The two writes** are the owner's own taps on their own rows, like ticking a
+to-do:
+
+- `POST .../work_items` goes through the store's existing `add_work_item`: one
+  `work_item_added` event in the same transaction. **Only the typed words are
+  accepted** - the body is `{"title"}` and any other field (`due_date` included)
+  is refused `400` and writes nothing, so a work item's date or state never comes
+  from this door; a date only ever comes from the owner's own dedicated edit or
+  from a source row an import copies unchanged. The phone's Quick Add sends
+  exactly the owner's typed words as `title`.
+- `POST .../work_items/<wid>/status` goes through the store's EXISTING status
+  path, `set_work_item_status`: it appends the one `work_item_status` event and
+  records the normal one-click `jarvis_undo` receipt, exactly as the same change
+  from a typed tool does. There is no second write and no second receipt, and a
+  second tap on an already-done item is `changed: false` with no event.
+
+**What asks first is unchanged and this does not speak for it.** Neither write
+raises a card - the owner is writing down their own task - and neither adds a
+card class, a gate row or a new permission. The phone holds both writes on a
+stale link (rule 4) like every other project change, and the PC's own project
+rules (Shareable ON asks, taking off Jarvis's own private mark asks) are
+untouched. The phone may summarize the plan in substance; it never weakens a
+safety rule and never speaks for the PC's permissions.
+
+**What is deliberately not here:** no Run Step dispatch (still deferred, §88.9),
+no GitHub read or sync on this route, no bulk status change, no date invented,
+no Kanban editor, and no change to the frozen §88.2 shapes. `docs/ARCHITECTURE.md`
+section 8 records the phone-first order and why `tools/check_parity.py`
+classifies the three routes PHONE_ONLY until the desktop page calls them.
+
+**Acceptance.** `backend/test_projects.py`'s `t_pm4_*` tests prove the shape and
+each key against a real SQLite store, the honest empty, a blocked item never in
+`ready`, the two bounds and the true totals, that the read writes nothing and
+creates no store, the one status path with its real `jarvis_undo` receipt and
+its second-tap no-op, and Quick Add saving the typed words with no invented
+date. The phone's JVM suite (`ProjectPlanTest`) builds against the real answers
+in `contract/projects-cases.json` (`tools/gen_projects_cases.py` now carries the
+`plan_full` / `plan_empty` cases and the two write answers) and proves the 3-item
+cap, the project name on each ready row, one request per tap on the one route,
+Quick Add carrying exactly the typed words, the honest empty/error states and
+the spoken answer's 3-item cap.
+
 ## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §59 on the `claude/jarvis-3d-animal-mascot-8dr0tb` branch; §59 is already Goals on main's side. References that came with that branch were renumbered with it.

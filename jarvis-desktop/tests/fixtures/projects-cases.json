@@ -1481,6 +1481,255 @@
    "title": "Projects",
    "unlinked_apps": []
   },
+  "plan_empty": {
+   "available": true,
+   "counts": {
+    "blocked": 0,
+    "edges": 0,
+    "events": 0,
+    "milestones": 0,
+    "ready": 0,
+    "work_items": 0
+   },
+   "events": [],
+   "linked_note_path": null,
+   "linked_repo": null,
+   "milestones": [],
+   "objective": null,
+   "ok": true,
+   "ready": [],
+   "slug": null,
+   "status": null,
+   "success_criteria": null,
+   "target_date": null,
+   "work_items": []
+  },
+  "plan_full": {
+   "available": true,
+   "counts": {
+    "blocked": 1,
+    "edges": 1,
+    "events": 8,
+    "milestones": 2,
+    "ready": 2,
+    "work_items": 4
+   },
+   "events": [
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "status": "done"
+     },
+     "id": "00000000000000000000000000000010",
+     "kind": "work_item_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "0000000000000000000000000000000f"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "dst": "0000000000000000000000000000000b",
+      "kind": "blocks",
+      "src": "00000000000000000000000000000009"
+     },
+     "id": "0000000000000000000000000000000e",
+     "kind": "edge_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "0000000000000000000000000000000d"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "status": "ready"
+     },
+     "id": "0000000000000000000000000000000c",
+     "kind": "work_item_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "0000000000000000000000000000000b"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "status": "ready"
+     },
+     "id": "0000000000000000000000000000000a",
+     "kind": "work_item_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "00000000000000000000000000000009"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "status": "ready"
+     },
+     "id": "00000000000000000000000000000008",
+     "kind": "work_item_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "00000000000000000000000000000007"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "status": "active"
+     },
+     "id": "00000000000000000000000000000006",
+     "kind": "milestone_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "00000000000000000000000000000005"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "status": "done"
+     },
+     "id": "00000000000000000000000000000004",
+     "kind": "milestone_added",
+     "project": "00000000000000000000000000000001",
+     "subject": "00000000000000000000000000000003"
+    },
+    {
+     "at": 1790000000.0,
+     "detail": {
+      "fields": [
+       "linked_note_path",
+       "linked_repo",
+       "objective",
+       "status",
+       "success_criteria",
+       "target_date"
+      ]
+     },
+     "id": "00000000000000000000000000000002",
+     "kind": "project_plan_changed",
+     "project": "00000000000000000000000000000001",
+     "subject": "00000000000000000000000000000001"
+    }
+   ],
+   "linked_note_path": "Notes/Kitchen.md",
+   "linked_repo": "owner/kitchen",
+   "milestones": [
+    {
+     "counts": {
+      "done": 1,
+      "work_items": 1
+     },
+     "due_date": null,
+     "id": "00000000000000000000000000000003",
+     "position": 0,
+     "status": "done",
+     "title": "Prepare"
+    },
+    {
+     "counts": {
+      "done": 0,
+      "work_items": 3
+     },
+     "due_date": null,
+     "id": "00000000000000000000000000000005",
+     "position": 1,
+     "status": "active",
+     "title": "Paint"
+    }
+   ],
+   "objective": "Repaint the kitchen before winter",
+   "ok": true,
+   "ready": [
+    "00000000000000000000000000000007",
+    "00000000000000000000000000000009"
+   ],
+   "slug": null,
+   "status": "active",
+   "success_criteria": "Walls done and the shelves back up",
+   "target_date": "2026-12-01",
+   "work_items": [
+    {
+     "blocked_by": [],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": "2026-11-25",
+     "executor": "owner",
+     "id": "00000000000000000000000000000007",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": "00000000000000000000000000000005",
+     "priority": 0,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": true,
+     "status": "ready",
+     "title": "Buy paint"
+    },
+    {
+     "blocked_by": [],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": null,
+     "executor": "owner",
+     "id": "00000000000000000000000000000009",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": "00000000000000000000000000000005",
+     "priority": 1,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": true,
+     "status": "ready",
+     "title": "Tape the edges"
+    },
+    {
+     "blocked_by": [
+      {
+       "id": "00000000000000000000000000000009",
+       "status": "ready",
+       "title": "Tape the edges"
+      }
+     ],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": null,
+     "executor": "owner",
+     "id": "0000000000000000000000000000000b",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": "00000000000000000000000000000005",
+     "priority": null,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": false,
+     "status": "ready",
+     "title": "Paint the walls"
+    },
+    {
+     "blocked_by": [],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": null,
+     "executor": "owner",
+     "id": "0000000000000000000000000000000f",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": "00000000000000000000000000000003",
+     "priority": null,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": false,
+     "status": "done",
+     "title": "Clear the counters"
+    }
+   ]
+  },
   "task_empty": {
    "ok": true,
    "task": {
@@ -3373,6 +3622,34 @@
    "value": 1000000.0
   }
  ],
+ "plan_limits": {
+  "events_max": 100,
+  "listed_ready_max": 20,
+  "ready_cap": 3,
+  "work_title": 120
+ },
+ "plan_words": {
+  "done": "Done",
+  "done_row": "Mark {title} in {project} done",
+  "done_said": "Marked done.",
+  "quick_add": "Add",
+  "quick_blank": "Type the task first.",
+  "quick_placeholder": "The task, in your words",
+  "quick_said": "Added.",
+  "quick_title": "Quick add a task",
+  "quick_to": "Add to: {name}",
+  "quick_under": "It is saved exactly as you type it, with no date added.",
+  "ready_empty": "Nothing is ready to work on right now.",
+  "ready_missing": "Your PC's Jarvis does not have the project plan read yet - run apply-patches.ps1 on the PC.",
+  "ready_more": "And {n} more ready on your PC.",
+  "ready_title": "Next 3 ready tasks",
+  "ready_under": "Up to 3 you can start now, across your projects.",
+  "ready_unreadable": "Couldn't read what's ready: {why}",
+  "speech_item": "{title} in {project}",
+  "speech_more": " And {n} more.",
+  "speech_none": "Nothing is ready to work on right now.",
+  "speech_ready": "Ready now: {items}."
+ },
  "posts": {
   "adopt": {
    "body": {
@@ -4018,6 +4295,47 @@
    },
    "status": 409
   },
+  "quick_add": {
+   "body": {
+    "item": {
+     "blocked_by": [],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": null,
+     "executor": "owner",
+     "id": "00000000000000000000000000000013",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": null,
+     "priority": null,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": true,
+     "status": "backlog",
+     "title": "Buy a brush"
+    },
+    "message": "Added \"Buy a brush\".",
+    "ok": true
+   },
+   "status": 200
+  },
+  "quick_add_blank": {
+   "body": {
+    "error": "A work item's title cannot be empty.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "quick_add_date": {
+   "body": {
+    "error": "A task added from here is a title and nothing else - a date is never set from here.",
+    "ok": false
+   },
+   "status": 400
+  },
   "shareable_off": {
    "body": {
     "changed": false,
@@ -4573,6 +4891,69 @@
     "ok": false
    },
    "status": 400
+  },
+  "work_item_status": {
+   "body": {
+    "changed": true,
+    "item": {
+     "blocked_by": [],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": "2026-11-25",
+     "executor": "owner",
+     "id": "00000000000000000000000000000007",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": "00000000000000000000000000000005",
+     "priority": 0,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": false,
+     "status": "done",
+     "title": "Buy paint"
+    },
+    "message": "Moved \"Buy paint\" to done.",
+    "ok": true
+   },
+   "status": 200
+  },
+  "work_item_status_again": {
+   "body": {
+    "changed": false,
+    "item": {
+     "blocked_by": [],
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "detail": "",
+     "due_date": "2026-11-25",
+     "executor": "owner",
+     "id": "00000000000000000000000000000007",
+     "linked_ci_status": "",
+     "linked_pr_number": null,
+     "linked_pr_state": "",
+     "linked_task_id": null,
+     "milestone": "00000000000000000000000000000005",
+     "priority": 0,
+     "project": "00000000000000000000000000000001",
+     "project_name": "Kitchen",
+     "ready": false,
+     "status": "done",
+     "title": "Buy paint"
+    },
+    "message": "\"Buy paint\" was already done.",
+    "ok": true
+   },
+   "status": 200
+  },
+  "work_item_status_unknown": {
+   "body": {
+    "error": "There is no work item with that id.",
+    "ok": false
+   },
+   "status": 404
   }
  },
  "scales": [
