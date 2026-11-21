@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.ProjectPlan
 import com.jarvis.client.net.Projects
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Pill
@@ -96,6 +97,13 @@ internal fun ProjectsSection(
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var newName by remember { mutableStateOf("") }
+    // PM4: the plan read for each project the list has, the ready list and the
+    // Quick Add box. All of it is the PC's own answer, read again after a change.
+    var plans by remember { mutableStateOf<Map<String, ProjectPlan.Plan>>(emptyMap()) }
+    var planErr by remember { mutableStateOf<String?>(null) }
+    var plansMissing by remember { mutableStateOf(false) }
+    var quickWords by remember { mutableStateOf("") }
+    var quickTargetId by remember { mutableStateOf<String?>(null) }
 
     // A card this screen caused is answered elsewhere; read again when the
     // queue changes while one waits.
@@ -128,6 +136,44 @@ internal fun ProjectsSection(
             } else {
                 readError = JarvisRuntime.noticeFor(r.error)
             }
+        }
+        // PM4: ONE plan read per project the list has. It is the PC's own answer
+        // (ready order included) - nothing here decides what is ready. A PC
+        // without the route says so; a failed read says so; neither invents a row.
+        val listed = list
+        if (listed != null) {
+            val got = mutableMapOf<String, ProjectPlan.Plan>()
+            var failed: String? = null
+            var routeMissing = false
+            for (p in listed.projects) {
+                val path = ProjectPlan.planPath(p.id) ?: continue
+                when (val pr = JarvisRuntime.projectsRead(path)) {
+                    is ApiResult.Ok -> {
+                        val reply = pr.value
+                        val plan = if (reply.code in 200..299) {
+                            ProjectPlan.parse(p.id, p.name, reply.body)
+                        } else {
+                            null
+                        }
+                        when {
+                            plan != null -> got[p.id] = plan
+                            Projects.isMissing(reply) -> routeMissing = true
+                            else -> failed = ProjectPlan.readError(reply)
+                        }
+                    }
+                    is ApiResult.Failed -> {
+                        if (Projects.missing(pr.error)) routeMissing = true
+                        else failed = JarvisRuntime.noticeFor(pr.error)
+                    }
+                }
+            }
+            plans = got
+            planErr = failed
+            plansMissing = got.isEmpty() && routeMissing && listed.projects.isNotEmpty()
+        } else {
+            plans = emptyMap()
+            planErr = null
+            plansMissing = false
         }
         val id = openId ?: run {
             project = null
@@ -209,6 +255,120 @@ internal fun ProjectsSection(
                         Gap(4)
                         Text("Couldn't read it again: $err", style = MaterialTheme.typography.labelSmall,
                             color = chrome.warnInk)
+                    }
+                    // PM4: Next 3 ready tasks, from the PC's own ready order and
+                    // capped at ProjectPlan.READY_CAP - the same cap the voice
+                    // answer keeps. A tap on Done is ONE status change through
+                    // the store's existing path (its own receipt/Undo).
+                    Gap(10)
+                    Label(ProjectPlan.w("ready_title"))
+                    val readyTasks = ProjectPlan.readyTasks(plans.values)
+                    val totalReady = ProjectPlan.totalReady(plans.values)
+                    when {
+                        plansMissing -> Text(
+                            ProjectPlan.w("ready_missing"),
+                            style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                        )
+                        planErr != null -> Text(
+                            ProjectPlan.fill(ProjectPlan.w("ready_unreadable"), "why" to (planErr ?: "")),
+                            style = MaterialTheme.typography.bodySmall, color = chrome.warnInk,
+                        )
+                        else -> {
+                            Text(
+                                if (readyTasks.isEmpty()) ProjectPlan.w("ready_empty")
+                                else ProjectPlan.w("ready_under"),
+                                style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                                modifier = Modifier.semantics {
+                                    contentDescription = ProjectPlan.spoken(readyTasks, totalReady)
+                                },
+                            )
+                            readyTasks.forEach { t ->
+                                Gap(6)
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(t.title, style = MaterialTheme.typography.bodyMedium,
+                                            color = chrome.textHi)
+                                        Text(t.projectName, style = MaterialTheme.typography.labelSmall,
+                                            color = chrome.textLo)
+                                    }
+                                    Quiet(
+                                        ProjectPlan.w("done"),
+                                        enabled = canAct && !busy,
+                                        modifier = Modifier.semantics {
+                                            contentDescription = ProjectPlan.fill(
+                                                ProjectPlan.w("done_row"),
+                                                "title" to t.title, "project" to t.projectName,
+                                            )
+                                        },
+                                        onClick = {
+                                            val req = ProjectPlan.doneRequest(t.projectId, t.id)
+                                            if (req == null) {
+                                                said = "Not changed."
+                                            } else {
+                                                change("work_item_status", req.path, req.body,
+                                                    ProjectPlan.w("done_said"))
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            val more = totalReady - readyTasks.size
+                            if (readyTasks.isNotEmpty() && more > 0) {
+                                Text(
+                                    ProjectPlan.fill(ProjectPlan.w("ready_more"), "n" to more),
+                                    style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
+                                )
+                            }
+                        }
+                    }
+                    // PM4: Quick Add. It posts the owner's typed words only - no
+                    // date, no status, no priority - to the project named on the
+                    // "Add to" button (tap it to pick another project).
+                    if (!plansMissing && planErr == null && shownList.projects.isNotEmpty()) {
+                        val target = shownList.projects.firstOrNull { it.id == quickTargetId }
+                            ?: shownList.projects.firstOrNull()
+                        Gap(12)
+                        Label(ProjectPlan.w("quick_title"))
+                        TextInput(
+                            value = quickWords,
+                            onValueChange = { quickWords = it.take(120) },
+                            placeholder = ProjectPlan.w("quick_placeholder"),
+                            supportingText = ProjectPlan.w("quick_under"),
+                        )
+                        Gap(6)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Quiet(
+                                ProjectPlan.fill(ProjectPlan.w("quick_to"), "name" to (target?.name ?: "")),
+                                onClick = {
+                                    if (target != null) {
+                                        val at = shownList.projects.indexOfFirst { it.id == target.id }
+                                        val next = shownList.projects[(at + 1) % shownList.projects.size]
+                                        quickTargetId = next.id
+                                    }
+                                },
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Primary(
+                                ProjectPlan.w("quick_add"),
+                                enabled = canAct && !busy && target != null && quickWords.isNotBlank(),
+                                busy = busy,
+                                onClick = {
+                                    val req = target?.let { ProjectPlan.addRequest(it.id, quickWords) }
+                                    if (req == null) {
+                                        said = ProjectPlan.w("quick_blank")
+                                    } else {
+                                        change("work_item_add", req.path, req.body,
+                                            ProjectPlan.w("quick_said")) { out ->
+                                            if (out.changed) quickWords = ""
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                     if (shownList.projects.isEmpty()) {
                         Gap(8)

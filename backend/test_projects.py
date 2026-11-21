@@ -4705,6 +4705,239 @@ def t_pm3_the_hub_export_stays_one_way_and_carries_the_bridge():
         _pm3_github_off(GH, old_token)
 
 
+def t_pm4_the_plan_read_is_the_one_read_the_screens_use():
+    """PM4 (2026-11-21). `GET /api/projects/<id>/plan` is ONE read-only answer:
+    the project's own plan words, its milestones with their progress counts,
+    the work items as stored, the ready ids in the store's own order and the
+    newest events. Every value is the store's own - a missing date is null, never
+    invented - and an empty plan is the honest empty, never a made-up row. The
+    read changes nothing it read (no row, no event), and it does not CREATE
+    projects.db when there is none."""
+    s, _bump, _ticks = _pm3_store()
+    pid = s.create({"name": "Half marathon", "kind": "life"}, here=True)["id"]
+    s.set_plan_fields(pid, {"objective": "Run 21 km in April",
+                            "success_criteria": "Finish under 2h",
+                            "status": "active", "target_date": "2026-04-12",
+                            "linked_repo": "owner/run",
+                            "linked_note_path": "Notes/Run.md"})
+    base = s.add_milestone(pid, {"title": "Base", "status": "active"})
+    s.add_milestone(pid, {"title": "Taper"})
+    easy = s.add_work_item(pid, {"title": "Easy run", "status": "ready",
+                                 "milestone": base["id"], "priority": 1})
+    shoes = s.add_work_item(pid, {"title": "Buy shoes", "status": "ready",
+                                  "priority": 0, "due_date": _pm3_day(2)})
+    race = s.add_work_item(pid, {"title": "Race", "status": "ready",
+                                 "milestone": base["id"]})
+    sign = s.add_work_item(pid, {"title": "Sign up", "status": "done",
+                                 "milestone": base["id"]})
+    s.add_edge("blocks", shoes["id"], race["id"])
+    before = (s.plan_counts(), len(s.events()))
+    code, out = P.handle_get(f"/api/projects/{pid}/plan", "", store=s)
+    check("the plan read answers ok and available", code == 200 and out.get("ok") is True
+          and out.get("available") is True, (code, out))
+    check("... and the read changes nothing it read (no row, no event)",
+          (s.plan_counts(), len(s.events())) == before, (s.plan_counts(), before))
+    check("the plan words are exactly the store's own",
+          out.get("objective") == "Run 21 km in April"
+          and out.get("success_criteria") == "Finish under 2h"
+          and out.get("status") == "active"
+          and out.get("target_date") == "2026-04-12"
+          and out.get("linked_repo") == "owner/run"
+          and out.get("linked_note_path") == "Notes/Run.md"
+          and out.get("slug") is None,
+          {k: out.get(k) for k in ("objective", "success_criteria", "status",
+                                   "target_date", "linked_repo",
+                                   "linked_note_path", "slug")})
+    counts = out.get("counts") or {}
+    check("counts carries the store's own six numbers",
+          set(counts) == {"milestones", "work_items", "ready", "blocked",
+                          "edges", "events"}
+          and counts == (s.plan_counts().get(pid) or {}), (counts, s.plan_counts()))
+    milestones = out.get("milestones") or []
+    check("both milestones are listed, with their own progress counts",
+          len(milestones) == 2
+          and set(milestones[0]) == {"id", "title", "status", "due_date",
+                                     "position", "counts"}
+          and milestones[0]["title"] == "Base"
+          and milestones[0]["counts"] == {"work_items": 3, "done": 1}
+          and milestones[1]["counts"] == {"work_items": 0, "done": 0},
+          milestones)
+    items = {i["id"]: i for i in out.get("work_items") or []}
+    wanted_keys = {"id", "project", "milestone", "title", "detail", "status",
+                   "priority", "due_date", "created", "changed", "blocked_by",
+                   "ready", "executor", "linked_task_id", "linked_pr_number",
+                   "linked_pr_state", "linked_ci_status"}
+    check("each work item is the store's whole read, no invented keys",
+          set(items) == {easy["id"], shoes["id"], race["id"], sign["id"]}
+          and all(wanted_keys <= set(item) for item in items.values()), sorted(items))
+    check("a date appears only where the store holds one",
+          items[shoes["id"]]["due_date"] == _pm3_day(2)
+          and items[easy["id"]]["due_date"] is None
+          and items[race["id"]]["due_date"] is None, items)
+    blocked = items[race["id"]]
+    check("a blocked item is not ready, and names its blocker",
+          blocked["ready"] is False
+          and [b["id"] for b in blocked["blocked_by"]] == [shoes["id"]],
+          blocked)
+    ready = out.get("ready") or []
+    check("ready is the store's own ready_next order, and nothing else",
+          ready == [row["id"] for row in s.ready_next(project_id=pid,
+                                                      limit=P.PLAN_READY_MAX)]
+          and easy["id"] in ready and shoes["id"] in ready
+          and race["id"] not in ready and sign["id"] not in ready, ready)
+    events = out.get("events") or []
+    check("events are the newest rows, newest first",
+          bool(events) and [e["at"] for e in events] == sorted(
+              (e["at"] for e in events), reverse=True)
+          and all({"id", "at", "kind", "subject", "detail"} <= set(e)
+                  for e in events), events[:2])
+    # The honest empty: a project with no plan rows reads as empty, not a row.
+    empty_pid = s.create({"name": "Empty", "kind": "life"}, here=True)["id"]
+    code, empty = P.handle_get(f"/api/projects/{empty_pid}/plan", "", store=s)
+    check("an empty plan is the honest empty, never a made-up row",
+          code == 200 and empty.get("objective") is None
+          and empty.get("milestones") == [] and empty.get("work_items") == []
+          and empty.get("ready") == [] and empty.get("events") == []
+          and all(v == 0 for v in (empty.get("counts") or {}).values()), empty)
+    # The bounds are real and the TOTAL still says how much there is.
+    big_pid = s.create({"name": "Many", "kind": "life"}, here=True)["id"]
+    for n in range(P.PLAN_READY_MAX + 5):
+        s.add_work_item(big_pid, {"title": f"Step {n}", "status": "ready"})
+    code, big = P.handle_get(f"/api/projects/{big_pid}/plan", "", store=s)
+    check("ready is a bounded list, and counts.ready keeps the true total",
+          len(big.get("ready") or []) == P.PLAN_READY_MAX
+          and big["counts"]["ready"] == P.PLAN_READY_MAX + 5
+          and len(big.get("work_items") or []) == P.PLAN_READY_MAX + 5,
+          (len(big.get("ready") or []), big.get("counts")))
+    for n in range(P.PLAN_EVENTS_MAX + 3 - len(big.get("events") or [])):
+        s.add_work_item(big_pid, {"title": f"More {n}"})
+    newest = s.add_work_item(big_pid, {"title": "The newest one"})
+    code, big = P.handle_get(f"/api/projects/{big_pid}/plan", "", store=s)
+    check("events are a bounded list of the NEWEST rows, newest first",
+          len(big.get("events") or []) == P.PLAN_EVENTS_MAX
+          and big["counts"]["events"] > P.PLAN_EVENTS_MAX
+          and big["events"][0]["kind"] == "work_item_added"
+          and big["events"][0]["subject"] == newest["id"],
+          (len(big.get("events") or []), big["events"][:1],
+           big.get("counts", {}).get("events")))
+    # The route's method, the unknown project, and the missing store.
+    check("the plan route is a GET: a POST is not it",
+          P.handle_post(f"/api/projects/{pid}/plan", {}, store=s)[0] == 404,
+          P.handle_post(f"/api/projects/{pid}/plan", {}, store=s))
+    check("the new work-item route is a POST: a GET is not it",
+          P.handle_get(f"/api/projects/{pid}/work_items", "", store=s)[0] == 405,
+          P.handle_get(f"/api/projects/{pid}/work_items", "", store=s))
+    code, missing = P.handle_get(f"/api/projects/{'f' * 32}/plan", "", store=s)
+    check("an unknown project is the usual 404, in the store's own words",
+          code == 404 and missing.get("ok") is False, (code, missing))
+    absent = P.Projects(_TMP / "pm4-absent.db")
+    code, missing = P.handle_get(f"/api/projects/{'e' * 32}/plan", "", store=absent)
+    check("a PC with no projects.db reads 404 and CREATES nothing",
+          code == 404 and not absent.path.exists(), (code, absent.path.exists()))
+
+
+def t_pm4_a_tap_moves_one_item_through_the_existing_status_path():
+    """PM4 (2026-11-21). The phone's "Done" tap calls ONE new route, and that
+    route is only a thin door onto the store's EXISTING status path
+    (`set_work_item_status`): one event, one jarvis_undo receipt, and that Undo
+    really puts the old status back exactly once. Nothing is invented: a second
+    tap changes nothing, and a status from another project's item is refused."""
+    import jarvis_receipts as R
+    s, _bump, _ticks = _pm3_store()
+    pid = s.create({"name": "Site", "kind": "coding"}, here=True)["id"]
+    item = s.add_work_item(pid, {"title": "Write the plan"})
+    route = f"/api/projects/{pid}/work_items/{item['id']}/status"
+    other = s.create({"name": "Other", "kind": "life"}, here=True)["id"]
+    other_item = s.add_work_item(other, {"title": "Someone else's"})
+    old_env = _pm2_use(s)
+    try:
+        before = {row["receipt_id"] for row in R.recent()}
+        events_before = len(s.events())
+        code, out = P.handle_post(route, {"status": "done"}, store=s)
+        new = [row for row in R.recent() if row["receipt_id"] not in before]
+        check("the tap answers ok, changed, and the item reads done",
+              code == 200 and out.get("ok") is True and out.get("changed") is True
+              and out["item"]["status"] == "done" and '"Write the plan"' in out.get("message", ""),
+              (code, out))
+        check("it went through the EXISTING status path: one event, from -> to",
+              len(s.events()) == events_before + 1
+              and [e["kind"] for e in s.events()][-1] == "work_item_status"
+              and s.events()[-1]["detail"] == {"from": "backlog", "to": "done"},
+              s.events()[-2:])
+        check("and it left ONE jarvis_undo receipt for the change",
+              len(new) == 1 and "Write the plan" in new[0].get("summary", ""),
+              new)
+        # A second tap is honest: already done, nothing changes.
+        events_before = len(s.events())
+        code, again = P.handle_post(route, {"status": "done"}, store=s)
+        check("a second tap changes nothing and says so",
+              code == 200 and again.get("changed") is False
+              and len(s.events()) == events_before, (code, again))
+        rid = new[0]["receipt_id"] if new else ""
+        if rid:
+            got = R.undo(rid)
+            after = [row for row in s.work_items() if row["id"] == item["id"]][0]
+            check("its Undo puts the old status back, exactly once",
+                  got.get("ok") is True and after["status"] == "backlog"
+                  and R.undo(rid).get("ok") is False, (got, after["status"]))
+        # Refusals: a bad status, another project's item, an unknown item.
+        check("a status from outside the five is refused with the store's words",
+              P.handle_post(route, {"status": "finished"}, store=s)[0] == 400,
+              P.handle_post(route, {"status": "finished"}, store=s))
+        other_route = f"/api/projects/{pid}/work_items/{other_item['id']}/status"
+        code, gone = P.handle_post(other_route, {"status": "done"}, store=s)
+        untouched = [row for row in s.work_items()
+                     if row["id"] == other_item["id"]][0]
+        check("another project's item is a 404 in the store's own sentence",
+              code == 404 and gone.get("error") == P.WORK_NOT_FOUND
+              and untouched["status"] == "backlog", (code, gone, untouched))
+        code, gone = P.handle_post(f"/api/projects/{pid}/work_items/{'a' * 32}/status",
+                                   {"status": "done"}, store=s)
+        check("an unknown item is the same honest 404",
+              code == 404 and gone.get("error") == P.WORK_NOT_FOUND, (code, gone))
+    finally:
+        _pm2_unuse(old_env)
+
+
+def t_pm4_quick_add_saves_the_typed_words_and_no_date():
+    """PM4 (2026-11-21). Quick Add posts ONE field, the owner's typed words, and
+    the store's own door stores exactly that: a backlog item with no date, no
+    milestone, no priority and the default executor, plus the one
+    `work_item_added` event. The PC never adds a date the owner did not type."""
+    s, _bump, _ticks = _pm3_store()
+    pid = s.create({"name": "Home", "kind": "life"}, here=True)["id"]
+    events_before = len(s.events())
+    code, out = P.handle_post(f"/api/projects/{pid}/work_items",
+                              {"title": "  Buy paint  "}, store=s)
+    item = out.get("item") or {}
+    check("Quick Add answers ok with the item it just saved",
+          code == 200 and out.get("ok") is True and item.get("id")
+          and item.get("title") == "Buy paint", (code, out))
+    check("... the store's own defaults, and NO date invented",
+          item.get("status") == "backlog" and item.get("due_date") is None
+          and item.get("milestone") is None and item.get("priority") is None
+          and item.get("executor") == "owner", item)
+    check("... and it appended exactly the one work_item_added event",
+          len(s.events()) == events_before + 1
+          and s.events()[-1]["kind"] == "work_item_added", s.events()[-2:])
+    check("a Quick Add with no words is refused, saving nothing",
+          P.handle_post(f"/api/projects/{pid}/work_items", {"title": "   "},
+                        store=s)[0] == 400
+          and len(s.work_items(pid)) == 1, s.work_items(pid))
+    check("the door refuses a due date - this is the owner's words only - saving nothing",
+          P.handle_post(f"/api/projects/{pid}/work_items",
+                        {"title": "Dated", "due_date": _pm3_day(1)}, store=s)[0] == 400
+          and len(s.work_items(pid)) == 1, s.work_items(pid))
+    code, gone = P.handle_post(f"/api/projects/{'c' * 32}/work_items",
+                               {"title": "Nowhere"}, store=s)
+    check("a project id that is not a project is the store's own 404",
+          code == 404 and gone.get("ok") is False, (code, gone))
+    code, plan = P.handle_get(f"/api/projects/{pid}/plan", "", store=s)
+    check("... and the plan read shows the typed words back, ready to work",
+          code == 200 and [i["title"] for i in plan["work_items"]] == ["Buy paint"]
+          and plan["ready"] == [item["id"]], plan.get("ready"))
+
+
 def main():
     try:
         for name, fn in list(globals().items()):

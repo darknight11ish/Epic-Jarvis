@@ -514,3 +514,59 @@ PM2 left them. A work item still gets a date only from the owner's own route
 or app, or from a source row the import copies unchanged; the bridges read
 that date and never write one.
 
+
+### PM4 (2026-11-21): the phone's concise Projects screen
+
+The owner-approved PM4 phone slice (the architecture review's PM4; `docs/ARCHITECTURE.md`
+section 8; JARVIS-API section 88.10). It is the phone only: the desktop's PM4 page - a
+4-column Kanban + Ready List with a project selector, a milestone progress bar, blocker
+badges and the 1-click Obsidian export - is a separate pull request in the same wave and
+reads the same plan read.
+
+**Built on the phone** (`ProjectsPlate.kt`, `net/ProjectPlan.kt`): the Projects list it
+already had, plus a **Next 3 ready tasks** block and a **Quick Add** box, and a **Done**
+tap on each ready task. Deliberately NOT a multi-column drag-and-drop Kanban: on a small
+screen the readout is the point, and a board would be a worse list.
+
+- **One read, shared with the desktop page:** `GET /api/projects/<id>/plan` (new,
+  additive - the frozen step-3 `GET /api/projects/<id>` shape is untouched). It returns
+  only what the store holds: the plan words (`objective`, `success_criteria`, `status`,
+  `target_date`, `linked_repo`, `linked_note_path`, `slug`), milestones with their own
+  progress counts, work items as stored, the ready ids in `ready_next()`'s order, and the
+  newest events. A missing date is `null` and is never invented; a project with no plan
+  rows reads as the honest empty; the read writes nothing and does not create
+  `projects.db`.
+- **The cap is a rule, and it is shared with the voice:** the screen shows at most
+  **3** ready tasks (`ProjectPlan.READY_CAP`), the same cap `jarvis_quick._MAX_NEXT_ITEMS`,
+  the morning brief (`BRIEF_READY_MAX`) and the spoken answer keep, so the screen and the
+  voice answer cannot disagree about how long the list is. The spoken summary in the app
+  uses the same 3 and says how many more are on the PC.
+- **The two taps are the store's existing doors, not a phone-only shortcut:**
+  `POST /api/projects/<id>/work_items` (Quick Add) calls `add_work_item`, and
+  `POST /api/projects/<id>/work_items/<wid>/status` (Done) calls `set_work_item_status` -
+  so the change has its one `work_item_status` event and its normal one-click
+  `jarvis_undo` receipt, exactly as the same change from a typed tool. Both are cardless
+  (the owner's own tap on their own row, the `todo_add` owner-direct tier), send no date,
+  add no card class and are held on a stale link. A second tap on an already-done task
+  changes nothing, and an invalid status is refused in the store's own words.
+- **Safety follows §6.2's rule for the phone - summarize in substance, never weaken a
+  rule:** nothing here speaks for the PC's permissions. Shareable ON and taking off
+  Jarvis's own private mark still raise their cards on the PC; the phone does not invent
+  a bypass, a bulk action or a cardless version of a carded thing. What stays the PC's is
+  unchanged: a coding project's folder, a benchmark's command, and the export hub note.
+- **Not built, and why:** no Kanban on the phone (the approved spec says the phone is the
+  concise list), no Run Step dispatch (still deferred by PM3, JARVIS-API 88.9), no date
+  invented anywhere, and the export stays the desktop page's card. NOT-TESTABLE at the
+  desk: the Compose screen drawing on a real phone. The JVM `ProjectPlanTest` proves the
+  parsers and the cap against the real generated answers, one request per tap through the
+  real client (MockWebServer as the transport), the exact-words Quick Add, the honest
+  empty/error states, the spoken cap, and source-pins the screen's calls; only a device
+  proves the drawing.
+
+**Acceptance:** `backend/test_projects.py`'s `t_pm4_*` tests (the shape and each key, the
+honest empty, a blocked item never in `ready`, the two route bounds and true totals, the
+read writing nothing and creating no store, the one status path with its real Undo, a
+second tap changing nothing, and Quick Add saving the typed words with no invented date),
+the phone's `ProjectPlanTest` JVM suite, and the regenerated shared contract
+(`tools/gen_projects_cases.py` now carries `plan_full`, `plan_empty`, `plan_words`,
+`plan_limits` and the two write answers).
