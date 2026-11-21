@@ -1888,10 +1888,25 @@ def says_there_are_none(text):
             and not DENY_RE.search(str(text or "")))
 
 
+#: A number the answer names AS a pull request: "#1432", "PR 1432", "pull
+#: request #1432". Deliberately NOT a bare digit run: a cockpit row also prints
+#: the 40-character head commit, and `numbers_in` was reading `...b9f1556` and
+#: `...c1863ba...` as invented PRs - measured 2026-11-21 on the deploy #6 run,
+#: where the answer named exactly the one real PR and "None of them are ready to
+#: merge yet" and was failed for it. The instrument, not the answer, was wrong.
+_PR_REF_RE = re.compile(
+    r"(?:#|\b(?:pr|pull\s+requests?)\s*(?:number\s*)?#?)(\d{1,7})\b", re.I)
+
+
+def pr_numbers_in(text):
+    """PR numbers an answer NAMES as pull requests (never digits inside a sha)."""
+    return [int(n) for n in _PR_REF_RE.findall(str(text or ""))]
+
+
 def invented_pr_numbers(text, real=()):
-    """PR-sized numbers the answer names that gh ground truth does not have."""
+    """PR numbers the answer names as pull requests that gh does not have."""
     known = {int(n) for n in real or ()}
-    return [n for n in numbers_in(text) if n >= 1000 and n not in known]
+    return [n for n in pr_numbers_in(text) if n not in known]
 
 
 #: A positive count claim in an answer that must say "there are none" (e.g.
@@ -2082,7 +2097,7 @@ def section_github():
     for label, kind, text, quick in results:
         low = norm(text).lower()
         if kind == "open_prs":
-            mentioned = set(numbers_in(text))
+            mentioned = set(pr_numbers_in(text))
             missing = [n for n in ground["open_numbers"] if n not in mentioned]
             extra = [n for n in mentioned
                      if n not in ground["open_numbers"] and n >= 1000]
@@ -2091,7 +2106,7 @@ def section_github():
                              f"open)", got,
                              f"missing {missing}" + (f", invented {extra}" if extra else ""))
         elif kind == "ready":
-            mentioned = {n for n in numbers_in(text) if n in ground["open_numbers"]}
+            mentioned = {n for n in pr_numbers_in(text) if n in ground["open_numbers"]}
             expected = set(ground["ready"])
             if expected:
                 extras = mentioned - expected
