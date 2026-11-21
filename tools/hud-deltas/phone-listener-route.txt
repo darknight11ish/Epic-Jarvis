@@ -1,0 +1,8 @@
+            # Ruling 5.1 (2026-11-20): the phone-facing listener, made visible.
+            # It is a SECOND jarvis_hud.py process, started with JARVIS_HUD_BIND;
+            # nothing else in this payload said whether it was configured or
+            # answering, so two outages read as healthy while both phones were
+            # offline. READ-ONLY: one small file read and one capped socket
+            # probe. It clears nothing, approves nothing, decides nothing.
+            phone_listener = _phone_listener_status()
+            degraded = _phone_listener_degraded(phone_listener)

@@ -1,0 +1,5 @@
+    httpd = _HudServer((bind, HUD_PORT), RequestHandler)
+    # Ruling 5.1: only now is the socket really bound. A loopback bind records
+    # nothing; a non-loopback one is what /api/status will report and probe.
+    _phone_listener_write(bind)
+    _install_shutdown(httpd)

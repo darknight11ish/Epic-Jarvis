@@ -2837,6 +2837,13 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   for the other cards. The phone still asks its own fingerprint, except on
   a small card under its own "Small cards" setting.
 
+- **The phone listener's honesty field is backend-only for now (2026-11-20,
+  ruling 5.1):** `/api/status` gains `phone_listener` and `degraded`, read by
+  this repository's field battery (`tools/field_battery.py`). Neither app
+  draws them yet - both ignore keys they do not know, so no client change is
+  owed and none was made; the phone's own "is my PC there?" check stays its
+  status probe, which this field now makes honest on the PC's side.
+
 `jarvis-android/` is the older app, kept for reference only: it speaks a
 protocol the backend does not have, so it cannot talk to Jarvis. Its safe
 parts (the approval widget, a quick-link widget) are already in

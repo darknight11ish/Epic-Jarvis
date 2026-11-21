@@ -122,7 +122,12 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        Fixes that live in the published base files but in NO `.patch` of their own
        are literal deltas too: the entry carries the exact block bytes in
        `tools/hud-deltas/` and either inserts them at an anchor or REPLACES an old
-       block that must appear exactly once. The literal loop is not HUD-only - it
+       block that must appear exactly once. Ruling 5.1's phone listener is the
+       newest of these and is a good five-entry example: the helper block, the
+       route's compute lines, the payload keys, the call that records the bound
+       socket, and the clean-exit removal - all in the base `jarvis_hud.py`, none
+       in a `.patch`, and each entry names its own post-image probes so a second
+       deploy is a no-op. The literal loop is not HUD-only - it
        iterates whatever file an entry names, so any of the five patched files can
        be carried this way (the 2026-10-14 HUD fixes do it for `jarvis_hud.py`;
        review ruling 8.2's guard change does it for `jarvis_gate.py` in four
@@ -443,6 +448,51 @@ STATUS_ROUTE_NEW_FILE = "status-route-new.txt"
 #: the chain cannot drift apart.
 STATUS_LATCHES_OLD_FILE = "status-latches-old.txt"
 STATUS_LATCHES_NEW_FILE = "status-latches-new.txt"
+
+#: Ruling 5.1 (2026-11-20): the phone-facing listener, visible and honest in
+#: `/api/status`. `jarvis_hud.py` is a patched-base file, and this change lives
+#: in the published base and in NO `.patch` - so it reaches the owner's live HUD
+#: as five literal deltas, the same route DEF-002 and the A4 latches took:
+#:
+#:   * the helper block, inserted before `_token_ok` (one anchor, no patch);
+#:   * the two route lines that build the field before the A4 latch read;
+#:   * the two payload keys, REPLACING the tail of the payload dict;
+#:   * the record call, after the socket has really bound;
+#:   * the clean-exit removal, registered beside `_release_gpu`.
+#:
+#: The helper and route NEW blocks are the published base's own text. The two
+#: `-old` blocks are the OWNER'S LIVE text, measured exactly once: main() there
+#: builds `_HudServer((bind, HUD_PORT), RequestHandler)` where the base calls
+#: `ThreadingHTTPServer`/`Handler`, which is why the start pair names those.
+#: The keys delta is ordered AFTER `activity-turn-guard.patch`, whose last hunk
+#: writes the `busy_reason` line its old block ends on.
+PHONE_LISTENER_HELPERS_FILE = "phone-listener-helpers.txt"
+PHONE_LISTENER_ROUTE_FILE = "phone-listener-route.txt"
+PHONE_LISTENER_KEYS_OLD_FILE = "phone-listener-keys-old.txt"
+PHONE_LISTENER_KEYS_NEW_FILE = "phone-listener-keys-new.txt"
+PHONE_LISTENER_START_OLD_FILE = "phone-listener-start-old.txt"
+PHONE_LISTENER_START_NEW_FILE = "phone-listener-start-new.txt"
+PHONE_LISTENER_ATEXIT_OLD_FILE = "phone-listener-atexit-old.txt"
+PHONE_LISTENER_ATEXIT_NEW_FILE = "phone-listener-atexit-new.txt"
+
+#: The line `def _token_ok(...)` is in front of: no patch writes it.
+PHONE_LISTENER_HELPERS_ANCHOR = "def _token_ok(handler) -> bool:"
+#: The route's own budget line: the `phone_listener` lines go immediately before
+#: it, so they run before the payload dict is built, in both the pre-cache and
+#: the cached route, and after the config read they do not depend on.
+PHONE_LISTENER_ROUTE_ANCHOR = "            budget = jarvis_router.Budget.load().status() if ROUTING else {}"
+
+#: Post-image probes, one per delta: all must be in the live file to count as
+#: present, so a second deploy stages nothing and a half-applied file refuses.
+PHONE_LISTENER_PROBES = ("PHONE_LISTENER_FILE = CONFIG_DIR",
+                         "def _phone_listener_status() -> dict:",
+                         "_PHONE_PROBE_TIMEOUT = 0.5")
+PHONE_LISTENER_ROUTE_PROBES = ("phone_listener = _phone_listener_status()",
+                               "degraded = _phone_listener_degraded(phone_listener)")
+PHONE_LISTENER_KEYS_PROBES = ('"phone_listener": phone_listener,',
+                              '"degraded": degraded,')
+PHONE_LISTENER_START_PROBES = ("    _phone_listener_write(bind)",)
+PHONE_LISTENER_ATEXIT_PROBES = ("atexit.register(_phone_listener_clear)",)
 
 #: D12 (2026-10-23): the 0.20 s loopback CONNECT cap. #752 changed the
 #: published base HUD, but NO patch carries this change and no DELTA_TABLE
@@ -2065,6 +2115,50 @@ DELTA_TABLE = {
                     "replace_file": LOCAL_MODEL_GUARD_OLD_FILE,
                     "probes": LOCAL_MODEL_GUARD_PROBES},
             },
+        },
+    },
+    # ==========================================================================
+    # Ruling 5.1 (2026-11-20): the phone-facing listener, published honestly on
+    # /api/status as `phone_listener` plus `degraded: ["phone_listener_down"]`.
+    # It lives in the published base HUD and in NO `.patch`, so the owner's live
+    # copy gets it through these five literal deltas - see the constants above
+    # for what each one carries. Order matters in one place only: the keys delta
+    # ends on the `busy_reason` line activity-turn-guard.patch's last hunk
+    # writes, so it is after that entry; the other four name their own text.
+    # ==========================================================================
+    "hud-phone-listener.patch": {
+        "jarvis_hud.py": {
+            "probes": PHONE_LISTENER_PROBES,
+            "anchor": PHONE_LISTENER_HELPERS_ANCHOR,
+            "file": PHONE_LISTENER_HELPERS_FILE,
+        },
+    },
+    "hud-phone-listener-route.patch": {
+        "jarvis_hud.py": {
+            "probes": PHONE_LISTENER_ROUTE_PROBES,
+            "anchor": PHONE_LISTENER_ROUTE_ANCHOR,
+            "file": PHONE_LISTENER_ROUTE_FILE,
+        },
+    },
+    "hud-phone-listener-keys.patch": {
+        "jarvis_hud.py": {
+            "probes": PHONE_LISTENER_KEYS_PROBES,
+            "file": PHONE_LISTENER_KEYS_NEW_FILE,
+            "replace_file": PHONE_LISTENER_KEYS_OLD_FILE,
+        },
+    },
+    "hud-phone-listener-start.patch": {
+        "jarvis_hud.py": {
+            "probes": PHONE_LISTENER_START_PROBES,
+            "file": PHONE_LISTENER_START_NEW_FILE,
+            "replace_file": PHONE_LISTENER_START_OLD_FILE,
+        },
+    },
+    "hud-phone-listener-exit.patch": {
+        "jarvis_hud.py": {
+            "probes": PHONE_LISTENER_ATEXIT_PROBES,
+            "file": PHONE_LISTENER_ATEXIT_NEW_FILE,
+            "replace_file": PHONE_LISTENER_ATEXIT_OLD_FILE,
         },
     },
 }

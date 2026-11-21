@@ -301,6 +301,8 @@ MINI_HUD += (
     "def main():\n"
     "    print('hud')\n"
     + R.STATUS_START_ANCHOR + "\n"
+    "    httpd = _HudServer((bind, HUD_PORT), RequestHandler)\n"
+    "    _install_shutdown(httpd)\n"
 )
 
 # D12's fixture piece: the live file's own `_http_json`/`_reachable` pair, which
@@ -376,6 +378,83 @@ MINI_HUD += (
     "\n\n"
     + R.HUD_REQUEST_FOR_AGENT_ANCHOR + "\n"
 )
+
+
+# Ruling 5.1 (2026-11-20): the five regions the phone-listener literal deltas
+# insert in front of or replace. The owner's live HUD holds each exactly once;
+# every fixture that plans the whole DELTA_TABLE with literals=True needs them,
+# the same gap the anchors above fill. The `def`/`if`/`return` wrapper lines are
+# fixture code, never delta text - they only make the stand-in compilable and
+# give the inserted blocks their real indentation. `CONFIG_DIR`/`HUD_PORT` are
+# the constants the inserted helper block binds at import; they are fixture
+# values, never deployed.
+MINI_HUD += (
+    "\n\n"
+    "from pathlib import Path\n"
+    "CONFIG_DIR = Path('.')\n"
+    "HUD_PORT = 4719\n\n"
+    "def _token_ok(handler) -> bool:\n"
+    "    return True\n\n"
+    "def _phone_listener_fixture(self):\n"
+    "    if True:\n"
+    "        if True:\n"
+    "            # A4 (2026-10-23): the session safety latches, READ-ONLY.\n"
+    "            latch = {}\n"
+    "            return self._send(200, {\n"
+    "                \"busy_reason\": _busy_reason_for_status(),\n"
+    "            })\n\n"
+    "def _install_shutdown(httpd):\n"
+    "    atexit.register(_release_gpu)\n"
+)
+
+
+#: Ruling 5.1's five literal deltas, in DELTA_TABLE order.
+PHONE_LISTENER_DELTAS = ("hud-phone-listener.patch",
+                         "hud-phone-listener-route.patch",
+                         "hud-phone-listener-keys.patch",
+                         "hud-phone-listener-start.patch",
+                         "hud-phone-listener-exit.patch")
+
+
+def _without_phone_listener(text: str) -> str:
+    """`text` with ruling 5.1's five literal deltas reversed out.
+
+    The published base HUD carries the phone-facing listener field now, but two
+    suites here reconstruct an EARLIER shape from it: activity-turn-guard.patch's
+    own pre-image (its last hunk's context ends where the phone keys now sit) and
+    A4's route (the latch delta's NEW block is the base route BEFORE ruling 5.1).
+    Reversing those five deltas exactly - a REPLACE pair swaps back, an anchor
+    insert is removed with the newline the inserter added - gives the base as
+    those changes left it. It is a fixture reconstruction, never a claim that the
+    base lacks the feature: `test_phone_listener_status.py` drives the real field.
+    """
+    for name in PHONE_LISTENER_DELTAS:
+        for target, entry in (R.DELTA_TABLE.get(name) or {}).items():
+            if target != "jarvis_hud.py":
+                continue
+            new = "\n".join(R._delta_lines(str(entry["file"])))
+            if entry.get("replace_file"):
+                old = "\n".join(R._delta_lines(str(entry["replace_file"])))
+                if new in text:
+                    # The live pre-image. The base never held the live lines
+                    # activity-turn-guard writes, so a direct swap is not always
+                    # possible (see the else): reverse the added LINES instead.
+                    text = text.replace(new, old, 1)
+                else:
+                    added = [ln for ln in new.splitlines()
+                             if ln not in old.splitlines()]
+                    for line in added:
+                        text = text.replace(line + "\n", "", 1)
+            else:
+                anchor = str(entry.get("anchor") or "")
+                block = new + "\n"
+                at = text.index(anchor)
+                if not text[:at].endswith(block):
+                    raise AssertionError(
+                        f"the fixture could not reverse {name}: the inserted block "
+                        f"is not directly before its anchor")
+                text = text[:at - len(block)] + text[at:]
+    return text
 
 
 def _cross_file_stub(module: str) -> str:
@@ -1620,7 +1699,10 @@ def t_the_session_latch_delta_chains_after_the_status_route_delta():
         new = "\n".join(R._delta_lines(R.STATUS_LATCHES_NEW_FILE))
         route_old = "\n".join(R._delta_lines(R.STATUS_ROUTE_OLD_FILE))
         route_new = "\n".join(R._delta_lines(R.STATUS_ROUTE_NEW_FILE))
-        base_source = (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8")
+        # The latch delta's NEW block is the base route before ruling 5.1's
+        # phone_listener lines, so compare against the base with those reversed.
+        base_source = _without_phone_listener(
+            (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8"))
         table = {"hud-status-latches.patch":
                  R.DELTA_TABLE.get("hud-status-latches.patch") or {}}
         full_table = {
@@ -5866,7 +5948,7 @@ def t_the_activity_turn_guard_is_carried_by_its_six_hunks():
 
         # The live-shaped fixture: the published base, with the one hunk the base
         # cannot hold materialised from the patch's own pre-image.
-        shape = BASE_HUD.read_text(encoding="utf-8")
+        shape = _without_phone_listener(BASE_HUD.read_text(encoding="utf-8"))
         materialised = []
         for hunk in hunks:
             old = "\n".join(hunk["old"])

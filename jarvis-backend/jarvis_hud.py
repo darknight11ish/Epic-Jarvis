@@ -1369,6 +1369,148 @@ def _bind_address() -> str:
         return "127.0.0.1"
 
 
+# --------------------------------------------------------------------------
+# Ruling 5.1 (2026-11-20): the phone-facing listener, made VISIBLE and honest.
+# --------------------------------------------------------------------------
+#
+# The phone reaches this PC through a SECOND `jarvis_hud.py` process, started
+# with JARVIS_HUD_BIND set to this machine's Tailscale or Meshnet address. That
+# process is unsupervised and it vanished twice on 2026-11-20; `/api/status`
+# reported healthy both times, because nothing in its payload said whether a
+# phone listener was configured, and nothing said whether it answered. The
+# ruling, verbatim:
+#
+#     publish phone_listener: {"configured": bool, "listening": bool,
+#                              "bind_address": "100.x:4719" | null}
+#     on /api/status, with "phone_listener_down" in degraded[] when
+#     configured && !listening
+#
+# So the process that BINDS the non-loopback socket records that fact in
+# `~/.openjarvis/phone-listener.json` while it runs - address, pid, when - and
+# removes the file on a clean exit. The HUD answering /api/status reads that
+# file and probes the socket: the file says what was intended, the probe says
+# whether it is still there. A stale file (the process was killed, not asked to
+# stop) therefore reads as configured-but-not-listening, which is exactly what
+# it is. A machine that never set up phone access has no file and is NOT
+# degraded: absent is not broken.
+#
+# The pairing token is NEVER in that file. It holds three fields and nothing
+# else, written by the block below, and the suite that proves this feature
+# asserts the file's shape and bytes.
+PHONE_LISTENER_FILE = CONFIG_DIR / "phone-listener.json"
+#: How long the status probe may wait for the listener's socket, in seconds.
+_PHONE_PROBE_TIMEOUT = 0.5
+
+
+def _phone_listener_loopback(bind: str) -> bool:
+    """True for an address only this machine can reach (or no address at all)."""
+    import ipaddress
+    text = (bind or "").strip()
+    if not text:
+        return True
+    try:
+        found = ipaddress.ip_address(text.split("%")[0])
+    except ValueError:
+        return text.lower() == "localhost"
+    return found.is_loopback
+
+
+def _phone_listener_configured(bind: str) -> bool:
+    """True when `bind` names a specific address a phone could reach."""
+    return bool((bind or "").strip()) and not _phone_listener_loopback(bind)
+
+
+def _phone_listener_write(bind: str) -> None:
+    """Record THIS process as the phone-facing listener while it runs.
+
+    Called only after the socket has actually bound, so the file never claims a
+    listener that failed to start. The dict is the whole file: bind_address,
+    pid and written - no token, no key, no other state.
+    """
+    if not _phone_listener_configured(bind):
+        return
+    try:
+        from datetime import datetime
+        PHONE_LISTENER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PHONE_LISTENER_FILE.write_text(json.dumps({
+            "bind_address": bind.strip(),
+            "pid": os.getpid(),
+            "written": datetime.now().astimezone().isoformat(timespec="seconds"),
+        }), encoding="utf-8")
+        print(f"  phone      listener {bind.strip()}:{HUD_PORT} - recorded for /api/status")
+    except Exception as exc:      # a status file must never stop the listener
+        print(f"  phone      could not record the listener ({type(exc).__name__})")
+
+
+def _phone_listener_clear() -> None:
+    """Remove the record on a clean exit - only when THIS process wrote it."""
+    try:
+        data = json.loads(PHONE_LISTENER_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if not isinstance(data, dict) or int(data.get("pid") or 0) != os.getpid():
+        return
+    try:
+        PHONE_LISTENER_FILE.unlink()
+    except OSError:
+        pass
+
+
+def _phone_listener_read() -> dict:
+    """The state file, or {} when it is absent, unreadable or not an object."""
+    try:
+        data = json.loads(PHONE_LISTENER_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _phone_listener_probe(bind: str) -> bool:
+    """True when something accepts a TCP connection at bind:HUD_PORT.
+
+    Capped at _PHONE_PROBE_TIMEOUT and never raises: a probe is a question the
+    status route asks, not a failure of the status route.
+    """
+    target_bind = (bind or "").strip()
+    if not target_bind:
+        return False
+    target = (target_bind, HUD_PORT)
+    try:
+        sock = socket.create_connection(target, timeout=_PHONE_PROBE_TIMEOUT)
+    except Exception:
+        return False
+    try:
+        sock.close()
+    except Exception:
+        pass
+    return True
+
+
+def _phone_listener_status() -> dict:
+    """Ruling 5.1's field: configured from the state file, listening from a probe.
+
+    No file (or a file naming loopback) answers the honest empty shape and is
+    not degraded. A non-loopback address always reports the probe's real result,
+    so a listener that went away is visible instead of looking healthy.
+    """
+    data = _phone_listener_read()
+    bind = str(data.get("bind_address") or "").strip()
+    if not _phone_listener_configured(bind):
+        return {"configured": False, "listening": False, "bind_address": None}
+    return {
+        "configured": True,
+        "listening": _phone_listener_probe(bind),
+        "bind_address": f"{bind}:{HUD_PORT}",
+    }
+
+
+def _phone_listener_degraded(status: dict) -> list:
+    """The named pieces of the status that are configured but not answering."""
+    if status.get("configured") and not status.get("listening"):
+        return ["phone_listener_down"]
+    return []
+
+
 def _token_ok(handler) -> bool:
     """A shared secret on the way IN, not just on the way out.
 
@@ -3525,6 +3667,14 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
             cfg = _read_toml(CONFIG_FILE)
+            # Ruling 5.1 (2026-11-20): the phone-facing listener, made visible.
+            # It is a SECOND jarvis_hud.py process, started with JARVIS_HUD_BIND;
+            # nothing else in this payload said whether it was configured or
+            # answering, so two outages read as healthy while both phones were
+            # offline. READ-ONLY: one small file read and one capped socket
+            # probe. It clears nothing, approves nothing, decides nothing.
+            phone_listener = _phone_listener_status()
+            degraded = _phone_listener_degraded(phone_listener)
             budget = jarvis_router.Budget.load().status() if ROUTING else {}
             # A4 (2026-10-23): the session safety latches, READ-ONLY. They are
             # stored on this PC - a SQLite row for the taint latch, a JSON state
@@ -3559,6 +3709,10 @@ class Handler(BaseHTTPRequestHandler):
                 "tools": len((cfg.get("tools") or {}).get("enabled") or []),
                 "taint_latched": latch["taint_latched"],
                 "rush_latched": latch["rush_latched"],
+                # Ruling 5.1 (2026-11-20): the phone-facing listener's own
+                # answer, and the named list of configured-but-down pieces.
+                "phone_listener": phone_listener,
+                "degraded": degraded,
             })
 
         return self._send(404, {"error": "not found"})
@@ -6397,6 +6551,7 @@ def _install_shutdown(httpd) -> None:
     terminate if asking did not work.
     """
     atexit.register(_release_gpu)
+    atexit.register(_phone_listener_clear)
 
     def _bye(signum, _frame):
         _release_gpu()
@@ -7117,6 +7272,9 @@ def main() -> None:
     _loopback_companion(bind, HUD_PORT, Handler)
     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
     httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)
+    # Ruling 5.1: only now is the socket really bound. A loopback bind records
+    # nothing; a non-loopback one is what /api/status will report and probe.
+    _phone_listener_write(bind)
     _install_shutdown(httpd)
     try:
         httpd.serve_forever()

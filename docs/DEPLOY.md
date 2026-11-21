@@ -75,7 +75,12 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
 - it also carries the HUD fixes that live in the published base but in **no**
   `.patch` as literal deltas (DEF-002's status cache, its start call and the
   cached `/api/status` route, and the reasoning fallback); a REPLACE delta's old
-  block must appear in the live file exactly once, or the run refuses;
+  block must appear in the live file exactly once, or the run refuses. **Ruling
+  5.1's phone listener (2026-11-20) is the same class and the current example:**
+  five literal deltas carry the `phone_listener`/`degraded` field into the live
+  HUD - the helper block, the route's two compute lines, the two payload keys,
+  the record call after the socket binds, and the clean-exit removal. No
+  `.patch` carries it, so the base file alone would never reach the owner's PC;
 - it rehearses every staged file with `py_compile` before anything is swapped,
   clears stale `__pycache__/*.pyc`, and adds ready plug-ins that the running HUD
   does not already wire;
@@ -347,11 +352,18 @@ never a pass.
 
 Two rows exist because of real outages:
 
-- **PREFLIGHT's two-address check.** The phone reaches the PC through a SECOND
-  HUD process (`JARVIS_HUD_BIND`); a restart that lost it left localhost
-  healthy while both phones were offline, twice. When remote access is
-  configured the battery requires both addresses to answer, and names the one
-  that did not. When it is not configured the row SKIPs and says so.
+- **PREFLIGHT's phone-listener check.** The phone reaches the PC through a
+  SECOND HUD process (`JARVIS_HUD_BIND`); a restart that lost it left localhost
+  healthy while both phones were offline, twice. Since ruling 5.1 (2026-11-20)
+  `/api/status` publishes `phone_listener` (`configured`, `listening`,
+  `bind_address`) and a `degraded` list, and the battery reads THAT field
+  first because the listener is started in the desktop's environment where the
+  battery cannot see it: a configured listener that does not answer is a FAIL
+  that names the address, one that answers is a PASS, and an install with no
+  listener configured (or an older HUD with no field) SKIPs and says which it
+  is. When a fieldless HUD is configured through the settings the battery can
+  read, it falls back to probing both addresses and names the one that did not
+  answer.
 - **PROJECT-ANSWERS / PROJECT-CHAT / CLOUD-BOUND.** The project store's three
   answers, a chat scoped to a project, and the bounded cloud answer are on the
   machine because of features merged on 2026-11-19/20; these rows are the

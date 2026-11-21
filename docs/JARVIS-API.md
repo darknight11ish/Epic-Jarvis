@@ -40881,3 +40881,89 @@ refused with the PRESETS list and no card; `set_provider` writing
 ONE `raise_api_limit` card and leaving the money file alone when denied; the
 lowering instant and cardless; and no key store being touched - proved with a runtime spy on
 `jarvis_chatbot_api.key_saved`, not by reading the module's source.
+
+---
+
+## 230. `/api/status` says whether the phone-facing listener is configured and answering (added 2026-11-20)
+
+**The ruling, verbatim (morning ruling 5.1):** *"publish `phone_listener:
+{"configured": bool, "listening": bool, "bind_address": "100.x:4719" | null}`
+on `/api/status`, with `"phone_listener_down"` in `degraded[]` when
+`configured && !listening`. Since the desktop app spawns the second HUD process,
+have it write a tiny runtime state file `~/.openjarvis/phone-listener.json` with
+`bind_address` + `pid`, which the main HUD reads when answering `/api/status`
+and then probes the socket."*
+
+**The problem it fixes, measured.** The phone reaches this PC through a SECOND
+`jarvis_hud.py` process started with `JARVIS_HUD_BIND=100.75.21.228`. That
+process is unsupervised, and it vanished twice on 2026-11-20. `/api/status`
+reported healthy both times: its keys were activity, budget, business,
+default_model, jarvis, lanes, models, ollama, proxy, routing, tools, … and
+none of them said a phone listener existed. Every client therefore read a
+healthy PC while both phones were offline.
+
+**The payload.** `/api/status` gains two additive keys; nothing else changes:
+
+```json
+"phone_listener": {"configured": true, "listening": false,
+                   "bind_address": "100.75.21.228:4719"},
+"degraded": ["phone_listener_down"]
+```
+
+- `configured` is true only when the state file names a specific non-loopback
+  address; a missing, unreadable or loopback-only file answers
+  `{"configured": false, "listening": false, "bind_address": null}`.
+- `listening` is a real socket probe of `bind_address:4719` - a TCP connect that
+  must be accepted within **0.5 s**. It never raises; a refused or timed-out
+  connect is simply `false`. A token-less or 403 answer still counts: the
+  question is whether anything is listening.
+- `degraded` is a list of short names for pieces that are configured but not
+  answering. `"phone_listener_down"` is present only when
+  `configured && !listening` - so an install that never set up phone access is
+  **not** degraded, and a stale file left by a killed listener is (which is
+  exactly what it is).
+- READ-ONLY: the field adds no route, changes no other key, clears nothing,
+  approves nothing, decides nothing, and never contains the pairing token.
+
+**The state file.** The process that binds the non-loopback socket writes
+`~/.openjarvis/phone-listener.json` after its socket is really bound - not
+before, so it never claims a listener that failed to start:
+
+```json
+{"bind_address": "100.75.21.228", "pid": 12345, "written": "2026-11-20T15:00:00-08:00"}
+```
+
+Those three fields are the whole file. It is removed on a clean exit (and only
+when the pid is that process's own), so a killed process leaves the file behind
+and the next `/api/status` reads configured-but-not-listening. A loopback bind
+(the normal desktop-only setup) writes nothing.
+
+**What clients should do.** Nothing is required: both apps ignore keys they do
+not know, so their behaviour is unchanged. The field exists so a person or a
+check can ask the PC "is my phone being served?" without guessing from settings
+the listener's environment may contradict - `docs/DEPLOY.md` §3b's field
+battery is the first reader.
+
+**How it reaches the owner's PC (carrier).** `jarvis_hud.py` is one of the five
+patched-base files, and this change lives in the published base
+(`jarvis-backend/jarvis_hud.py`) and in **no** `.patch`. It is carried to a live
+install by the deploy tool as five literal `DELTA_TABLE` entries in
+`tools/reconcile_live_backend.py` with their block bytes in
+`tools/hud-deltas/`: the helper block, the route's compute lines, the payload
+keys, the record call after the bind, and the clean-exit removal. This is the
+same route DEF-002's status cache and the A4 session latches took, and it was
+chosen over a new patch on purpose: a patch added after a 160-patch stack would
+have to re-police six patch-order suites, be replayed on a drifted owner
+install, and still need a `DELTA_TABLE` rule for the deploy - while this change
+is a base-file fix with no owner of its own. `docs/DEPLOY.md` §2 names it.
+
+**Proof.** `backend/test_phone_listener_status.py` (offline; no HUD, no network,
+no token, no non-loopback bind): the five required payload cases driven through
+the REAL base HUD's `/api/status` handler - no file, a loopback file, a
+configured-but-down file (the outage), a listener that answers (a fixture
+socket), and the malformed-file case - plus a real loopback fixture for the
+probe and its cap, the state file's token-free three-field shape, the
+clean-exit removal, the carrier's five entries, and one structural check that no
+`.patch` in `backend/` carries the change. `backend/test_field_battery.py` adds
+the PREFLIGHT field cases; `tools/field_battery.py --self-test` is unchanged.
+

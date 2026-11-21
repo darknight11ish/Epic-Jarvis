@@ -1,0 +1,6 @@
+                "busy_reason": _busy_reason_for_status(),
+                # Ruling 5.1 (2026-11-20): the phone-facing listener's own
+                # answer, and the named list of configured-but-down pieces.
+                "phone_listener": phone_listener,
+                "degraded": degraded,
+            })
