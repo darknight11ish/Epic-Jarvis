@@ -175,7 +175,7 @@ class ProjectPlanTest {
         )))
         assertFalse(Projects.isMissing(own404))
         assertEquals("No such project.", ProjectPlan.readError(own404))
-        assertEquals("Your PC said no (HTTP 500).", ProjectPlan.readError(Projects.Reply(500, null)))
+        assertEquals("Your PC could not answer that read. Nothing was changed.", ProjectPlan.readError(Projects.Reply(500, null)))
     }
 
     // ------------------------------------------------ the 3-item rule --------

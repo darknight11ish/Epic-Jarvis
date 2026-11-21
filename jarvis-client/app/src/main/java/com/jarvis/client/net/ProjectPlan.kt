@@ -193,7 +193,7 @@ object ProjectPlan {
      */
     fun readError(reply: Projects.Reply): String =
         reply.body?.text("error")?.trim()?.takeIf { it.isNotEmpty() }
-            ?: "Your PC said no (HTTP ${reply.code})."
+            ?: "Your PC could not answer that read. Nothing was changed."
 
     /**
      * One plan read, or null when the body is not a plan answer at all (a PC

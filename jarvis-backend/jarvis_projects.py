@@ -4996,7 +4996,7 @@ def _snapshot_mode_file(path: Path) -> dict:
             roots=[str(path.parent)])
     except Exception as exc:                                # noqa: BLE001
         return {"ok": False,
-                "error": f"guardian_unavailable ({type(exc).__name__})",
+                "error": "the file guardian is not available",
                 "words": "The time machine could not save a copy of the Project "
                          "Mode file."}
 
