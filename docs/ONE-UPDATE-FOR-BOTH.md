@@ -54,6 +54,15 @@ calls one cannot.
    running, and Jarvis was stopped for step 2, so the card offers the same
    Restart button the desktop-only install already offered.
 
+**Both or neither (the owner's standing rule, stated 2026-11-20 21:12 PT).**
+*"when I update Jarvis the HUD and backend should always update at the same
+time."* The in-app action therefore installs nothing when the backend half
+cannot run: it says in one plain line which folder or program is missing, and it
+never claims Jarvis was updated. The Windows installer path cannot be hooked
+(the updater runs it and exits the process), so a desktop-only update can still
+happen - and **section 9** is what finishes its backend half automatically on
+the next start.
+
 ### Why that order, and not the other one
 
 - **The backend half needs a process stopped, and this half is the one that can
@@ -148,10 +157,14 @@ folder this app already starts Jarvis from.
 2. **No tunnel.** Nothing here opens one.
 3. **No key is involved.** The paths are not secrets, and no token is read,
    logged or written by this feature.
-4. **Never automatic.** No timer, no startup path and no setting can start it:
-   `update_both` is reachable only from its own button, behind a question. A
-   test asserts the page invokes it exactly once and only after
-   `window.confirm`.
+4. **It does not act on its own; only a desktop-only update is finished.** No
+   timer, no page and no setting can start `update_both`: it is reachable only
+   from its own button, behind a question (a test asserts the page invokes it
+   exactly once and only after `window.confirm`). The ONE automatic path is the
+   owner's own update action continuing: when the Windows installer has already
+   moved the desktop alone, the next start finishes the backend half by itself
+   (section 9) - once per mismatch, never when the halves are equal or the
+   backend is newer. It raises no card and approves nothing.
 5. **Non-commercial.** Untouched.
 
 ## 5. Why the phone has nothing
@@ -318,3 +331,81 @@ backend is patched and proven`, `DONE - no problems, but NOT fully proven`, or
 `DONE WITH
 PROBLEMS - do not trust this update yet`, and `updatedBoth` still needs both
 halves `ok`.
+
+## 9. One update, both halves - and everything the halves need (2026-11-20/21)
+
+The owner's standing rule, stated 2026-11-20 21:12 PT after two half-updates
+left the HUD saying MISMATCH: **"when I update Jarvis the HUD and backend should
+always update at the same time."** Three places had to change, and one of them
+is not about code at all:
+
+1. **Both or neither, for the in-app action.** The desktop half is not installed
+   unless `locate()` says the backend half can run. When it cannot, the press
+   says in one plain line which folder or program is missing and installs
+   nothing - never "updated". The old desktop-only fallback is gone. The Rust
+   `install_update` command refuses the same case before downloading a byte, and
+   the tray's blocked press says the same line instead of installing.
+2. **A desktop-only update finishes its backend half automatically.** The Windows
+   installer path cannot be hooked, so the next start's version handshake does
+   it: when the desktop is ahead and the backend is the OLDER one, the app runs
+   the SAME backend half an "Update everything" press runs - the same
+   `tools/update_backend.py`, patcher and suites, at the `responsive` pace - then
+   starts the backend again and reads the two versions back. It says one line
+   before and one line after in the HUD's chat (`version` channel), claims
+   "both halves now match" only when the read-back really says in-sync, and tries
+   ONCE for one `(desktop, backend)` mismatch, never in a loop and never when the
+   versions are equal or the backend is newer. A blocked attempt - folders not
+   set, a lock held, the tool missing, a program folder that cannot be proved to
+   hold this build's commit or later (a stale clone), or a patch/checks failure -
+   says exactly why in one line and claims nothing. A stale program folder is
+   refused rather than patched: patching from an older folder would make the
+   backend older than the desktop, and moving the HUD's marker would hide the
+   very difference this rule exists to show.
+3. **The release's own identity and files move with the backend half.** "Both
+   halves updated" is not code alone; three things were measured broken on the
+   live PC the day after the rule was stated:
+   - the backend's `VERSION` marker (the number `GET /api/self` reports, which the
+     HUD compares character for character) was only ever written by the deploy
+     tool, so a successful in-app backend patch still left MISMATCH. After the
+     patcher proves itself, and only when `git merge-base` proves the program
+     folder holds this build's commit or later, the app writes
+     `<backend>/VERSION` with the version it is running - the deploy tool's own
+     rule (the installed desktop's version, never this repository's root
+     `VERSION`), one file, atomic;
+   - **the release's look spec** (`jarvis-desktop/src/jarvis-visual-spec.json`)
+     never reached the live backend folder, so every start warned that the
+     desktop's bundled spec DISAGREED with the server's copy (measured: the
+     release's 73,121-byte copy against the live folder's 61,301-byte one).
+     `tools/update_backend.py` now compares the release's copy with the live one
+     structurally - the same comparison `spec_drift.rs` makes, so formatting
+     alone is not a difference - and writes it atomically with a timestamped
+     backup of the old file and a read-back, reported as one `BESIDE:` line;
+   - **the release's new tool defaults** never reached the owner's own
+     `jarvis-framework.toml`: PM2 shipped eight project tools ON in the published
+     config, and the live file listed 29 and none of the eight (measured all
+     eight `enabled=False offered=False`). After the proof, the tool hands the
+     tools this release NEWLY ships ON to `tools/enable_new_tools.py`'s explicit
+     additive write (`--add`, `--apply`, backup, read-back), reported verbatim as
+     `TOOL DEFAULTS:` lines. "New" is shipped ON now and not shipped ON at the
+     desktop build the owner had BEFORE this update (the pending-install record
+     for the automatic finish, this binary's own build commit for a press). A tool
+     the owner turned off was shipped at that baseline, so it is never named; a
+     tool merely absent from the live list is never added on that evidence alone.
+     If the baseline commit is not in the clone, either config cannot be read, or
+     the release has no `tools/enable_new_tools.py`, the step says exactly which
+     and adds nothing. **Honest first-run limit:** the automatic rule only knows
+     tools shipped AFTER the previous desktop build; the tools that shipped
+     before it (PM2's eight are exactly that) were a one-time explicit `--add`
+     migration by hand. Nobody may "fix" the baseline later by re-adding every
+     shipped tool that is absent from the live list - that is how an owner's
+     deliberate OFF gets flipped back on.
+
+All three report lines (the version marker, `BESIDE:`, `TOOL DEFAULTS:`) are
+shown verbatim in the backend half's own sentence on the card, and the automatic
+finish puts them on its ending line too. None of them can fail the backend
+update: if a step cannot run, its line says so and the proven patch stands.
+
+**What this deliberately does not do:** it raises no card, approves nothing,
+changes no other setting, touches no network beyond the one local `/api/self`
+read, and never fetches anything from GitHub. It is the owner's own update
+action continuing, not a new one.

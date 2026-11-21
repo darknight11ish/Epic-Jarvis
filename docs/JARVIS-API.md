@@ -35295,35 +35295,100 @@ answers ONE state with ONE plain sentence (`backend_self.rs:131-190`):
 | State | When | What the owner is told |
 |---|---|---|
 | `in-sync` | both parse to the same version (`1` and `1.0` are the same) | both versions named, "IN SYNC" |
-| `backend-older` | the backend is lower **or has no `/api/self` at all** (a 404 is an answer: that backend predates this build) | "MISMATCH", both versions, and the update path to press |
+| `backend-older` | the backend is lower **or has no `/api/self` at all** (a 404 is an answer: that backend predates this build) | "MISMATCH", both versions, that the update runs BOTH halves (a desktop-only update finishes the backend half automatically), and "Update everything" for the case the automatic pass cannot finish |
 | `backend-newer` | the backend is higher | safe to keep working; the route is additive |
 | `different` | both answered but not one numbering scheme | they cannot be compared - never a made-up sync |
 | `unavailable` | answered, no version this build can read | says so and points at the update |
 | `unreachable` | nothing listening or the read failed | says so; nothing was changed |
 
 **The button and the line that goes with it.** The Settings card's Install
-button now runs that `update_both` (the backend half first, then this
-executable) rather than the desktop-only `install_update`; the desktop-only
-path survives in exactly ONE case - a PC where the backend half cannot run at
-all - and that case says in words that the backend was NOT updated and where to
-finish it, never that both halves moved. The same card carries a new
+button runs that `update_both` (the backend half first, then this executable)
+and nothing else: the desktop-only `install_update` used to be a fallback for a
+PC where the backend half could not run, and that fallback is **gone** (the
+owner's standing rule, 2026-11-20 21:12 PT: *"when I update Jarvis the HUD and
+backend should always update at the same time"*). When the backend half cannot
+run - the two folders are not set, or `apply-patches.ps1` is missing - the press
+installs NOTHING, and says in one plain line which folder or program is missing;
+the Rust command itself refuses the same case before it downloads a byte, so the
+page is a second witness rather than the only guard. The same card carries a
 `#update-sync` line, drawn from the handshake, so the sentence sits beside the
 button that acts. And when an update is found, the HUD's own chat log also says
-that one Update press installs BOTH halves
-(`say_available_in_hud`, `jarvis-desktop/src-tauri/src/update.rs`) - a
-sentence, not a click; the click stays on the card.
+that one Update press installs BOTH halves (`say_available_in_hud`,
+`jarvis-desktop/src-tauri/src/update.rs`) - a sentence, not a click; the click
+stays on the card.
+
+**A desktop-only update finishes its backend half automatically (2026-11-20).**
+The Windows installer path cannot be hooked - the updater runs it and exits this
+process - so the update action could still land the desktop alone (measured
+twice: the installer moved the desktop to 0.2.484 and then 0.2.486 while the
+backend stayed at the previous version, and the HUD said MISMATCH until the
+backend half was run by hand). The next start's handshake is where that is
+finished: when the desktop is ahead and the backend is the OLDER one, the app
+runs the SAME backend half an "Update everything" press runs (the `responsive`
+pace, the same `tools/update_backend.py` / `apply-patches.ps1`, the same
+refusals), then starts the backend again and reads the two versions back. It
+says one line before and one line after, in the HUD's chat on the `version`
+channel: what it is doing, then what happened - and it claims "both halves now
+match" only when the read-back really says `in-sync`. It starts nothing when the
+versions are equal or the backend is newer, and it tries ONCE for one mismatch
+(a process-level record), never in a loop. A blocked attempt - folders not set,
+the patch program missing, an update lock held, or a program folder that cannot
+be proved to hold this build's commit or a later one - says exactly why in one
+line and does NOT claim success; a stale program folder is refused rather than
+patched, because patching from an older folder would make the backend older than
+the desktop and moving the HUD's marker would then hide exactly the difference
+this rule exists to show.
+
+The backend half also moves the **release marker the HUD compares**: after the
+patcher proved itself, and only when the program folder holds this build's
+commit or later, `backend_update.rs` writes `<backend>/VERSION` with the version
+this desktop is running (the same rule `tools/reconcile_live_backend.py` uses -
+the installed desktop's version, never this repository's root `VERSION`). That
+is what turns "the code moved" into "the HUD says the two are in step"; without
+it the MISMATCH sentence would survive a successful patch. It is one marker
+file, written atomically, and it writes nothing else.
+
+**Two more things the half needs, measured broken the next day (2026-11-21).**
+After the proof, `tools/update_backend.py` also carries the release's own copies
+to the places the half needs them, reporting each verbatim on the card:
+
+- **the look spec.** The desktop bundles
+  `jarvis-desktop/src/jarvis-visual-spec.json`; the live backend folder served a
+  stale copy, so `spec_drift.rs` warned on every start that the spec DISAGREED
+  with the server's (measured: 73,121 bytes at the desktop against 61,301 beside
+  the backend). The update compares the release's copy with
+  `<backend>/jarvis-visual-spec.json` structurally (the same parsed-JSON rule
+  the desktop uses, so formatting is not a difference), and on a real change
+  writes it atomically with a timestamped backup and a read-back - one
+  `BESIDE:` line. If the release's copy cannot be read or is not JSON, the old
+  file is left exactly as it was and the line says which read failed.
+- **the release's new tool defaults.** The published config
+  (`jarvis-backend/jarvis-framework.toml`) is never copied over the owner's own
+  `jarvis-framework.toml` (it holds their vault path, bind address and every
+  switch they chose), so a new ON tool used to reach a fresh install only. The
+  update now hands the tools this release NEWLY ships ON to the explicit,
+  additive `tools/enable_new_tools.py` write (`--add`, `--apply`): a tool the
+  owner turned off was shipped at the baseline (the desktop build before this
+  update) and is never named; a tool merely absent from the live list is never
+  added on that evidence. Lines are `TOOL DEFAULTS:` and the step can never fail
+  the backend update. Its honest limit: tools shipped before that baseline need
+  a one-time explicit `--add`; the rule is not allowed to infer them from
+  absence.
 
 The rules: **"up to date" is only ever said when both sides parse the same**
 (`backend_self.rs`'s own test `only_the_in_sync_sentence_says_in_sync`), no
 window waits on it, and the read is display-only. At start-up one handshake runs
 after 8 s and only the `backend-older` answer is spoken in the HUD's chat log
-(`spawn_startup_handshake`, `backend_self.rs:296`), so a build that is ahead of
-its backend says so once instead of pretending all is well; the Updates card can
-ask on demand (`shell_version_sync`, granted as `allow-shell-version-sync` in
-the `hud-nav` set). The update itself is the existing `update.rs` `update_both`
-- backend half first, then this executable - and this handshake is the read-back
-that says whether both halves really moved together. Nothing here checks GitHub
-for a newer version, and nothing auto-updates.
+(`spawn_startup_handshake`), so a build that is ahead of its backend says so once
+instead of pretending all is well; the Updates card can ask on demand
+(`shell_version_sync`, granted as `allow-shell-version-sync` in the `hud-nav`
+set). The automatic finish is the owner's own update action CONTINUING, not a
+new one: it raises no card, approves nothing, changes no setting, and adds no
+network path - the only route it reads is the local `/api/self` the handshake
+already read. Nothing here checks GitHub for a newer version, and nothing
+auto-updates: the Settings/Tray/chat presses are still the only thing that can
+start `update_both`, and the automatic path only finishes a backend half the
+owner already moved the desktop for.
 
 **Said plainly, on the tree this was written from:** the desktop's parser reads
 the version STRING out of the portrait (`version.app_version`) in the final

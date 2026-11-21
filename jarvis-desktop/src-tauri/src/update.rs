@@ -579,23 +579,39 @@ pub fn set_update_check_on_start(app: AppHandle, enabled: bool) -> Result<bool, 
     Ok(enabled)
 }
 
-/// Downloads, verifies and installs — and is reached only where the backend half
-/// cannot run.
+/// Downloads, verifies and installs — and refuses outright unless the backend
+/// half can run.
 ///
 /// Separate from `check_for_update` rather than a flag on it, so that no future
 /// edit can make checking install something by passing `true`.
 ///
-/// It was the second door into the desktop half, and since 2026-11-04 it is the
-/// **fallback**: the Settings Install press and the tray's update row both run
-/// [`update_both`], and only turn here when [`backend_half_blocked`] says the
-/// backend half cannot run on this PC. The desktop half alone still goes through
-/// the same ordered preparation as "update both halves": the package is
-/// downloaded and checked, the record is written, the backend is stopped, and
-/// only then is the installer called. Before this round it reached the installer
-/// with a supervised backend still running.
+/// **BOTH OR NEITHER (the owner's standing rule, stated 2026-11-20 21:12 PT:
+/// *"when I update Jarvis the HUD and backend should always update at the same
+/// time"*).** The Windows installer path cannot be hooked, and that is the one
+/// desktop-only update nobody can gate — which is why the next start finishes
+/// the backend half automatically ([`finish_backend_if_desktop_ahead`]). But
+/// this app's OWN action can be gated, and it is: before a single byte is
+/// downloaded, `locate()`'s own `blocked` field says whether the backend half
+/// can run, and when it cannot this returns the one plain line naming what is
+/// missing and changes nothing. A half-Jarvis is not an update.
+///
+/// Since 2026-11-04 this is the fallback door only: the Settings Install press
+/// and the tray's update row run [`update_both`], and there is no in-app path
+/// left that reaches this command while the backend half is blocked.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<String, String> {
     let here = crate::backend_update::locate(&app);
+    // The gate is a pure function so the rule is a test rather than a comment:
+    // a desktop install is allowed only when `locate()` says the backend half
+    // can run, and refused with the folder/thing that is missing when it says
+    // otherwise.
+    if let Err(why) = desktop_install_gate(here.blocked.as_deref()) {
+        // Said out loud before anything else: the HUD's chat is the surface the
+        // owner may be reading, and the log keeps the record. Never "updated".
+        crate::logfile::log(&format!("[jarvis] {why}"));
+        say_in_hud(&app, "failed", &why);
+        return Err(why);
+    }
     let backend_commit = crate::backend_update::repo_commit(here.repo.as_deref());
     // Said before anything is downloaded: on Windows this process ends when the
     // installer starts, so there is no second chance to say it.
@@ -603,6 +619,25 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
     say_in_hud(&app, "running", INSTALL_CLOSES_AND_RESTARTS);
     let ready = prepare_desktop_half(&app, None, backend_commit).await?;
     install_now(&app, ready).await
+}
+
+/// The both-or-neither gate before a desktop install: `Ok(())` only when
+/// `locate()` says the backend half can run, otherwise the ONE plain line the
+/// owner is told, naming the folder or program that is missing.
+///
+/// Pure, and public to this crate, because this is the whole of rule 1: an
+/// in-app update either moves both halves or installs nothing. Every caller
+/// (`install_update` here; the Settings Install press and the tray row through
+/// their own check) answers with `locate()`'s own `blocked` field, so no two
+/// doors can disagree about whether the backend half can run.
+pub fn desktop_install_gate(blocked: Option<&str>) -> Result<(), String> {
+    match blocked.map(str::trim).filter(|why| !why.is_empty()) {
+        None => Ok(()),
+        Some(why) => Err(format!(
+            "Jarvis Desktop was NOT installed. The update moves both halves, and the \
+             backend half cannot run on this PC: {why}"
+        )),
+    }
 }
 
 /// Why the BACKEND half cannot run on this PC, in the words the Settings
@@ -626,12 +661,13 @@ fn backend_half_blocked(app: &AppHandle) -> Option<String> {
 ///
 /// The owner's requirement of 2026-11-03 was that ONE Update press keeps both
 /// halves together, so the ordinary press runs [`update_both`] - the backend
-/// first, then Jarvis Desktop - and the desktop-only [`install_update`] survives
-/// only for a PC where the backend half cannot run at all
-/// ([`backend_half_blocked`]), which is the same check the Settings card makes
-/// before it chooses between its two branches. That fallback says plainly that
-/// the BACKEND was NOT updated and where to finish it; it is never silent, and
-/// it is never called "updated".
+/// first, then Jarvis Desktop. The old desktop-only fallback (install the
+/// desktop alone where the backend half cannot run) is **gone** as of the
+/// owner's standing rule of 2026-11-20 21:12 PT: *"when I update Jarvis the HUD
+/// and backend should always update at the same time."* When the backend half
+/// cannot run, this press installs nothing and says in one line which folder or
+/// program is missing ([`desktop_install_gate`]); the app never calls a
+/// half-update "updated".
 ///
 /// The row is turned into "Updating Jarvis to <version>…" and disabled FIRST, so
 /// a second press cannot start a second run. A failure re-reads the real state
@@ -683,8 +719,9 @@ pub async fn install_from_tray(app: AppHandle) {
         // through the SAME runner Settings' Install press and an answered
         // `desktop_update` card use.
         None => update_both_from_tray(app, &version).await,
-        // The one honest exception, in the words the Settings card uses.
-        Some(why) => install_desktop_alone(app, why).await,
+        // Both or neither: the blocked arm installs nothing and says exactly
+        // which folder or program is missing, never "updated".
+        Some(why) => refuse_tray_update(app, why).await,
     }
 }
 
@@ -767,53 +804,24 @@ async fn update_both_from_tray(app: AppHandle, version: &str) {
     }
 }
 
-/// The one case where the desktop half runs alone, said in the same words the
-/// Settings Install press uses for that case.
+/// The tray press on a PC whose backend half cannot run: it installs NOTHING.
 ///
-/// "Both are always updated" is only promised where both can be, and pretending
-/// otherwise is the one thing neither door may do: the sentence before the
-/// install says what is happening and why, and the one after it says plainly
-/// that the BACKEND was NOT updated and where to finish it. Both sentences are
-/// guarded, because `why` can name a folder on this PC and a toast can be read
-/// from a locked screen.
-async fn install_desktop_alone(app: AppHandle, why: String) {
-    commands::notify_guarded(
-        &app,
-        "Atlas Desktop update",
-        &format!(
-            "The backend half cannot run on this PC ({why}). Installing Jarvis Desktop on \
-             its own - the two may differ until the backend update is finished. \
-             {INSTALL_CLOSES_AND_RESTARTS}"
-        ),
-        None,
-    );
-    match install_update(app.clone()).await {
-        Ok(installed) => {
-            // Windows never reaches this: the installer ends the process. A
-            // platform without that exit re-reads and says what is left.
-            let _ = check_for_update(app.clone()).await;
-            commands::notify_guarded(
-                &app,
-                "Atlas Desktop updated",
-                &format!(
-                    "{installed} installed on the desktop. The BACKEND was NOT updated: \
-                     {why}. Finish it from \"Update both halves\" once the folders are in \
-                     place."
-                ),
-                None,
-            );
-        }
-        Err(err) => {
-            commands::notify_failed(
-                &app,
-                "Atlas Desktop update",
-                "The update did not install.",
-                &err,
-                commands::Details::Log,
-            );
-            let _ = check_for_update(app.clone()).await;
-        }
-    }
+/// The owner's standing rule of 2026-11-20, and rule 1 of this feature: the
+/// in-app update action moves both halves or none. The tray has no card to show
+/// a long refusal, so the toast is the whole of what the owner is told - the ONE
+/// plain line naming the folder or program that is missing, in the same words
+/// the Settings Install press and [`install_update`] itself use. It is guarded
+/// because that line can name a folder on this PC and a toast can be read from a
+/// locked screen; it is never silent, because a row that does nothing reads as
+/// broken.
+async fn refuse_tray_update(app: AppHandle, why: String) {
+    let words = desktop_install_gate(Some(&why))
+        .expect_err("a blocked backend half is exactly what the gate refuses");
+    crate::logfile::log(&format!("[jarvis] tray update: {words}"));
+    commands::notify_guarded(&app, "Atlas Desktop update", &words, None);
+    // The row was turned into "Updating…" before this arm ran, so it is rebuilt
+    // from a real check rather than left that way for ever.
+    let _ = check_for_update(app.clone()).await;
 }
 
 // ---------------------------------------------------------------------------
@@ -1515,6 +1523,14 @@ pub fn reconcile_pending_at_startup(app: &AppHandle) {
     let Some(ending) = reconcile(Some(&pending), &version(app)) else {
         return;
     };
+    // The build the desktop ran BEFORE this installer: the automatic finish and
+    // the tool-defaults step need it to tell what THIS release newly ships. Only
+    // a finished install proves the replacement happened; every other ending
+    // leaves the old build running, so the caller falls back to this binary's
+    // own commit (the same one).
+    if matches!(ending, DesktopEnding::Finished { .. }) {
+        remember_previous_desktop_build(pending.app_commit.as_deref());
+    }
     let words = ending_words(
         &ending,
         crate::backend_update::app_commit().as_deref(),
@@ -1842,7 +1858,13 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
          test suites. {halves}"
     );
     announce_step(&app, &step_starting(STEP_BACKEND, Some(&opening)));
-    let backend = crate::backend_update::run(&app, &mode, &mode_label).await;
+    // The build the desktop is running NOW - the release before this action.
+    // The backend tool needs it to tell the tools THIS release newly ships ON
+    // from one the owner turned off on purpose (never re-enabled), and to hand
+    // only the former to the additive config step after the run proves itself.
+    let previous_release = crate::backend_update::app_commit();
+    let backend =
+        crate::backend_update::run(&app, &mode, &mode_label, previous_release.as_deref()).await;
     // `proven` is its own answer rather than a flavour of done: a backend that
     // patched but skipped its own checks is patched, and is not a pass.
     let backend_step = if !backend.ok {
@@ -1950,6 +1972,404 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         restart_needed: installed || backend_stopped,
     };
     Ok(outcome)
+}
+
+// ---------------------------------------------------------------------------
+// The automatic finish: a desktop-only update's backend half (2026-11-20)
+// ---------------------------------------------------------------------------
+//
+// The owner's standing rule, stated 2026-11-20 21:12 PT after two half-updates
+// left the HUD saying MISMATCH: *"when I update Jarvis the HUD and backend
+// should always update at the same time."*
+//
+// Rule 1 (`desktop_install_gate`) covers every in-app update action. The Windows
+// installer path cannot be hooked - the updater runs it and then exits this
+// process - so a desktop-only update can still happen. This section is the
+// answer to that one: on the next start, the running desktop version is compared
+// with the backend's own reported version, and when the backend is the OLDER one
+// the app runs the backend half of the same "Update everything" action by
+// itself, at the default pace, and says what it is doing and what happened.
+//
+// What it is, said plainly: **the owner's own update action continuing**, not a
+// new one. It raises no card, approves nothing, changes no setting, and adds no
+// network path - it runs the same local patcher the button runs. The three
+// limits are held by the code below rather than by this comment:
+//
+// * it tries ONCE for one exact `(desktop, backend)` mismatch, ever (a
+//   process-level record), so a PC that cannot finish it says so once and does
+//   not loop;
+// * it never starts when the two versions are equal or the backend is NEWER -
+//   that is the safe direction the HUD already explains;
+// * it does not run at all when the Jarvis program folder cannot be proved to
+//   hold this build's commit (or a later one): patching from an older folder
+//   would make the backend older than the desktop, and moving the HUD's marker
+//   would then hide exactly the difference this rule exists to show. That
+//   attempt says why and claims nothing.
+
+/// The decision the start-up comparison makes about a desktop that has moved
+/// ahead of its backend. Pure, so every branch is a test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AutoFinish {
+    /// Nothing to do: versions equal, backend newer, or no comparable answer.
+    Nothing,
+    /// The backend is older and can be finished here: run the backend half.
+    Run,
+    /// The backend is older and cannot be finished here. `String` is the ONE
+    /// line the owner is told; nothing is installed and nothing is claimed.
+    Blocked(String),
+}
+
+/// What the start-up comparison decides, from the handshake's own answer and
+/// `locate()`'s own refusal - the same two sources the Updates card renders, so
+/// the automatic finish and the card cannot disagree.
+pub fn auto_finish_plan(
+    state: crate::backend_self::SyncState,
+    blocked: Option<&str>,
+) -> AutoFinish {
+    if state != crate::backend_self::SyncState::BackendOlder {
+        // IN SYNC is done. A NEWER backend is the safe direction, and the HUD
+        // already says so; so is "unreachable" and "different numbering", where
+        // there is no mismatch to run against. None of those may start an
+        // update.
+        return AutoFinish::Nothing;
+    }
+    match blocked.map(str::trim).filter(|why| !why.is_empty()) {
+        None => AutoFinish::Run,
+        Some(why) => AutoFinish::Blocked(format!(
+            "Jarvis Desktop is ahead of the backend, but the backend half cannot be \
+             finished automatically on this PC: {why}"
+        )),
+    }
+}
+
+/// The line said BEFORE the automatic run. Names both versions and what is
+/// about to happen; promises no ending.
+pub fn auto_finish_opening(desktop: &str, backend: Option<&str>) -> String {
+    let older = match backend.map(str::trim).filter(|b| !b.is_empty()) {
+        Some(version) => format!("the backend ({version})"),
+        None => "a backend so old it does not report its version".to_string(),
+    };
+    format!(
+        "Jarvis Desktop {desktop} is ahead of {older}. Finishing the backend half \
+         automatically now - the same update \"Update everything\" runs, at the default \
+         pace. This can take several minutes."
+    )
+}
+
+/// The one honest line for the attempt that could not run because the Jarvis
+/// program folder is not this build's commit (or a later one).
+///
+/// Pure, and it must never claim an update: this is the case where patching
+/// would leave the backend OLDER than the desktop, so the app refuses instead of
+/// hiding it. `repo` and `build` are the short or full commits, named only when
+/// they were really read.
+pub fn auto_finish_behind_words(desktop: &str, repo: Option<&str>, build: Option<&str>) -> String {
+    let named = match (repo, build) {
+        (Some(repo), Some(build)) => {
+            format!("the Jarvis program folder is at {repo} and this app was built from {build}")
+        }
+        (Some(repo), None) => format!(
+            "the Jarvis program folder is at {repo} and this build does not record which \
+             commit it came from"
+        ),
+        _ => "this app cannot read which commit the Jarvis program folder is at".to_string(),
+    };
+    format!(
+        "Jarvis Desktop {desktop} is ahead of the backend, but {named}, so patching the \
+         backend from that folder would not make the two halves the same release. Nothing \
+         was changed. Pull the program folder (git pull), then Settings, then Updates, and \
+         press Update everything."
+    )
+}
+
+/// One automatic attempt is allowed per exact mismatch, in this process.
+///
+/// A record rather than a comment: "once per mismatch, never in a loop" is a
+/// test. `claim` is `true` the first time for one `(desktop, backend)` pair and
+/// `false` every time after; a different pair is a new mismatch and starts a new
+/// single attempt.
+#[derive(Debug, Default)]
+pub struct AutoFinishAttempts(std::sync::Mutex<Option<(String, String)>>);
+
+impl AutoFinishAttempts {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The pair as this record keys it. An unknown backend version is its own
+    /// key (`""`), because two failures with no version to name are still the
+    /// same mismatch.
+    fn key(desktop: &str, backend: Option<&str>) -> (String, String) {
+        (
+            desktop.trim().to_string(),
+            backend.map(str::trim).unwrap_or("").to_string(),
+        )
+    }
+
+    /// Claim the one attempt for this mismatch. Never touches the record for a
+    /// mismatch it has already claimed.
+    pub fn claim(&self, desktop: &str, backend: Option<&str>) -> bool {
+        let wanted = Self::key(desktop, backend);
+        let mut slot = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if slot.as_ref() == Some(&wanted) {
+            return false;
+        }
+        *slot = Some(wanted);
+        true
+    }
+}
+
+/// The app's own record. Only the startup path reads it, and only [`claim`] is
+/// ever called on it.
+static AUTO_FINISH_ATTEMPTS: AutoFinishAttempts = AutoFinishAttempts(std::sync::Mutex::new(None));
+
+/// The commit the desktop binary ran BEFORE the installer that just finished,
+/// remembered by [`reconcile_pending_at_startup`] for the automatic finish.
+///
+/// `pending-desktop-update.json` is written by the OLD process and carries
+/// `appCommit` - the build it was running. After the installer ends it, the new
+/// process's own commit is the RELEASE; the old one is the baseline the tool
+/// defaults step compares against (so a tool THIS release newly ships ON is told
+/// from one the owner turned off, which is never re-enabled). One value per
+/// process, set once, and only when the installer really finished.
+static PREVIOUS_DESKTOP_BUILD: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Remember the build commit recorded by the pending install that just finished.
+/// Returns what was stored, so a caller can log it.
+pub fn remember_previous_desktop_build(commit: Option<&str>) -> Option<String> {
+    let commit = commit
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let mut slot = PREVIOUS_DESKTOP_BUILD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *slot = commit;
+    slot.clone()
+}
+
+/// The build commit the desktop ran before the update that just installed, when
+/// the startup reconcile saw such an update finish.
+pub fn previous_desktop_build() -> Option<String> {
+    PREVIOUS_DESKTOP_BUILD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// One line for the HUD's chat, on the feed's `version` channel - the same
+/// channel the MISMATCH sentence arrives on, so the story is in one place.
+fn say_version_line(app: &AppHandle, state: &str, words: &str) {
+    crate::push_to_hud(
+        app,
+        "version",
+        &crate::backend_self::VersionLine {
+            state: state.to_string(),
+            words: words.to_string(),
+        },
+    );
+}
+
+/// Runs the automatic finish, if the start-up comparison says it should.
+///
+/// Called from [`crate::backend_self::spawn_startup_handshake`] and nowhere
+/// else, after the handshake has already told the HUD it is behind. Everything
+/// this does is reported, once before and once after; nothing here can approve
+/// or configure anything.
+pub async fn finish_backend_if_desktop_ahead(
+    app: &AppHandle,
+    sync: &crate::backend_self::VersionSync,
+) {
+    let here = crate::backend_update::locate(app);
+    let plan = auto_finish_plan(sync.state, here.blocked.as_deref());
+    if plan == AutoFinish::Nothing {
+        return;
+    }
+    // Once per mismatch, before anything else: a blocked attempt counts too, so
+    // a PC that cannot finish it says why once and never retries in a loop.
+    if !AUTO_FINISH_ATTEMPTS.claim(&sync.desktop, sync.backend.as_deref()) {
+        return;
+    }
+    match plan {
+        AutoFinish::Nothing => {}
+        AutoFinish::Blocked(why) => {
+            crate::logfile::log(&format!("[jarvis] automatic backend finish: {why}"));
+            say_version_line(app, "failed", &why);
+        }
+        AutoFinish::Run => finish_backend_half(app, sync, &here).await,
+    }
+}
+
+/// The run itself: the same checks and the same runner an "Update everything"
+/// press uses, minus the desktop half (that one already installed).
+async fn finish_backend_half(
+    app: &AppHandle,
+    sync: &crate::backend_self::VersionSync,
+    here: &crate::backend_update::Where,
+) {
+    // The program folder must really hold this build's commit (or a later one).
+    // Anything unprovable is a single honest line, never a run the HUD would
+    // then lie about.
+    let build = crate::backend_update::app_commit();
+    let proved = matches!((here.repo.as_deref(), build.as_deref()), (Some(_), Some(_)))
+        && crate::backend_update::repo_is_at_least_build(here.repo.as_deref(), build.as_deref())
+            == Some(true);
+    if !proved {
+        let repo = crate::backend_update::repo_commit(here.repo.as_deref());
+        let words = auto_finish_behind_words(&sync.desktop, repo.as_deref(), build.as_deref());
+        crate::logfile::log(&format!("[jarvis] automatic backend finish: {words}"));
+        say_version_line(app, "failed", &words);
+        return;
+    }
+    // The same two pre-checks a press makes: one run in this app, and no run
+    // beside another update already held on this PC. Both refuse in words that
+    // say nothing was started.
+    let Some(_in_app) = claim_update_both() else {
+        let words = "Jarvis Desktop is ahead of the backend, but a backend update is \
+                     already running in this window. Nothing was started; the next start \
+                     finishes the backend half if it is still ahead."
+            .to_string();
+        crate::logfile::log(&format!("[jarvis] automatic backend finish: {words}"));
+        say_version_line(app, "failed", &words);
+        return;
+    };
+    if let Some(lock) = crate::backend_update::held_update_lock(app) {
+        let words = format!(
+            "Jarvis Desktop is ahead of the backend, but a Jarvis backend update is \
+             already running on this PC (pid {}, pace {}). Nothing was started.",
+            lock.pid, lock.pace
+        );
+        crate::logfile::log(&format!("[jarvis] automatic backend finish: {words}"));
+        say_version_line(app, "failed", &words);
+        return;
+    }
+    // The default pace is the press's default. The label comes from the tool's
+    // own answer when the folder has it; a folder too old for the tool runs the
+    // older one-at-a-time patcher, exactly as a press would.
+    let label = match (here.repo.as_deref(), here.backend.as_deref()) {
+        (Some(repo), Some(backend)) => crate::backend_update::mode_plan_for(repo, backend)
+            .0
+            .iter()
+            .find(|row| row.id == "responsive")
+            .map(|row| row.label.clone())
+            .unwrap_or_else(|| "Balanced (older one-at-a-time update)".to_string()),
+        _ => "Balanced (older one-at-a-time update)".to_string(),
+    };
+    let opening = auto_finish_opening(&sync.desktop, sync.backend.as_deref());
+    crate::logfile::log(&format!("[jarvis] {opening}"));
+    say_version_line(app, "running", &opening);
+
+    // THE SAME runner the button uses, at the default pace. It stops the
+    // supervised backend itself, patches, runs the suites and reports a verdict.
+    // The tool-defaults step compares against the build the desktop had BEFORE
+    // the installer that started this launch - remembered from the pending
+    // record - and falls back to this build when there was no such record.
+    let previous_release = previous_desktop_build().or_else(crate::backend_update::app_commit);
+    let backend =
+        crate::backend_update::run(app, "responsive", &label, previous_release.as_deref()).await;
+    let (state, mut words) = if !backend.ok {
+        let mut words = format!(
+            "The automatic backend update did NOT finish, so the two halves still \
+             differ. {}",
+            backend.detail
+        );
+        if let Some(dir) = backend.log_dir.as_deref() {
+            words.push_str(&format!(" The run's own log is in {dir}."));
+        }
+        ("failed", words)
+    } else if !backend.proven {
+        (
+            "partial",
+            format!(
+                "The automatic backend update patched the backend, but could not prove \
+                 every check - and an unproven backend is not a pass here, so the two \
+                 halves are not claimed to match. {}",
+                backend.detail
+            ),
+        )
+    } else {
+        // The patched backend can be called this release only if the marker the
+        // HUD compares moves with it. The value is this app's own version (the
+        // one the installer just put here), and it is written only because the
+        // check above proved the program folder holds this build's commit.
+        let backend_dir = Path::new(here.backend.as_deref().unwrap_or_default());
+        let marker = crate::backend_update::write_release_marker(backend_dir, &sync.desktop);
+        let marker_said = crate::backend_update::marker_words(&marker);
+        crate::logfile::log(&format!("[jarvis] automatic backend finish: {marker_said}"));
+        // The backend was stopped for the patch; start it again so the version
+        // it reports is the code and marker that were just put down, then read
+        // the pair back. Bounded, and never retried beyond that.
+        let after = restart_and_read(app).await;
+        if marker.in_step() && after.state == crate::backend_self::SyncState::InSync {
+            // What the release's own files did, when they had anything to say:
+            // the look spec delivered beside the backend, and the new tool
+            // defaults added to the owner's config. Verbatim on the ending line,
+            // so an update nobody presses a button for still says what reached
+            // this PC.
+            let files = if backend.notes.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", backend.notes.join(" "))
+            };
+            (
+                "ok",
+                format!(
+                    "The backend half finished, and both halves now match: Jarvis Desktop \
+                     {} and the backend {}.{files}",
+                    after.desktop,
+                    after.backend.as_deref().unwrap_or("the same version")
+                ),
+            )
+        } else {
+            let extra = if marker.in_step() {
+                format!("The two versions still differ: {}", after.words)
+            } else {
+                format!("{marker_said} {}", after.words)
+            };
+            (
+                "partial",
+                format!(
+                    "The automatic backend update patched the backend and proved its \
+                     tests, but the two halves are not in step yet. {extra}"
+                ),
+            )
+        }
+    };
+    if words.is_empty() {
+        words = "The automatic backend update ended without a sentence to say what it \
+                 did, so nothing is claimed about it."
+            .to_string();
+    }
+    crate::logfile::log(&format!("[jarvis] automatic backend finish: {words}"));
+    say_version_line(app, state, &words);
+}
+
+/// Starts the supervised backend again after the patch run stopped it, then
+/// reads the two versions back - a few bounded attempts, because a backend that
+/// was just started is not answering on its first millisecond.
+///
+/// This is not an update retry loop: the run happens once, and this only waits
+/// for the process the run itself needs to report its own version.
+async fn restart_and_read(app: &AppHandle) -> crate::backend_self::VersionSync {
+    match crate::sidecar::ensure_backend(app).await {
+        Ok(said) => crate::logfile::log(&format!("[jarvis] automatic backend finish: {said}")),
+        Err(err) => crate::logfile::log(&format!(
+            "[jarvis] automatic backend finish: the backend could not be started again \
+             ({err}); the version it reports cannot be read"
+        )),
+    }
+    let mut last = crate::backend_self::read(app).await;
+    for _ in 0..5 {
+        if last.state != crate::backend_self::SyncState::Unreachable {
+            return last;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        last = crate::backend_self::read(app).await;
+    }
+    last
 }
 
 /// The update a chat message asked for, after its ONE card was approved.
@@ -2196,10 +2616,12 @@ pub fn spawn_startup_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        both_updated, chat_facts, claim_update_both, clear_pending, desktop_half_allowed,
-        desktop_half_trace, ending_words, finish, friendly, install_notice_for, is_update_card,
-        local_stamp, mark_launched, read_pending, reconcile, same_version, state_of, step_starting,
-        write_pending, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
+        auto_finish_behind_words, auto_finish_opening, auto_finish_plan, both_updated, chat_facts,
+        claim_update_both, clear_pending, desktop_half_allowed, desktop_half_trace,
+        desktop_install_gate, ending_words, finish, friendly, install_notice_for, is_update_card,
+        local_stamp, mark_launched, previous_desktop_build, read_pending, reconcile,
+        remember_previous_desktop_build, same_version, state_of, step_starting, write_pending,
+        AutoFinish, AutoFinishAttempts, BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf,
         PendingDesktopInstall, Status, Step, BEFORE_INSTALLER, DESKTOP_HALF,
         DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL, INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE,
         STEP_BACKEND, STEP_DESKTOP,
@@ -2456,8 +2878,8 @@ mod tests {
             .find(concat!("async fn update_both_", "from_tray("))
             .expect("update.rs has no update_both_from_tray")..];
         let both = &both[..both
-            .find(concat!("async fn install_desktop_", "alone("))
-            .expect("update.rs has no install_desktop_alone")];
+            .find(concat!("async fn refuse_", "tray_update("))
+            .expect("update.rs no longer has the blocked tray arm")];
         let both_call = concat!("update_both(app.clone(), ", "\"responsive\".to_string())");
         assert!(
             both.contains(both_call),
@@ -2469,27 +2891,33 @@ mod tests {
             "the both-halves arm still installs the desktop on its own"
         );
 
-        // The fallback keeps `install_update` reachable, and says plainly what
-        // it did NOT do.
-        let fallback = &src[src
-            .find(concat!("async fn install_desktop_", "alone("))
-            .expect("update.rs has no install_desktop_alone")..];
-        let fallback = &fallback[..fallback.find("\n}\n").expect("it has no end")];
+        // The blocked arm installs NOTHING (the owner's both-or-neither rule,
+        // 2026-11-20) and its one line is the gate's own words - there is no
+        // desktop-only fallback any more.
+        let blocked = &src[src
+            .find(concat!("async fn refuse_", "tray_update("))
+            .expect("update.rs has no refuse_tray_update")..];
+        let blocked = &blocked[..blocked.find("\n}\n").expect("it has no end")];
         assert!(
-            fallback.contains(concat!("match install_", "update(app.clone()).await")),
-            "the blocked arm no longer runs the desktop-only install"
+            blocked.contains(concat!("desktop_install_", "gate(Some(&why))")),
+            "the blocked tray arm does not use the both-or-neither gate's own line"
         );
         assert!(
-            fallback.contains("The BACKEND was NOT updated:"),
-            "the desktop-only fallback does not say the BACKEND was not updated"
+            !blocked.contains(concat!("install_", "update(app.clone()).await")),
+            "the blocked tray arm still runs a desktop-only install"
         );
         assert!(
-            fallback.contains(concat!("The backend half cannot run on this ", "PC")),
-            "the desktop-only fallback does not say why it is running alone"
+            !blocked.contains("Installing Jarvis Desktop on"),
+            "the blocked tray arm still says it is installing the desktop"
         );
         assert!(
-            !fallback.contains(both_call),
-            "the fallback runs the both-halves update too"
+            blocked.contains("check_for_update(app.clone())"),
+            "the blocked tray arm leaves the row on \"Updating…\" for ever"
+        );
+        // ...and the old fallback function is gone, not merely unreachable.
+        assert!(
+            !src.contains(concat!("async fn install_desktop_", "alone(")),
+            "the desktop-only fallback is still defined"
         );
     }
 
@@ -2539,6 +2967,331 @@ mod tests {
         assert!(
             entrance.contains("The update was not started."),
             "a refused App-lock check does not tell the owner nothing was started"
+        );
+    }
+
+    // ---- both or neither (the owner's standing rule, 2026-11-20 21:12 PT) --
+    //
+    // Rule 1: the in-app update action installs the desktop half only when the
+    // backend half can run, and otherwise says in one line which folder/program
+    // is missing and installs nothing.
+
+    #[test]
+    fn the_both_or_neither_gate_allows_a_desktop_install_only_with_a_runnable_backend() {
+        // `locate()` answering "nothing blocked" is the whole permission.
+        assert_eq!(desktop_install_gate(None), Ok(()));
+        assert_eq!(desktop_install_gate(Some("   ")), Ok(()));
+
+        let why = "This app does not know where the Jarvis program folder is on this PC, \
+                   so it cannot update the backend. Nothing was changed.";
+        let refused = desktop_install_gate(Some(why))
+            .expect_err("a blocked backend half must refuse the desktop install");
+        // ONE plain line that names the thing that is missing...
+        assert!(refused.contains("NOT installed"), "{refused}");
+        assert!(refused.contains(why), "{refused}");
+        assert!(refused.contains("both halves"), "{refused}");
+        // ...and never a claim that Jarvis was updated.
+        for forbidden in ["was updated", "is updated", "both halves are"] {
+            assert!(!refused.contains(forbidden), "{forbidden:?} in {refused}");
+        }
+        assert!(
+            !refused.contains('\n'),
+            "the refusal is not one line: {refused:?}"
+        );
+    }
+
+    /// The gate comes BEFORE the download, the record, the backend stop and the
+    /// installer - so a blocked PC downloads nothing and changes nothing. And
+    /// `install_update` is the only in-app command that can install the desktop
+    /// alone; the tray uses the same gate's words rather than a second rule.
+    #[test]
+    fn a_desktop_install_checks_the_gate_before_anything_else_happens() {
+        let src = include_str!("update.rs");
+        let install = &src[src
+            .find("pub async fn install_update")
+            .expect("update.rs has no install_update")..];
+        let install = &install[..install.find("\n}\n").expect("it has no end")];
+        let gate = install
+            .find("desktop_install_gate(here.blocked.as_deref())")
+            .expect("install_update no longer asks the both-or-neither gate");
+        for later in [
+            "prepare_desktop_half",
+            "install_now",
+            concat!("INSTALL_CLOSES_AND", "_RESTARTS"),
+        ] {
+            let at = install
+                .find(later)
+                .unwrap_or_else(|| panic!("install_update never reaches {later}"));
+            assert!(
+                gate < at,
+                "the gate is checked after `{later}` - a blocked PC would already have \
+                 downloaded, stopped or installed something"
+            );
+        }
+        // The tray's blocked arm is the same gate, so the two doors cannot
+        // disagree about the one line the owner is told.
+        assert!(
+            src.contains(concat!("desktop_install_", "gate(Some(&why))")),
+            "the tray blocked arm does not use the gate's own line"
+        );
+    }
+
+    // ---- the automatic finish (rule 2) ------------------------------------
+
+    #[test]
+    fn a_desktop_ahead_of_its_backend_runs_the_backend_half_automatically() {
+        // The measured history in one decision: desktop 0.2.486, backend
+        // 0.2.484, both folders locatable -> the backend half runs.
+        assert_eq!(
+            auto_finish_plan(crate::backend_self::SyncState::BackendOlder, None),
+            AutoFinish::Run
+        );
+    }
+
+    #[test]
+    fn a_blocked_automatic_finish_says_why_and_installs_nothing() {
+        let why = "This app does not know where the Jarvis program folder is on this PC, \
+                   so it cannot update the backend. Nothing was changed.";
+        match auto_finish_plan(crate::backend_self::SyncState::BackendOlder, Some(why)) {
+            AutoFinish::Blocked(words) => {
+                // Exactly why, in one line...
+                assert!(words.contains(why), "{words}");
+                assert!(
+                    words.contains("cannot be finished automatically"),
+                    "{words}"
+                );
+                // ...and no claim that anything happened. The ONLY arms that can
+                // install are Run; a blocked answer never reaches them.
+                for forbidden in ["was updated", "is updated", "installed", "now match"] {
+                    assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+                }
+                assert!(!words.contains('\n'), "{words:?}");
+            }
+            other => panic!("a blocked backend half planned {other:?}"),
+        }
+        // Whitespace is not a reason.
+        assert_eq!(
+            auto_finish_plan(crate::backend_self::SyncState::BackendOlder, Some("  ")),
+            AutoFinish::Run
+        );
+    }
+
+    #[test]
+    fn equal_or_newer_versions_never_start_an_automatic_finish() {
+        // The rule, exhaustively over the handshake's own states. Only "the
+        // backend is older" may run; every other answer is nothing - even when
+        // the folders are blocked.
+        for state in [
+            crate::backend_self::SyncState::InSync,
+            crate::backend_self::SyncState::BackendNewer,
+            crate::backend_self::SyncState::Different,
+            crate::backend_self::SyncState::Unavailable,
+            crate::backend_self::SyncState::Unreachable,
+        ] {
+            assert_eq!(
+                auto_finish_plan(state, None),
+                AutoFinish::Nothing,
+                "{state:?}"
+            );
+            assert_eq!(
+                auto_finish_plan(state, Some("the folders are not set")),
+                AutoFinish::Nothing,
+                "{state:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn one_mismatch_gets_exactly_one_automatic_attempt() {
+        let attempts = AutoFinishAttempts::new();
+        // The same mismatch, three times over: the first claim only.
+        assert!(attempts.claim("0.2.486", Some("0.2.484")));
+        assert!(!attempts.claim("0.2.486", Some("0.2.484")));
+        assert!(!attempts.claim("0.2.486", Some("0.2.484")));
+        // A DIFFERENT mismatch is a new single attempt, not "already tried".
+        assert!(attempts.claim("0.2.490", Some("0.2.486")));
+        assert!(!attempts.claim("0.2.490", Some("0.2.486")));
+        // A backend too old to report a version is still one mismatch.
+        assert!(attempts.claim("0.2.490", None));
+        assert!(!attempts.claim("0.2.490", None));
+        // Whitespace never makes a second key for the same pair.
+        assert!(!attempts.claim(" 0.2.490 ", Some("")));
+    }
+
+    #[test]
+    fn the_automatic_opening_names_the_versions_and_promises_no_ending() {
+        let opening = auto_finish_opening("0.2.486", Some("0.2.484"));
+        assert!(opening.contains("Jarvis Desktop 0.2.486"), "{opening}");
+        assert!(opening.contains("0.2.484"), "{opening}");
+        assert!(opening.contains("automatically now"), "{opening}");
+        assert!(opening.contains("Update everything"), "{opening}");
+        assert!(opening.contains("default pace"), "{opening}");
+        // It says what is happening, never what happened.
+        for forbidden in ["now match", "finished", "IN SYNC", "are equal"] {
+            assert!(!opening.contains(forbidden), "{forbidden:?} in {opening}");
+        }
+        // A backend too old to report a version is still named honestly.
+        let old = auto_finish_opening("0.2.486", None);
+        assert!(old.contains("does not report its version"), "{old}");
+    }
+
+    #[test]
+    fn a_program_folder_behind_this_build_is_never_claimed_as_this_release() {
+        let words = auto_finish_behind_words("0.2.486", Some("c75ee418a"), Some("97edfab81"));
+        assert!(words.contains("Jarvis Desktop 0.2.486"), "{words}");
+        assert!(words.contains("c75ee418a"), "{words}");
+        assert!(words.contains("97edfab81"), "{words}");
+        assert!(words.contains("Nothing was changed"), "{words}");
+        assert!(
+            words.contains("git pull") && words.contains("Update everything"),
+            "{words}"
+        );
+        // It must never read as an update, and never claim the halves are in step.
+        for forbidden in ["now match", "IN SYNC", "are equal", "was updated"] {
+            assert!(!words.contains(forbidden), "{forbidden:?} in {words}");
+        }
+        // An unreadable half is still named as unreadable rather than left out.
+        let unknown = auto_finish_behind_words("0.2.486", None, None);
+        assert!(unknown.contains("cannot read"), "{unknown}");
+        let build_only = auto_finish_behind_words("0.2.486", Some("c75ee418a"), None);
+        assert!(build_only.contains("does not record"), "{build_only}");
+    }
+
+    /// The wiring, which no pure test can reach: the start-up handshake is the
+    /// ONE caller, it runs the SAME backend runner the button runs, at the
+    /// default pace, and the automatic path never touches the desktop install.
+    #[test]
+    fn the_startup_handshake_is_the_one_place_the_automatic_finish_runs() {
+        let self_rs = include_str!("backend_self.rs");
+        assert!(
+            self_rs
+                .contains("crate::update::finish_backend_if_desktop_ahead(&handle, &sync).await"),
+            "the start-up handshake never asks for the automatic finish"
+        );
+
+        let src = include_str!("update.rs");
+        let production = &src[..src.find("#[cfg(test)]").expect("no test module")];
+        let start = production
+            .find("pub async fn finish_backend_if_desktop_ahead")
+            .expect("update.rs has no automatic finish");
+        let automatic = &production[start
+            ..production
+                .find("/// The update a chat message asked for")
+                .expect("the automatic finish has no end")];
+        // Once per mismatch is claimed before anything runs...
+        let claim = automatic
+            .find("AUTO_FINISH_ATTEMPTS.claim(")
+            .expect("the automatic finish has no once-per-mismatch record");
+        let run = automatic
+            .find("crate::backend_update::run(")
+            .expect("the automatic finish never runs the backend half");
+        let run_call = &automatic[run..automatic
+            .find("\n    .await;")
+            .filter(|end| *end > run)
+            .unwrap_or(automatic.len())];
+        for part in [
+            "app,",
+            "\"responsive\"",
+            "&label",
+            "previous_release.as_deref()",
+        ] {
+            assert!(
+                run_call.contains(part),
+                "the automatic finish's backend run no longer carries `{part}`:\n{run_call}"
+            );
+        }
+        assert!(
+            claim < run,
+            "the automatic finish runs before it claims its attempt"
+        );
+        // ...the same runner and the same default pace the button uses...
+        assert!(
+            automatic.contains("backend_update::mode_plan_for"),
+            "the automatic finish invents its own pace instead of reading the tool's"
+        );
+        // ...and it never installs the desktop half, because it runs only after
+        // the desktop was already installed by the Windows installer.
+        for forbidden in ["install_now(", "install_update(", "prepare_desktop_half("] {
+            assert!(
+                !automatic.contains(forbidden),
+                "the automatic backend finish reaches `{forbidden}`"
+            );
+        }
+        // The wait for the restarted backend is bounded, never a retry loop of
+        // the update itself.
+        assert!(
+            automatic.contains("for _ in 0..5"),
+            "the restart-and-read wait is not bounded"
+        );
+    }
+
+    /// The baseline for the release's NEW tool defaults (2026-11-21): the build
+    /// the desktop ran BEFORE the installer that just finished. The reconcile is
+    /// the only place that knows it, and every step after it reads it from here.
+    #[test]
+    fn the_build_the_installer_replaced_is_remembered_for_the_release_steps() {
+        // Before any finished install there is no such build: the callers fall
+        // back to this binary's own commit, which is the same release.
+        assert_eq!(remember_previous_desktop_build(None), None);
+        assert_eq!(previous_desktop_build(), None);
+        // Whitespace is not a commit.
+        assert_eq!(remember_previous_desktop_build(Some("  ")), None);
+        let remembered = remember_previous_desktop_build(Some("7add1b7c1d5f"));
+        assert_eq!(remembered.as_deref(), Some("7add1b7c1d5f"));
+        assert_eq!(previous_desktop_build().as_deref(), Some("7add1b7c1d5f"));
+        // One value per process; a second finished install replaces it.
+        remember_previous_desktop_build(Some("97edfab81dd4"));
+        assert_eq!(previous_desktop_build().as_deref(), Some("97edfab81dd4"));
+        // Leave the process as it was for anything else that reads it.
+        remember_previous_desktop_build(None);
+        assert_eq!(previous_desktop_build(), None);
+    }
+
+    /// The wiring of the two release-file steps: the in-app press passes the
+    /// running build as the baseline; the automatic finish prefers the build the
+    /// installer replaced; the reconcile stores it only for a FINISHED install.
+    #[test]
+    fn the_release_file_steps_are_wired_to_the_right_baseline() {
+        let src = include_str!("update.rs");
+        let both = &src[src
+            .find("pub async fn update_both")
+            .expect("update.rs has no update_both")..];
+        let both = &both[..both
+            .find("// ---- 2. the executable")
+            .expect("update_both has no desktop half")];
+        assert!(
+            both.contains("let previous_release = crate::backend_update::app_commit();"),
+            "the in-app press no longer passes the running build as the baseline"
+        );
+        assert!(
+            both.contains("previous_release.as_deref()"),
+            "the in-app press never gives the backend tool its baseline"
+        );
+
+        let start = src
+            .find("pub async fn finish_backend_if_desktop_ahead")
+            .expect("update.rs has no automatic finish");
+        let automatic = &src[start
+            ..src
+                .find("/// The update a chat message asked for")
+                .expect("the automatic finish has no end")];
+        assert!(
+            automatic
+                .contains("previous_desktop_build().or_else(crate::backend_update::app_commit)"),
+            "the automatic finish does not prefer the build the installer replaced"
+        );
+
+        let reconcile = &src[src
+            .find("pub fn reconcile_pending_at_startup")
+            .expect("update.rs has no startup reconcile")..];
+        let reconcile = &reconcile[..reconcile.find("\n}\n").expect("it has no end")];
+        assert!(
+            reconcile.contains("remember_previous_desktop_build(pending.app_commit.as_deref())"),
+            "the startup reconcile no longer remembers the replaced build"
+        );
+        assert!(
+            reconcile.contains("matches!(ending, DesktopEnding::Finished { .. })"),
+            "the replaced build is remembered for an install that did not finish"
         );
     }
 

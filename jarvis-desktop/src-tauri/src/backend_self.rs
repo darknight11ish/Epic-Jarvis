@@ -156,14 +156,16 @@ pub fn words(desktop: &str, backend: Option<&str>, state: SyncState) -> String {
     match state {
         SyncState::InSync => format!("Jarvis Desktop {desktop} and the {named} - IN SYNC."),
         SyncState::BackendOlder => format!(
-            "MISMATCH: the {named}, but this HUD expects {desktop}. Finish the backend \
-             update - Settings, then Updates, and press Update everything there (that \
-             updates both halves)."
+            "MISMATCH: the {named}, but this HUD expects {desktop}. The update runs both \
+             halves - Jarvis finishes the backend half automatically after a desktop-only \
+             update, so this usually clears on its own. If it does not, Finish the backend \
+             update - Settings, then Updates, and press Update everything there (that one \
+             press updates both halves)."
         ),
         SyncState::BackendNewer => format!(
             "The {named} is newer than Jarvis Desktop {desktop}. That is safe - the HUD \
-             keeps working and adds nothing it does not know - but updating Jarvis Desktop \
-             gets the two in step."
+             keeps working and adds nothing it does not know - and the next desktop release \
+             is what gets the two in step."
         ),
         SyncState::Different => format!(
             "Jarvis Desktop {desktop} and the {named} are different kinds of version, so \
@@ -290,10 +292,22 @@ pub async fn shell_version_sync(app: AppHandle) -> Result<VersionSync, String> {
     Ok(read(&app).await)
 }
 
-/// One read at start-up, so a desktop newer than its backend says so once,
-/// in the HUD's own chat log, instead of pretending all is well. Only the
-/// OLDER answer is spoken: "in sync" on every launch is noise, and a backend
-/// that is down is already the page's own standing line.
+/// One read at start-up, so a desktop newer than its backend says so once, in
+/// the HUD's own chat log, instead of pretending all is well.
+///
+/// Only the OLDER answer is spoken: "in sync" on every launch is noise, and a
+/// backend that is down is already the page's own standing line.
+///
+/// **Since the owner's standing rule of 2026-11-20 21:12 PT** (*"when I update
+/// Jarvis the HUD and backend should always update at the same time"*), the
+/// OLDER answer is also where the backend half of a desktop-only update gets
+/// finished: [`crate::update::finish_backend_if_desktop_ahead`] runs the SAME
+/// backend update the "Update everything" press runs, at the default pace, and
+/// says what it is doing and what happened. It is the owner's own update action
+/// continuing - it raises no card, approves nothing and changes no setting - and
+/// it tries once per mismatch, never when the two versions are equal or the
+/// backend is newer. The handshake is still only a READ; this one continuation
+/// lives in `update.rs`, where the rest of the update action lives.
 pub fn spawn_startup_handshake(app: &AppHandle) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -320,9 +334,14 @@ pub fn spawn_startup_handshake(app: &AppHandle) {
         // no one asked: remember the last answer for the next Settings open.
         if let Some(state) = handle.try_state::<LastSync>() {
             if let Ok(mut slot) = state.0.lock() {
-                *slot = Some(sync);
+                *slot = Some(sync.clone());
             }
         }
+        // The owner's standing rule: a desktop-only update finishes its backend
+        // half automatically, once, right here. The same runner the button uses;
+        // it says what it is doing and what happened, and a blocked attempt says
+        // exactly why and claims nothing.
+        crate::update::finish_backend_if_desktop_ahead(&handle, &sync).await;
     });
 }
 
@@ -458,6 +477,58 @@ mod tests {
         // The owner read the instruction and could not follow it.
         assert!(sentence.contains("Update everything"), "{sentence}");
         assert!(!sentence.contains("press Install"), "{sentence}");
+        // The owner's standing rule of 2026-11-20 21:12 PT: the update moves
+        // BOTH halves, and a desktop-only update now finishes the backend half
+        // by itself - the MISMATCH sentence says both, so the card cannot read
+        // as "only the backend moved".
+        assert!(sentence.contains("both halves"), "{sentence}");
+        assert!(
+            sentence.contains("finishes the backend half automatically"),
+            "{sentence}"
+        );
+        // ...and it still says the manual door for the case the automatic pass
+        // could not finish (a stale program folder, a broken patcher, a lock).
+        assert!(sentence.contains("Finish the backend update"), "{sentence}");
+    }
+
+    /// The three states rule 4 of the 2026-11-20 work names, as three different
+    /// sentences: equal, backend behind (updating/finishing automatically), and
+    /// backend newer (safe, the next desktop release gets them in step).
+    #[test]
+    fn the_three_version_states_say_three_different_things() {
+        let in_sync = words("0.2.486", Some("0.2.486"), SyncState::InSync);
+        assert!(in_sync.contains("IN SYNC"), "{in_sync}");
+        assert!(in_sync.contains("Jarvis Desktop 0.2.486"), "{in_sync}");
+
+        let behind = words("0.2.486", Some("0.2.484"), SyncState::BackendOlder);
+        assert!(behind.contains("MISMATCH"), "{behind}");
+        assert!(
+            behind.contains("0.2.484") && behind.contains("0.2.486"),
+            "{behind}"
+        );
+        assert!(behind.contains("Update everything"), "{behind}");
+        assert!(
+            behind.contains("finishes the backend half automatically"),
+            "{behind}"
+        );
+
+        let newer = words("0.2.486", Some("0.2.490"), SyncState::BackendNewer);
+        assert!(newer.contains("safe"), "{newer}");
+        assert!(newer.contains("next desktop release"), "{newer}");
+        assert!(
+            newer.contains("0.2.490") && newer.contains("0.2.486"),
+            "{newer}"
+        );
+        // Never one state in another's clothes: the three sentences differ, and
+        // only the equal one claims IN SYNC or asks for an update.
+        assert_ne!(in_sync, behind);
+        assert_ne!(in_sync, newer);
+        assert_ne!(behind, newer);
+        for (said, claims_sync) in [(&in_sync, true), (&behind, false), (&newer, false)] {
+            assert_eq!(said.contains("IN SYNC"), claims_sync, "{said}");
+        }
+        assert!(!newer.contains("MISMATCH"), "{newer}");
+        assert!(!newer.contains("Update everything"), "{newer}");
     }
 
     #[test]

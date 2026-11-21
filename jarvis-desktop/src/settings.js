@@ -2030,18 +2030,14 @@ dom.updateInstall.addEventListener("click", async () => {
   // No confirmation dialog, because the button is the confirmation: it only
   // appears once a check has found something, and it names the version.
   //
-  // 2026-11-03, the owner's requirement: "when i click update on the jarvis
-  // hud i want it linked to the back end so both are always updated at the
-  // same time". This ONE press therefore runs `update_both` - the backend
-  // first, then this executable - instead of the desktop-only `install_update`.
-  // The order, the pace check and the "a half that did not run is skipped, not
-  // a pass" rule all live in update.rs; this page cannot reorder them.
-  //
-  // The ONE case where the desktop half runs alone is a PC where the backend
-  // half cannot run at all (the two folders are not set, or the patch program
-  // is missing). That is not silent and not called "updated": the sentence
-  // below says the backend was NOT updated and where to finish it, and the
-  // version line underneath still names both versions.
+  // BOTH OR NEITHER (the owner's standing rule, stated 2026-11-20 21:12 PT:
+  // *"when I update Jarvis the HUD and backend should always update at the same
+  // time"*). This ONE press runs the both-halves runner when the backend half
+  // can run. When the backend half cannot - the two folders are not set, or the
+  // patch program is missing - it installs NOTHING: it says in one plain line
+  // which folder or thing is missing, and never claims Jarvis was updated. The
+  // Rust `install_update` command refuses the same case before downloading a
+  // byte, so this page is a second witness rather than the only guard.
   report(dom.updateStatus, "Checking both halves…", "");
   dom.updateInstall.disabled = true;
   dom.updateCheck.disabled = true;
@@ -2081,39 +2077,39 @@ dom.updateInstall.addEventListener("click", async () => {
       );
       if (outcome && outcome.restartNeeded) dom.updateRestart.hidden = false;
       announce(dom.updateStatus.textContent, "assertive");
-    } else {
-      // The backend half cannot run on this PC, so the desktop half runs ALONE
-      // and says so. "Both are always updated" is only promised where both can
-      // be; pretending otherwise is the one thing this card must not do.
-      const why = (where && where.blocked) || "the backend folders are not set up";
-      report(
-        dom.updateStatus,
-        `The backend half cannot run on this PC (${why}). Installing Jarvis Desktop ` +
-          `on its own - the two may differ until the backend update is finished.`,
-        "bad"
-      );
-      const version = await invoke("install_update");
+      dom.updateInstall.hidden = true;
       dom.updateProgress.hidden = true;
-      report(
-        dom.updateStatus,
-        `${version} installed on the desktop. The BACKEND was NOT updated: ${why}. ` +
-          `Finish it from "Update both halves" once the folders are in place.`,
-        "bad"
-      );
-      announce(dom.updateStatus.textContent, "assertive");
+      dom.updateRestart.hidden = false;
+    } else {
+      // BOTH OR NEITHER: nothing is installed, and the one line names what is
+      // missing. "Both are always updated" is only promised where both CAN be;
+      // the one thing this card must never do is install half of Jarvis and call
+      // it an update.
+      const why =
+        (where && where.blocked) ||
+        "this app could not read where the backend folder is, so it cannot update it";
+      const said =
+        `Jarvis Desktop was NOT installed. The update moves both halves, and the ` +
+        `backend half cannot run on this PC: ${why}`;
+      report(dom.updateStatus, said, "bad");
+      announce(said, "assertive");
+      dom.updateProgress.hidden = true;
     }
-    dom.updateInstall.hidden = true;
-    dom.updateProgress.hidden = true;
-    dom.updateRestart.hidden = false;
   } catch (error) {
     // A signature that does not verify lands here, and it is the one failure
     // that must not read as a routine network problem.
     dom.updateProgress.hidden = true;
     report(dom.updateStatus, String(error.message || error), "bad");
     announce(dom.updateStatus.textContent, "assertive");
-    dom.updateInstall.disabled = false;
   } finally {
     dom.updateCheck.disabled = false;
+    if (!bothPossible) {
+      // Nothing was installed, so the button the owner just pressed stays
+      // offered - and no Restart button appears for an install that did not
+      // happen.
+      dom.updateInstall.disabled = false;
+      dom.updateRestart.hidden = true;
+    }
     // The two versions, read back: whichever half just moved, the line says
     // whether the two are in step now. Never a second read that could fail
     // silently - `loadVersionSync` has its own words for every failure.

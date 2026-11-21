@@ -199,10 +199,11 @@ check("navigation rides the per-answer route field, and there is no dead stream 
     "the open_jarvis_area command is gone");
 });
 
-check("the Update press runs BOTH halves, and never claims it when it cannot", () => {
+check("the Update press runs BOTH halves, and installs nothing when it cannot", () => {
   // The owner's requirement: one Update click updates the desktop AND the
-  // backend. The desktop-only command survives only for the PC where the
-  // backend half cannot run, and that case says so and is not painted green.
+  // backend. The desktop-only install is refused outright when the backend half
+  // cannot run - both or neither (the owner's standing rule, 2026-11-20): the
+  // press says in one line which folder/program is missing and installs nothing.
   const handler = SETTINGS_JS.slice(
     SETTINGS_JS.indexOf('dom.updateInstall.addEventListener("click"'),
     SETTINGS_JS.indexOf('dom.updateRestart.addEventListener')
@@ -218,8 +219,12 @@ check("the Update press runs BOTH halves, and never claims it when it cannot", (
   assert.doesNotMatch(handler, /invoke\("update_both"/,
     "the Updates card starts update_both outside the one runner");
   assert.match(handler, /where\.blocked/, "Install does not check whether the backend half can run");
-  assert.match(handler, /The BACKEND was NOT updated/,
-    "the desktop-only fallback does not admit the backend was not updated");
+  // The blocked arm installs NOTHING and says what is missing - it never runs
+  // the desktop-only command and never claims an update.
+  assert.match(handler, /Jarvis Desktop was NOT installed/,
+    "the blocked arm does not say the desktop was NOT installed");
+  assert.doesNotMatch(handler, /invoke\("install_update"\)/,
+    "the blocked arm still installs the desktop on its own");
   assert.match(handler, /loadVersionSync\(\)/, "the handler does not re-read the two versions");
   assert.match(SETTINGS_JS, /invoke\("shell_version_sync"\)/,
     "Settings never reads the version handshake");
