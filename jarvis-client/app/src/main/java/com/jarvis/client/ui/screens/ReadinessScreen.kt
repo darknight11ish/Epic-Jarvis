@@ -556,9 +556,11 @@ private fun YourVoiceCard(
 }
 
 /**
- * "Wake word - hey Jarvis" on Platform checks: only the STATUS (a check), and a
+ * "Wake phrase: Hey Jarvis." on Platform checks: only the STATUS (a check), and a
  * button to Settings, Voice, where the switches now are ([WakeWordSwitchesCard]).
- * Nothing here changes anything.
+ * Nothing here changes anything. The sentence is the owner's ruling of
+ * 2026-11-21: simple and factual, with no promise about an unshipped model
+ * (decisions.d/2026-11-21-wake-copy-hey-jarvis.md).
  */
 @Composable
 private fun WakeWordSummaryCard(
@@ -578,7 +580,7 @@ private fun WakeWordSummaryCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dot(tint)
             Spacer(Modifier.width(10.dp))
-            Text("Wake word - \"hey Jarvis\"", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Text("Wake phrase: Hey Jarvis.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
             Spacer(Modifier.weight(1f))
             Text(
                 when {

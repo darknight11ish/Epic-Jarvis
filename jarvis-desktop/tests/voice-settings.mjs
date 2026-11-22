@@ -60,6 +60,7 @@ const section = (page) => page.evaluate(() => {
     last: shown("voice-last"),
     talk: shown("voice-talk"),
     wake: shown("voice-wake"),
+    wakeTitle: shown("voice-wake-title"),
     wakeState: $("voice").dataset.wake || "",
     verifier: shown("voice-verifier"),
     stopWord: shown("voice-stop-word"),
@@ -168,6 +169,20 @@ await check("a card to turn the wake word on is waiting: said, with where to app
 });
 
 /* ── The page ───────────────────────────────────────────────────────────── */
+
+await check("the wake phrase is stated as a fact, and nothing promises an unshipped model", async () => {
+  // The owner's ruling of 2026-11-21 (decisions.d/2026-11-21-wake-copy-hey-jarvis.md):
+  // the copy is simple and factual - "Wake phrase: Hey Jarvis." - and the
+  // unshipped model is not named to the owner. wake-copy.mjs is the tree-wide
+  // guard; this one pins the sentence on the page the owner actually reads.
+  const page = await open({ status: C.ready_wake_on });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.wakeTitle, "Wake phrase: Hey Jarvis.");
+  assert.doesNotMatch(s.all, /Hey Atlas/i, "Settings names an unshipped wake phrase");
+  assert.doesNotMatch(s.all, /\bin training\b|\bbeing trained\b/i,
+    "Settings promises a wake phrase that is still being trained");
+});
 
 await check("the section shows the real status, and offers training on this PC", async () => {
   const page = await open({ status: C.phone_trained });
