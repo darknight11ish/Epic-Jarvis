@@ -872,6 +872,21 @@ FOCUS_WORDS = ("quick answers", "writing", "coding", "agentic", "pictures",
 CHOICE_FILE = "presets-choice.json"
 APPLY_PATH = "/api/work/apply"
 PENDING_LINE = "waiting for the model; nothing was changed"
+#: THE PRESET THAT LOADS WHEN ATLAS ITSELF STARTS (2026-11-22). The owner's
+#: ask, verbatim: *"load the general local ai model preset. and have that be the
+#: default that loads anytime jarvis is reset. it should be a larger local ai
+#: model in that preset compared to qwen 9b. let me set the default presets that
+#: load when atlas is restarted through chat or settings"*. This file is the
+#: owner's answer to the second half: `{"preset": "<id>"}`, absent means none,
+#: and it is DELIBERATELY SEPARATE from `presets-choice.json` - that file records
+#: the last apply and is cleared by the restart reconcile when the on-demand
+#: lane is gone, while this one is the choice the owner made on purpose and must
+#: outlive a restart. Read at start-up and by `/api/work`'s `startup_preset`
+#: block; written only twice - after the ONE `change_own_config` card that sets
+#: it, and at once when it is CLEARED (a tightening, the asymmetry every switch
+#: in this program keeps).
+STARTUP_FILE = "startup-preset.json"
+STARTUP_PATH = "/api/work/startup-preset"
 
 
 
@@ -889,6 +904,10 @@ def _config_dir() -> "pathlib.Path":
 
 def _choice_path():
     return _config_dir() / CHOICE_FILE
+
+
+def _startup_path():
+    return _config_dir() / STARTUP_FILE
 
 
 def choice() -> Optional[str]:
@@ -1833,6 +1852,441 @@ def reconcile_after_restart(*, probe=None, set_active_url=None,
             "preset_cleared": cleared}
 
 
+# --------------------------------------------------------------------------
+#   The preset that loads WHEN ATLAS STARTS (2026-11-22)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, and the half that was missing. He asked for the General
+# preset to be "the default that loads anytime jarvis is reset", and to be able
+# to "set the default presets that load when atlas is restarted through chat or
+# settings". The preset table needed nothing: General already exists, it is the
+# 26B model on the pooled three-card lane - larger than the everyday 9B - and
+# `apply_preset` already starts that lane, switches the model and persists the
+# lane. What was missing is a SETTING that survives the restart and a start-up
+# step that reads it:
+#
+#   * the reconcile ABOVE is the opposite case. When the remembered preset's
+#     on-demand lane is gone after a restart, it points chat back at the default
+#     lane and DELETES `presets-choice.json`, because a choice nobody can serve
+#     is a lie. That is right for a choice made by clicking; it must not be how
+#     a choice the owner made on purpose is treated, so this setting lives in
+#     its own file and the start-up step applies it BEFORE any reconcile runs.
+#   * THE APPLY IS THE ROUTE'S OWN ROAD, not a second implementation:
+#     `_apply_body({"preset": pid}, owner_ui=True)` is exactly what
+#     `POST /api/work/apply` runs, so the lane starts, the model switches, the
+#     lane is persisted and the chosen preset is written by the one code path
+#     that already does all four. `owner_ui=True` means what it means on that
+#     route - the owner's own act - so a start-up load raises no second card:
+#     the ONE `change_own_config` card that saved this setting was the yes for
+#     it. (The apply still writes its Undo receipt, so a start-up load is
+#     reversible like any other owner-clicked apply.)
+#   * the owner accepted a slow start (~a minute, ~15 GiB of card memory), but
+#     not a late one: `_start_startup_check` runs this in ONE daemon thread, so
+#     a 26B cold load never delays the HUD's first request. The outcome lands in
+#     `_LAST_RECONCILE`, which `/api/work` already reports as
+#     `restart_reconcile`, so a load that failed is never silent.
+#   * THE LOAD ASKS TO STAY RESIDENT (`keep_alive: -1`), through the SAME loader
+#     the route uses, because an eager preload the idle timer throws away five
+#     minutes later is pointless. The pooled lane's own server already runs with
+#     `OLLAMA_KEEP_ALIVE=-1` (`jarvis_big_coder._child_env`), so this matters most
+#     where that guarantee does not reach: a lane that reuses a server THIS
+#     program did not start. It is bounded by two existing rules - one preset's
+#     model at a time (a later apply ends the lane first) and the owner's rest
+#     hours (`_startup_keep_alive`).
+#   * with NO start-up preset this module does exactly what it did before: the
+#     reconcile runs, once, synchronously, and every existing sentence is
+#     unchanged.
+
+#: The approval action every setting change in this program uses. Reused, never
+#: a new row: a start-up preset is a config change like the cloud switch, and
+#: `change_own_config` is already `ask`.
+STARTUP_ACTION = CLOUD_ACTION
+
+
+def _startup_doc() -> tuple:
+    """(the preset id to load at start, why there is none). Reads only.
+
+    The `why` is "" when there is nothing to explain: no file is "nothing has
+    been set", and a valid id is "it is set". It is a plain sentence when the
+    file cannot be read or names a preset this PC does not have - the case where
+    a saved setting silently stops working, which is exactly what must be said
+    rather than hidden.
+    """
+    import json
+    try:
+        text = _startup_path().read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "", ""
+    except Exception:
+        return "", ("the start-up preset file on this PC cannot be read, so no "
+                    "preset is loaded at start")
+    try:
+        doc = json.loads(text)
+    except Exception:
+        return "", ("the start-up preset file on this PC is not readable JSON, so "
+                    "no preset is loaded at start")
+    if not isinstance(doc, dict):
+        return "", ("the start-up preset file on this PC does not hold a setting, "
+                    "so no preset is loaded at start")
+    raw = str(doc.get("preset") or "").strip()
+    if not raw:
+        return "", ""
+    if by_id(raw) is None:
+        return "", (f"this PC has no preset called {raw!r}, so no preset is loaded "
+                    f"at start")
+    return raw, ""
+
+
+def startup_preset() -> str:
+    """The preset id the owner marked to load every time Atlas starts, or "".
+
+    Never raises, and never guesses: an unreadable file or an id this PC does
+    not know is "" - nothing is loaded - and `startup_why()` says which.
+    """
+    return _startup_doc()[0]
+
+
+def startup_why() -> str:
+    """The plain reason nothing is loaded at start, or "" when all is well."""
+    return _startup_doc()[1]
+
+
+def startup_view() -> dict:
+    """The `/api/work` answer's small `startup_preset` block. Read-only."""
+    preset, why = _startup_doc()
+    return {"preset": preset, "why": why}
+
+
+def _write_startup_preset(preset_id: str) -> bool:
+    """Save the one start-up preset, or remove the setting when it is "".
+
+    Atomic (write beside, replace), and False - with nothing changed - on any
+    error. The empty case removes the FILE rather than writing `{"preset": ""}`:
+    absent is the shape every other setting file in this folder treats as "not
+    set", and a reader must be able to tell the two apart by `exists()`.
+    """
+    import json
+    try:
+        if not str(preset_id or "").strip():
+            try:
+                _startup_path().unlink()
+            except FileNotFoundError:
+                pass
+            return True
+        _config_dir().mkdir(parents=True, exist_ok=True)
+        tmp = _startup_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"preset": str(preset_id)}, indent=2) + "\n",
+                       encoding="utf-8")
+        tmp.replace(_startup_path())
+        return True
+    except Exception:
+        return False
+
+
+def _startup_card_text(p) -> str:
+    """The ONE card setting this, in the owner's own words.
+
+    It has to say what will happen at the NEXT start, because that is the thing
+    being agreed to and it is invisible at the moment of the click: a model he
+    chose will be loaded before he asks anything, and it will cost the time and
+    the card memory the preset's own row measures. `heavy_words` is the preset
+    table's measured sentence, quoted rather than re-typed.
+    """
+    cost = (p.heavy_words
+            or f"It loads on {p.lane_info['card']} ({p.lane_info['words']}).")
+    return (f"Load the {p.title} preset ({p.model}) every time Atlas starts, "
+            f"before you ask it anything. {cost} Chat is not ready until it has "
+            f"finished loading. Nothing on this PC changes until you say yes.")
+
+
+def set_startup_preset(*, preset, gate_check=None) -> tuple:
+    """Mark ONE preset to load at every start (ONE card), or clear it (at once).
+
+    ORDER, the same contract `cloud_escalate` keeps: refuse an id that is not a
+    local preset (400, BEFORE any card - a card for something that cannot work
+    would be a lie) -> refuse a preset whose model this PC does not have yet
+    (409, also before a card) -> do nothing and raise no second card when it is
+    already the setting -> raise ONE `change_own_config` card -> only after that
+    yes, write `startup-preset.json`.
+
+    CLEARING IS A TIGHTENING and is instant, the asymmetry every switch here
+    keeps: it makes Atlas load nothing at start. Setting it asks because it is a
+    standing change to what the program does on its own, every time it starts.
+
+    Returns (http status, body); `card` says whether one was raised, so a client
+    can say "waiting for your click" instead of guessing.
+    """
+    pid = str(preset or "").strip()
+    if not pid:
+        had = bool(_startup_doc()[0])
+        if not _write_startup_preset(""):
+            return 503, {"ok": False, "changed": False, "card": False,
+                         "error": ("the start-up preset could not be cleared on "
+                                   "this PC; nothing was changed"),
+                         "startup_preset": startup_view()}
+        return 200, {"ok": True, "changed": had, "card": False,
+                     "startup_preset": startup_view(),
+                     "message": ("No preset will be loaded when Atlas starts."
+                                 if had else
+                                 "No preset was set to load when Atlas starts.")}
+    if pid == CLOUD_PRESET_ID:
+        return 400, {"ok": False, "changed": False, "card": False,
+                     "error": ("the Cloud row is not a local preset, so there is no "
+                               "model on this PC for Atlas to load at start"),
+                     "startup_preset": startup_view()}
+    p = by_id(pid)
+    if p is None:
+        return 400, {"ok": False, "changed": False, "card": False,
+                     "error": (f"there is no preset called {pid!r}; the presets are "
+                               f"{', '.join(PRESET_IDS)}"),
+                     "startup_preset": startup_view()}
+    if p.pending:
+        return 409, {"ok": False, "changed": False, "card": False,
+                     "error": (f"the {p.title} preset has no model on this PC yet, so "
+                               f"it cannot be loaded when Atlas starts"),
+                     "startup_preset": startup_view()}
+    if _startup_doc()[0] == pid:
+        return 200, {"ok": True, "changed": False, "card": False,
+                     "startup_preset": startup_view(),
+                     "message": (f"{p.title} is already the preset Atlas loads when "
+                                 f"it starts.")}
+    words = _startup_card_text(p)
+    verdict = (gate_check or _gate)(
+        STARTUP_ACTION, {"text": words},
+        f"load the {p.title} preset every time Atlas starts")
+    if not getattr(verdict, "allowed", False):
+        return 200, {"ok": False, "changed": False, "card": True,
+                     "outcome": str(getattr(verdict, "outcome", "refused")),
+                     "message": ("Not changed - Atlas still starts with no preset "
+                                 "loading."),
+                     "startup_preset": startup_view()}
+    if not _write_startup_preset(pid):
+        return 503, {"ok": False, "changed": False, "card": True,
+                     "error": ("the start-up preset could not be saved on this PC; "
+                               "nothing was changed"),
+                     "startup_preset": startup_view()}
+    return 200, {"ok": True, "changed": True, "card": True,
+                 "startup_preset": startup_view(),
+                 "message": (f"Atlas will load the {p.title} preset ({p.model}) every "
+                             f"time it starts, before you ask it anything. Nothing "
+                             f"on this PC changes until the next start.")}
+
+
+def startup_from_body(body) -> tuple:
+    """`POST /api/work/startup-preset {"preset": "<id>"}` -> set_startup_preset.
+
+    `{"preset": ""}` and `{"clear": true}` both clear it. The body is checked
+    exactly, the same way the cloud switch's is: there is no truthiness shortcut
+    on a setting that changes what the program does on its own.
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "expected a JSON object"}
+    if "clear" in body:
+        if not isinstance(body.get("clear"), bool):
+            return 400, {"ok": False, "error": '"clear" must be true or false'}
+        if body["clear"]:
+            return set_startup_preset(preset="")
+    if "preset" not in body:
+        return 400, {"ok": False,
+                     "error": 'expected {"preset": "<id>"}, {"preset": ""} or '
+                              '{"clear": true}'}
+    if not isinstance(body.get("preset"), str):
+        return 400, {"ok": False, "error": '"preset" must be text'}
+    return set_startup_preset(preset=body["preset"])
+
+
+#: Ollama's documented "keep it resident until something else evicts it"
+#: (`keep_alive: -1`). THE START-UP PRESET ASKS FOR IT (2026-11-22, measured on
+#: this PC: the General model was applied at 02:41 and Ollama's default idle
+#: timer had unloaded it by 10:30 - `/api/ps` on 11450 reported no model while
+#: `/api/work` still said `chosen: "general"`). An eager start-up load the idle
+#: timer throws away five minutes later is pointless, so the load asks to stay.
+#: WHAT BOUNDS IT, and both are rules this program already keeps: only ONE
+#: preset's model is resident at a time, so applying any other preset ends this
+#: lane first (`stop_pooled`, `_default_stop_pooled`), and the owner's own rest
+#: hours are respected at start-up (see `_startup_keep_alive`).
+STARTUP_KEEP_ALIVE = -1
+
+
+def _startup_keep_alive() -> tuple:
+    """(the keep_alive the start-up load may ask for, why it is not -1).
+
+    `(STARTUP_KEEP_ALIVE, "")` when nothing tells the model to go. `(None, why)`
+    when the owner's own rest hours are active right now, or cannot be read: the
+    model is then loaded by the ordinary road with Ollama's own idle rule, and
+    the reason travels in the record.
+
+    THE SETTING IS THE ONE THE PRODUCT HAS: `[power]`'s scheduled window
+    (`schedule_enabled`, `quiet_start`, `quiet_end`, `schedule_mode`), read by
+    `jarvis_power.schedule_drop()` - the same reader the power rules use, so
+    there is no second copy of the clock arithmetic. There is NO `[energy]`
+    rest-hours setting: that section is the measured-watts record
+    (`jarvis_energy.py`), so nothing here invents one.
+    """
+    try:
+        import jarvis_power as _power
+    except Exception:
+        return STARTUP_KEEP_ALIVE, ""     # no rest-hours module: nothing to respect
+    try:
+        drop = _power.schedule_drop()
+    except Exception as exc:              # noqa: BLE001 - said, never swallowed
+        return None, (f"the rest hours could not be read "
+                      f"({type(exc).__name__}), so the model was loaded with "
+                      f"Ollama's own idle rule instead of being held resident")
+    if drop:
+        return None, (f"your rest hours are on now ({drop}), so the model was "
+                      f"loaded with Ollama's own idle rule instead of being held "
+                      f"resident")
+    return STARTUP_KEEP_ALIVE, ""
+
+
+def apply_startup_preset(*, apply=None, reconcile=None) -> dict:
+    """The ONE start-up step: load the marked preset, or repair what it left.
+
+    Called by `install()` in the real HUD process. Returns the dict that becomes
+    `/api/work`'s `restart_reconcile` block: `{"changed", "why", "lane",
+    "preset"}` and, for this feature, `startup_applied`, `startup_preset` and
+    `keep_alive`.
+
+    THREE OUTCOMES, and none is silent:
+
+      * NO start-up preset: today's behaviour, byte for byte - the restart
+        reconcile runs and its own dict is returned untouched, so every existing
+        sentence and every existing test is unchanged;
+      * the preset LOADS: the apply is the route's own road
+        (`_apply_body(..., owner_ui=True)`), which starts the lane, switches the
+        model, points chat at the lane and saves the chosen preset. No reconcile
+        runs, so the owner's choice is never deleted by the step that just
+        served it. The load asks to STAY RESIDENT (`keep_alive: -1`) unless the
+        owner's own rest hours are active or unreadable, in which case the record
+        says why it did not;
+      * the preset CANNOT load: the failure is said, and THEN today's reconcile
+        runs - chat is pointed back at the default lane and the unservable
+        choice is forgotten, exactly as it is today - with both sentences kept
+        in `why`. A start that cannot do what the owner set says so; it never
+        leaves a stale choice and no word about it.
+    """
+    import os as _os
+    if _os.environ.get("JARVIS_SUITE_RUNNING") and not _os.environ.get(
+            "OPENJARVIS_CONFIG_DIR"):
+        # The same refusal `reconcile_after_restart` makes, for the same reason
+        # (2026-11-08): a suite with no temp config folder must never read, let
+        # alone act on, the owner's live setting.
+        return {"changed": False, "lane": "", "preset": "",
+                "why": ("refused: a suite run must point OPENJARVIS_CONFIG_DIR at "
+                        "its own temp folder; nothing was touched")}
+    pid = startup_preset()
+    if not pid:
+        got = (reconcile or reconcile_after_restart)()
+        return got if isinstance(got, dict) else {
+            "changed": False, "lane": "", "preset": "", "why": ""}
+    keep_alive, hold_why = _startup_keep_alive()
+
+    def _apply(want):
+        return _apply_body({"preset": want}, owner_ui=True,
+                           keep_alive=keep_alive)
+
+    apply = apply or _apply
+    try:
+        code, body = apply(pid)
+    except Exception as exc:                     # noqa: BLE001 - said, never swallowed
+        code, body = 503, {"ok": False,
+                           "error": f"{type(exc).__name__}: {exc}"}
+    body = body if isinstance(body, dict) else {}
+    if code in (200, 202) and body.get("ok") is True and not body.get("error"):
+        p = by_id(pid)
+        title = p.title if p is not None else pid
+        lane = str(body.get("base_url") or "")
+        return {"changed": True,
+                "why": (f"loaded the {title} preset at start, as you set it"
+                        + (f" on {lane}" if lane else "")
+                        + ("; it stays resident until another preset or your "
+                           "rest hours replace it" if keep_alive is not None
+                           else "; " + hold_why)
+                        + "; it is the preset chat uses now"),
+                "lane": lane, "preset": pid, "startup_preset": pid,
+                "startup_applied": True, "keep_alive": keep_alive,
+                "held_resident": keep_alive is not None,
+                "model": str(body.get("model") or "")}
+    why = str(body.get("error") or body.get("reason")
+              or body.get("message") or "").strip()
+    if not why:
+        why = f"the apply answered {code} and agreed to nothing"
+    try:
+        got = (reconcile or reconcile_after_restart)()
+    except Exception as exc:                     # noqa: BLE001 - said, never swallowed
+        got = {"changed": False, "lane": "", "preset": "",
+               "why": f"{type(exc).__name__}: the restart check failed"}
+    got = dict(got) if isinstance(got, dict) else {}
+    tail = str(got.get("why") or "")
+    merged = dict(got)
+    merged.update({
+        "startup_preset": pid, "startup_applied": False,
+        "keep_alive": keep_alive,
+        # `preset` is the preset THIS feature was asked to load; the reconcile's
+        # own answer about the remembered choice keeps its own key, so a reader
+        # can tell the two apart.
+        "preset": pid,
+        "remembered_preset": str(got.get("preset") or ""),
+        "startup_error": why,
+        "why": (f"the start-up preset ({pid}) could not be loaded: {why}."
+                + (f" {tail}" if tail else
+                   " Nothing else on this PC was changed by it.")),
+    })
+    return merged
+
+
+#: Set once this process has started its start-up check, so a second `install()`
+#: in the same process (the suites call it several times) cannot start a second
+#: 26B load.
+_STARTUP_CHECK_STARTED = False
+
+
+def _startup_check_in_background() -> None:
+    """Run `apply_startup_preset()` off the serving path and record its outcome.
+
+    The ONE writer of `_LAST_RECONCILE` on this road: `/api/work` reports it as
+    `restart_reconcile`, so the answer to "did the start-up preset load?" is a
+    read of the normal payload rather than a line in a log nobody opens.
+    """
+    global _LAST_RECONCILE
+    try:
+        got = apply_startup_preset()
+    except Exception as exc:                     # noqa: BLE001 - never blocks start-up
+        got = {"changed": False, "lane": "", "preset": "",
+               "why": f"{type(exc).__name__}: the start-up check failed"}
+    _LAST_RECONCILE = dict(got) if isinstance(got, dict) else {
+        "changed": False, "lane": "", "preset": "",
+        "why": "the start-up check answered nothing"}
+    try:
+        if _LAST_RECONCILE.get("changed"):
+            print("  presets    " + str(_LAST_RECONCILE.get("why") or ""))
+    except Exception:                            # noqa: BLE001 - printing is not start-up
+        pass
+
+
+def _start_startup_check() -> bool:
+    """Start THE start-up thread once. True when it is running (or was).
+
+    A 26B cold load measured about 50 s on this PC (`GEMMA4_26B_MEASURED_WORDS`),
+    and the HUD must serve its first request during it - so this work is on its
+    own daemon thread and never on `install()`'s. False means the thread could
+    not be created, which the caller records rather than hides.
+    """
+    global _STARTUP_CHECK_STARTED
+    if _STARTUP_CHECK_STARTED:
+        return True
+    thread = threading.Thread(target=_startup_check_in_background,
+                              name="jarvis-presets-startup", daemon=True)
+    try:
+        thread.start()
+    except Exception:
+        _STARTUP_CHECK_STARTED = False
+        return False
+    _STARTUP_CHECK_STARTED = True
+    return True
+
+
 def _chat_lane_url() -> str:
     """The lane a chat turn uses: the applied preset's own lane, else the default.
 
@@ -1932,6 +2386,11 @@ def live_status() -> dict:
         # What the startup reconcile did after the last restart (2026-11-08).
         # A read: it changes nothing and is empty on a PC with no pooled preset.
         "restart_reconcile": dict(_LAST_RECONCILE),
+        # The preset marked to load at every start (2026-11-22), and the plain
+        # reason there is none when one is saved and cannot be used. Read-only:
+        # this block changes nothing, starts nothing and raises no card. A PC
+        # that never set one reads `{"preset": "", "why": ""}`.
+        "startup_preset": startup_view(),
         "lane": lane,
         "lane_status": lane,
         "apply_path": APPLY_PATH,
@@ -2261,7 +2720,7 @@ class _OwnerPressed:
     reason = "the owner pressed this preset in one of the apps"
 
 
-def _start_lane_for_the_owner(key: str, mode: str = ""):
+def _start_lane_for_the_owner(key: str, mode: str = "", keep_alive=None):
     """Start the preset's lane with NO card - the owner's own click. `(status, body)`.
 
     The same start `_default_start_lane` performs, with the same `mode`, and the
@@ -2271,6 +2730,10 @@ def _start_lane_for_the_owner(key: str, mode: str = ""):
     press the app's preset control just recorded. The presets on a named lane
     raise no card on either road, so they are started exactly as before, through
     `_lane_starter` (every injected one-argument seam still works).
+
+    `keep_alive` is forwarded only when the start-up path names one (2026-11-22,
+    `-1`): the start-up load takes this same road - the owner set it on purpose,
+    so it is his own press - and the option reaches the lane's own loader.
 
     NOTHING HERE DOWNLOADS and nothing here picks a model: a heavy preset's
     model is loaded by the lane and recorded afterwards by `_default_adopt`, on
@@ -2283,9 +2746,13 @@ def _start_lane_for_the_owner(key: str, mode: str = ""):
     """
     import jarvis_model_lanes
     if str(key) == jarvis_model_lanes.POOLED_KEY:
+        if keep_alive is None:
+            return jarvis_model_lanes.start_pooled_lane(
+                gate=lambda *a, **k: _OwnerPressed(),
+                mode=str(mode or "coding"))
         return jarvis_model_lanes.start_pooled_lane(
             gate=lambda *a, **k: _OwnerPressed(),
-            mode=str(mode or "coding"))
+            mode=str(mode or "coding"), keep_alive=keep_alive)
     return _lane_starter(key, mode)
 
 
@@ -2461,8 +2928,18 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  switch_model=None, switch_for_owner=None, owner_ui=False,
                  active_url=None, set_active_url=None,
                  read_choice=None, write_choice=None, rollback_model=None,
-                 stop_pooled=None, verify_lane=None) -> tuple:
+                 stop_pooled=None, verify_lane=None, keep_alive=None) -> tuple:
     """Apply ONE preset: after the owner's card, or at once for an app click.
+
+    `keep_alive` is the load's residency ask in Ollama's own units, and it is
+    `None` for every caller but the start-up preset (2026-11-22): `-1` asks the
+    lane to keep the model resident until something else evicts it, which is
+    what makes an eager start-up load outlive Ollama's idle timer. It reaches
+    the SAME loader through the same `start_lane` call - `-1` and nothing else
+    changes - and it is passed only when a caller names it, so every existing
+    seam, fake and caller keeps the exact call it made before. A LATER preset
+    switch still ends this lane first (`stop_pooled`), so no second copy of any
+    model becomes resident: the one-preset-at-a-time rule bounds the keep-alive.
 
     `owner_ui=True` is set by ONE caller - this module's own route wrapper
     (`install()`), the road both apps' preset controls use. It means "the
@@ -2592,8 +3069,12 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                                    f"cards, so this preset was not applied: {why}")}
     try:
         mode = str(getattr(p, "mode", "") or "")
-        code, start_body = (start_lane(p.lane, mode=mode) if mode
-                            else start_lane(p.lane))
+        # `keep_alive` is named ONLY when the caller named one: the route, the
+        # chat path and every injected seam keep the exact call they made before
+        # 2026-11-22.
+        keep = ({} if keep_alive is None else {"keep_alive": keep_alive})
+        code, start_body = (start_lane(p.lane, mode=mode, **keep) if mode
+                            else start_lane(p.lane, **keep))
     except Exception as exc:
         return 503, {"ok": False, "changed": False,
                      "error": f"the {p.lane} lane could not be started "
@@ -2770,7 +3251,7 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  "receipt_id": receipt_id}
 
 
-def _default_start_lane(key: str, mode: str = ""):
+def _default_start_lane(key: str, mode: str = "", keep_alive=None):
     """The preset's own lane, started on demand.
 
     "pooled" is not one of the PC's logon tasks: it is the ONE Ollama that sees
@@ -2780,11 +3261,16 @@ def _default_start_lane(key: str, mode: str = ""):
     app-click road passes `_OwnerPressed` instead, because the press is the
     approval (`_start_lane_for_the_owner`). `mode` is the applied preset's pooled
     mode (Medical today); "" keeps the coding lane every pre-wave-14 caller has
-    always started.
+    always started. `keep_alive` is forwarded to the lane ONLY when the caller
+    named one (the start-up preset, 2026-11-22); a named-lane start loads no
+    model at all, so it has nowhere to put it.
     """
     import jarvis_model_lanes
     if str(key) == jarvis_model_lanes.POOLED_KEY:
-        return jarvis_model_lanes.start_pooled_lane(mode=str(mode or "coding"))
+        if keep_alive is None:
+            return jarvis_model_lanes.start_pooled_lane(mode=str(mode or "coding"))
+        return jarvis_model_lanes.start_pooled_lane(mode=str(mode or "coding"),
+                                                    keep_alive=keep_alive)
     mapped = LANE_START_KEYS.get(str(key))
     if mapped is None or jarvis_model_lanes.lane_by_key(mapped) is None:
         return 409, {"ok": False, "changed": False,
@@ -2793,7 +3279,7 @@ def _default_start_lane(key: str, mode: str = ""):
     return jarvis_model_lanes.start_lane(mapped)
 
 
-def _lane_starter(key: str, mode: str = ""):
+def _lane_starter(key: str, mode: str = "", keep_alive=None):
     """`_default_start_lane` with the mode passed ONLY when a preset names one.
 
     The nine older presets name no pooled mode, so they call the starter with
@@ -2801,8 +3287,11 @@ def _lane_starter(key: str, mode: str = ""):
     existing tests, and every caller that replaced `_default_start_lane`, keeps
     working. The two-argument call is reserved for a preset that really does
     name a pooled mode (Medical today), and an injected seam that cannot take
-    it says so with a TypeError rather than being silently downgraded.
+    it says so with a TypeError rather than being silently downgraded. A third
+    argument (`keep_alive`) is passed only when the start-up path names one.
     """
+    if keep_alive is not None:
+        return _default_start_lane(key, mode, keep_alive=keep_alive)
     return _default_start_lane(key, mode) if mode else _default_start_lane(key)
 
 
@@ -2922,29 +3411,38 @@ def apply_from_body(body) -> tuple:
     return _apply_body(body, owner_ui=False)
 
 
-def _apply_body(body, *, owner_ui: bool) -> tuple:
+def _apply_body(body, *, owner_ui: bool, keep_alive=None) -> tuple:
     """`apply_from_body` with the road named; private on purpose.
 
     `owner_ui=True` is passed by ONE caller in this program - `install()`'s
     POST wrapper, the route both apps' preset controls use - so no Python
     caller can turn a card off by accident, and no request field can ask for
     it. `owner_ui=False` is the carded path, unchanged.
+
+    `keep_alive` is the start-up preload's own residency ask (2026-11-22), and
+    it is passed by ONE caller - `apply_startup_preset` - never read from a
+    request body, so the route's own bytes are unchanged. It travels to
+    `apply_preset`'s `start_lane`, the road the route already takes.
     """
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "expected a JSON object"}
     provider = body.get("provider")
     if provider is not None and not isinstance(provider, str):
         return 400, {"ok": False, "error": '"provider" must be text'}
+    if keep_alive is None:
+        return apply_preset(body.get("preset"), provider=provider,
+                            owner_ui=owner_ui)
     return apply_preset(body.get("preset"), provider=provider,
-                        owner_ui=owner_ui)
+                        owner_ui=owner_ui, keep_alive=keep_alive)
 
 
 def install(Handler, *, origin_ok, token_ok, read_body):
     """Wire GET /api/work and GET /api/presets (the preset contract),
-    POST /api/work/apply and POST /api/work/cloud-escalate onto the HUD's
-    Handler. Returns the status line the banner prints. Reads nothing from the
-    owner's PC except what live_status() reports; it approves nothing: the
-    cloud apply and the escalation switch raise their one change_own_config
+    POST /api/work/apply, POST /api/work/cloud-escalate and
+    POST /api/work/startup-preset onto the HUD's Handler. Returns the status
+    line the banner prints. Reads nothing from the owner's PC except what
+    live_status() reports; it approves nothing: the cloud apply, the escalation
+    switch and setting a start-up preset raise their one change_own_config
     card. A LOCAL preset applied through this route is the owner's own click:
     it applies at once, writes a receipt, and starts a heavy preset's pooled
     lane with that press as its approval - the model path keeps its card, and
@@ -2990,7 +3488,7 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     def do_POST(self):
         import json
         path = str(getattr(self, "path", "") or "").split("?", 1)[0]
-        if path not in (APPLY_PATH, CLOUD_ESCALATE_PATH):
+        if path not in (APPLY_PATH, CLOUD_ESCALATE_PATH, STARTUP_PATH):
             if original is None:
                 return self._send(404, {"error": "not found"})
             return original(self)
@@ -3007,14 +3505,23 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         # whether Jarvis may ask the cloud with no per-question yes. Both raise
         # a card through the same gate.
         #
+        # THE START-UP PRESET IS ITS OWN ROUTE for the same reason (2026-11-22):
+        # applying a preset says which model answers NOW, and this says which
+        # one loads by itself the next time Atlas starts. It raises the same
+        # `change_own_config` card and writes nothing before the yes.
+        #
         # THIS IS THE ONLY PLACE `owner_ui=True` IS SET, and this route already
         # passed the server's origin and token checks above. It is what makes a
         # local preset click apply at once, the heavy ones included since
         # 2026-11-16; the body cannot ask for it, and every other caller of
         # apply_from_body keeps the card. Cloud still cards here (apply_preset
         # decides), and so does the same preset asked for in chat.
-        code, out = (escalate_from_body(body) if path == CLOUD_ESCALATE_PATH
-                     else _apply_body(body, owner_ui=True))
+        if path == CLOUD_ESCALATE_PATH:
+            code, out = escalate_from_body(body)
+        elif path == STARTUP_PATH:
+            code, out = startup_from_body(body)
+        else:
+            code, out = _apply_body(body, owner_ui=True)
         return self._send(code, out)
 
     Handler.do_POST = do_POST
@@ -3024,15 +3531,36 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     # (and lets a wake-time warm-up load the pooled 30B on one card). Real HUD
     # process only, the same rule as the card warm below, so a suite's
     # install() stays off the owner's PC.
+    #
+    # THE START-UP PRESET COMES FIRST, and that order is the feature (2026-11-22):
+    # when the owner has marked a preset to load, the start-up step applies it
+    # through the route's own road, and the reconcile above only runs if that
+    # apply could not happen. Running the reconcile first would delete
+    # `presets-choice.json` - the choice the next step was about to serve -
+    # before anything had a chance to load it.
+    #
+    # A start-up load takes about a minute (26B cold load) and the HUD must serve
+    # its first request during it, so THAT road runs in its own thread and
+    # updates `restart_reconcile` when it finishes. With no start-up preset the
+    # reconcile runs here, synchronously, exactly as it always has.
     global _LAST_RECONCILE
     if _warm_on_startup():
-        try:
-            _LAST_RECONCILE = reconcile_after_restart()
-            if _LAST_RECONCILE.get("changed"):
+        if startup_preset():
+            if not _start_startup_check():
+                _LAST_RECONCILE = {
+                    "changed": False, "lane": "", "preset": startup_preset(),
+                    "why": ("the start-up preset could not be loaded because the "
+                            "background check would not start; chat was left as it "
+                            "was")}
                 print("  presets    " + str(_LAST_RECONCILE.get("why") or ""))
-        except Exception as exc:                     # noqa: BLE001 - never blocks start-up
-            _LAST_RECONCILE = {"changed": False,
-                               "why": f"{type(exc).__name__}: the startup check failed"}
+        else:
+            try:
+                _LAST_RECONCILE = reconcile_after_restart()
+                if _LAST_RECONCILE.get("changed"):
+                    print("  presets    " + str(_LAST_RECONCILE.get("why") or ""))
+            except Exception as exc:                 # noqa: BLE001 - never blocks start-up
+                _LAST_RECONCILE = {"changed": False,
+                                   "why": f"{type(exc).__name__}: the startup check failed"}
     # Warm the card detection while the HUD finishes starting, so the first
     # GET /api/work does not pay the ~10 s `nvidia-smi` + lane-probe cost. The
     # request path never does it again once a snapshot exists (see above).

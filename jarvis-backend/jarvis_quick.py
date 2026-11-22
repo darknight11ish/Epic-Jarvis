@@ -21594,6 +21594,85 @@ _K_PRESET_SWITCH = re.compile(
     r"(?:switch|change)\s+(?:to\s+)?(?:the\s+)?(.+?)\s+preset\s*\??$"
     r"|use\s+(?:the\s+)?(.+?)\s+preset\s*\??$"
     r"|apply\s+(?:the\s+)?preset\s+(.+?)\s*\??$")
+
+#: THE PRESET THAT LOADS WHEN ATLAS ITSELF STARTS (2026-11-22).
+#:
+#: THE OWNER'S OWN WORDS: *"load the general local ai model preset ... have that
+#: be the default that loads anytime jarvis is reset ... let me set the default
+#: presets that load when atlas is restarted through chat or settings"*. The
+#: setting is `jarvis_presets.startup-preset.json` and its own door is
+#: `POST /api/work/startup-preset`; this file owns only the SENTENCES.
+#:
+#: TIGHT ON PURPOSE, and the reason is the sentence it must NOT take: "use the
+#: General preset" (or "switch to the coding preset") asks for a preset NOW, and
+#: `_K_PRESET_SWITCH` below is the answer to it. So every SET shape here needs a
+#: START-UP marker as well as the word "preset" - "when you start", "on startup",
+#: "every time Atlas starts", "when Atlas is restarted" - and a near miss is
+#: harmless while a hijack would change a preset the owner wanted applied at
+#: once. "stop loading a preset when you start" is the CLEAR shape; it also
+#: needs the marker, so a bare "stop loading a preset" keeps whatever path it
+#: had.
+_STARTUP_WHEN = (
+    r"(?:(?:when|whenever|any\s?time)\s+"
+    r"(?:you|it|atlas|jarvis|the\s+(?:program|app|desktop|hud))\s+"
+    r"(?:is\s+|are\s+)?(?:re)?(?:start|reset)(?:s|ed)?\b"
+    r"|(?:when|whenever|any\s?time)\s+(?:windows|the\s+pc|this\s+pc|my\s+pc)\s+"
+    r"(?:re)?(?:starts?|resets?|restarts?|reboots?)\b"
+    r"|(?:on|at|after)\s+(?:a\s+|the\s+|each\s+|every\s+)?(?:re)?start(?:up)?\b"
+    r"|(?:on|at)\s+start(?:up)?\b"
+    r"|every\s+time\s+(?:you|it|atlas|jarvis|the\s+(?:program|app|desktop|hud))\s+"
+    r"(?:is\s+|are\s+)?(?:re)?(?:start|reset)(?:s|ed)?\b)"
+)
+_STARTUP_PRESET_SET = re.compile(
+    # "load the general preset when you start" / "start with the general preset
+    # every time atlas starts"
+    r"(?:load|preload|use|boot|start)\s+(?:up\s+)?(?:with\s+)?"
+    r"(?:the\s+|my\s+|your\s+)?(?P<a>[a-z][a-z0-9 .&+_-]{0,40}?)\s+preset\b"
+    r"[^.;!?]*?" + _STARTUP_WHEN +
+    # "make general my default preset on startup"
+    r"|(?:make|set|have|choose|pick)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?P<b>[a-z][a-z0-9 .&+_-]{0,40}?)\s+(?:my\s+|the\s+|your\s+)?"
+    r"(?:default|start[\s-]?up)\s+preset\b[^.;!?]*?" + _STARTUP_WHEN +
+    # "make the general preset the default when atlas starts"
+    r"|(?:make|set)\s+(?:the\s+)?(?P<d>[a-z][a-z0-9 .&+_-]{0,40}?)\s+preset\s+"
+    r"(?:the\s+|my\s+|your\s+)?default\b[^.;!?]*?" + _STARTUP_WHEN +
+    # "set the default preset to general"
+    r"|(?:set|make|choose|pick)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:default|start[\s-]?up)\s+preset\s+(?:to|as)\s+"
+    r"(?:the\s+|my\s+|your\s+)?(?P<c>[a-z][a-z0-9 .&+_-]{0,40}?)\s*\??$")
+_STARTUP_PRESET_CLEAR = re.compile(
+    # "stop loading a preset when you start" / "don't load a preset on startup"
+    r"(?:stop|quit|don'?t|do\s+not|never)\s+"
+    r"(?:load|loading|preload|preloading|use|using)\s+"
+    r"(?:a\s+|any\s+|the\s+|my\s+)?(?:[a-z][a-z0-9 .&+_-]{0,40}\s+)?preset\b"
+    r"[^.;!?]*?" + _STARTUP_WHEN +
+    # "clear the startup preset"
+    r"|(?:clear|remove|delete|unset|forget)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:default|start[\s-]?up)\s+preset\b.*"
+    # "no preset on startup"
+    r"|(?:no|without\s+a)\s+(?:default\s+|start[\s-]?up\s+)?preset\s+"
+    r"(?:on|at|when)\s+(?:start\s*up|start|restart|reboot)\b.*")
+
+
+def _startup_preset_ask(s: str) -> Optional[Intent]:
+    """The start-up preset, in the owner's words, or None.
+
+    Every value it returns is the sentence's own: a named preset stays named
+    and is resolved by the runner against this PC's real rows, and a clear is a
+    clear only because the sentence says to stop loading one. Nothing here
+    decides what an id means or writes anything.
+    """
+    if _STARTUP_PRESET_CLEAR.fullmatch(s):
+        return Intent("startup_preset", {"clear": True})
+    m = _STARTUP_PRESET_SET.fullmatch(s)
+    if m is not None:
+        name = next((g for g in m.groups() if g), "")
+        name = re.sub(r"^(?:the|my|your)\s+", "", str(name or "").strip())
+        name = re.sub(r"\s+preset$", "", name).strip(" ?.!,")
+        if name:
+            return Intent("startup_preset", {"name": name, "clear": False})
+    return None
+
 _K_MODEL_SWITCH = re.compile(
     r"(?:switch|change)\s+to\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
     r"|load\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
@@ -21875,6 +21954,15 @@ def _is_focus_setting_name(name: str) -> bool:
 
 def _model_chat(s: str) -> Optional[Intent]:
     """The model/preset question shapes. Never a switch unless the words name one."""
+    # THE PRESET THAT LOADS WHEN ATLAS STARTS comes FIRST here (2026-11-22),
+    # before every other preset shape: "load the General preset when you start"
+    # is otherwise read by `_K_PRESET_SWITCH` as "use the General preset now" -
+    # the preset would be applied this minute and the start-up setting never
+    # made. The start marker in the pattern is what keeps that ordinary sentence
+    # out of this one.
+    got = _startup_preset_ask(s)
+    if got is not None:
+        return got
     # The focus preset is a SETTING first: "what is the focus preset" and "what
     # model does the focus preset use" both belong to its own answer (2026-11-04,
     # gap 6). Checked first, because `_K_PRESET_DETAIL` would read it as a preset
@@ -24245,6 +24333,67 @@ def _run_preset_switch(name) -> Result:
                       "preset_switch")
     except Exception:
         return Result("The preset could not be applied on this PC.", "preset_switch")
+
+
+def _run_startup_preset(f: dict) -> Result:
+    """The preset Atlas loads when it starts, through its OWN door (2026-11-22).
+
+    THE DOOR IS `jarvis_presets.set_startup_preset`, the exact call
+    `POST /api/work/startup-preset` makes. It owns everything that decides: an
+    unknown preset is a 400 with no card, setting one raises ONE
+    `change_own_config` card and writes nothing before the owner's yes, already
+    set is a no-op with no second card, clearing is instant, and a refusal says
+    the PC's own sentence. Nothing here copies, loosens or re-decides any of
+    that, and nothing here approves a card.
+
+    WHAT IT SAYS IS THE BODY'S OWN SENTENCE (`message`/`error`), because the
+    answer is about what will happen at the NEXT start: a runner that filled in
+    "Done" after a refused card would promise a preset that will not load. A
+    card that is still waiting is reported as waiting, never as set.
+    """
+    try:
+        import jarvis_presets as P
+    except Exception as exc:                # noqa: BLE001 - module absent
+        return Result("The start-up preset is not available on this PC "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "startup_preset")
+    try:
+        if f.get("clear") is True:
+            _code, body = P.set_startup_preset(preset="")
+        else:
+            name = str(f.get("name") or "").strip()
+            pid = ""
+            try:
+                import jarvis_model_knowledge as K
+                preset = K.preset_by_name(name)
+                if preset:
+                    pid = str(preset.get("id") or "")
+            except Exception:               # noqa: BLE001 - older PC
+                pid = ""
+            if not pid:
+                return Result(f'I do not know a preset called "{name}" on this PC.',
+                              "startup_preset")
+            _code, body = P.set_startup_preset(preset=pid)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("The start-up preset could not be changed "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "startup_preset")
+    body = body if isinstance(body, dict) else {}
+    error = str(body.get("error") or "").strip()
+    if error:
+        return Result(error, "startup_preset")
+    said = (str(body.get("said") or "").strip()
+            or str(body.get("message") or "").strip())
+    pending = (body.get("waiting") is True
+               or (body.get("card") is True and body.get("changed") is not True
+                   and not body.get("outcome")))
+    if pending:
+        if not re.search(r"wait|approv|card|click|yes", said, re.I):
+            said = (said + " " if said else "") + (
+                "Waiting for your yes on the approval card on this PC. "
+                "Nothing has changed yet.")
+        return Result(said, "startup_preset")
+    return Result(said or "Nothing was changed.", "startup_preset")
 
 
 def _run_model_switch(name) -> Result:
@@ -31432,6 +31581,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_both_cards()
     if n == "preset_switch":
         return _run_preset_switch(intent.f.get("name") or "")
+    if n == "startup_preset":
+        # The preset that loads when Atlas itself starts (2026-11-22), through
+        # `jarvis_presets.set_startup_preset` - the same door the route calls.
+        # Deliberately NOT in READ_ONLY_INTENTS: it writes a setting and raises
+        # one `change_own_config` card.
+        return _run_startup_preset(intent.f or {})
     if n == "model_speed":
         return _run_model_speed(intent.f.get("model") or "")
     if n == "model_pros_cons":

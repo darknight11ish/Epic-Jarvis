@@ -489,14 +489,25 @@ def unload(url: str, model: str) -> bool:
                       20.0) is not None
 
 
-def load(url: str, model: str, num_ctx: int) -> bool:
+def load(url: str, model: str, num_ctx: int, keep_alive=None) -> bool:
     """Load `model` now, NAMING the context. A load that names no context
     loads at Ollama's own small default instead of the lane's setting, which
     is the trap jarvis_power_switch.py documents at length; so there is no
-    code path here that omits it."""
-    return _post_json(url, "/api/generate",
-                      {"model": model, "options": {"num_ctx": int(num_ctx)}},
-                      240.0) is not None
+    code path here that omits it.
+
+    `keep_alive` is the caller's own residency ask, in Ollama's own units: `-1`
+    is its documented "keep it resident until something else evicts it", and
+    `None` - the default every existing caller keeps - sends no field at all,
+    exactly the request this made before 2026-11-22. It exists for the ONE
+    caller that needs a load to outlive Ollama's idle timer: the start-up preset
+    (`jarvis_presets.apply_startup_preset`), because a preset the owner marked to
+    load at every start is evicted five minutes later otherwise. The option is
+    part of THIS request, never a second loader.
+    """
+    body = {"model": model, "options": {"num_ctx": int(num_ctx)}}
+    if keep_alive is not None:
+        body["keep_alive"] = keep_alive
+    return _post_json(url, "/api/generate", body, 240.0) is not None
 
 
 def _settle(url: str, model: str, *, gone: bool, settle_s: float = SETTLE_S,
@@ -814,7 +825,8 @@ def pause_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
 def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
                num_ctx: Optional[int] = None,
                allow_spill: Optional[int] = None,
-               mode: str = DEFAULT_MODE) -> dict:
+               mode: str = DEFAULT_MODE,
+               keep_alive=None) -> dict:
     """Load the 30B on the three-card server and prove from /api/ps that it
     fits: present, at the context asked for, and with no spill beyond what the
     caller has measured and accepted. On anything else it is unloaded again and
@@ -835,6 +847,12 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     positive number must be a measurement the caller can point at;
     `jarvis_model_lanes` passes 0 since 2026-11-07, because the three-card
     window loaded with zero spill (`docs/MEASURED-2026-11-07-THREE-GPU.md`).
+
+    `keep_alive` goes straight to `load()` and is `None` for every caller but
+    the start-up preset (2026-11-22): `-1` asks the lane to keep the model
+    resident until something else evicts it, which is what makes an eager
+    start-up load worth doing. Nothing else about the load changes - the name,
+    the window, the spill proof and the unload-on-anything-wrong are the same.
     """
     m = mode_profile(mode)
     ctx_wanted = int(num_ctx or m.num_ctx)
@@ -849,7 +867,12 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
                         "nothing was loaded."),
                 "proof": []}
     url = url_for(port)
-    if not load(url, m.model, ctx_wanted):
+    # `keep_alive` is named ONLY when the caller asked for one: every other
+    # caller makes the exact `load(...)` call it made before 2026-11-22, which
+    # also keeps every suite that stands `load` in working unchanged.
+    loaded_now = (load(url, m.model, ctx_wanted) if keep_alive is None
+                  else load(url, m.model, ctx_wanted, keep_alive=keep_alive))
+    if not loaded_now:
         return {"ok": False, "why": f"the three-card Ollama on port {port} did not load "
                                     f"{m.model}", "proof": []}
     rows = _settle(url, m.model, gone=False)

@@ -41602,3 +41602,156 @@ only the confirm applying it, and a denied, timed-out or refused card said in th
 PC's own words - never a green "Removed N" - with no count invented when the PC
 reports none.
 
+
+## 232. The preset that loads when Atlas itself starts (added 2026-11-22)
+
+**The ask.** The owner asked for the General preset to be *"the default that
+loads anytime jarvis is reset"*, and to be able to *"set the default presets
+that load when atlas is restarted through chat or settings"*. When asked how, he
+chose **eager preload**: the preset loads as the program starts (about a minute,
+about 15 GiB of card memory), not lazily on the first message. **Nothing in the
+preset table changed.** `general` already exists, it is `gemma4:26b-a4b-it-qat`
+on the pooled three-card lane, and it is larger than the everyday `qwen3.5:9b`.
+
+**The setting.** `~/.openjarvis/startup-preset.json` (the config folder, so
+`OPENJARVIS_CONFIG_DIR` moves it too), shape `{"preset": "<id>"}`; **absent means
+none**. It is deliberately NOT `presets-choice.json`: that file records the last
+apply, and the restart reconcile deletes it when the on-demand lane is gone -
+right for a click, wrong for a choice the owner made on purpose. A file that
+cannot be read, or an id this PC does not have, reads as **no** preset and says
+why in `why`; nothing is loaded and nothing pretends otherwise.
+
+**The block in `/api/work` and `/api/presets`.** Read-only, additive:
+
+    "startup_preset": {"preset": "general" | "", "why": ""}
+
+`preset` is the id that will load at the next start. `why` is `""` when there is
+nothing to explain; it is the PC's own sentence when the saved setting cannot be
+used (an unreadable file, an id this PC does not have). This block starts
+nothing, writes nothing and raises no card. `restart_reconcile` is reported
+beside it and now also carries the start-up step's outcome (below).
+
+**`POST /api/work/startup-preset` - NEW.**
+
+| Body | Answer |
+|---|---|
+| `{"preset": "general"}` | ONE `change_own_config` card, then `startup-preset.json`. **200** `{"ok": true, "changed": true, "card": true, "startup_preset": {"preset": "general", "why": ""}, "message"}`. A refused card answers **200** `{"ok": false, "changed": false, "card": true, "outcome", "message"}` and writes nothing. Already set is **200** `{"ok": true, "changed": false, "card": false, "message"}` and raises no second card. **503** when the file cannot be written (nothing changed). |
+| `{"preset": ""}` or `{"clear": true}` | Immediate, **no card** (clearing is a tightening); the file is removed. **200** `{"ok": true, "changed": <whether one was set>, "card": false, "startup_preset": {"preset": "", "why": ""}, "message"}`. **503** when the file cannot be removed. |
+| `{"preset": "<unknown>"}` | **400** naming the ten presets. No card, nothing written. |
+| `{"preset": "cloud"}` | **400** - the Cloud row is not a local preset, so there is no model on this PC to load at start. |
+| `{"preset": "<a pending preset>"}` | **409** - its model is not on this PC yet, so it could not load at start. Before any card. |
+| `{}`, `{"preset": 3}`, `{"clear": "yes"}`, a non-object | **400** with a plain sentence. No card. |
+
+**The card, and why setting one asks.** Setting it is a standing change to what
+the program does on its own at every start, so it follows every such change in
+this program: ONE `change_own_config` card (tier `ask`) whose text says what will
+happen at the NEXT start - the preset, its model, and the preset row's own
+measured cost (for General: all three cards as one pooled lane on port 11450,
+about 50 seconds) - and that nothing on this PC changes until the yes.
+**Clearing is a tightening and is instant**, the asymmetry every switch here
+keeps.
+
+**At start-up: apply FIRST, reconcile only if it could not.** `install()` in
+`jarvis_presets` (the HUD's start) reads the setting and, when it is set, applies
+the preset through **the route's own road**: `_apply_body({"preset": id},
+owner_ui=True)`, the exact call `POST /api/work/apply` makes - so the lane is
+started, the model switched, the lane read back, the chat lane persisted and the
+chosen preset saved by the one code path that already does all four. It raises
+**no second card**: the card that saved the setting was the owner's yes. It
+writes the same Undo receipt an app click writes.
+
+**The load asks to STAY RESIDENT, and the rest hours still win.** Measured on
+this PC, 2026-11-22: General (`gemma4:26b-a4b-it-qat`, 15.5 GB) was applied at
+02:41 and Ollama's own idle timer had unloaded it by 10:30 - `/api/ps` on 11450
+reported no model while `/api/work` still said `chosen: "general"`. An eager
+start-up load that is evicted five minutes later is pointless, so the start-up
+road passes Ollama's documented `keep_alive: -1` ("keep it resident until
+something else evicts it"). It is the **same loader**: the option travels
+`_apply_body` -> `apply_preset` -> `start_lane` -> `jarvis_model_lanes.
+start_pooled_lane` -> `jarvis_big_coder.load_coder` -> `jarvis_big_coder.load`,
+which adds one field to the `/api/generate` body it already sends. Every other
+caller (the route, an app click, chat) passes nothing and sends exactly the
+request it sent before. A preset that is not heavy loads no model at start at
+all - its lane loads on the first turn - so the field is genuinely about the
+pooled lane.
+
+Two rules bound it, and both already exist. **One preset's model at a time**
+(2026-11-18): applying any other preset ends this lane first, which unloads the
+model, so no second copy can be resident. And **the owner's rest hours**
+(`[power]`'s `schedule_enabled` / `quiet_start` / `quiet_end`, read by
+`jarvis_power.schedule_drop()` - the same reader the power rules use): if a rest
+window is active when Atlas starts, the load asks for **no** residency and the
+record says why. A window that begins later is the power schedule's own job and
+still runs. There is **no `[energy]` rest-hours setting** - that section is the
+measured-watts record (`jarvis_energy.py`), so nothing here invents one. If the
+rest hours cannot be read, the model is not held (`keep_alive` omitted) and the
+record says that too.
+
+The order is the feature. The restart reconcile below points chat back at the
+default lane **and deletes `presets-choice.json`** when the on-demand pooled lane
+is gone; run first, it would delete the choice the next step was about to serve.
+So it runs only when the configured preset could not load, and then it runs
+exactly as it always has. If the configured preset cannot load, the answer in
+`restart_reconcile` keeps **both** sentences and never silently starts with
+neither: the block is `{"changed", "why", "lane", "preset", "startup_preset",
+"startup_applied", "keep_alive", "held_resident", "startup_error",
+"remembered_preset"}`, where `preset` is the start-up preset that failed and
+`remembered_preset` is the choice the reconcile cleared. `keep_alive` is `-1`
+when the load asked to stay, `null` when it did not (rest hours, or unreadable
+rest hours), and `held_resident` is the same fact as a boolean. On a successful
+start the same block says the preset loaded, names the lane and says it stays
+resident. A PC with no start-up preset gets today's reconcile dict, unchanged.
+
+**It never blocks the first request.** A 26B cold load measured about 50 s on
+this PC, so the start-up apply runs in **ONE daemon thread**
+(`_start_startup_check`, once per process) and `install()` returns immediately;
+the outcome lands in `_LAST_RECONCILE`, which `GET /api/work` already reports as
+`restart_reconcile`. With **no** start-up preset the reconcile runs in
+`install()`, synchronously, exactly as it always has - so every existing
+reconcile behaviour and test is unchanged.
+
+**Asking in chat.** These sentences reach `jarvis_presets.set_startup_preset` -
+the same function the route calls, so the same one card and the same file - and
+the answer names what will happen at the next start:
+
+- *"load the General preset when you start"*, *"... on startup"*, *"start with
+  the General preset every time Atlas starts"*;
+- *"make General my default preset on startup"*, *"make the General preset my
+  default when Atlas starts"*, *"set the default preset to General"*;
+- *"stop loading a preset when you start"*, *"don't load a preset on startup"*,
+  *"clear the startup preset"*, *"no preset on startup"* (these clear it).
+
+Each SET sentence needs a **start marker** as well as the word "preset", so the
+ordinary *"use the General preset"* / *"switch to the coding preset"* is still an
+apply NOW and never becomes a start-up setting; a near miss is harmless while a
+hijack would change the wrong thing.
+
+**What this deliberately does not do.** It adds **no gate row** -
+`change_own_config` already covers a config change, so nothing is appended to
+`jarvis_gate.py`. It adds **no phone route** and does not touch the desktop
+Settings page (`jarvis-desktop/src/settings.html`), which another lane owns; the
+route and the chat sentence are the two doors that exist.
+
+**Proof.** `backend/test_startup_preset.py` (101 checks, offline: no lane, no
+model, no card, its own `OPENJARVIS_CONFIG_DIR`): the file, its exact shape and
+its honest reads; ONE card and nothing written before the yes; already set, a
+denial, a clear (instant, no card), an unknown id, the Cloud row, a pending
+preset and every malformed body; the route and `startup_from_body` calling the
+one door; the start-up apply through the real `apply_preset` with the lane start
+and the model switch recorded and the lane and choice persisted; **the load
+asking for `keep_alive: -1`**, and that the ask reaches the ONE loader
+(`jarvis_big_coder.load`'s own `/api/generate` body, `load_coder`'s forwarding)
+rather than a second one; **rest hours** (standby and quiet windows, and an
+unreadable clock) turning the hold off with the reason recorded; **a later
+preset switch ending the held lane first**, so no second copy is resident;
+**a failed start-up apply falling back to today's reconcile with both sentences
+in the record**; an apply that raises; with no setting, the start-up step being
+the reconcile dict key for key and the same end state; `install()` returning
+while a blocked load is still blocked, and a second `install()` starting no
+second load; the `/api/work` block; and every chat sentence above, including the
+ordinary "use the General preset" that must not match.
+`backend/test_pooled_lane.py`'s reconcile rows and its new
+`t_a_pooled_start_can_ask_the_model_to_stay_resident` (the ask reaching the
+engine's `load_coder`, and the unasked call staying byte-identical), and
+`backend/test_presets_owner_ui.py`'s "exactly three literal callers" pin names
+the start-up preload as the third, with its reason.
