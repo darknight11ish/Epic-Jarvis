@@ -1833,10 +1833,39 @@ def reconcile_after_restart(*, probe=None, set_active_url=None,
             "preset_cleared": cleared}
 
 
-def _active_lane_key() -> Optional[str]:
-    url = _active_url()
+def _chat_lane_url() -> str:
+    """The lane a chat turn uses: the applied preset's own lane, else the default.
+
+    THE DEFECT THIS FIXES (measured on the owner's phone, 2026-11-21 ~20:24 PT).
+    `_active_lane_key()` and the `lane`/`active_lane` blocks read `_active_url()`,
+    which is the DEFAULT lane (`OLLAMA_URL`, port 11436 on this PC) - so while
+    the General preset was APPLIED and `presets-active-lane.json` pointed every
+    chat turn at the pooled lane (11450, its model resident), the contract still
+    reported the default lane. The phone compares the chosen preset's lane with
+    the reported one, so it drew "General - Chosen - not running now" over a
+    lane that was really running.
+
+    The applied lane is exactly what `jarvis_hud.active_ollama_url()` hands a
+    chat turn, and it is persisted in the loopback-only file
+    `_persisted_lane_url()` already reads. `_active_url()` itself is NOT
+    changed: `reconcile_after_restart()` needs the default lane to point chat
+    back at it. This is the contract's read only - it starts nothing, pauses
+    nothing, writes nothing, and never raises.
+    """
+    return _persisted_lane_url() or _active_url()
+
+
+def _active_lane_key(url: str = "") -> Optional[str]:
+    """The `LANES` key of the lane chat is on, or None when it is no preset lane.
+
+    `url` defaults to the applied-or-default lane (`_chat_lane_url()`); it is a
+    parameter so `live_status()` can pass the one reading it already took. The
+    port compare (not a string compare) accepts the same loopback spellings the
+    lane file accepts: `localhost` and `::1` name this PC too.
+    """
+    port = _port_of_url(url or _chat_lane_url())
     for key, lane in LANES.items():
-        if url == f"http://127.0.0.1:{lane['port']}":
+        if port == int(lane["port"]):
             return key
     return None
 
@@ -1849,23 +1878,36 @@ def live_status() -> dict:
 
     Reads only, and never switches a model, starts a lane or writes a file -
     the two things it DOES read from the owner's PC are which cloud keys are
-    saved (presence only) and this month's spend, both for `cloud`."""
+    saved (presence only) and this month's spend, both for `cloud`.
+
+    The `lane` block and `active_lane` report the APPLIED preset's lane when one
+    is persisted (`presets-active-lane.json`, the same file a chat turn is
+    pointed by), falling back to the default lane only when no applied lane
+    exists - the reading that makes the phone's chosen/running compare true.
+    """
     chosen = choice()
     chosen_preset = by_id(chosen) if chosen else None
     hw = hardware_block()
-    lane_key = _active_lane_key()
+    applied_lane = _persisted_lane_url()
+    lane_url = applied_lane or _active_url()
+    lane_key = _active_lane_key(lane_url)
     lane_info = LANES.get(lane_key) if lane_key else None
     lane_label = ""
     if lane_info:
         lane_label = f"{lane_info['card']} · {lane_info['words']}"
     lane = {
         "key": lane_key,
-        "base_url": _active_url(),
+        "base_url": lane_url,
         "card": lane_info["card"] if lane_info else "",
         "words": lane_info["words"] if lane_info else "",
         "label": lane_label,
         "ready": lane_info is not None,
-        "why": "" if lane_info else "no preset has been applied on this PC yet",
+        # Never a guess: with no applied lane this is today's sentence, and with
+        # an applied lane that names no preset port it says the address is not
+        # one of the presets' lanes instead of pretending nothing was applied.
+        "why": "" if lane_info else (
+            "the applied preset's lane is not one of the presets' lanes"
+            if applied_lane else "no preset has been applied on this PC yet"),
     }
     return {
         "found": f"{len(PRESETS)} focus presets",
@@ -1886,7 +1928,7 @@ def live_status() -> dict:
         "chosen": chosen,
         "chosen_preset": chosen,
         "chosen_model": chosen_preset.model if chosen_preset else None,
-        "active_lane": {"key": lane_key, "base_url": _active_url()},
+        "active_lane": {"key": lane_key, "base_url": lane_url},
         # What the startup reconcile did after the last restart (2026-11-08).
         # A read: it changes nothing and is empty on a PC with no pooled preset.
         "restart_reconcile": dict(_LAST_RECONCILE),

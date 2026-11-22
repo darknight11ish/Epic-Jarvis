@@ -51,7 +51,10 @@ def t_the_live_route_matches_the_generated_contract():
           "questionnaire" not in live, list(live))
     check("the route adds the live-only fields both readers use",
           live["chosen"] is None or isinstance(live["chosen"], str)
-          and live["lane"]["key"] in ("main", "coding", None)
+          # Every lane the contract can honestly report: this PC's own applied
+          # lane may be the pooled one now (2026-11-21), so it is a known key,
+          # never a second copy of the lane table.
+          and live["lane"]["key"] in tuple(P.LANES) + (None,)
           and live["active_lane"]["key"] == live["lane"]["key"]
           and isinstance(live["auto"], bool) and live["auto"] is False
           and live["apply_path"] == "/api/work/apply")
@@ -466,6 +469,111 @@ def t_general_uncensored_is_the_measured_uncensored_moe():
           "cannot be confused",
           gen["model"] == "gemma4:26b-a4b-it-qat"
           and gen["model"] != row["model"], (gen["model"], row["model"]))
+
+
+def t_the_contract_reports_the_applied_presets_lane():
+    """THE MEASURED PHONE BUG (owner's phone, 2026-11-21 ~20:24 PT).
+
+    Brain -> Focus presets drew "General - Chosen - not running now" while
+    General WAS running: `presets-choice.json` said `general`,
+    `presets-active-lane.json` said 11450 (the pooled lane, its model resident),
+    and yet `GET /api/work` reported `active_lane` = the default `main`/11436.
+    The phone compares the chosen preset's own lane (`general` -> `pooled`) with
+    that reported lane, so the two could never agree whenever a preset was
+    applied.
+
+    THE CAUSE: `_active_lane_key()` (and the `lane`/`active_lane` blocks) read
+    `_active_url()` - the DEFAULT lane from `jarvis_models.ollama_url_on_this_pc`
+    (`OLLAMA_URL`, 11436 here) - instead of the applied lane the product's own
+    chat path uses (`jarvis_hud.active_ollama_url()` reads the same
+    `presets-active-lane.json`). `_active_lane_key()` now takes the applied lane
+    first and falls back to the default only when no applied lane exists.
+
+    HERMETIC: its own temp `OPENJARVIS_CONFIG_DIR` and a pinned `OLLAMA_URL`,
+    both restored afterwards. The owner's real ~/.openjarvis is never read or
+    written; the lane file is only this test's. The four branches are (a) an
+    applied lane, (b) no file, (c) a non-loopback file, and (d) a loopback
+    port that is not one of the presets' lanes. (a) and (d) fail on the pre-fix
+    tree; (b) and (c) pin the behaviour the fix must leave unchanged.
+    """
+    import os
+    import shutil
+    import tempfile
+
+    saved = {name: os.environ.get(name)
+             for name in ("OPENJARVIS_CONFIG_DIR", "OLLAMA_URL")}
+    tmp = Path(tempfile.mkdtemp(prefix="presets-lane-"))
+    lane_file = tmp / P.LANE_FILE_NAME
+    every = "http://127.0.0.1:11436"
+    pooled = "http://127.0.0.1:11450"
+    os.environ["OPENJARVIS_CONFIG_DIR"] = str(tmp)
+    os.environ["OLLAMA_URL"] = every
+    try:
+        # (a) THE BUG: General applied, its lane persisted -> the contract must
+        # report the pooled lane, and the row the phone compares must agree.
+        lane_file.write_text(json.dumps({"base_url": pooled}), encoding="utf-8")
+        (tmp / P.CHOICE_FILE).write_text(json.dumps({"preset": "general"}),
+                                         encoding="utf-8")
+        body = P.live_status()
+        chosen_row = next((p for p in body["presets"] if p["id"] == "general"), {})
+        check("(a) an applied preset's lane is the reported active lane (pooled, 11450)",
+              body["active_lane"] == {"key": "pooled", "base_url": pooled}
+              and body["lane"]["key"] == "pooled"
+              and body["lane"]["base_url"] == pooled
+              and body["active_lane"]["base_url"] == pooled
+              and body["lane"]["ready"] is True
+              and body["lane"]["why"] == "", body["lane"])
+        check('(a) ... so the phone\'s "Chosen - not running now" compare agrees, '
+              "never a false mismatch",
+              body["chosen"] == "general"
+              and chosen_row.get("lane", {}).get("key") == body["lane"]["key"]
+              == body["active_lane"]["key"] == "pooled",
+              (body["chosen"], chosen_row.get("lane"), body["lane"]))
+
+        # (b) NO file: today's default answer, byte-for-byte the fields it had.
+        lane_file.unlink()
+        body = P.live_status()
+        check("(b) with no applied lane the previous/default answer is unchanged",
+              body["active_lane"] == {"key": "main", "base_url": every}
+              and body["lane"]["key"] == "main"
+              and body["lane"]["base_url"] == every
+              and body["lane"]["card"] == "RTX 2060"
+              and body["lane"]["ready"] is True
+              and body["lane"]["why"] == "", body["lane"])
+
+        # (c) a non-loopback file is ignored, exactly as the product ignores it.
+        lane_file.write_text(json.dumps({"base_url": "http://10.0.0.9:11450"}),
+                             encoding="utf-8")
+        body = P.live_status()
+        check("(c) a non-loopback lane file is ignored, with no error",
+              body["active_lane"] == {"key": "main", "base_url": every}
+              and body["lane"]["key"] == "main"
+              and body["lane"]["base_url"] == every
+              and body["lane"]["ready"] is True, body["lane"])
+
+        # (d) a loopback applied lane on no preset port: no key (never a guessed
+        # one), not ready, and the reason is the honest one - not "nothing was
+        # applied", because a preset WAS applied to an address this table lacks.
+        lane_file.write_text(json.dumps({"base_url": "http://127.0.0.1:11499"}),
+                             encoding="utf-8")
+        body = P.live_status()
+        check("(d) an applied lane on no preset port has no key, is not ready, "
+              "and says why - never a guess",
+              body["active_lane"]["key"] is None
+              and body["lane"]["key"] is None
+              and body["lane"]["base_url"] == "http://127.0.0.1:11499"
+              and body["lane"]["ready"] is False
+              and isinstance(body["lane"]["why"], str)
+              and bool(body["lane"]["why"])
+              and "no preset has been applied" not in body["lane"]["why"],
+              body["lane"])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def main() -> int:
@@ -922,6 +1030,7 @@ def main() -> int:
     t_three_gpu_rows_name_the_cards_by_role_not_by_index()
     t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane()
     t_the_live_route_matches_the_generated_contract()
+    t_the_contract_reports_the_applied_presets_lane()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
