@@ -4635,8 +4635,8 @@ def apply_deploy_manifest(action: ManifestAction, live, backup: Backup) -> dict:
     rebuilt into the manifest, and the result must be exactly the planned bytes.
     A live folder that moved under the run is a failure that names it, never a
     record of bytes nobody has. The old manifest (when there is one) is backed up
-    first, the new bytes are written, and the write is read back before it is
-    claimed. Returns `{"ok": bool, "why": str}`.
+    first, the new bytes go to a sibling temp file that is renamed into place, and
+    the write is read back before it is claimed. Returns `{"ok": bool, "why": str}`.
     """
     live = Path(live)
     try:
@@ -4656,7 +4656,12 @@ def apply_deploy_manifest(action: ManifestAction, live, backup: Backup) -> dict:
             backup.save(target)          # the old record is kept for a rollback
         else:
             backup.record_new(target)    # a new record is removed by a rollback
-        target.write_bytes(blob)
+        # ATOMIC: the whole JSON goes to a sibling temp file and is renamed over
+        # the target, so a kill during the write leaves either the old valid
+        # record or the new valid record - never a truncated one to refuse.
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_bytes(blob)
+        os.replace(tmp, target)
     except OSError as exc:
         return {"ok": False, "why": f"{DEPLOY_MANIFEST} could not be written ({exc})"}
     try:

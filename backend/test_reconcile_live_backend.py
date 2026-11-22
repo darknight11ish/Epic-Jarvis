@@ -6002,6 +6002,71 @@ def t_no_installed_desktop_means_no_manifest_rather_than_a_guessed_one():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_a_manifest_write_killed_before_the_rename_keeps_the_old_valid_record():
+    """Atomicity: a kill after the temp write and before the rename keeps the old record.
+
+    The tool used to write DEPLOY-MANIFEST with one `write_bytes`, so a kill during
+    that write could leave a truncated, unparseable JSON record - and the updater then
+    refuses the install. The write is now `temp + os.replace`, so the rename either
+    happens or does not. This simulates the one instant the change exists for:
+    `os.replace` raises after the full new JSON has reached the sibling temp file.
+    The old manifest must still be byte-identical and still parse and validate, and
+    the bytes that were about to be renamed must be the complete new record.
+    """
+    root = tmpdir()
+    try:
+        live = root / "live"
+        write(live / "one.py", '"""one, old"""\n')
+        write(live / "two.py", '"""two"""\n')
+        old_files = {leaf: R.file_fingerprint((live / leaf).read_bytes())
+                     for leaf in ("one.py", "two.py")}
+        old_blob = R.build_deploy_manifest("a" * 40, "1.0.0", old_files)
+        target = live / R.DEPLOY_MANIFEST
+        target.write_bytes(old_blob)
+        check("manifest-atomic: the fixture starts from a valid old record",
+              R.read_deploy_manifest(live)["ok"] is True)
+
+        write(live / "one.py", '"""one, new"""\n')
+        new_files = {leaf: R.file_fingerprint((live / leaf).read_bytes())
+                     for leaf in ("one.py", "two.py")}
+        new_blob = R.build_deploy_manifest("b" * 40, "2.0.0", new_files)
+        action = R.ManifestAction("write", blob=new_blob,
+                                  names=tuple(sorted(new_files)),
+                                  commit="b" * 40, version="2.0.0")
+        seen = {}
+        real_replace = R.os.replace
+
+        def crash_between_temp_and_replace(src, dst, *args, **kwargs):
+            if Path(dst).name == R.DEPLOY_MANIFEST:
+                seen["src"] = Path(src)
+                seen["bytes"] = Path(src).read_bytes()
+                raise OSError("simulated kill between the temp write and the replace")
+            return real_replace(src, dst, *args, **kwargs)
+
+        with mock.patch.object(R.os, "replace", crash_between_temp_and_replace):
+            result = R.apply_deploy_manifest(action, live,
+                                             R.Backup(live, stamp="fixture"))
+        check("manifest-atomic: the failed rename is a failed write, never a pass",
+              result["ok"] is False and R.DEPLOY_MANIFEST in result["why"], result)
+        temp = seen.get("src")
+        check("manifest-atomic: the new bytes went to a sibling temp file first",
+              temp is not None and temp.parent == live and temp.name.endswith(".tmp"),
+              seen.get("src"))
+        complete = seen.get("bytes") == new_blob
+        parsed = json.loads(seen["bytes"]) if complete else None
+        check("manifest-atomic: ... holding the complete, parseable new record",
+              complete and isinstance(parsed, dict)
+              and parsed.get("commit") == "b" * 40, complete)
+        check("manifest-atomic: the previous record is still there, byte-identical",
+              target.read_bytes() == old_blob,
+              (len(target.read_bytes()), len(old_blob)))
+        check("manifest-atomic: ... and it still parses and validates",
+              R.read_deploy_manifest(live)["ok"] is True,
+              R.read_deploy_manifest(live))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 # --------------------------------------------------------------------------
 #   15. THE 2026-11-06 DEPLOY GAP: PR 2's card fields and the activity guard
 # --------------------------------------------------------------------------
@@ -7255,6 +7320,7 @@ def main():
                t_the_manifest_is_written_even_when_the_route_probes_are_skipped,
                t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted,
                t_no_installed_desktop_means_no_manifest_rather_than_a_guessed_one,
+               t_a_manifest_write_killed_before_the_rename_keeps_the_old_valid_record,
                t_source_commit_is_recorded_beside_version_and_never_guessed,
                t_source_commit_blob_is_stable_and_validated,
                t_the_lists_parse_from_apply_patches,
