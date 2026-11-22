@@ -1722,7 +1722,7 @@ fnv 1.0.7 - followed: MIT (offered: Apache-2.0 / MIT)
   Copyright (c) 2017 Contributors
 foldhash 0.2.0 - followed: Zlib (offered: Zlib)
   Copyright (c) 2024 Orson Peters
-form_urlencoded 1.2.2 - followed: MIT (offered: MIT OR Apache-2.0)
+form_urlencoded 1.2.3 - followed: MIT (offered: MIT OR Apache-2.0)
   Copyright (c) 2013-2016 The rust-url developers
 futures-channel 0.3.34 - followed: MIT (offered: MIT OR Apache-2.0)
   Copyright (c) 2016 Alex Crichton
@@ -2235,7 +2235,7 @@ unicode-segmentation 1.13.3 - followed: MIT (offered: MIT OR Apache-2.0)
   Copyright (c) 2015 The Rust Project Developers
 untrusted 0.9.0 - followed: ISC (offered: ISC)
   Copyright (c) Brian Smith (from Cargo.toml; its licence files name no holder)
-url 2.5.8 - followed: MIT (offered: MIT OR Apache-2.0)
+url 2.5.9 - followed: MIT (offered: MIT OR Apache-2.0)
   Copyright (c) 2013-2025 The rust-url developers
 urlpattern 0.6.0 - followed: MIT (offered: MIT)
   Copyright (c) 2021 the Deno authors
