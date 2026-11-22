@@ -826,6 +826,13 @@ CLASSIFICATION = {
     # what WOULD be removed (a read); the confirm ends in the PC's own
     # `devices_cleanup` approval card. The phone gets no clean-up button in this
     # slice, so this is a recorded one-sided decision, not a missing screen.
+    # MERGED 2026-11-21 with main's #1451 backend half (the same route, shipped
+    # `planned` + PENDING_CLIENTS because no app called it): this branch ships
+    # the desktop button that CALLS it (jarvis-desktop/src-tauri/src/devices.rs
+    # CLEANUP_PATH, src/devices.js `devices_cleanup`), the phone still has no
+    # call site, so the route is `deliberate` here and main's PENDING_CLIENTS
+    # line was removed with it - a pending entry must not survive its first
+    # client (the checker fails on that, section "PENDING_CLIENTS" below).
     "/api/devices/cleanup": ("deliberate", "The owner's dry-run-first clean-up of duplicate/inactive devices (Gemini ruling 5.6, 2026-11-21) is the DESKTOP's button: Settings -> Devices asks the PC what WOULD be removed, preserves anything active within 30 days, and only the confirm applies it - ending in the PC's own `devices_cleanup` approval card (202 while it waits, 200 with the removed/kept counts after the owner answers). The phone's Settings -> Devices keeps the list and Remove it already has and gains no clean-up button in this slice; the phone half is its own follow-up against this same contract. ARCHITECTURE section 8."),
     # PWA slice 2 (2026-10-23): the BROWSER is the client here. The phone is
     # already a paired device with its own key and never opens a cookie session,

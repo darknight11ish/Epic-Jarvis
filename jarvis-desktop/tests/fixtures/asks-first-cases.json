@@ -1161,6 +1161,17 @@
        "windows_hello": false
       },
       {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
+       "windows_hello": false
+      },
+      {
        "action": "app_build_android",
        "confirmations": 1,
        "fixed": false,
@@ -4037,6 +4048,17 @@
        "windows_hello": false
       },
       {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
+       "windows_hello": false
+      },
+      {
        "action": "app_build_android",
        "confirmations": 1,
        "fixed": false,
@@ -6906,6 +6928,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN",
+       "windows_hello": false
+      },
+      {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
        "windows_hello": false
       },
       {
@@ -9790,6 +9823,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN",
+       "windows_hello": false
+      },
+      {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
        "windows_hello": false
       },
       {
@@ -12678,6 +12722,17 @@
        "windows_hello": false
       },
       {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
+       "windows_hello": false
+      },
+      {
        "action": "app_build_android",
        "confirmations": 1,
        "fixed": false,
@@ -15559,6 +15614,17 @@
        "windows_hello": false
       },
       {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
+       "windows_hello": false
+      },
+      {
        "action": "app_build_android",
        "confirmations": 1,
        "fixed": false,
@@ -18431,6 +18497,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN",
+       "windows_hello": false
+      },
+      {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
        "windows_hello": false
       },
       {
@@ -21311,6 +21388,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN",
+       "windows_hello": false
+      },
+      {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
        "windows_hello": false
       },
       {
@@ -24205,6 +24293,17 @@
        "windows_hello": false
       },
       {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
+       "windows_hello": false
+      },
+      {
        "action": "app_build_android",
        "confirmations": 1,
        "fixed": false,
@@ -27083,6 +27182,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN",
+       "windows_hello": false
+      },
+      {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
        "windows_hello": false
       },
       {
@@ -29974,6 +30084,17 @@
        "windows_hello": false
       },
       {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
+       "windows_hello": false
+      },
+      {
        "action": "app_build_android",
        "confirmations": 1,
        "fixed": false,
@@ -32852,6 +32973,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN",
+       "windows_hello": false
+      },
+      {
+       "action": "devices_cleanup",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "devices_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clean up duplicate or inactive devices",
        "windows_hello": false
       },
       {

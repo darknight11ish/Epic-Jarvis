@@ -8,7 +8,10 @@ received: the app builder's two `_RISK` rows and the card timer in
 the Obsidian notes editor's `edit_vault_note` `_RISK` row (PR #1350, missing
 from the live gate measured 2026-11-19 - without it the owner's own note append
 is classified as risky and its card demands Windows Hello, so a headless field
-battery can never approve it).
+battery can never approve it), and the device list's `devices_cleanup` risk row
+and `_NO_RULE_FROM_DENIAL` membership (Gemini's ruling 5.6, 2026-11-21 - without
+them the owner's own cleanup card takes the unclassified fallback, says the
+cleanup is permanent and outbound, and demands Windows Hello).
 
 Two repairs carry MORE than one edit in one file, and both are proved below to
 land as one write with one backup. The card timer is TWO hunks of
@@ -117,6 +120,13 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
         '    "calculator": "auto",\n'
         '    "send_file_to_phone": "send_file_to_phone",\n'
         "}\n"
+        "\n"
+        "# A live jarvis_gate.py always carries this table too: the\n"
+        "# devices-cleanup repair (2026-11-21) anchors on it, the same way\n"
+        "# the tool-actions repair anchors on the table above.\n"
+        "_NO_RULE_FROM_DENIAL = frozenset({\n"
+        '    "pair_device",\n'
+        "})\n"
         "\n"
         'def _tiers(framework: Optional[dict] = None) -> dict:\n'
         '    """The tier table, validated. An unrecognised tier string - "Never" with a\n'
@@ -426,6 +436,78 @@ def t_the_real_bases_carry_both_pieces():
     patch = (REPO / "backend" / "chat-history.patch").read_text(encoding="utf-8")
     check("chat-history.patch names both routes", "/api/history/pin" in patch
           and "/api/history/archive" in patch)
+
+
+def _denial_actions(text: str) -> set:
+    """The actions `_NO_RULE_FROM_DENIAL` really holds, read with `ast`.
+
+    The table is built as a `frozenset({...})` plus module-level
+    `_NO_RULE_FROM_DENIAL | {...}` unions (one per feature that adds a row),
+    so a literal-only reader misses every row a later feature added.
+    """
+    found = set()
+    for node in ast.parse(text).body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "_NO_RULE_FROM_DENIAL"
+                   for t in targets):
+            continue
+        for sub in ast.walk(value):
+            if isinstance(sub, ast.Set):
+                found |= {e.value for e in sub.elts
+                          if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return found
+
+
+def t_the_devices_cleanup_rows_repair_a_live_gate_without_them():
+    """Gemini's ruling 5.6 (2026-11-21): the device-list cleanup card.
+
+    Without the row `risk_for("devices_cleanup")` answers the unclassified
+    fallback - permanent and outbound - so the owner's own local, reversible
+    cleanup demands Windows Hello and its card says things that are false. The
+    repair must insert the published base's own row and give the action its
+    `_NO_RULE_FROM_DENIAL` membership, in ONE write, and must be a no-op on a
+    gate that already carries both.
+    """
+    mod = load_tool()
+    repair = mod.REPAIRS["devices-cleanup"]
+    base = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    base_rows = risk_table(base)
+    base_row = base_rows.get("devices_cleanup")
+    check("the published base carries the action's risk row",
+          isinstance(base_row, tuple) and base_row[:2] == ("yes", "local"),
+          repr(base_row))
+    check("... and its denial is not a standing rule",
+          "devices_cleanup" in _denial_actions(base),
+          sorted(_denial_actions(base))[-5:])
+    live = a_live_folder()
+    check("a live-shaped gate without the rows has no entry to classify",
+          "devices_cleanup" not in risk_table(
+              (live / "jarvis_gate.py").read_text(encoding="utf-8")))
+    check("the tool reports the cleanup rows missing",
+          mod.check_one(live, repair) == "missing")
+    check("... and one apply writes them",
+          mod.apply_one(live, repair, stamp="test") == "applied")
+    gate_after = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+    check("the repaired _RISK table is the base's own row",
+          risk_table(gate_after).get("devices_cleanup") == base_row,
+          repr(risk_table(gate_after).get("devices_cleanup")))
+    check("... and the denial membership landed with it",
+          "devices_cleanup" in _denial_actions(gate_after),
+          sorted(_denial_actions(gate_after))[-5:])
+    check("... exactly once each", risk_key_uses(gate_after, "devices_cleanup") == 2,
+          risk_key_uses(gate_after, "devices_cleanup"))
+    check("... a second apply is the idempotent no-op",
+          mod.apply_one(live, repair, stamp="test-2") == "already")
+    check("... it did not insert a second copy",
+          risk_key_uses((live / "jarvis_gate.py").read_text(encoding="utf-8"),
+                        "devices_cleanup") == 2)
+    check("... with exactly one backup for the one write",
+          len(list(live.glob("jarvis_gate.py.before-repair-*"))) == 1)
 
 
 def load_reconcile():

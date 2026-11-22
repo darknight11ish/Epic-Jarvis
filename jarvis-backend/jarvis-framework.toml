@@ -901,6 +901,15 @@ pair_device               = "ask"
 unretire_shared_key       = "ask"
 register_approval_key     = "ask"
 
+# Cleaning up duplicate or inactive devices (jarvis_devices.py, Gemini's ruling
+# 5.6 of 2026-11-21): concurrent multi-device polling is expected, so the same
+# phone used for months leaves a trail of pairing rows. The owner starts it
+# with the button in Settings, Devices; a dry run shows what would go first,
+# and only ONE card's yes removes anything. Must stay "ask": the route refuses
+# any other tier rather than take a looser line as consent, because removing
+# pairing rows must never become a standing yes.
+devices_cleanup           = "ask"
+
 # Adding a task's change to a Jarvis-built app inside Projects (jarvis_apps.py,
 # apps-in-projects.patch, docs/APPS-IN-PROJECTS-DESIGN.md): ONE card per
 # change, showing every file and the whole change. A RISKY card (Windows Hello

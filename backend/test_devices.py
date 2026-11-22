@@ -32,6 +32,14 @@ docs/PAIRING-DESIGN.md section 10's backend list, row by row:
   * Remove, Retire (uses_it_yourself), Bring back (a card, PC only, 409
     under Lockdown - and 409 with plain words, no card, while a device holds
     a key of its own);
+  * cleaning up duplicate/inactive devices (Gemini's ruling 5.6, 2026-11-21):
+    the dry run's list and its 200 contract, writing nothing and raising no
+    card; the 30-day-active rule; the last-active and requesting-device
+    promises; ONE devices_cleanup card for a real run, nothing written until
+    it is approved; the approved run removing exactly the listed rows with
+    the registry copy written first; a denial and a refusal changing nothing
+    and saying so; and the gate rows, card words, "What asks first" row,
+    settings copies, parity entry and API section that make the action real;
   * devices/registry.json is not in a backup (jarvis_backup's own code);
   * the tables that must know the new actions;
   * no key, secret or code in any audit line, event or printed line.
@@ -41,8 +49,10 @@ tiers and clocks are stand-ins.
 """
 from __future__ import annotations
 
+import ast
 import contextlib
 import hashlib
+import importlib.util
 import io
 import json
 import re
@@ -50,11 +60,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import types
 import typing
 from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:                       # pragma: no cover - Python < 3.11
+    import tomli as tomllib
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -2602,6 +2618,501 @@ def t_a_label_cannot_make_two_rows_read_the_same():
     code, out = D.label({"id": dev, "label": ""}, you="pc")
     check("CONTROL: an empty label still clears it, back to the name it sent",
           code == 200 and out["shown"] == "Pixel 9", (code, out))
+
+
+# ==========================================================================
+#   8. Cleaning up duplicate/inactive devices (Gemini's ruling 5.6, 2026-11-21)
+# ==========================================================================
+
+CLEANUP = "devices_cleanup"
+
+
+def _registry(*rows):
+    """Write a registry holding `rows` (already shaped) and return its path."""
+    doc = {"version": 1, "devices": list(rows),
+           "shared": {"retired": False, "retired_at": None,
+                      "last_other_seen": None, "last_other_address": None}}
+    p = D.registry_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+    D._CACHE.update(stamp=None, doc=None, why="")
+    return p
+
+
+def _row(rid, name, *, days=None, label=None, created_days=400):
+    """One registry row exactly as pairing writes it.
+
+    `days` is how long ago it was last seen (None = never seen), and
+    `created_days` how long ago it was paired. Both are measured from
+    D._wall(), so a test's Clock decides every time."""
+    now = D._wall()
+    row = {"id": rid, "name": name, "kind": "phone",
+           "token_sha256": D._hash("key-" + rid),
+           "created": int(now - created_days * 86400),
+           "last_seen": None if days is None else int(now - days * 86400),
+           "removed": None, "approval_key": None}
+    if label is not None:
+        row["label"] = label
+    return row
+
+
+def _cleanup_names(out):
+    return [r["name"] for r in out.get("would_remove") or []]
+
+
+class WaitingGate:
+    """A gate that holds the card open until the test answers it."""
+
+    def __init__(self):
+        self.cards = []
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.verdict = APPROVE
+
+    def __call__(self, action, detail, prompt):
+        self.cards.append((action, detail, prompt))
+        self.entered.set()
+        self.release.wait(10)
+        return self.verdict
+
+
+def _spawn_thread(fn):
+    threading.Thread(target=fn, daemon=True).start()
+
+
+def _wait_for(predicate, seconds=5.0):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return bool(predicate())
+
+
+def _gate_table(text: str, name: str) -> dict:
+    """The table Python builds from `text`: the `name = {...}` literal with
+    every module-level `name.update({...})` folded in, read with `ast` - the
+    table the gate answers with, not the literal (CLAUDE.md: a grep-only
+    reader reported a row missing on a tree where the gate answered).
+
+    Built here rather than imported from another suite so this file keeps its
+    own dependencies; `ast.literal_eval` only ever sees constants."""
+    table = {}
+    for node in ast.parse(text).body:
+        target, value = None, None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, value = node.target.id, node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name):
+            target, value = node.targets[0].id, node.value
+        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) \
+                and isinstance(node.value.func, ast.Attribute) \
+                and node.value.func.attr == "update" \
+                and isinstance(node.value.func.value, ast.Name) and node.value.args:
+            target, value = node.value.func.value.id, node.value.args[0]
+        if target != name or not isinstance(value, ast.Dict):
+            continue
+        for k, v in zip(value.keys, value.values):
+            if isinstance(k, ast.Constant):
+                try:
+                    table[k.value] = ast.literal_eval(v)
+                except (ValueError, TypeError):
+                    continue
+    return table
+
+
+def _denial_actions(text: str) -> set:
+    """What `_NO_RULE_FROM_DENIAL` really holds: the literal given to
+    `frozenset` at its definition plus every `_NO_RULE_FROM_DENIAL | {...}`
+    union at module level, folded with `ast` (a later feature's row lives in
+    the union, not the literal)."""
+    found = set()
+    for node in ast.parse(text).body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "_NO_RULE_FROM_DENIAL"
+                   for t in targets):
+            continue
+        for sub in ast.walk(value):
+            if isinstance(sub, ast.Set):
+                found |= {e.value for e in sub.elts
+                          if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return found
+
+
+def t_cleanup_dry_run_lists_duplicates_and_inactive_and_writes_nothing():
+    fresh()
+    with Clock():
+        p = _registry(_row("d00000001", "Pixel 9", days=95, label="Work phone"),
+                      _row("d00000002", "Pixel 9", days=90),
+                      _row("d00000003", "OnePlus 12", days=3),
+                      _row("d00000004", "Old tablet", days=210))
+        before = p.read_bytes()
+        gate = Gate()
+        code, out = D.cleanup({"dry_run": True}, you="pc", gate=gate)
+    check("dry run: 200, and the contract's exact shape",
+          code == 200 and out.get("ok") is True and out.get("dry_run") is True
+          and out.get("total") == 4 and out.get("keep_active_30d") == 1
+          and out.get("kept_last_active") is True, (code, out))
+    check("dry run: the stale duplicates and the inactive tablet, oldest first, "
+          "named the way the device list shows them",
+          _cleanup_names(out) == ["Old tablet", "Work phone", "Pixel 9"]
+          and [r["last_seen_days"] for r in out["would_remove"]] == [210, 95, 90],
+          out.get("would_remove"))
+    check("dry run: the device used 3 days ago is kept, and counted as kept",
+          "OnePlus 12" not in _cleanup_names(out) and out["keep_active_30d"] == 1)
+    check("dry run: it wrote NOTHING and left no copy",
+          p.read_bytes() == before
+          and not list(p.parent.glob("registry.json.before-cleanup-*")),
+          sorted(q.name for q in p.parent.iterdir()))
+    check("dry run: it raised no card at all", gate.cards == [],
+          gate.cards[0][0] if gate.cards else "no cards")
+    bad = [D.cleanup(body, you="pc")[0] for body in
+           ({}, {"dry_run": "yes"}, {"dry_run": True, "id": "d00000001"}, [])]
+    check("dry run: any other body is refused 400, and nothing is raised",
+          bad == [400, 400, 400, 400], bad)
+
+
+def t_cleanup_keeps_every_device_used_in_the_last_thirty_days():
+    fresh()
+    with Clock():
+        p = _registry(_row("d00000001", "Used 29 days ago", days=29),
+                      _row("d00000002", "Used exactly 30 days ago", days=30),
+                      _row("d00000003", "Used 31 days ago", days=31),
+                      _row("d00000004", "Paired 2 days ago and never polled",
+                           days=None, created_days=2),
+                      _row("d00000005", "Paired 40 days ago and never polled",
+                           days=None, created_days=40))
+        code, out = D.cleanup({"dry_run": True}, you="pc", gate=Gate())
+        names = _cleanup_names(out)
+        check("the 30-day line is the ruling's: 30 days is active, 31 is not",
+              "Used 29 days ago" not in names
+              and "Used exactly 30 days ago" not in names
+              and "Used 31 days ago" in names, names)
+        check("a device paired recently counts as used, even before its first poll",
+              "Paired 2 days ago and never polled" not in names, names)
+        check("a device never polled since it was paired long ago is inactive",
+              "Paired 40 days ago and never polled" in names, names)
+        check("keep_active_30d counts exactly the three active rows",
+              out["keep_active_30d"] == 3 and out["total"] == 5, out)
+        check("the two inactive rows are what a cleanup would remove",
+              names == ["Paired 40 days ago and never polled", "Used 31 days ago"],
+              names)
+        # A registry where nothing is removable: the real run is honest about
+        # it and raises NO card for an empty list.
+        p = _registry(_row("d00000011", "Fresh phone", days=2),
+                      _row("d00000012", "Older but active", days=12))
+        before = p.read_bytes()
+        gate = Gate()
+        code, out = D.cleanup({"dry_run": False}, you="pc", gate=gate,
+                              spawn=now_spawn)
+    check("a real run with nothing to remove: 200 with zeros, and no card",
+          code == 200 and out == {"ok": True, "removed": 0, "kept": 2}
+          and gate.cards == [], (code, out, gate.cards))
+    check("... and it wrote nothing", p.read_bytes() == before)
+
+
+def t_cleanup_never_lists_the_last_active_or_the_requesting_device():
+    fresh()
+    with Clock():
+        _registry(_row("d00000001", "Newest stale phone", days=100),
+                  _row("d00000002", "Older stale phone", days=120),
+                  _row("d00000003", "Oldest stale phone", days=140),
+                  _row("d00000004", "The asking phone", days=500))
+        code, out = D.cleanup({"dry_run": True}, you="d00000004", gate=Gate())
+        names = _cleanup_names(out)
+        check("the last active device (the newest sighting) is never listed",
+              "Newest stale phone" not in names, names)
+        check("the device making the request is never listed",
+              "The asking phone" not in names, names)
+        check("the rest of the stale rows are listed, oldest first",
+              names == ["Oldest stale phone", "Older stale phone"], names)
+        check("kept_last_active is the ruling's promise, always true",
+              out.get("kept_last_active") is True)
+        code, out_pc = D.cleanup({"dry_run": True}, you="pc", gate=Gate())
+    check("from the PC, the newest device is still kept (only the asker changed)",
+          "Newest stale phone" not in _cleanup_names(out_pc), _cleanup_names(out_pc))
+
+
+def t_cleanup_a_real_run_raises_one_card_and_writes_nothing_until_approved():
+    fresh()
+    gate = WaitingGate()
+    try:
+        with Clock():
+            p = _registry(_row("d00000001", "Pixel 9", days=200),
+                          _row("d00000002", "Pixel 9", days=190),
+                          _row("d00000003", "OnePlus 12", days=1))
+            before = p.read_bytes()
+            code, out = D.cleanup({"dry_run": False}, you="pc", gate=gate,
+                                  spawn=_spawn_thread)
+            check("the request that raises the card answers 202 while it waits",
+                  code == 202 and out.get("ok") is True
+                  and out.get("waiting") is True, (code, out))
+            check("the card really was raised, and the gate is holding it",
+                  gate.entered.wait(5) and len(gate.cards) == 1, len(gate.cards))
+            code2, out2 = D.cleanup({"dry_run": False}, you="pc", gate=gate)
+            check("a second press while it waits answers 202 and raises NO second card",
+                  code2 == 202 and out2.get("waiting") is True
+                  and len(gate.cards) == 1, (code2, out2, len(gate.cards)))
+            action, detail, prompt = gate.cards[0]
+            check("the one card is devices_cleanup, tier ask, listing the rows",
+                  action == CLEANUP and detail.get("count") == 2
+                  and "these 2 device rows" in prompt
+                  and prompt.count("Pixel 9") == 2, (action, prompt))
+            check("NOTHING was written or copied while the card waited",
+                  p.read_bytes() == before
+                  and not list(p.parent.glob("registry.json.before-cleanup-*")))
+            gate.verdict = APPROVE
+            gate.release.set()
+            check("the run finishes once the owner approves",
+                  _wait_for(lambda: bool(D._CL_RESULT)))
+            code3, out3 = D.cleanup({"dry_run": False}, you="pc", gate=gate)
+            check("the first call after the approval collects 200 and the counts",
+                  code3 == 200 and out3.get("ok") is True
+                  and out3.get("removed") == 2 and out3.get("kept") == 1,
+                  (code3, out3))
+            check("still exactly ONE card was ever raised", len(gate.cards) == 1)
+    finally:
+        gate.release.set()
+        D._reset_for_tests()
+
+
+def t_cleanup_an_approved_run_removes_exactly_the_listed_rows_copying_first():
+    fresh()
+    copies = []
+    with Clock():
+        p = _registry(_row("d00000001", "Stale one", days=100),
+                      _row("d00000002", "Fresh one", days=2),
+                      _row("d00000003", "Stale two", days=300),
+                      _row("d00000004", "Fresh two", days=20))
+        before = p.read_bytes()
+        code, plan = D.cleanup({"dry_run": True}, you="pc")
+        listed = {(r["name"], r["last_seen_days"]) for r in plan["would_remove"]}
+        seen = {}
+        real_write = D._write
+
+        def spy(doc):
+            seen["copies_at_write"] = [q.name for q in p.parent.glob(
+                "registry.json.before-cleanup-*")]
+            return real_write(doc)
+
+        D._write = spy
+        try:
+            first, _raising = D.cleanup({"dry_run": False}, you="pc",
+                                        gate=Gate(APPROVE), spawn=now_spawn)
+            code, out = D.cleanup({"dry_run": False}, you="pc",
+                                  gate=Gate(APPROVE), spawn=now_spawn)
+        finally:
+            D._write = real_write
+        copies = list(p.parent.glob("registry.json.before-cleanup-*"))
+    check("the dry run listed the two stale rows, and the real run answers (202, then 200)",
+          listed == {("Stale one", 100), ("Stale two", 300)}
+          and first == 202 and code == 200 and out.get("ok") is True
+          and out.get("removed") == 2 and out.get("kept") == 2,
+          (listed, first, code, out))
+    check("the registry copy already existed when the registry was written",
+          len(seen.get("copies_at_write") or []) == 1, seen)
+    check("the copy is the registry exactly as it was before the run",
+          len(copies) == 1 and copies[0].read_bytes() == before,
+          [q.name for q in copies])
+    doc, why = D.load()
+    live = [D.row_shown(r) for r in doc["devices"] if not r.get("removed")]
+    check("exactly the dry run's rows were removed; the active ones are untouched",
+          live == ["Fresh one", "Fresh two"] and not why, (live, why))
+    check("a removed row keeps its history and loses its key, approval key and label",
+          all(r.get("token_sha256") == "" and r.get("approval_key") is None
+              and r.get("label") is None and isinstance(r.get("removed"), int)
+              for r in doc["devices"] if r.get("removed")))
+    backup_name = copies[0].name if copies else ""
+    check("audit: devices.cleaned with the counts and the copy's file name",
+          any(e == "devices.cleaned" and d.get("removed") == 2
+              and d.get("kept") == 2 and d.get("backup") == backup_name
+              for e, d in AUDIT), AUDIT[-3:])
+    check("a devices event told both apps to re-read the list",
+          ("devices", {}) in EVENTS, EVENTS)
+
+
+def t_cleanup_a_denied_or_refused_card_changes_nothing_and_reports_it():
+    fresh()
+    with Clock():
+        p = _registry(_row("d00000001", "Stale phone", days=400),
+                      _row("d00000002", "Fresh phone", days=1))
+        before = p.read_bytes()
+        first, _raising = D.cleanup({"dry_run": False}, you="pc",
+                                    gate=Gate(DENY), spawn=now_spawn)
+        code, out = D.cleanup({"dry_run": False}, you="pc", gate=Gate(DENY),
+                              spawn=now_spawn)
+        check("a denied card: 202, then 200 with the owner's no and zero removed",
+              first == 202 and code == 200 and out.get("ok") is False
+              and out.get("denied") is True and out.get("removed") == 0
+              and out.get("kept") == 2
+              and out.get("error") == D.CLEANUP_WORDS["denied"], (first, code, out))
+        check("a denial changed nothing and left no copy",
+              p.read_bytes() == before
+              and not list(p.parent.glob("registry.json.before-cleanup-*")))
+        reason = "the PC could not show the approval card just now"
+        gate = Gate(Verdict(False, "ask", "refused", reason))
+        first, _raising = D.cleanup({"dry_run": False}, you="pc", gate=gate,
+                                    spawn=now_spawn)
+        code, out = D.cleanup({"dry_run": False}, you="pc", gate=gate,
+                              spawn=now_spawn)
+        check("a refusal returns the gate's own words, and nothing changed",
+              first == 202 and code == 200 and out.get("refused") is True
+              and out.get("error") == reason and out.get("removed") == 0
+              and p.read_bytes() == before, (first, code, out))
+        failing = Gate()
+
+        def boom(*_a, **_k):
+            raise RuntimeError("boom")
+
+        failing.verdict = boom
+        first, _raising = D.cleanup({"dry_run": False}, you="pc", gate=failing,
+                                    spawn=now_spawn)
+        code, out = D.cleanup({"dry_run": False}, you="pc", gate=Gate(),
+                              spawn=now_spawn)
+        check("a gate that fails: refused, nothing removed, no traceback on the wire",
+              first == 202 and code == 200 and out.get("refused") is True
+              and "RuntimeError" in (out.get("error") or "")
+              and out.get("removed") == 0 and p.read_bytes() == before,
+              (first, code, out))
+        keep = fw.action_tier
+        fw.action_tier = lambda a: "auto"
+        try:
+            code, out = D.cleanup({"dry_run": False}, you="pc", gate=Gate(),
+                                  spawn=now_spawn)
+        finally:
+            fw.action_tier = keep
+        check("a looser tier line is refused rather than run cardless",
+              code == 503 and "is tier 'auto'" in (out.get("error") or "")
+              and out.get("removed") is None and p.read_bytes() == before,
+              (code, out))
+
+
+def t_the_cleanup_gate_rows_page_words_and_settings():
+    # The ROW lives in the published base `jarvis-backend/jarvis_gate.py` (the
+    # ruling of 2026-11-14: a new gate row is a base + repair-tool change, never
+    # a new patch). `_stack.stand_in` shows the patched tree as TEXT with gap
+    # markers where a hunk could not be replayed, so it is read for presence
+    # only - anything that must PARSE is read from the published base itself.
+    gate_text = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    risk = _gate_table(gate_text, "_RISK").get(CLEANUP)
+    check("devices_cleanup: a _RISK row, local and reversible",
+          isinstance(risk, tuple) and risk[:2] == ("yes", "local"), risk)
+    check("... whose words say a copy is written first and nothing leaves this PC",
+          isinstance(risk, tuple) and "copy of the device list" in risk[2]
+          and "nothing leaves this PC" in risk[2], risk)
+    check("... and that the newest and recently-used devices are never removed",
+          isinstance(risk, tuple) and "last 30 days" in risk[2]
+          and "newest device" in risk[2], risk)
+    denial = _denial_actions(gate_text)
+    check("a no is not a standing rule (_NO_RULE_FROM_DENIAL)",
+          CLEANUP in denial, sorted(denial)[-5:])
+    spec = importlib.util.spec_from_file_location(
+        "repair_tool_for_devices_test",
+        REPO / "tools" / "repair_live_backend_gaps.py")
+    repair_tool = importlib.util.module_from_spec(spec)
+    sys.modules["repair_tool_for_devices_test"] = repair_tool
+    spec.loader.exec_module(repair_tool)
+    repair = repair_tool.REPAIRS.get("devices-cleanup")
+    check("the live-install carrier is the repair tool, not a new patch",
+          repair is not None
+          and f'"{CLEANUP}": ("yes", "local"' in repair.probes,
+          repair.probes if repair is not None else None)
+    import jarvis_card_words as W
+    check("the card has a written title", CLEANUP in W.TITLES, W.TITLES.get(CLEANUP))
+    check("... and a short summary of its own", CLEANUP in W.SUMMARY,
+          W.SUMMARY.get(CLEANUP))
+    import jarvis_asks_first as AF
+    ids = [x for _title, rows in AF.GROUPS for x in rows]
+    check("it is on the What asks first page, always asks and is never loosened",
+          CLEANUP in ids and CLEANUP in AF.HARD_LIMITS and CLEANUP in AF.MUST_ASK
+          and CLEANUP not in AF.SWITCHABLE)
+    cfg = tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml")
+                        .read_text(encoding="utf-8"))
+    check("the shipped settings copy carries it as \"ask\"",
+          cfg.get("autonomy", {}).get("tiers", {}).get(CLEANUP) == "ask",
+          cfg.get("autonomy", {}).get("tiers", {}).get(CLEANUP))
+    patched = [p.name for p in sorted(HERE.glob("*.patch"))
+               if CLEANUP in p.read_text(encoding="utf-8")]
+    check("no patch carries the gate rows - they are base file + repair tool",
+          patched == [], patched)
+
+
+def t_the_cleanup_route_is_installed_and_documented_in_parity_and_the_api():
+    fresh()
+    D._ARMED = False
+
+    class H(FakeHandler):
+        pass
+
+    D.install(H, origin_ok=lambda h: True, token_ok=Original(),
+              read_body=lambda h: h.body)
+    try:
+        with Clock():
+            _registry(_row("d00000001", "Stale phone", days=200),
+                      _row("d00000002", "Fresh phone", days=1))
+            h = H("/api/devices/cleanup", token=SHARED, peer="127.0.0.1",
+                  body={"dry_run": True})
+            h.do_POST()
+            bad = H("/api/devices/cleanup", token=SHARED, peer="127.0.0.1",
+                    body={"dry_run": "sometimes"})
+            bad.do_POST()
+    finally:
+        D._ARMED = False
+    code, out = h.sent[-1]
+    check("the module's own install() serves the route: 200 dry run",
+          code == 200 and out.get("dry_run") is True
+          and out.get("total") == 2, h.sent)
+    check("... and an invalid body through the route is 400",
+          bad.sent[-1][0] == 400, bad.sent)
+    spec = importlib.util.spec_from_file_location(
+        "parity_for_devices_test", REPO / "tools" / "check_parity.py")
+    parity = importlib.util.module_from_spec(spec)
+    sys.modules["parity_for_devices_test"] = parity
+    spec.loader.exec_module(parity)
+    entry = parity.CLASSIFICATION.get("/api/devices/cleanup")
+    check("check_parity.py classifies POST /api/devices/cleanup", entry is not None,
+          entry)
+    check("... as deliberate: the desktop's Settings button calls it, the phone's "
+          "Devices screen gains no clean-up button in this slice (the phone half is "
+          "its own follow-up, so the phone never calls it)",
+          bool(entry) and entry[0] == "deliberate" and len(entry) > 1
+          and bool(entry[1].strip()), entry)
+    pending = parity.PENDING_CLIENTS.get("/api/devices/cleanup")
+    check("... and main's PENDING_CLIENTS line for it is gone: a backend-first "
+          "route must not stay pending after its first client lands",
+          pending is None, pending)
+    doc = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    start = doc.find("## 231.")
+    block = doc[start:] if start >= 0 else ""
+    check("docs/JARVIS-API.md has section 231 for it", start >= 0)
+    check("... documenting the route and the dry run's contract fields",
+          "/api/devices/cleanup" in block
+          and all(f in block for f in ('"keep_active_30d"', '"would_remove"',
+                                       '"kept_last_active"', '"dry_run": true')),
+          block[:120])
+    check("... the real run's two answers, the card and the registry copy",
+          "202" in block and CLEANUP in block and "before-cleanup-" in block)
+
+
+def t_the_device_module_is_one_file_on_both_sides():
+    repo = (HERE / "jarvis_devices.py").read_bytes()
+    base = (REPO / "jarvis-backend" / "jarvis_devices.py").read_bytes()
+    check("backend/jarvis_devices.py and jarvis-backend/jarvis_devices.py "
+          "are byte-identical", repo == base)
+    check("... and both carry the cleanup route (the published copy is not stale)",
+          b"/api/devices/cleanup" in repo and b"/api/devices/cleanup" in base)
+    for name in ("jarvis_card_words.py", "jarvis_asks_first.py"):
+        check(f"{name}: the two copies are byte-identical",
+              (HERE / name).read_bytes()
+              == (REPO / "jarvis-backend" / name).read_bytes())
+    check("jarvis-framework.toml: the two copies are byte-identical",
+          (HERE / "rebuilt" / "jarvis-framework.toml").read_bytes()
+          == (REPO / "jarvis-backend" / "jarvis-framework.toml").read_bytes())
 
 
 def t_every_annotation_in_this_module_can_be_resolved():
