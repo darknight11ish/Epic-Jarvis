@@ -41452,11 +41452,14 @@ that calls it (2026-11-21): `jarvis-desktop/src-tauri/src/devices.rs`'s
 first press is the dry run and shows what would go, the second press is the
 confirm that ends in the PC's own `devices_cleanup` card, and the page never
 removes a device of its own accord, never loops over `devices_remove` and never
-prunes on load or on a timer. The phone has no call site in this slice (its
-Settings → Devices keeps the list and Remove it already has), so
+prunes on load or on a timer. The phone has no call site and never will
+(Gemini's ruling 5, 2026-11-21: the clean-up is desktop-only by decision), so
 `tools/check_parity.py` classifies the route `deliberate` - a recorded
 one-sided decision whose parity row names the desktop's door - rather than
-`planned`.
+`planned`. The reasons the phone is not the door: concurrent Pixel 9 + OnePlus
+polling is expected, and pruning paired devices is an administrative,
+destructive-adjacent action whose backup is kept on the host filesystem; its
+Settings → Devices keeps the list and Remove it already has.
 
 | Route | Body | Answers |
 |---|---|---|

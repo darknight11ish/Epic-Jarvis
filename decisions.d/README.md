@@ -38,6 +38,17 @@ The roll is **deliberate, never automatic**: no workflow runs it, and a feature
 pull request must not run it — only this tool's own tests and the person doing
 the roll do. Open ONE pull request with the roll and nothing else in it, the same
 shape as the periodic `docs/README.md` size refresh. The roll is idempotent.
+**The one exception is Gemini's ruling 3 (2026-11-21):** this roll may ride in
+ONE combined `chore/records-and-generated-refresh` pull request with
+`roll_changelog.py` and the three generated refreshes (`gen_recent_changes.py`,
+`gen_self_code_map.py`, `gen_docs_map.py`, in that order after the two rolls),
+because both halves are deterministic scripts and each separate pull request
+pays the same roughly one-hour CI cycle. That combined pull request carries
+records and generated files only — nothing hand-written — and the rolls and
+`gen_recent_changes.py` are committed before the map is taken, because the map
+refuses to write on a dirty tree. The old "one PR with the roll and nothing
+else" wording is superseded only for that combined chore; every other pull
+request still follows it.
 
 **Where the roll inserts, and why.** `docs/DECISIONS.md` is chronological,
 **oldest first**, so the roll appends at the very END of the file and writes one
