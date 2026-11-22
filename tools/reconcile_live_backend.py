@@ -4515,12 +4515,17 @@ def planned_managed_bytes(plan: Plan, live) -> dict:
 
     The manifest's coverage, exactly: every `$SHIPPED` leaf, every live file the
     HUD deltas touch, and the release markers this run writes or leaves in place
-    (`VERSION`, `SOURCE-COMMIT`, the beside-files). The five patched base files
-    are in it because this tool writes their deltas; the owner's own
+    (`VERSION`, `SOURCE-COMMIT`, the beside-files). FOUR of the five patched base
+    files are in it - `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py`,
+    `jarvis_skills.py` - because this tool writes their deltas.
+    `jarvis_models.py` is the fifth patched base file and is deliberately NOT in
+    it: no delta here writes it and the repository holds no copy of it, so this
+    manifest cannot prove its bytes (the cross-file dependency table checks the
+    functions it must expose, not its bytes). The owner's own
     `jarvis-framework.toml`, the live-only look spec and the plug-in folders are
-    deliberately NOT (this tool does not manage them). Raises `OSError` when a
-    file the plan says is unchanged cannot be read - the manifest may never
-    describe a file it could not see.
+    deliberately NOT in it (this tool does not manage them). Raises `OSError`
+    when a file the plan says is unchanged cannot be read - the manifest may
+    never describe a file it could not see.
     """
     live = Path(live)
     files = {}

@@ -806,7 +806,12 @@ Its three rules in the update path:
 - **verification uses it.** Before the existing `jarvis-backend/` twin compare,
   every file the manifest lists is checked against its recorded size+sha256, so
   a manual edit, a half-write or a deleted file is a failed update - including
-  the five patched base files this repository holds no copy of. The twin compare
+  the four patched base files this tool writes deltas into (`jarvis_hud.py`,
+  `jarvis_gate.py`, `jarvis_extract.py`, `jarvis_skills.py`). The fifth patched
+  base file, `jarvis_models.py`, is **not** in the manifest and is **not**
+  twin-verified: this tool writes no delta into it and the repository holds no
+  copy of it, so nothing here proves its live bytes - the cross-file dependency
+  table checks the functions it must expose, not its bytes. The twin compare
   still runs afterwards, so the shipped bytes are proved twice over.
 - **a corrupt one refuses.** A manifest that is there but unusable - malformed,
   a seal that no longer recomputes, or no `VERSION` beside it - is a REFUSAL in
