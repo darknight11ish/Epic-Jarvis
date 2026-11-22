@@ -669,7 +669,13 @@ await check("a reloaded window with a pairing open shows its state, never its co
  * 30 days preserved, nothing pruned on load or on a timer, and only the confirm
  * applies it - ending in the PC's own `devices_cleanup` approval card. The
  * contract is `POST /api/devices/cleanup` (dry run -> the would-remove list;
- * confirm -> 202 while the card waits, 200 {removed, kept} after approval). */
+ * confirm -> 202 while the card waits, 200 {removed, kept} after approval).
+ *
+ * A card that was DENIED, a card nobody answered and a refusal all come back
+ * 200 `{ok: false, removed: 0, kept: N, denied|timed_out|refused: true,
+ * error: "<the PC's own sentence>"}`. None of them removed anything, so none
+ * of them may be painted as a success.
+ */
 
 /** The PC's dry-run answer, exactly the contract's shape. */
 function cleanupDry({ total = 4, keep = 2, rows = [
@@ -680,6 +686,25 @@ function cleanupDry({ total = 4, keep = 2, rows = [
     ok: true, dry_run: true, total, keep_active_30d: keep,
     would_remove: rows, kept_last_active: true,
   };
+}
+
+/** Press the cleanup button, confirm it, and read what the page said back.
+ *  `cleanupApply` is the PC's confirm answer, exactly as the route gives it. */
+async function confirmCleanup(cleanupApply) {
+  const page = await open({
+    devices: { list: list(), cleanupDry: cleanupDry(), cleanupApply },
+  });
+  await page.waitForTimeout(400);
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  await page.locator("#dv-clean-apply").click();
+  await page.waitForTimeout(450);
+  const seen = await page.evaluate(() => ({
+    said: document.getElementById("dv-clean-status").textContent,
+    tone: document.getElementById("dv-clean-status").dataset.tone || "",
+  }));
+  await page.close();
+  return seen;
 }
 
 await check("clean up asks what WOULD be removed first, and removes nothing on its own", async () => {
@@ -831,6 +856,55 @@ await check("a cleanup the PC refuses is said in the PC's own words", async () =
   assert.match(seen.said, /busy right now/, `said "${seen.said}"`);
   assert.equal(seen.tone, "bad", "a refused read was painted as fine");
   assert.equal(seen.panelHidden, true, "a refusal left an empty plan on screen");
+});
+
+await check("a cleanup the owner DENIED is the card's own words, never a success", async () => {
+  const seen = await confirmCleanup({
+    ok: false, removed: 0, kept: 3, denied: true, http: 200,
+    error: "You said no on the card, so nothing was removed. The device list is unchanged.",
+  });
+  assert.match(seen.said, /You said no on the card/, `said "${seen.said}"`);
+  assert.match(seen.said, /nothing was removed/, `said "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a denied cleanup was painted as a success: "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a denied cleanup was painted as fine (green)");
+});
+
+await check("a cleanup nobody ANSWERED changes nothing and says so", async () => {
+  const seen = await confirmCleanup({
+    ok: false, removed: 0, kept: 3, timed_out: true, http: 200,
+    error: "Nobody answered the card in time, so nothing was removed. The device list is unchanged.",
+  });
+  assert.match(seen.said, /Nobody answered the card in time/, `said "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a timed-out cleanup was painted as a success: "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a timed-out cleanup was painted as fine (green)");
+});
+
+await check("a REFUSED cleanup says nothing was removed and names the reason", async () => {
+  // A refusal's `error` is the gate's bare reason, which does not carry the
+  // "nothing was removed" half - the page has to say it itself.
+  const seen = await confirmCleanup({
+    ok: false, removed: 0, kept: 3, refused: true, http: 200,
+    error: "the approval gate failed (TimeoutError)",
+  });
+  assert.match(seen.said, /Nothing was removed\./, `said "${seen.said}"`);
+  assert.match(seen.said, /approval gate failed/, `the PC's reason was dropped: "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a refused cleanup was painted as a success: "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a refused cleanup was painted as fine (green)");
+});
+
+await check("a cleanup with no reported count never invents one", async () => {
+  // The old fallback was `rows.length`: the dry run's plan reported as if it
+  // had been removed. The PC's answer here carries no `removed` at all.
+  const seen = await confirmCleanup({ ok: true, kept: 1, http: 200 });
+  assert.match(seen.said, /did not say how many devices were removed/, `said "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a made-up count was reported: "${seen.said}"`);
+  assert.notEqual(seen.tone, "ok", "an unreported count was painted as a clean success");
+});
+
+await check("a real approved cleanup still shows its counts", async () => {
+  const seen = await confirmCleanup({ ok: true, removed: 2, kept: 3, http: 200 });
+  assert.equal(seen.said, "Removed 2 devices; kept 3.", `said "${seen.said}"`);
+  assert.equal(seen.tone, "ok", "an approved cleanup was not painted as done");
 });
 
 await browser.close();

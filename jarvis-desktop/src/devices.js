@@ -497,8 +497,25 @@ async function cleanupDryRun() {
   }
 }
 
+/** The PC's own words for a cleanup that did NOT happen (2026-11-21).
+ *
+ *  A card the owner denied, a card nobody answered and a refusal all answer
+ *  `ok: false` with the reason in `error` - the card's own sentence, or the
+ *  gate's. All three mean the same thing, and none of them is a success: the
+ *  page says the card's words and never a "Removed ..." line. A refusal's
+ *  `error` is the gate's bare reason (it does not say "nothing was removed"),
+ *  so the page says that half itself rather than trust the PC's sentence to
+ *  carry it. */
+function cleanupRefusalWords(out) {
+  const why = String((out && out.error) || "").trim();
+  if (!why) return "Nothing was removed, and the PC did not say why.";
+  if (/nothing (?:was|has been) removed/i.test(why)) return why;
+  return `Nothing was removed. ${why}`;
+}
+
 /** The confirm: the only press that changes anything. The PC raises its own
- *  card, so the answer may be "waiting" - and then nothing has been removed. */
+ *  card, so the answer may be "waiting" - and then nothing has been removed.
+ *  Any other `ok: false` answer is the card's refusal, never a success. */
 async function cleanupApply() {
   const rows = cleanupPlan && Array.isArray(cleanupPlan.would_remove)
     ? cleanupPlan.would_remove : [];
@@ -514,14 +531,29 @@ async function cleanupApply() {
   paint();
   try {
     const out = await call("devices_cleanup", { dryRun: false }, "action");
-    if (out && out.waiting) {
+    if (out && out.ok === false) {
+      // The owner said no, nobody answered the card, or the gate refused it.
+      // That is the card's answer, not a success: never green, and never a
+      // made-up "Removed N".
+      say(el.cleanStatus, cleanupRefusalWords(out), "bad");
+    } else if (out && out.waiting) {
       say(el.cleanStatus,
         "Waiting for your approval on the card. Nothing has been removed yet.", "warn");
     } else {
-      const removed = out && Number.isFinite(out.removed) ? out.removed : rows.length;
-      const kept = out && Number.isFinite(out.kept) ? out.kept : 0;
-      say(el.cleanStatus,
-        `Removed ${removed} device${removed === 1 ? "" : "s"}; kept ${kept}.`, "ok");
+      // The PC's own counts. A missing `removed` is "not reported" - never
+      // `rows.length`, which would report rows the owner was only shown as a
+      // plan as if they had gone.
+      const removed = out && Number.isFinite(out.removed) ? out.removed : null;
+      const kept = out && Number.isFinite(out.kept) ? out.kept : null;
+      if (removed === null) {
+        say(el.cleanStatus,
+          "The cleanup finished, but the PC did not say how many devices were " +
+          "removed.", "warn");
+      } else {
+        const still = kept === null ? "" : `; kept ${kept}`;
+        say(el.cleanStatus,
+          `Removed ${removed} device${removed === 1 ? "" : "s"}${still}.`, "ok");
+      }
     }
     clearCleanupPlan();
   } catch (error) {
