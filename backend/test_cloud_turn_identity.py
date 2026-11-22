@@ -144,8 +144,12 @@ def _open_function(capture, conversation=None):
             "json": json,
             "_CHAT_CLIENT_FIELDS": set(),
             "_chat_client_fields_off": lambda messages: list(messages),
-            "_completions_url": lambda lane: "http://127.0.0.1:8000/v1/chat/"
-                                             "completions",
+            # The real helper takes (lane, body) on the owner's patched HUD and
+            # (lane) on the published base, so the stub takes whatever the text
+            # under test calls it with - this suite is about the messages, not
+            # about pinning someone else's signature.
+            "_completions_url": lambda *args, **kwargs: ("http://127.0.0.1:8000/"
+                                                         "v1/chat/completions"),
             "_auth_headers": lambda headers: dict(headers),
             "payload": {"model": LOCAL,
                         "messages": list(CONVERSATION if conversation is None

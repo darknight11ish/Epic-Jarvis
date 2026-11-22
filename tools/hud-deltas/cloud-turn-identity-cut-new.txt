@@ -1,0 +1,8 @@
+                # cloud-turn-identity: the fixed sentence above is the ONLY
+                # message besides the newest question, and it comes first, so
+                # the model is told what it is before it reads what was asked.
+                # `+ said[-1:]` keeps every earlier user turn out, exactly as
+                # cloud-one-turn.patch does; nothing here can add a second copy
+                # of the sentence because `body["messages"]` is replaced, not
+                # appended to.
+                body["messages"] = [cloud_identity] + said[-1:]
