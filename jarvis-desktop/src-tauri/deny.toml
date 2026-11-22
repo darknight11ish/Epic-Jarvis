@@ -31,13 +31,15 @@ confidence-threshold = 0.9
 # anywhere else.
 ignore = [
   "RUSTSEC-2024-0370",  # proc-macro-error, unmaintained (tauri-plugin tree)
-  "RUSTSEC-2024-0429",  # glib, unsound VariantStrIter (Linux GTK backend only)
   "RUSTSEC-2024-0436",  # paste, unmaintained - NEW 2026-11-16 through specta (see above)
-  "RUSTSEC-2025-0075",  # unic-char-range, unmaintained
-  "RUSTSEC-2025-0080",  # unic-common, unmaintained
-  "RUSTSEC-2025-0081",  # unic-char-property, unmaintained
-  "RUSTSEC-2025-0098",  # unic-ucd-version, unmaintained
-  "RUSTSEC-2025-0100",  # unic-ucd-ident, unmaintained
+  # RUSTSEC-2024-0429 (glib) and RUSTSEC-2025-0075 / -0080 / -0081 / -0098 /
+  # -0100 (the unic-* crates) were removed on 2026-11-22: those crates left this
+  # lockfile, and cargo-deny fails an ignore entry that matches no crate
+  # ("advisory was not encountered"), so keeping them turned the audit job red
+  # on main itself. Measured with `cargo deny check advisories` at the desk,
+  # which named six stale ids - two more than the CI log named, because its
+  # advisory database snapshot differed. A notice that arrives again is named
+  # here again, by id, where it can be seen.
   "RUSTSEC-2026-0370",  # zvariant, unmaintained (Tauri's Linux zbus tree; never in the Windows build)
   "RUSTSEC-2026-0371",  # zbus_names, unmaintained (same Linux-only Tauri tree)
   "RUSTSEC-2026-0372",  # zvariant_derive, unmaintained (same Linux-only Tauri tree)
