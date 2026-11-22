@@ -163,17 +163,24 @@ finished the same update with 0 refusals.
 
 **Since ruling 5.5 the install type is checked UP FRONT, before any program
 runs.** `deploy_managed_evidence` reads only things the deploy tool itself
-writes and nothing else does: `SOURCE-COMMIT` sitting beside `VERSION` in the
-live folder, and/or a `_jarvis-deploy-backup-tool-*` folder. When that evidence
-is there the deploy tool's own `--apply` (`deploy_route`) is the PRIMARY route -
-the ~three-minute 51-hunk refusal is skipped, not paid. Only an install with
-NEITHER evidence (a legacy patch-only install) starts with the patch stack; if
-that stack then refuses in the measured shape, the same run continues with the
-deploy route - the measured fallback is unchanged. A deploy-tool refusal is
-printed verbatim and never becomes a claim, and a detected deploy route does NOT
-fall back to a patch stack that refuses by construction. The ONE `ROUTE:` line
-says which route carried the update and why: either the evidence that chose the
-deploy route, or the refusal that switched to it.
+writes and nothing else does: a valid `DEPLOY-MANIFEST` beside `VERSION` (the
+deploy's own content-hash record of the release it wrote - Gemini's ruling 4,
+2026-11-21 - the STRONGEST evidence and preferred when present), `SOURCE-COMMIT`
+sitting beside `VERSION` (the fallback for an install deployed before the
+manifest existed), and/or a `_jarvis-deploy-backup-tool-*` folder. When that
+evidence is there the deploy tool's own `--apply` (`deploy_route`) is the
+PRIMARY route - the ~three-minute 51-hunk refusal is skipped, not paid. Only an
+install with NEITHER evidence (a legacy patch-only install) starts with the
+patch stack; if that stack then refuses in the measured shape, the same run
+continues with the deploy route - the measured fallback is unchanged. A
+deploy-tool refusal is printed verbatim and never becomes a claim, and a
+detected deploy route does NOT fall back to a patch stack that refuses by
+construction. A manifest that is THERE but unusable (malformed, edited so its
+seal no longer recomputes, or without its `VERSION`) refuses the whole update in
+the corrupt marker's own words: that is not a fallback either, it is a state
+neither route may guess about. The ONE `ROUTE:` line says which route carried
+the update and why: either the evidence that chose the deploy route, or the
+refusal that switched to it.
 
 WHAT IT WRITES, AND WHAT IT DOES NOT
 
@@ -185,7 +192,9 @@ WHAT IT WRITES, AND WHAT IT DOES NOT
   to the dead-pid rule).
   On the deploy route the write is the deploy tool's own: its
   `_jarvis-deploy-backup-tool-*` folders and journal, the `$SHIPPED` modules,
-  the HUD deltas and the release markers `VERSION` and `SOURCE-COMMIT`.
+  the HUD deltas and the release markers `VERSION`, `SOURCE-COMMIT` and, last of
+  all, the content-hash `DEPLOY-MANIFEST` that records the release and every
+  managed live file's size+sha256 (Gemini's ruling 4, 2026-11-21).
   The bounded proof writes nothing into the install: it compiles the live
   modules to a throwaway folder and imports them in a child process. It does
   start the LIVE folder's `jarvis_hud.py` on a spare loopback port for its
@@ -225,6 +234,7 @@ pace). It runs nothing.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import math
 import ntpath
@@ -259,6 +269,11 @@ ROUTE_PREFIX = "ROUTE: "
 #: The deploy tool that is the route on a deploy-managed install. It is in the
 #: same folder as this tool, and is called in-process rather than reimplemented.
 DEPLOY_TOOL_REL = Path("tools") / "reconcile_live_backend.py"
+#: The deploy tool's content-hash manifest, written BESIDE `VERSION` (Gemini's
+#: ruling 4, 2026-11-21). A valid one is the STRONGEST deploy evidence; a corrupt
+#: one is a refusal, never silently ignored. The deploy tool owns its shape and
+#: its seal, so this tool validates it through that tool's own reader.
+DEPLOY_MANIFEST_NAME = "DEPLOY-MANIFEST"
 
 # ---------------------------------------------------------------------------
 #   The owner's everyday model lane - recorded before the proof suites
@@ -1450,19 +1465,23 @@ def shipped_leaves(repo) -> list:
 def bounded_proof_phrase(bounded_result: dict) -> str:
     """The `ROUTE:` half that reports the bounded proof, skips included.
 
-    A check can pass while checks INSIDE its suite were skipped for this PC
-    (measured 2026-11-21: 4 inside `test_reconcile_live_backend`). The bounded
-    result carries that count, so the one sentence that names the proof must
-    carry it too - "9 of 9" is true at check granularity, but a skipped check is
-    never counted as proven.
+    THE COUNT IS THE CLAIM (Gemini's ruling 1, 2026-11-21). A check can pass
+    while checks INSIDE its suite were skipped for this PC (measured
+    2026-11-21: 4 inside `test_reconcile_live_backend`), and the card must show
+    that compactly - `(9 of 9, 4 skipped)` - rather than in a trailing clause a
+    reader can miss. Both numbers are part of the same parenthesis: what passed,
+    and what inside those suites was skipped and is therefore not counted as
+    proven. The no-skip sentence is byte-identical to what it was before this
+    ruling, and the honest subset clause stays on the end in both shapes.
     """
-    proof = (f"and the bounded checks above passed "
-             f"({bounded_result['passed']} of {bounded_result['total']})")
     skipped = bounded_result.get("skipped") or 0
+    count = f"{bounded_result['passed']} of {bounded_result['total']}"
     if skipped:
-        proof += (f", with {skipped} check(s) inside those suites skipped for "
-                  "this PC and not counted as proven")
-    return proof + "; they are a subset, not the full suite"
+        return (f"and the bounded checks above passed ({count}, {skipped} skipped) - "
+                "checks skipped for this PC are not counted as proven; they are a "
+                "subset, not the full suite")
+    return (f"and the bounded checks above passed ({count}); they are a subset, "
+            "not the full suite")
 
 
 def verify_live_files(repo, backend) -> list:
@@ -1474,11 +1493,50 @@ def verify_live_files(repo, backend) -> list:
     trigger rather than a warning. The owner-only files a patch writes
     (`jarvis_gate.py`, `jarvis_hud.py`) are not in SHIPPED and are not
     compared: this repository has no version of them to compare against.
+
+    THE CONTENT-HASH MANIFEST IS CHECKED FIRST (Gemini's ruling 4, 2026-11-21).
+    When the live folder carries a valid `DEPLOY-MANIFEST`, every file it lists
+    is compared with the size and sha256 the deploy recorded - so a file edited,
+    half-written or deleted after the deploy is a failure, INCLUDING the five
+    patched base files this repository has no twin for. The twin comparison
+    below still runs, so the shipped bytes are proved against `jarvis-backend/`
+    as well. A manifest that is there but cannot be validated is a failure that
+    names it - never silently ignored, and never a reason to fall back to the
+    patch stack. No manifest (an install from before the ruling) keeps exactly
+    today's behaviour.
     """
     repo = Path(repo)
     backend = Path(backend)
     problems = []
     compared = 0
+    if (backend / DEPLOY_MANIFEST_NAME).is_file():
+        record = _read_deploy_manifest(backend)
+        if not record.get("ok"):
+            problems.append({"file": DEPLOY_MANIFEST_NAME,
+                             "why": "corrupt: " + (record.get("why")
+                                                   or "it cannot be validated")})
+        else:
+            for leaf in sorted(record.get("files") or {}):
+                entry = record["files"][leaf]
+                live = backend / leaf
+                if not live.is_file():
+                    problems.append({"file": leaf,
+                                     "why": f"missing (it is listed in "
+                                            f"{DEPLOY_MANIFEST_NAME})"})
+                    continue
+                try:
+                    data = live.read_bytes()
+                except OSError:
+                    problems.append({"file": leaf, "why": "unreadable"})
+                    continue
+                if len(data) != entry["size"]:
+                    problems.append({"file": leaf,
+                                     "why": "size differs from "
+                                            f"{DEPLOY_MANIFEST_NAME}"})
+                elif hashlib.sha256(data).hexdigest() != entry["sha256"]:
+                    problems.append({"file": leaf,
+                                     "why": "differs from "
+                                            f"{DEPLOY_MANIFEST_NAME}"})
     for leaf in shipped_leaves(repo):
         live = backend / leaf
         twin = repo / BASE_REL / leaf
@@ -1707,19 +1765,29 @@ def refusal_route_words(refusal: dict) -> str:
 # DIRECTLY as the primary route and skip the guaranteed refusal; fall back to
 # `scripts/apply-patches.ps1` only for a legacy patch-only install.
 #
-# THE DETECTION IS EVIDENCE, NEVER A GUESS. Only two things on the owner's own
-# PC are written by the deploy tool and by nothing else (see
-# `tools/reconcile_live_backend.py`'s marker and backup steps):
-#   * `SOURCE-COMMIT` sitting BESIDE `VERSION` in the live folder - the two
-#     release markers the deploy writes together. The patch program never
-#     writes SOURCE-COMMIT, and the app's own `VERSION` marker step never does
-#     either, so both files together are deploy evidence; one alone is not.
+# THE DETECTION IS EVIDENCE, NEVER A GUESS. Only things on the owner's own PC
+# written by the deploy tool and by nothing else are evidence (see
+# `tools/reconcile_live_backend.py`'s marker, manifest and backup steps):
+#   * a VALID `DEPLOY-MANIFEST` beside `VERSION` - the deploy tool's own
+#     content-hash record of the commit, version and bytes it deployed (Gemini's
+#     ruling 4, 2026-11-21). This is the STRONGEST evidence and is preferred;
+#     its `manifest_sha256` is recomputed from its own `files` map, so a record
+#     that has been altered is not evidence but a refusal.
+#   * `SOURCE-COMMIT` sitting BESIDE `VERSION` in the live folder - the older
+#     release marker pair the deploy writes together. This stays the FALLBACK
+#     for an install deployed before the manifest existed. The patch program
+#     never writes SOURCE-COMMIT, and the app's own `VERSION` marker step never
+#     does either, so both files together are deploy evidence; one alone is not.
 #   * at least one `_jarvis-deploy-backup-tool-*` folder in the live folder -
 #     the deploy tool's own backups, named by that tool and by nothing else.
-# Any other folder shape (a patched install with a `VERSION` file, an older
-# install with neither) is a LEGACY PATCH-ONLY install: the patch stack runs
-# first exactly as before, and the measured refusal shape remains the evidence
-# that switches the run mid-way (that behaviour is unchanged).
+# A manifest that is there but UNUSABLE (malformed, sealed wrong, or without its
+# `VERSION`) is a REFUSAL, not a fallback: the caller refuses the update in the
+# corrupt marker's own words instead of quietly running a patch stack that
+# refuses a deploy-managed install by construction. Any other folder shape (a
+# patched install with a `VERSION` file, an older install with neither) is a
+# LEGACY PATCH-ONLY install: the patch stack runs first exactly as before, and
+# the measured refusal shape remains the evidence that switches the run
+# mid-way (that behaviour is unchanged).
 #
 # A DEPLOY REFUSAL IS STILL REPORTED VERBATIM AND CLAIMS NOTHING. When the
 # detected deploy route refuses, the run does NOT fall back to the patch stack:
@@ -1735,24 +1803,80 @@ DEPLOY_BACKUP_PREFIX = "_jarvis-deploy-backup-tool-"
 SOURCE_COMMIT_NAME = "SOURCE-COMMIT"
 
 
+def _read_deploy_manifest(backend) -> dict:
+    """Validate the live `DEPLOY-MANIFEST` through the deploy tool's own reader.
+
+    The deploy tool owns the manifest's shape and its seal, so this tool asks it
+    rather than reimplementing the canonical string - two canonicalisers that
+    drift apart would be a wrong answer delivered confidently. The module is
+    loaded only when a manifest is actually there, so an install from before the
+    ruling (or a program folder older than the deploy tool) never pays for it.
+    An unavailable or broken tool is itself a corrupt-evidence answer: the
+    manifest is present and this program cannot read it, which is exactly the
+    case the caller must refuse rather than guess.
+    """
+    try:
+        return load_deploy_tool().read_deploy_manifest(backend)
+    except UpdateRefused as exc:
+        return {"present": True, "ok": False, "doc": None, "files": {},
+                "why": f"{DEPLOY_MANIFEST_NAME} is here but the deploy tool that "
+                       f"reads it is not ({exc.message})"}
+    except Exception as exc:                      # noqa: BLE001 - never a crash
+        return {"present": True, "ok": False, "doc": None, "files": {},
+                "why": f"the deploy tool could not read {DEPLOY_MANIFEST_NAME} "
+                       f"({type(exc).__name__}: {exc})"}
+
+
 def deploy_managed_evidence(backend) -> dict:
     """Is this live folder DEPLOY-MANAGED, and on what evidence? Never a guess.
 
-    Returns `{"managed": bool, "why": <the evidence in words>, "backups": [...]}`.
-    `managed` is True only when the real marker is there: `SOURCE-COMMIT` sits
-    beside `VERSION` AND carries a commit. The deploy tool's backup folders
-    CORROBORATE that, never select it - they are never deleted, so one stale
-    folder would otherwise send a legacy install down the deploy route forever. `why` is always written for a human to check: it names the
-    marker and its value, or the deploy backup folder count. When nothing is
-    there, `why` is empty and the caller falls back to the legacy patch route -
-    this function never guesses an install type from a folder's name, a missing
-    file or a failure to read one.
+    Returns `{"managed": bool, "why": <the evidence in words>, "backups": [...],
+    "corrupt": <a sentence naming unusable evidence, or "">}`.
+
+    A VALID `DEPLOY-MANIFEST` BESIDE `VERSION` IS THE STRONGEST EVIDENCE
+    (Gemini's ruling 4, 2026-11-21): its `manifest_sha256` recomputes from its
+    own files map, so it is the deploy tool's own record of the release it
+    wrote, and it alone selects the deploy route. It is named in `why` first;
+    the older `SOURCE-COMMIT` marker is the FALLBACK for an install deployed
+    before the manifest existed, and the backup folders CORROBORATE either -
+    they never select, because the tool never deletes them and one stale folder
+    would otherwise send a legacy install down the deploy route forever.
+
+    A MANIFEST THAT IS THERE BUT UNUSABLE IS A REFUSAL, NEVER A GUESS. A
+    malformed file, an edited record whose seal no longer recomputes, or a
+    manifest whose `VERSION` is missing fills `corrupt` with the reason; the
+    caller refuses the update with those words instead of falling back to the
+    patch stack or pretending no manifest exists. Only when the file is ABSENT
+    does the old `SOURCE-COMMIT` logic run unchanged.
     """
     backend = Path(backend)
     reasons = []
+    corrupt = ""
     version = backend / "VERSION"
+    manifest = backend / DEPLOY_MANIFEST_NAME
+    if manifest.is_file():
+        record = _read_deploy_manifest(backend)
+        if record.get("ok"):
+            if not version.is_file():
+                corrupt = (f"{DEPLOY_MANIFEST_NAME} is here and self-consistent, "
+                           "but VERSION is not beside it, so the record cannot say "
+                           "which release it belongs to")
+            else:
+                doc = record.get("doc") or {}
+                shown = str(doc.get("commit") or "").strip()
+                reasons.append(
+                    f"{DEPLOY_MANIFEST_NAME} sits beside VERSION "
+                    f"({shown[:12]}, {len(record.get('files') or {})} file(s) "
+                    f"hashed, manifest_sha256 "
+                    f"{str(doc.get('manifest_sha256') or '')[:12]})")
+        else:
+            corrupt = (record.get("why")
+                       or f"{DEPLOY_MANIFEST_NAME} could not be validated")
+    if corrupt:
+        return {"managed": False, "why": corrupt, "corrupt": corrupt,
+                "backups": _deploy_backup_folders(backend)}
     source = backend / SOURCE_COMMIT_NAME
-    if version.is_file() and source.is_file():
+    if not reasons and version.is_file() and source.is_file():
         digest = _read_text(source)
         # The deploy tool writes SOURCE-COMMIT as JSON (`{"commit": "<sha>", ...}`),
         # so the ROUTE line names the COMMIT, not the first twelve characters of
@@ -1771,13 +1895,7 @@ def deploy_managed_evidence(backend) -> dict:
         # a "SOURCE-COMMIT sits beside VERSION" reason and select the deploy
         # route on no proof at all. The marker selects only when it carries a
         # real commit; the backup folders then corroborate it.
-    backups = []
-    try:
-        backups = sorted(
-            entry.name for entry in backend.iterdir()
-            if entry.is_dir() and entry.name.startswith(DEPLOY_BACKUP_PREFIX))
-    except OSError:
-        backups = []
+    backups = _deploy_backup_folders(backend)
     if backups and reasons:
         # CORROBORATION ONLY. The deploy tool never deletes its backup folders,
         # so one on its own is not evidence that this install came from the
@@ -1788,7 +1906,17 @@ def deploy_managed_evidence(backend) -> dict:
             f"{len(backups)} {DEPLOY_BACKUP_PREFIX}* backup folder(s) are here "
             f"({backups[-1]})")
     return {"managed": bool(reasons), "why": "; ".join(reasons),
-            "backups": backups}
+            "backups": backups, "corrupt": ""}
+
+
+def _deploy_backup_folders(backend) -> list:
+    """The deploy tool's own backup folder names in `backend`, sorted; [] on OSError."""
+    try:
+        return sorted(
+            entry.name for entry in Path(backend).iterdir()
+            if entry.is_dir() and entry.name.startswith(DEPLOY_BACKUP_PREFIX))
+    except OSError:
+        return []
 
 
 def deploy_primary_words(evidence: dict) -> str:
@@ -3365,6 +3493,25 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
     # is the legacy patch-only install and starts with the patch stack exactly
     # as before. `evidence` is what the ROUTE line says, never a re-guess.
     evidence = deploy_managed_evidence(backend)
+    if evidence.get("corrupt"):
+        # RULING 4 (Gemini, 2026-11-21). Evidence that is THERE and unusable is a
+        # refusal, never a fallback: a malformed/edited `DEPLOY-MANIFEST` (or one
+        # without its `VERSION`) cannot say which install this is, and the two
+        # guesses are both bad - the patch stack refuses a deploy-managed install
+        # by construction, and deploying over an unreadable record claims bytes
+        # nobody has checked. So neither route starts, in the marker's own words.
+        say("")
+        say(f"REFUSED  {evidence['corrupt']}.")
+        say("This tool never guesses which kind of install this is, so neither route "
+            "was started: the patch stack refuses a deploy-managed install by "
+            "construction, and a deploy over an unreadable record is not a fact.")
+        say(f"To repair it, run: py -3 tools\\reconcile_live_backend.py "
+            f"--backend-path \"{backend}\" --apply - a successful deploy rewrites "
+            f"{DEPLOY_MANIFEST_NAME}. If this install is really a legacy patch-only "
+            f"one, delete {backend / DEPLOY_MANIFEST_NAME} instead. Then run the "
+            "update again.")
+        say("DONE WITH PROBLEMS - nothing was run and nothing is claimed as updated.")
+        return 1
     path = Path(timings_path) if timings_path is not None else timings_path_for(backend)
     timings = pace_timings(load_timings(path), mode)
     plan = estimate(mode, names, timings, requested=requested_workers)

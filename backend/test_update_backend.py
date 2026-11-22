@@ -68,6 +68,7 @@ Nothing here touches the owner's backend folder, starts a patch run, or reads
 from __future__ import annotations
 
 import json
+import hashlib
 import io
 import os
 import shutil
@@ -3563,6 +3564,37 @@ def _mark_deploy_managed(backend: Path, *, commit="d7003442e", backups=1) -> Non
          ).mkdir(parents=True, exist_ok=True)
 
 
+#: The leaves `_mark_deploy_manifest` records: the fixture's three shipped files,
+#: the patched base file the deploy writes deltas into, and the two release
+#: markers beside them. `jarvis_hud.py` is deliberately in it - it has no
+#: `jarvis-backend/` twin, so only the manifest can prove its bytes.
+MANIFEST_LEAVES = ("one.py", "two.py", "jarvis_hud.html", "jarvis_hud.py",
+                   "VERSION", "SOURCE-COMMIT")
+
+
+def _mark_deploy_manifest(backend: Path, *, commit="a" * 40,
+                          version="0.2.491", names=MANIFEST_LEAVES) -> Path:
+    """A live folder carrying the deploy tool's own content-hash manifest (ruling 4).
+
+    Built through the REAL deploy tool's `build_deploy_manifest`, so the fixture
+    and the writer cannot drift: the tests below prove what the deploy tool would
+    have written, not a copy of its format.
+    """
+    backend = Path(backend)
+    (backend / "VERSION").write_bytes(version.encode("utf-8"))
+    (backend / U.SOURCE_COMMIT_NAME).write_text(json.dumps(
+        {"schema": R.SOURCE_COMMIT_SCHEMA, "commit": commit,
+         "ref": "origin/main", "version": version}) + "\n", encoding="utf-8")
+    files = {}
+    for leaf in names:
+        data = (backend / leaf).read_bytes()
+        files[leaf] = {"size": len(data),
+                       "sha256": hashlib.sha256(data).hexdigest()}
+    path = backend / U.DEPLOY_MANIFEST_NAME
+    path.write_bytes(R.build_deploy_manifest(commit, version, files))
+    return path
+
+
 def t_the_bounded_proof_is_named_and_runs_the_required_real_commands():
     root = _make_root()
     repo, backend = _make_repo(root)
@@ -3944,6 +3976,201 @@ def t_a_deploy_managed_install_is_detected_from_evidence_up_front():
           lonely["managed"] is False, lonely)
 
 
+def t_a_valid_deploy_manifest_is_the_strongest_deploy_evidence():
+    """Gemini's ruling 4 (2026-11-21): the content-hash manifest selects the route.
+
+    A `DEPLOY-MANIFEST` beside `VERSION` whose `manifest_sha256` recomputes from
+    its own `files` map is the deploy tool's own record of the release it wrote,
+    so it is the STRONGEST evidence and is preferred over the older
+    `SOURCE-COMMIT` marker, which stays the fallback for installs deployed
+    before the manifest existed.
+    """
+    root = _make_root()
+    try:
+        repo, backend = _make_repo(root)
+        _write_live(backend, NEW)
+        path = _mark_deploy_manifest(backend)
+        record = json.loads(path.read_text(encoding="utf-8"))
+        evidence = U.deploy_managed_evidence(backend)
+        check("manifest: a valid DEPLOY-MANIFEST beside VERSION IS deploy evidence",
+              evidence["managed"] is True and evidence["corrupt"] == "", evidence)
+        check("... the evidence words name the manifest, its commit and its file count",
+              "DEPLOY-MANIFEST" in evidence["why"]
+              and record["commit"][:12] in evidence["why"]
+              and f"{len(record['files'])} file(s) hashed" in evidence["why"],
+              evidence["why"])
+        check("... and it is PREFERRED over SOURCE-COMMIT, which is not named",
+              "SOURCE-COMMIT sits beside VERSION" not in evidence["why"],
+              evidence["why"])
+        check("... the ROUTE words carry that same evidence",
+              "DEPLOY-MANIFEST" in U.deploy_primary_words(evidence),
+              U.deploy_primary_words(evidence))
+
+        # A manifest with no VERSION beside it cannot say which release it is:
+        # that is unusable evidence, not "no manifest".
+        (backend / "VERSION").unlink()
+        unpaired = U.deploy_managed_evidence(backend)
+        check("manifest: a valid manifest with NO VERSION beside it is unusable, "
+              "and says so", unpaired["managed"] is False
+              and bool(unpaired["corrupt"])
+              and "VERSION is not beside it" in unpaired["corrupt"], unpaired)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_corrupt_deploy_manifest_refuses_the_update_and_runs_neither_route():
+    """Ruling 4: malformed/edited evidence is a REFUSAL, never a silent fallback.
+
+    The two guesses a fallback would make are both wrong on a deploy-managed
+    install: the patch stack refuses by construction, and a deploy over an
+    unreadable record claims bytes nobody has checked. So neither route starts.
+    """
+    root = _make_root()
+    try:
+        repo, backend = _make_repo(root)
+        _write_live(backend, NEW)
+        path = _mark_deploy_manifest(backend)
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc["manifest_sha256"] = "0" * 64            # the seal no longer recomputes
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        before = {name: (backend / name).read_bytes() for name in NEW}
+        fake = FakeRun(_bounded_handler(repo, backend))
+        deploys = []
+        said = []
+        with _fake_proof_checks():
+            code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                            clock=lambda: 0.0, timings_path=root / "timings.json",
+                            deploy=_deploy_ok(backend, calls=deploys))
+        tail = "\n".join(said)
+        patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
+        check("manifest: a corrupt manifest REFUSES the whole update", code == 1
+              and "DONE WITH PROBLEMS" in tail and "ALL DONE" not in tail,
+              (code, said[-6:]))
+        check("... the words name the corrupt marker and why it cannot be used",
+              "REFUSED" in tail and "DEPLOY-MANIFEST" in tail
+              and "does not recompute" in tail, said[-6:])
+        check("... the patch stack is NEVER started (no guessing at the install type)",
+              patchers == [] and "patcher_calls" not in fake.state, patchers)
+        check("... and the deploy route is never started either", deploys == [], deploys)
+        check("... nothing is written and nothing is claimed as updated",
+              all((backend / name).read_bytes() == before[name] for name in before)
+              and "DONE WITH PROBLEMS - nothing was run" in tail,
+              {name: (backend / name).read_bytes() for name in before})
+        check("... and it says how to repair the record",
+              "reconcile_live_backend.py" in tail and "--apply" in tail, said[-6:])
+
+        # The same refusal for a file that is not JSON at all.
+        path.write_bytes(b"{ not json")
+        said2 = []
+        with _fake_proof_checks():
+            code2 = U.update(
+                repo, backend, "responsive",
+                run=FakeRun(_bounded_handler(repo, backend)), say=said2.append,
+                clock=lambda: 0.0, timings_path=root / "timings2.json",
+                deploy=_deploy_refused("the deploy route must not run"))
+        tail2 = "\n".join(said2)
+        check("... and a manifest that is not JSON is refused the same way",
+              code2 == 1 and "DEPLOY-MANIFEST" in tail2 and "not JSON" in tail2,
+              said2[-6:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_live_file_edited_after_the_deploy_fails_manifest_verification():
+    """Ruling 4's verification half: the manifest proves bytes the twins cannot.
+
+    `jarvis_hud.py` is a patched base file with no `jarvis-backend/` twin, so
+    before the manifest a hand edit to it was invisible to `verify_live_files`.
+    Now every file the deploy recorded is checked against its size+sha256, and
+    the existing twin compare still runs afterwards.
+    """
+    root = _make_root()
+    try:
+        repo, backend = _make_repo(root)
+        _write_live(backend, NEW)                  # the state the deploy wrote
+        _mark_deploy_manifest(backend)
+        check("manifest: a folder the manifest describes verifies clean",
+              U.verify_live_files(repo, backend) == [],
+              U.verify_live_files(repo, backend))
+
+        # An edit to a listed file that has NO repository twin: only the
+        # manifest can catch it, and it must.
+        (backend / "jarvis_hud.py").write_text("# edited by hand\n", encoding="utf-8")
+        problems = U.verify_live_files(repo, backend)
+        check("manifest: a live file edited after the deploy is a FAILURE",
+              any(p["file"] == "jarvis_hud.py" and "DEPLOY-MANIFEST" in p["why"]
+                  for p in problems), problems)
+
+        # A missing listed file is a failure too.
+        _write_live(backend, {"jarvis_hud.py": b"# the owner's backend\n"})
+        _mark_deploy_manifest(backend)
+        (backend / "two.py").unlink()
+        problems = U.verify_live_files(repo, backend)
+        check("manifest: a listed live file that is MISSING is a failure",
+              any(p["file"] == "two.py" and "DEPLOY-MANIFEST" in p["why"]
+                  for p in problems), problems)
+
+        # The twin compare STILL runs: a shipped file edited away from the
+        # repository's bytes is caught even when the manifest was rewritten.
+        _write_live(backend, NEW)
+        _mark_deploy_manifest(backend)
+        (backend / "one.py").write_bytes(b"NEW ONE, BUT EDITED\n")
+        problems = U.verify_live_files(repo, backend)
+        check("manifest: the existing twin compare still runs after the manifest",
+              any(p["file"] == "one.py" and p["why"] == "differs" for p in problems),
+              problems)
+        check("... and the same file is also named by the manifest check",
+              any(p["file"] == "one.py" and "DEPLOY-MANIFEST" in p["why"]
+                  for p in problems), problems)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_corrupt_manifest_fails_live_verification_instead_of_being_ignored():
+    """A manifest that cannot be validated is a failure naming it, never 'no manifest'."""
+    root = _make_root()
+    try:
+        repo, backend = _make_repo(root)
+        _write_live(backend, NEW)
+        path = _mark_deploy_manifest(backend)
+        clean = U.verify_live_files(repo, backend)
+        path.write_bytes(b"{ not json")
+        problems = U.verify_live_files(repo, backend)
+        check("verify: a corrupt DEPLOY-MANIFEST is a failure that names it",
+              any(p["file"] == "DEPLOY-MANIFEST" and "corrupt" in p["why"]
+                  for p in problems), problems)
+        check("... it is NOT silently ignored (the clean result is not returned)",
+              clean == [] and problems != [], (clean, problems))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_without_a_manifest_live_verification_is_exactly_todays_behaviour():
+    """An install from before ruling 4 keeps the old behaviour, byte for byte."""
+    root = _make_root()
+    try:
+        repo, backend = _make_repo(root)
+        problems = U.verify_live_files(repo, backend)
+        expected = [{"file": "one.py", "why": "differs"},
+                    {"file": "two.py", "why": "differs"},
+                    {"file": "jarvis_hud.html", "why": "differs"}]
+        check("no manifest: live verification is exactly the twin compare, as before",
+              problems == expected, problems)
+        check("no manifest: ... with no DEPLOY-MANIFEST entry in it",
+              not any(p["file"] == "DEPLOY-MANIFEST" for p in problems), problems)
+        evidence = U.deploy_managed_evidence(backend)
+        check("no manifest: a legacy install still shows no deploy evidence",
+              evidence["managed"] is False and evidence["corrupt"] == "", evidence)
+        # SOURCE-COMMIT alone keeps working as the fallback evidence.
+        _mark_deploy_managed(backend)
+        fallback = U.deploy_managed_evidence(backend)
+        check("no manifest: SOURCE-COMMIT beside VERSION is still the fallback",
+              fallback["managed"] is True and fallback["corrupt"] == ""
+              and "SOURCE-COMMIT" in fallback["why"], fallback)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def t_a_deploy_managed_install_takes_reconcile_first_with_no_patch_run():
     root = _make_root()
     repo, backend = _make_repo(root)
@@ -4099,19 +4326,62 @@ def t_a_bounded_suite_that_skipped_checks_is_reported_not_hidden():
 def t_the_deploy_route_proof_sentence_reports_checks_skipped_inside_suites():
     """MEASURED 2026-11-21: 0.2.495's ROUTE line said "passed (9 of 9)" while 4
     checks inside test_reconcile_live_backend were skipped. The count must travel
-    with the claim, so the one sentence that names the proof says it too."""
+    with the claim, so the one sentence that names the proof says it too.
+
+    Gemini's ruling 1 (2026-11-21) then made the card show it COMPACTLY - the
+    skip count belongs in the same parenthesis as the pass count, not in a
+    trailing clause: `(9 of 9, 4 skipped)`. The no-skip wording is byte-identical
+    to what it was before that ruling, and the honest subset clause stays.
+    """
     plain = {"passed": 9, "total": 9, "skipped": 0}
-    check("with no skips the sentence is unchanged",
+    check("with no skips the sentence is byte-identical to before ruling 1",
           U.bounded_proof_phrase(plain) ==
           "and the bounded checks above passed (9 of 9); they are a subset, "
           "not the full suite", U.bounded_proof_phrase(plain))
     with_skips = {"passed": 9, "total": 9, "skipped": 4}
     said = U.bounded_proof_phrase(with_skips)
-    check("... and a skip inside a passing suite is named in it",
-          "with 4 check(s) inside those suites skipped for this PC and not "
-          "counted as proven" in said, said)
+    check("... and the skip count is shown COMPACTLY with the pass count",
+          said == ("and the bounded checks above passed (9 of 9, 4 skipped) - "
+                   "checks skipped for this PC are not counted as proven; they "
+                   "are a subset, not the full suite"), said)
+    check("... the old trailing 'with 4 check(s) ...' clause is gone",
+          "with 4 check(s)" not in said, said)
+    check("... a skipped check is never counted as proven",
+          "not counted as proven" in said, said)
     check("... while the subset claim stays exactly as it was",
           "they are a subset, not the full suite" in said, said)
+    check("... and the phrase holds no full stop of its own (the ROUTE sentence "
+          "supplies the one that ends it)",
+          "." not in said, said)
+
+def t_the_four_bounded_proof_phase_names_are_frozen():
+    """Gemini's ruling 2 (2026-11-21): the four phase labels are a contract.
+
+    The desktop's `update_progress.rs` parses the wire SHAPE, and the card
+    renders the phase name it is given VERBATIM, so a renamed label changes what
+    the owner reads with no Rust change at all. The exact four strings are pinned
+    here; changing one is now a breaking contract change - written in
+    `docs/JARVIS-API.md` section 184.12 first, then in the code and this test -
+    the same treatment as a route change. `backend/test_api_doc.py` proves the
+    page's frozen list and this tuple agree.
+    """
+    names = [phase["name"] for phase in U.BOUNDED_PROOF_PHASES]
+    check("the four bounded-proof phase names are frozen, in order",
+          names == ["module imports", "instant API answers", "core invariants",
+                    "look spec & config"], names)
+    check("... and there are exactly four phases",
+          len(names) == 4, len(names))
+    check("... the internal ids are still the short ids, not the labels",
+          [phase["id"] for phase in U.BOUNDED_PROOF_PHASES]
+          == ["imports", "answers", "invariants", "spec"],
+          [phase["id"] for phase in U.BOUNDED_PROOF_PHASES])
+    check("... and the progress line prints one of these labels verbatim",
+          U.PROOF_STEP_SHAPE.format(step=2, steps=len(names), phase=names[1],
+                                    done=1, total=1)
+          == "PROOF: Step 2/4 - instant API answers - 1 of 1",
+          U.PROOF_STEP_SHAPE.format(step=2, steps=len(names), phase=names[1],
+                                    done=1, total=1))
+
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

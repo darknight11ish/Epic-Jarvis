@@ -92,6 +92,31 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
   character, and every other reader parses it as a bare version number. Neither
   is guessed: a missing desktop is `VERSION: skipped (no installed desktop)` and
   an unreadable commit is `SOURCE-COMMIT: skipped (...)`;
+- it writes the live folder's **content-hash deploy manifest**,
+  `DEPLOY-MANIFEST`, beside `VERSION` (Gemini's ruling 4, 2026-11-21) - **last
+  of all**, only after every file is written and the route probes have passed.
+  It records the commit, the `VERSION`, and every live file the deploy manages
+  (every `$SHIPPED` leaf, every file the HUD deltas touch, and the markers
+  themselves) as `{"size": N, "sha256": "<hex>"}`, sealed with a
+  `manifest_sha256` over the sorted `leaf sha256 size` lines:
+
+  ```json
+  {"commit": "<sha>", "version": "<VERSION>",
+   "files": {"<leaf>": {"size": 1234, "sha256": "<64 hex>"}},
+   "manifest_sha256": "<sha256 of the canonical pairing string>"}
+  ```
+
+  It is **tamper-evident**: the seal is recomputed from the record's own `files`
+  map, so an edited hash, size or leaf list stops validating - and the update
+  tool must not trust it. No timestamp and no path goes into it, so a second
+  apply over the same bytes plans "unchanged", and two runs over the same bytes
+  produce the same manifest. This is what lets `tools/update_backend.py` prove
+  the installed **bytes**, not only the commit: a hand edit after a deploy
+  fails its check, and a corrupt manifest is a refusal there - never a
+  fallback. When the deploy cannot state a commit or the installed desktop's
+  `VERSION` (a machine with no installed desktop), it writes no manifest and
+  its own `DEPLOY-MANIFEST: skipped (...)` line says why, never a guessed
+  record;
 - with `--apply` it then probes the live routes (`/api/setup`,
   `/api/media-index`, `/api/app-control/run` while app control is off, and
   `/api/voice/status`), reading the token itself from the live folder and never
@@ -514,6 +539,21 @@ longer claim a reconcile over a patch whose hunks are absent.
   NOT-a-pass line. This tool's own refusal is reported verbatim by the in-app
   half; the app never picks this route on the hope that it will work. See
   `docs/ONE-UPDATE-FOR-BOTH.md` section 9.
+- **`DEPLOY-MANIFEST` is the deploy's own content-hash record, and it is the
+  strongest install evidence (2026-11-21).** `tools/update_backend.py` detects a
+  deploy-managed install before anything runs; a valid manifest beside `VERSION`
+  (its seal recomputing from its own `files` map) is preferred over the older
+  `SOURCE-COMMIT` marker, which stays the fallback on installs deployed before
+  the manifest existed. Its `verify_live_files` step also checks every listed
+  live file's size+sha256 against the manifest before the usual
+  `jarvis-backend/` twin compare, so a file edited or deleted after a deploy -
+  including a patched base file this repository has no copy of - is a failed
+  update instead of a silent claim. A manifest that is there but unreadable
+  (malformed, seal no longer recomputing, or `VERSION` missing beside it) makes
+  the update **refuse**: neither the patch stack (which rejects a deploy-managed
+  install by construction) nor the deploy route (over a record nobody can check)
+  is guessed at, and the refusal names the corrupt marker and the command that
+  rewrites it (`reconcile_live_backend.py --apply`).
 - `jarvis-backend/` is never copied over the live folder - it is a snapshot of
   the published base, not the runtime tree.
 - A patch with **no** `DELTA_TABLE` entry is still judged by "any one pre-image-absent

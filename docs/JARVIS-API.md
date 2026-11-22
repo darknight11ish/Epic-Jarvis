@@ -35688,6 +35688,19 @@ is what turns "the code moved" into "the HUD says the two are in step"; without
 it the MISMATCH sentence would survive a successful patch. It is one marker
 file, written atomically, and it writes nothing else.
 
+**A content-hash deploy manifest beside `VERSION` (Gemini's ruling 4,
+2026-11-21).** The deploy route also writes `<backend>/DEPLOY-MANIFEST`, a JSON
+record of the release it wrote: the commit, the `VERSION`, and every managed
+live file's `{"size", "sha256"}`, sealed with a `manifest_sha256` over the
+sorted `leaf sha256 size` lines. It is written LAST - after the files and the
+route probes - and it is what lets the update path prove the installed BYTES
+rather than only the commit: a valid manifest beside `VERSION` is the strongest
+deploy evidence (the older `SOURCE-COMMIT` stays the fallback), every listed
+file is verified against its recorded size+sha256 before the usual twin compare,
+and a malformed/tampered manifest is a refusal that names it rather than a
+silent fallback. `docs/DEPLOY.md` section 5 says what it covers and how it is
+sealed.
+
 **Two more things the half needs, measured broken the next day (2026-11-21).**
 After the proof, `tools/update_backend.py` also carries the release's own copies
 to the places the half needs them, reporting each verbatim on the card:
@@ -35968,6 +35981,44 @@ classifies nothing new because no event kind is added (navigation stays on the
 existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
 is added by this work** - that row is still waiting on the app lanes; the PR
 says exactly what each checker reported.
+
+### 184.12 The Updates card's PROOF: contract (FROZEN, 2026-11-21)
+
+**THIS SUBSECTION IS THE FROZEN PROGRESS CONTRACT.** Ruling 2 (Gemini,
+2026-11-21) froze the four phase labels the Updates card shows while the
+bounded proof runs. Since ruling 5.2 the tool prints exactly one line per
+check, and the card renders it verbatim:
+
+> PROOF: Step 2/4 - instant API answers - 1 of 1
+
+`Step N/4` is the phase (`N` of the four), the phase name is printed on the
+line verbatim, and `x of y` counts the checks done **in that phase**. The four
+labels, in order, are:
+
+- `module imports`
+- `instant API answers`
+- `core invariants`
+- `look spec & config`
+
+Those are the four `name` values of `BOUNDED_PROOF_PHASES` in
+`tools/update_backend.py`, in that order, and they are what
+`backend/test_update_backend.py` pins and `backend/test_api_doc.py` compares
+against this page. **Changing any phase label is now a breaking change**: it
+needs the same treatment as a route change - written in this section first,
+then in the code and its pinning tests - because the label is part of the
+contract the card was built against, not a free editorial choice in a
+progress string. `N/4` stays 4 while these are the four phases; adding or
+removing a phase is the same kind of contract change and is never done by
+relabelling one of these four.
+
+**The route sentence's own count.** The `ROUTE:` line that ends an
+`update_backend.py` run is rendered verbatim by the desktop's `route_lines`,
+so its numbers are contract too: a bounded pass with skips inside its suites
+reads `and the bounded checks above passed (9 of 9, 4 skipped) - checks
+skipped for this PC are not counted as proven; they are a subset, not the full
+suite` (ruling 1, 2026-11-21). The count in the parenthesis is what passed plus
+what inside those suites was skipped, and a skipped check is never counted as
+proven.
 
 ## 185. Jarvis measures its own token speed: one run, two rates, and its own history (backend phase 1, added 2026-11-04)
 
