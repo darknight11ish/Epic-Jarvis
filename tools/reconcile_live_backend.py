@@ -546,6 +546,34 @@ PHONE_LISTENER_KEYS_PROBES = ('"phone_listener": phone_listener,',
 PHONE_LISTENER_START_PROBES = ("    _phone_listener_write(bind)",)
 PHONE_LISTENER_ATEXIT_PROBES = ("atexit.register(_phone_listener_clear)",)
 
+#: cloud-turn-identity (2026-11-22, external review ruling 5.3): every request to
+#: a lane that is not the local model carries ONE fixed sentence saying what that
+#: lane is, because it has no identity, no tools and no private files. Measured on
+#: this PC: a cloud turn answered "I don't have a GitHub repository of my own" and
+#: called itself "Me (OpenAI model via API/ChatGPT)" on a machine whose provider is
+#: deepseek_api. The change lives in the published base `jarvis_hud.py` and in NO
+#: `.patch` - so without these literal deltas the owner's live HUD keeps guessing
+#: and the deploy would look clean (the same silent-miss class as the 2026-11-06
+#: card work). TWO regions, in this order, because a literal entry carries ONE
+#: block: the `_open` prologue (the fixed message is BUILT before the request) and
+#: the cloud cut (it is PREPENDED after `said[-1:]`, so the cut cannot drop it).
+#: The OLD blocks are the owner's LIVE text, measured exactly once each; the NEW
+#: blocks are the published base's own text byte for byte, so after both deltas
+#: the live file holds the base's regions. Each entry's probes are post-image only,
+#: so a second deploy says ALREADY and a half-applied file is refused, not guessed.
+CLOUD_IDENTITY_OPEN_OLD_FILE = "cloud-turn-identity-open-old.txt"
+CLOUD_IDENTITY_OPEN_NEW_FILE = "cloud-turn-identity-open-new.txt"
+CLOUD_IDENTITY_CUT_OLD_FILE = "cloud-turn-identity-cut-old.txt"
+CLOUD_IDENTITY_CUT_NEW_FILE = "cloud-turn-identity-cut-new.txt"
+CLOUD_IDENTITY_OPEN_PROBES = (
+    'cloud_identity = {"role": "system", "content": (',
+    '"You are Atlas, answering an escalated complex question via "',
+)
+CLOUD_IDENTITY_CUT_PROBES = (
+    "# cloud-turn-identity: the fixed sentence above is the ONLY",
+    'body["messages"] = [cloud_identity] + said[-1:]',
+)
+
 #: D12 (2026-10-23): the 0.20 s loopback CONNECT cap. #752 changed the
 #: published base HUD, but NO patch carries this change and no DELTA_TABLE
 #: entry shipped it - so the owner's live `_http_json`/`_reachable` are still
@@ -2253,6 +2281,31 @@ DELTA_TABLE = {
             "probes": ('route_header["crisis"] = True',
                        'route_header["cloud_refused"] = "crisis"'),
             "hunks": True,
+        },
+    },
+    # cloud-turn-identity (2026-11-22, review ruling 5.3): the identity sentence
+    # every escalated cloud turn carries. It lives in the published base
+    # `jarvis_hud.py` and in NO `.patch` (see the constants above), so it reaches
+    # the owner's live HUD as TWO literal replaces, in this order. The first
+    # swaps `_open`'s two-line prologue for the block that builds
+    # `cloud_identity`; the second swaps the cloud cut's `said[-1:]` line for the
+    # one that prepends it. Ordered by region, not by stack: both old blocks sit
+    # where no patch in `$PATCHES` writes (measured on the live file: each appears
+    # exactly once), and the identity block is added AFTER the cut so the cut can
+    # never drop it. The probes are post-image only, so a second deploy is
+    # ALREADY_PRESENT and a half-applied prologue is refused.
+    "cloud-turn-identity.patch": {
+        "jarvis_hud.py": {
+            "probes": CLOUD_IDENTITY_OPEN_PROBES,
+            "file": CLOUD_IDENTITY_OPEN_NEW_FILE,
+            "replace_file": CLOUD_IDENTITY_OPEN_OLD_FILE,
+        },
+    },
+    "cloud-turn-identity-cut.patch": {
+        "jarvis_hud.py": {
+            "probes": CLOUD_IDENTITY_CUT_PROBES,
+            "file": CLOUD_IDENTITY_CUT_NEW_FILE,
+            "replace_file": CLOUD_IDENTITY_CUT_OLD_FILE,
         },
     },
 }

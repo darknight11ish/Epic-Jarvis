@@ -408,6 +408,24 @@ MINI_HUD += (
 )
 
 
+# cloud-turn-identity (2026-11-22, review ruling 5.3): the two regions its
+# literal deltas replace - `_open`'s prologue and the cloud cut - at the
+# indentation the owner's live HUD holds them at, with the wrapper def/if lines
+# as fixture code (never delta text) so the staged file still compiles after the
+# replaces. Every fixture that plans the whole DELTA_TABLE with literals=True
+# needs them, the same gap the anchors above fill.
+MINI_HUD += (
+    "\n\n"
+    "def _cloud_identity_fixture(self):\n"
+    "    if True:\n"
+    "        def _open(lane: str):\n"
+    "            body = dict(payload); body[\"model\"] = lane\n"
+    "            if lane != local_model:\n"
+    "                said = [m for m in (body.get(\"messages\") or [])]\n"
+    "                body[\"messages\"] = said[-1:]\n"
+)
+
+
 #: Ruling 5.1's five literal deltas, in DELTA_TABLE order.
 PHONE_LISTENER_DELTAS = ("hud-phone-listener.patch",
                          "hud-phone-listener-route.patch",
@@ -7410,7 +7428,8 @@ def main():
                t_the_target_binding_reader_is_a_static_hasattr,
                t_an_unguarded_call_is_required_and_a_fallback_is_not,
                t_the_cloud_honesty_patch_is_carried_from_the_live_shape,
-               t_the_attached_file_rule_is_decided_by_its_own_probes):
+               t_the_attached_file_rule_is_decided_by_its_own_probes,
+               t_the_cloud_turn_identity_is_carried_as_two_literal_replaces):
         fn()
     print()
     if FAILED:
@@ -7450,6 +7469,69 @@ def t_the_attached_file_rule_is_decided_by_its_own_probes():
         entry = R.DELTA_TABLE[name]["jarvis_hud.py"]
         check(f"{name} is carried by its own hunks with two probes",
               entry.get("hunks") is True and len(entry.get("probes") or ()) == 2, entry)
+
+
+def t_the_cloud_turn_identity_is_carried_as_two_literal_replaces():
+    """2026-11-22 (review ruling 5.3): the identity sentence reaches the live HUD.
+
+    The sentence every escalated cloud turn now carries lives in the published
+    base `jarvis_hud.py` and in NO `.patch`, so it is the exact silent-miss class
+    this tool exists for: without these two entries the owner's live `_open`
+    keeps sending an identity-less request and the deploy prints "already
+    present" for every patch. TWO literal replaces, in order - the `_open`
+    prologue that builds the message, then the cloud cut line that prepends it -
+    because a literal entry carries one block. The staged file must hold the
+    base's own text and still compile; a second plan must find both ALREADY.
+    """
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        table = {name: R.DELTA_TABLE[name] for name in
+                 ("cloud-turn-identity.patch", "cloud-turn-identity-cut.patch")}
+        for name, entry in table.items():
+            check(f"{name} is a literal REPLACE with two probes",
+                  bool(entry["jarvis_hud.py"].get("file"))
+                  and bool(entry["jarvis_hud.py"].get("replace_file"))
+                  and len(entry["jarvis_hud.py"].get("probes") or ()) == 2, entry)
+        old_open = "\n".join(R._delta_lines(R.CLOUD_IDENTITY_OPEN_OLD_FILE))
+        old_cut = "\n".join(R._delta_lines(R.CLOUD_IDENTITY_CUT_OLD_FILE))
+        check("the fixture holds each live block exactly once",
+              MINI_HUD.count(old_open) == 1 and MINI_HUD.count(old_cut) == 1,
+              (MINI_HUD.count(old_open), MINI_HUD.count(old_cut)))
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 literals=True)
+        by = {d.patch: d.status for d in deltas}
+        check("both identity regions are planned, with no refusal",
+              refusals == [] and by.get("cloud-turn-identity.patch") == "insert"
+              and by.get("cloud-turn-identity-cut.patch") == "insert",
+              (deltas, refusals))
+        text = staged.get("jarvis_hud.py", "")
+        sentence = "You are Atlas, answering an escalated complex question via "
+        check("the staged HUD carries the sentence exactly once",
+              text.count(sentence) == 1, text.count(sentence))
+        body_line = '            body = dict(payload); body["model"] = lane'
+        check("... the message is BUILT before the request body",
+              "cloud_identity = {" in text
+              and text.index("cloud_identity = {") < text.index(body_line))
+        check("... and PREPENDED after the cloud cut, so the cut cannot drop it",
+              'body["messages"] = [cloud_identity] + said[-1:]' in text
+              and 'body["messages"] = said[-1:]' not in text)
+        check("... the cut itself is unchanged",
+              "said[-1:]" in text)
+        check("the staged HUD still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        backup = R.Backup(live, stamp="cloud-identity")
+        R.apply_deltas(staged, live, backup)
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  literals=True)
+        statuses = {d.patch: d.status for d in again}
+        check("a second plan sees both identity deltas ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and statuses.get("cloud-turn-identity.patch") == "already"
+              and statuses.get("cloud-turn-identity-cut.patch") == "already",
+              (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 if __name__ == "__main__":
