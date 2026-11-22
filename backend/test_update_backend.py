@@ -4095,6 +4095,24 @@ def t_a_bounded_suite_that_skipped_checks_is_reported_not_hidden():
     rows = [row for row in result["checks"] if row["skipped"]]
     check("... and the row names which check skipped something", bool(rows), rows[:2])
 
+
+def t_the_deploy_route_proof_sentence_reports_checks_skipped_inside_suites():
+    """MEASURED 2026-11-21: 0.2.495's ROUTE line said "passed (9 of 9)" while 4
+    checks inside test_reconcile_live_backend were skipped. The count must travel
+    with the claim, so the one sentence that names the proof says it too."""
+    plain = {"passed": 9, "total": 9, "skipped": 0}
+    check("with no skips the sentence is unchanged",
+          U.bounded_proof_phrase(plain) ==
+          "and the bounded checks above passed (9 of 9); they are a subset, "
+          "not the full suite", U.bounded_proof_phrase(plain))
+    with_skips = {"passed": 9, "total": 9, "skipped": 4}
+    said = U.bounded_proof_phrase(with_skips)
+    check("... and a skip inside a passing suite is named in it",
+          "with 4 check(s) inside those suites skipped for this PC and not "
+          "counted as proven" in said, said)
+    check("... while the subset claim stays exactly as it was",
+          "they are a subset, not the full suite" in said, said)
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
