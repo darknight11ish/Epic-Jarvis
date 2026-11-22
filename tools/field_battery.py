@@ -39,17 +39,19 @@ MONEY
       * C5 (Cloud escalation): one genuinely hard, non-private question sent to
         the chosen cloud provider (deepseek-flash at the shipped prices).
       * EFFICIENCY: up to four hard, non-private questions. It prints the
-        expected MAXIMUM spend before sending any of them, and SKIPs without
-        spending when the ledger's remaining monthly cap is below that figure,
-        when the price table cannot turn the turns into dollars, or when the
-        announced maximum would pass a few-cents ceiling. Its ten ordinary
-        questions are expected to cost $0.00; an ordinary question that reaches
-        the cloud is a FAIL and is named.
+        expected spend as an estimated RANGE before sending any of them, and
+        SKIPs without spending when the ledger's remaining monthly cap is below
+        that estimate, when the price table cannot turn the turns into dollars,
+        or when the estimate is already above the section's own ceiling. The
+        estimate is an expectation, not a promise: the run FAILS only when the
+        dollars the ledger measured are above the HARD $0.05 safety ceiling.
+        Its ten ordinary questions are expected to cost $0.00; an ordinary
+        question that reaches the cloud is a FAIL and is named.
     At the shipped prices the whole battery now expects to spend about 1-2
     cents (C5 about $0.003 + up to four EFFICIENCY turns at about $0.004
-    each). The expected maximum is printed before it is spent; the actual
-    dollars, token counts and the monthly cap are printed after every paid
-    turn.
+    each). The estimated range and the hard failure line are printed before
+    anything is spent; the actual dollars, token counts and the monthly cap are
+    printed after every paid turn.
     C6 (Cloud privacy) is a private question and must stay local - it spends
     nothing, and the script checks the ledger did not move.
 
@@ -1245,16 +1247,25 @@ EFFICIENCY_HARD = (
      "checked, and too long for the deterministic quick lane to answer for free"),
 )
 
-#: What this section may spend, in dollars. The announced maximum is turns x
-#: cost per turn; CEILING is the line above which the section refuses to start
-#: at all; STOP is a running guard that finishes the measurement it already has
-#: rather than cross a few cents. All three are deliberately small.
+#: What this section may spend, in dollars. The estimate printed before the run
+#: is a RANGE, not a promise: the per-turn figure prices one generous token
+#: budget, and a real answer can run shorter or longer than that. CEILING is the
+#: HARD safety line - the run FAILS only when the dollars the ledger measured
+#: exceed it; STOP is a running guard that finishes the measurement it already
+#: has rather than cross a few cents. All three are deliberately small.
 EFF_CEILING_DOLLARS = 0.05
 EFF_STOP_DOLLARS = 0.04
 
-#: The token figures the per-turn estimate prices in. Deliberately generous: a
-#: MAXIMUM, so a run that beats it is inside the promise, and one that exceeds
-#: it FAILs rather than quietly costing more than the owner was told.
+#: How far the estimate may land either side of the measured per-turn figure:
+#: half of it at the low end, twice it at the high end, times the number of
+#: escalated turns. Derived from the same per-turn measurement, never from a
+#: day's numbers. A spend outside this range is NOT a failure - the ceiling is.
+EFF_RANGE_LOW_FACTOR = 0.5
+EFF_RANGE_HIGH_FACTOR = 2.0
+
+#: The token figures the per-turn estimate prices in. Deliberately generous,
+#: because the estimate is an EXPECTATION: a run that beats it is still inside
+#: the safety ceiling, and only a spend above EFF_CEILING_DOLLARS FAILs.
 EFF_EST_PROMPT_TOKENS = 1500
 EFF_EST_COMPLETION_TOKENS = 3000
 
@@ -1429,6 +1440,53 @@ def _eff_estimate(ledger, provider, turns):
             "in_price": in_price, "out_price": out_price}
 
 
+def eff_spend_range(per_turn, turns):
+    """(low, high): what `turns` escalated turns are ESTIMATED to cost, in dollars.
+
+    Derived from the same per-turn figure `_eff_estimate` measures (the ledger's
+    price applied to a generous token budget, or its measured average per
+    request, whichever is larger), never from a day's observed numbers: a real
+    answer can run shorter or longer than that budget, so half of the estimate
+    is the low end and twice it the high end. This is an expectation, NOT the
+    failure line - EFF_CEILING_DOLLARS is that."""
+    per = max(0.0, float(per_turn))
+    return (per * turns * EFF_RANGE_LOW_FACTOR,
+            per * turns * EFF_RANGE_HIGH_FACTOR)
+
+
+def eff_spend_verdict(spent, ceiling=None):
+    """(inside, words): did one run's real spend stay inside the HARD ceiling?
+
+    `spent` is what the section's own ledger deltas measured. Being above the
+    estimated RANGE is not a failure - an answer can run longer than the token
+    budget the estimate prices. Only spending more than EFF_CEILING_DOLLARS
+    does, and the words say which line that is."""
+    ceiling = EFF_CEILING_DOLLARS if ceiling is None else float(ceiling)
+    spent = float(spent)
+    if spent > ceiling + 1e-9:
+        return False, (f"really spent {pennies(spent)}, above the {money(ceiling)} "
+                       f"safety ceiling - the failure line")
+    return True, (f"really spent {pennies(spent)}, inside the {money(ceiling)} safety "
+                  f"ceiling; the estimate was a range, not a promise")
+
+
+def eff_spend_words(per_turn, turns):
+    """The two lines EFFICIENCY prints before it sends anything.
+
+    The first states the estimated RANGE (from the measured per-turn figure and
+    the number of escalated turns); the second states the HARD safety ceiling
+    and says plainly that exceeding it - not the range - is what FAILs. Returned
+    as data so a test can pin the sentence without reading this module's text."""
+    low, high = eff_spend_range(per_turn, turns)
+    return [
+        f"  Estimated spend: ~{pennies(low)}\u2013{pennies(high)} for {turns} "
+        f"turn(s) x {dollars6(per_turn)} - an ESTIMATE and a RANGE, not a ceiling.",
+        f"  Hard safety ceiling: {money(EFF_CEILING_DOLLARS)} - the failure line: "
+        f"the run FAILS only if the real spend is above it. It stops sending once "
+        f"{money(EFF_STOP_DOLLARS)} has really been spent.",
+    ]
+
+
 def section_cloud_efficiency():
     REC.header(
         "EFFICIENCY",
@@ -1483,7 +1541,7 @@ def section_cloud_efficiency():
     est = _eff_estimate(ledger, provider, len(EFFICIENCY_HARD))
     if est["per_turn"] <= 0:
         return REC.skip(f"the ledger has no usable price for {provider}, so the "
-                        f"expected maximum spend cannot be stated - nothing sent")
+                        f"estimated spend cannot be stated - nothing sent")
     cap = before["cap"]
     try:
         cap_value = float(cap)
@@ -1495,10 +1553,8 @@ def section_cloud_efficiency():
 
     print(f"\n  THIS SECTION SPENDS MONEY: up to {len(EFFICIENCY_HARD)} escalated "
           f"turn(s), and no other turn is expected to cost anything.")
-    print(f"  Announced maximum: {len(EFFICIENCY_HARD)} turn(s) x "
-          f"{dollars6(est['per_turn'])} = {pennies(est['total'])} "
-          f"(ceiling for this section {money(EFF_CEILING_DOLLARS)}; it stops "
-          f"sending once {money(EFF_STOP_DOLLARS)} has really been spent).")
+    for line in eff_spend_words(est["per_turn"], len(EFFICIENCY_HARD)):
+        print(line)
     print(f"  Per-turn figure: the larger of the ledger's price for {provider}"
           f"{('/' + est['model']) if est['model'] else ''} "
           f"(${est['in_price']:.2f}/M in, ${est['out_price']:.2f}/M out) applied to "
@@ -1508,14 +1564,14 @@ def section_cloud_efficiency():
     print(f"  Cap: {money(cap_value)} per month on {before['cap_service'] or provider}; "
           f"already spent {pennies(before['dollars'])}; remaining {pennies(remaining)}.")
     if est["total"] > EFF_CEILING_DOLLARS:
-        return REC.skip(f"the announced maximum {pennies(est['total'])} is above this "
-                        f"section's {money(EFF_CEILING_DOLLARS)} ceiling - nothing sent "
-                        f"(raise EFF_CEILING_DOLLARS deliberately if the owner wants a "
-                        f"bigger measurement)")
+        return REC.skip(f"the estimated spend {pennies(est['total'])} is above this "
+                        f"section's {money(EFF_CEILING_DOLLARS)} safety ceiling - "
+                        f"nothing sent (raise EFF_CEILING_DOLLARS deliberately if the "
+                        f"owner wants a bigger measurement)")
     if remaining < est["total"]:
         return REC.skip(f"the remaining monthly cap {pennies(remaining)} is below the "
-                        f"announced maximum {pennies(est['total'])} - nothing sent")
-    REC.info(f"guard passed: remaining {pennies(remaining)} >= announced maximum "
+                        f"estimated spend {pennies(est['total'])} - nothing sent")
+    REC.info(f"guard passed: remaining {pennies(remaining)} >= estimated spend "
              f"{pennies(est['total'])}; the {len(EFFICIENCY_ORDINARY)} ordinary "
              f"questions are expected to cost $0.00")
 
@@ -1690,10 +1746,9 @@ def section_cloud_efficiency():
                f"around the HTTP call")
         REC.info(f"tokens per escalated turn: prompt {prompt_per:,.0f}, completion "
                  f"{completion_per:,.0f} (ledger deltas, divided by {count})")
-        if spent_this_section > est["total"] + 1e-9:
-            REC.fail("the section stayed inside the maximum spend it announced",
-                     f"really spent {pennies(spent_this_section)}, announced "
-                     f"{pennies(est['total'])}")
+        inside, spend_words = eff_spend_verdict(spent_this_section)
+        REC.expect("the section stayed inside its hard safety ceiling",
+                   inside, spend_words)
 
     # ---- 4. what the budget does, computed and not spent -------------------
     if final is not None:
@@ -3879,8 +3934,9 @@ def main(only=None, allow_stale_cloud=False):
     print(f"  checkout: {REPO}")
     print(f"  throwaway marker: {MARKER}")
     print("  spends money ONLY in sections C5 (one hard cloud question) and EFFICIENCY")
-    print("  (up to four, behind an announced maximum and a remaining-cap check); every")
-    print("  other row is read-only or writes only its own throwaway artifact, removed again.")
+    print("  (up to four, behind an estimated range, a $0.05 safety ceiling and a")
+    print("  remaining-cap check); every other row is read-only or writes only its own")
+    print("  throwaway artifact, removed again.")
     print("  a token, key or private fact is never printed.")
 
     sections = list(SECTIONS)
