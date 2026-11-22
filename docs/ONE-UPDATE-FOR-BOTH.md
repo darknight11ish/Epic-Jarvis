@@ -708,6 +708,27 @@ full check passed", and the unqualified full-sweep line is printed only by
 "patched and proven" from the line, and the app path's proof IS the bounded
 pass.)
 
+**The four phase names are FROZEN (Gemini's ruling 2, 2026-11-21).** The labels
+the card shows - `module imports`, `instant API answers`, `core invariants`,
+`look spec & config` - are the four `BOUNDED_PROOF_PHASES` names, in that order,
+and they are now a contract, not copy: the desktop renders the `PROOF: Step
+N/4 - <phase> - x of y` line verbatim, so **changing a phase label is a breaking
+change** and needs the same treatment as a route change (the frozen section in
+`docs/JARVIS-API.md` §184.12 first, then the code and its pinning tests). The
+same freeze covers the progress line's shape: `N/4` is the phase, the name is
+printed verbatim, and `x of y` counts that phase's checks. `backend/test_update_backend.py`
+pins the four exact strings, and `backend/test_api_doc.py` proves this page's
+list and the code's tuple agree.
+
+**And the route sentence's count is part of the claim (ruling 1, 2026-11-21).**
+A bounded check can pass while checks inside its suite were skipped for this PC
+(measured 2026-11-21: 4 inside `test_reconcile_live_backend`). The one sentence
+that names the proof shows that compactly - `passed (9 of 9, 4 skipped)` - and
+keeps the honest clause: *"checks skipped for this PC are not counted as
+proven; they are a subset, not the full suite."* With no skips the sentence is
+byte-identical to what it was, `passed (9 of 9); they are a subset, not the full
+suite`.
+
 **The app's bounds are unchanged.** The five-minute proof heartbeat (#1442) is
 still there for a quiet child and for the `--full-proof` sweep; a healthy
 bounded run finishes in a few minutes, so no bound can fire on it.
@@ -730,14 +751,17 @@ that could have been predicted: the live folder is deploy-managed, so the
 then did `tools/reconcile_live_backend.py --apply` carry the update. Now the
 install type is checked first, from **evidence only**:
 
-- **deploy-managed** when the live folder has `SOURCE-COMMIT` sitting beside
-  `VERSION` (the two markers only the deploy tool writes together), and/or at
-  least one `_jarvis-deploy-backup-tool-*` backup folder. Then the deploy tool
-  is the PRIMARY route - the patch stack is never started, so its guaranteed
-  refusal is skipped;
-- **legacy patch-only** when neither is there. Then `scripts/apply-patches.ps1`
-  runs first exactly as before, and the measured mid-run refusal fallback to the
-  deploy route is unchanged.
+- **deploy-managed** when the live folder has a valid `DEPLOY-MANIFEST` beside
+  `VERSION` - the deploy's own content-hash record of the release it wrote, and
+  the STRONGEST evidence (see below) - or, on an install deployed before that
+  manifest existed, `SOURCE-COMMIT` sitting beside `VERSION` (the two markers
+  only the deploy tool writes together), and/or at least one
+  `_jarvis-deploy-backup-tool-*` backup folder. Then the deploy tool is the
+  PRIMARY route - the patch stack is never started, so its guaranteed refusal is
+  skipped;
+- **legacy patch-only** when none of that is there. Then
+  `scripts/apply-patches.ps1` runs first exactly as before, and the measured
+  mid-run refusal fallback to the deploy route is unchanged.
 
 The decision is never guessed: `SOURCE-COMMIT` without `VERSION` is not "beside
 VERSION", a lone `VERSION` is not evidence (the app writes one too), and
@@ -749,8 +773,49 @@ e.g. *"this install is deploy-managed (SOURCE-COMMIT sits beside VERSION
 this repository's bytes at commit d7003442e and VERSION 0.2.492, and the
 bounded checks above passed (9 of 9); they are a subset, not the full suite."*
 
-**Held by tests** (`backend/test_update_backend.py`, every new check fails on the
-tree before this change): the bounded subset is what the app path runs and the
+**THE DEPLOY MANIFEST - content, not just a commit (Gemini's ruling 4,
+2026-11-21).** `tools/reconcile_live_backend.py --apply` now writes
+`DEPLOY-MANIFEST` beside `VERSION`, **last of all** - after every live file is
+written and the route probes have passed - never before the bytes it describes:
+
+```json
+{"commit": "<sha>", "version": "<VERSION>",
+ "files": {"<leaf>": {"size": 1234, "sha256": "<64 hex>"}},
+ "manifest_sha256": "<sha256 of the canonical pairing string>"}
+```
+
+It covers every live file the deploy manages: every `$SHIPPED` leaf, every file
+the HUD deltas touch, and the markers `VERSION`, `SOURCE-COMMIT` and the
+beside-files. The canonical pairing string is the file map sorted by leaf name,
+one `<leaf> <sha256> <size>` line per file, and `manifest_sha256` is the sha256
+of it - so a reader can recompute the seal from the record's own `files` map,
+and an edited hash, size or leaf list stops it validating. The record is
+**tamper-evident**, has no timestamp and no path in it, and two runs over the
+same bytes produce the same manifest. It gives the folder something
+`SOURCE-COMMIT` never could: the answer to *which bytes* was this deployed
+with.
+
+Its three rules in the update path:
+
+- **detection prefers it.** A valid manifest beside `VERSION` is the strongest
+  deploy evidence and is named first in the `ROUTE:` sentence's evidence; the
+  older `SOURCE-COMMIT` marker stays the fallback when no manifest exists.
+- **verification uses it.** Before the existing `jarvis-backend/` twin compare,
+  every file the manifest lists is checked against its recorded size+sha256, so
+  a manual edit, a half-write or a deleted file is a failed update - including
+  the five patched base files this repository holds no copy of. The twin compare
+  still runs afterwards, so the shipped bytes are proved twice over.
+- **a corrupt one refuses.** A manifest that is there but unusable - malformed,
+  a seal that no longer recomputes, or no `VERSION` beside it - is a REFUSAL in
+  the update tool: it names the corrupt marker and how to repair it
+  (`reconcile_live_backend.py --apply`, or delete it on a genuinely legacy
+  install) and starts NEITHER route. It is never treated as "no manifest" and
+  never silently falls back to the patch stack. Manifest absent (an install
+  from before this ruling) keeps today's behaviour exactly.
+
+**Held by tests** (`backend/test_update_backend.py` and
+`backend/test_reconcile_live_backend.py`; every manifest check fails on the tree
+before this change): the bounded subset is what the app path runs and the
 full sweep only runs with the flag; every bounded check's command is named and
 driven (the heavy ones through fakes); the four phase lines are the card's exact
 shape; a quiet phase is heartbeated inside the five minutes while a healthy one
@@ -758,5 +823,11 @@ is not; `py_compile` and the import-all child really fail on a broken live
 module; a deploy-managed fixture takes reconcile first with NO patch run; a
 patch-only fixture still runs the patch stack; a deploy refusal is verbatim with
 one ROUTE line and no fallback; and the bounded ending never claims the full
-check. "Both or neither" is untouched: nothing here installs, approves or starts
-anything else.
+check. The manifest itself: the apply writes it after the probes with every
+managed file's own size+sha256 and a seal over the canonical sorted lines; two
+applies over the same bytes produce the same `manifest_sha256`; a valid
+manifest is preferred as deploy evidence and named in the evidence words; a
+malformed/tampered one refuses the update loudly and runs neither route; a live
+file edited after a deploy fails verification against its recorded hash; and no
+manifest means the old behaviour, unchanged. "Both or neither" is untouched:
+nothing here installs, approves or starts anything else.

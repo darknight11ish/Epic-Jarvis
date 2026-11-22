@@ -5324,9 +5324,10 @@ def fixture_version_reader(exe: Path):
 
 
 def release_report(text: str) -> list:
-    """The VERSION:/SOURCE-COMMIT:/BESIDE: lines, for a failure message."""
+    """The VERSION:/SOURCE-COMMIT:/BESIDE:/DEPLOY-MANIFEST: lines, for a failure message."""
     return [line for line in text.splitlines()
-            if line.startswith(("VERSION:", "SOURCE-COMMIT:", "BESIDE:"))]
+            if line.startswith(("VERSION:", "SOURCE-COMMIT:", "BESIDE:",
+                                "DEPLOY-MANIFEST:"))]
 
 
 def t_release_markers_carry_the_version_and_the_beside_files():
@@ -5363,10 +5364,11 @@ def t_release_markers_carry_the_version_and_the_beside_files():
         # The runbook's formula: to add + to update + the DISTINCT files among
         # the inserts + the release markers (each differing beside file plus the
         # VERSION when it differs, plus SOURCE-COMMIT when it is not already the
-        # record this run would write) - `wrote N` covers all of them since
-        # 2026-11-06. Here VERSION differs (0.2.421 -> 9.9.9), BOTH beside files
-        # are missing, and SOURCE-COMMIT is absent (Gemini's ruling Q8,
-        # 2026-11-15), so the release term is 4.
+        # record this run would write, plus the content-hash DEPLOY-MANIFEST
+        # when it must be written - Gemini's ruling 4, 2026-11-21) - `wrote N`
+        # covers all of them since 2026-11-06. Here VERSION differs
+        # (0.2.421 -> 9.9.9), BOTH beside files are missing, SOURCE-COMMIT is
+        # absent (Q8, 2026-11-15) and the manifest is new, so the term is 5.
         def summ(label):
             found = re.search(rf"^  {re.escape(label)}: (\d+)$", text, re.M)
             return int(found.group(1)) if found else 0
@@ -5381,7 +5383,7 @@ def t_release_markers_carry_the_version_and_the_beside_files():
             found = re.search(r"^  insert files: (\d+)$", blob, re.M)
             return int(found.group(1)) if found else 0
 
-        expected_release = 4
+        expected_release = 5
         expected_wrote = (summ("to add") + summ("to update")
                           + insert_files(text)
                           + expected_release)
@@ -5407,13 +5409,14 @@ def t_release_markers_carry_the_version_and_the_beside_files():
               and "BESIDE: wrote quiz_grader_cases.json" in text2,
               release_report(text2))
         wrote = re.search(r"wrote (\d+) file\(s\)", text2)
-        check("release: `wrote N` is add + update + insert + beside + version",
+        check("release: `wrote N` is add + update + insert + beside + version "
+              "+ the deploy manifest",
               wrote is not None and int(wrote.group(1)) == expected_wrote,
               (wrote.group(1) if wrote else None, expected_wrote))
         check("release: ... and the report says how many were release markers",
-              "wrote %d file(s) (4 of them release markers: VERSION, "
-              "SOURCE-COMMIT, requirements.lock, quiz_grader_cases.json)"
-              % expected_wrote in text2,
+              "wrote %d file(s) (5 of them release markers: VERSION, "
+              "SOURCE-COMMIT, requirements.lock, quiz_grader_cases.json, "
+              "DEPLOY-MANIFEST)" % expected_wrote in text2,
               (text2[-4:], expected_wrote))
         # The record itself: the full commit, in the format the preflight reads.
         record = json.loads((live / "SOURCE-COMMIT").read_text(encoding="utf-8"))
@@ -5512,9 +5515,11 @@ def t_a_missing_installed_desktop_is_skipped_not_guessed():
 def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
     """Q1.1 (owner ruling 2026-11-06 11:35 PT): the formula counts them.
 
-    One beside file differs and the VERSION differs -> the release term is 2, and
-    `PLANNED CHANGES` and `wrote N` must both include it. The arithmetic is pinned
-    from the run's OWN printed bucket counts, never from a hard-coded plan size."""
+    One beside file differs, the VERSION differs and SOURCE-COMMIT is absent -> the
+    beside+version term is 3; the content-hash DEPLOY-MANIFEST adds one more
+    (Gemini's ruling 4, 2026-11-21). `PLANNED CHANGES` and `wrote N` must both
+    include them. The arithmetic is pinned from the run's OWN printed bucket
+    counts, never from a hard-coded plan size."""
     root = tmpdir()
     try:
         repo, live, _show = make_fixture_pc(root)
@@ -5525,8 +5530,11 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         lock.write_bytes(fake_show(repo, "origin/main", "requirements.lock"))
         # quiz_grader_cases.json is absent -> differs -> counts.
         # SOURCE-COMMIT is absent too, and the ref resolves to FIXTURE_HEAD, so
-        # the record is written and counts (Q8, 2026-11-15).
+        # the record is written and counts (Q8, 2026-11-15). The content-hash
+        # DEPLOY-MANIFEST is absent as well, so it is one more write of the
+        # formula (Gemini's ruling 4, 2026-11-21).
         expected_release = 3
+        expected_manifest = 1
 
         lines = []
         code = run_fixture(repo, live, apply=False, out_lines=lines,
@@ -5534,31 +5542,35 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         text = "\n".join(lines)
         check("formula: the dry run succeeds", code == 0, (code, lines[-5:]))
         check("formula: the release header states the count in the formula",
-              "RELEASE MARKERS (3 in the formula: VERSION, SOURCE-COMMIT and the "
-              "beside-files):" in text,
+              "RELEASE MARKERS (4 in the formula: VERSION, SOURCE-COMMIT, the "
+              "beside-files and the deploy manifest):" in text,
               release_report(text))
-        check("formula: ... and its lines name exactly the three writes",
+        check("formula: ... and its lines name exactly the three marker writes "
+              "plus the manifest",
               "VERSION: would write 9.9.9 (now 0.2.421)" in text
               and "BESIDE: would write quiz_grader_cases.json" in text
               and "BESIDE: unchanged requirements.lock" in text
-              and f"SOURCE-COMMIT: would write {FIXTURE_HEAD[:12]}" in text,
+              and f"SOURCE-COMMIT: would write {FIXTURE_HEAD[:12]}" in text
+              and "DEPLOY-MANIFEST: would write (" in text,
               release_report(text))
         planned = re.search(
             r"^PLANNED CHANGES: (\d+) file-level change\(s\) = add (\d+) \+ "
             r"update (\d+) \+ insert (\d+) \+ beside\+version (\d+) \+ "
-            r"pycache (\d+)",
+            r"manifest (\d+) \+ pycache (\d+)",
             text, re.M)
         check("formula: PLANNED CHANGES prints its own buckets", planned is not None,
               [l for l in lines if l.startswith("PLANNED CHANGES")])
         if planned:
-            total, add_n, upd_n, ins_n, rel_n, pyc_n = (int(g) for g in planned.groups())
+            (total, add_n, upd_n, ins_n, rel_n, man_n, pyc_n) = (
+                int(g) for g in planned.groups())
             check("formula: ... with beside+version = 3 (one beside file + VERSION + "
-                  "SOURCE-COMMIT)",
-                  rel_n == expected_release, rel_n)
+                  "SOURCE-COMMIT) and manifest = 1",
+                  rel_n == expected_release and man_n == expected_manifest,
+                  (rel_n, man_n))
             check("formula: ... and the total is add + update + insert + "
-                  "beside+version + pycache",
-                  total == add_n + upd_n + ins_n + rel_n + pyc_n,
-                  (total, add_n, upd_n, ins_n, rel_n, pyc_n))
+                  "beside+version + manifest + pycache",
+                  total == add_n + upd_n + ins_n + rel_n + man_n + pyc_n,
+                  (total, add_n, upd_n, ins_n, rel_n, man_n, pyc_n))
 
         lines2 = []
         code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
@@ -5577,14 +5589,15 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         wrote = re.search(r"wrote (\d+) file\(s\)", text2)
         wrote_n = int(wrote.group(1)) if wrote else -1
         check("formula: wrote N is add + update + distinct insert files + "
-              "beside + version",
+              "beside + version + the manifest",
               wrote_n == (summ("to add") + summ("to update") + distinct_inserts
-                          + expected_release),
+                          + expected_release + expected_manifest),
               (wrote_n, summ("to add"), summ("to update"), distinct_inserts,
-               expected_release))
+               expected_release, expected_manifest))
         check("formula: ... and the report names the release markers it counted",
-              wrote_n > 0 and ("wrote %d file(s) (3 of them release markers: "
-                               "VERSION, SOURCE-COMMIT, quiz_grader_cases.json)"
+              wrote_n > 0 and ("wrote %d file(s) (4 of them release markers: "
+                               "VERSION, SOURCE-COMMIT, quiz_grader_cases.json, "
+                               "DEPLOY-MANIFEST)"
                                % wrote_n) in text2,
               (text2[-4:], wrote_n))
 
@@ -5594,9 +5607,11 @@ def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
         text3 = "\n".join(lines3)
         check("formula: a second apply is idempotent", code3 == 0, (code3, lines3[-8:]))
         check("formula: ... it plans 0 release markers, because nothing differs",
-              "RELEASE MARKERS (0 in the formula: VERSION, SOURCE-COMMIT and the "
-              "beside-files):" in text3,
+              "RELEASE MARKERS (0 in the formula: VERSION, SOURCE-COMMIT, the "
+              "beside-files and the deploy manifest):" in text3,
               release_report(text3))
+        check("formula: ... the manifest is reported unchanged, not rewritten",
+              "DEPLOY-MANIFEST: unchanged (" in text3, release_report(text3))
         check("formula: ... and says no file changed",
               "no file changed (already current)" in text3, text3[-4:])
     finally:
@@ -5722,6 +5737,229 @@ def t_release_markers_leave_unchanged_files_alone():
                  for p in (live / "VERSION", lock, quiz)}
         check("release: unchanged files keep their bytes AND their mtime",
               after == before, (before, after))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
+#   14b. THE CONTENT-HASH DEPLOY MANIFEST (Gemini's ruling 4, 2026-11-21)
+# --------------------------------------------------------------------------
+#
+# WHY. The deploy folder could say which COMMIT it came from (`SOURCE-COMMIT`)
+# but not which BYTES it was deployed with: a file edited after the deploy, or a
+# half-written one, read exactly like the deployed release. The manifest is the
+# deploy's own record - commit, version, and every managed live file's size and
+# sha256, sealed with one `manifest_sha256` over the sorted map - written LAST,
+# after the files it describes have been written and the deploy has proved them.
+# `tools/update_backend.py` prefers it as deploy evidence and verifies live
+# files against it; a corrupt one is a refusal there, never a fallback.
+#
+# EVERY CHECK IN THIS SECTION FAILS ON THE TREE BEFORE THIS CHANGE: there was no
+# manifest at all.
+
+#: The fixture's managed leaves: every `$SHIPPED` file, every live file the HUD
+#: deltas touch, and the release markers. Pinned exactly, so a new file that
+#: enters the deploy without entering the manifest (or the reverse) fails here.
+FIXTURE_MANIFEST_LEAVES = (
+    "SOURCE-COMMIT", "VERSION", "jarvis_agent.py", "jarvis_compute.py",
+    "jarvis_gate.py", "jarvis_hud.html", "jarvis_hud.py",
+    "quiz_grader_cases.json", "requirements.lock",
+)
+
+
+def manifest_record(live: Path) -> dict:
+    """The live folder's DEPLOY-MANIFEST, parsed; an absent one is a failure here."""
+    path = Path(live) / "DEPLOY-MANIFEST"
+    if not path.is_file():
+        raise AssertionError(f"no DEPLOY-MANIFEST in {live}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def t_the_deploy_manifest_records_the_release_and_every_managed_leaf():
+    """The manifest's shape, its bytes, its seal, and that it is written LAST."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("manifest: the apply succeeds", code == 0, (code, lines[-8:]))
+        path = live / "DEPLOY-MANIFEST"
+        check("manifest: an apply writes DEPLOY-MANIFEST beside VERSION",
+              path.is_file() and (live / "VERSION").is_file())
+        doc = manifest_record(live)
+        check("manifest: its shape is exactly ruling 4's four keys, in order",
+              list(doc) == ["commit", "version", "files", "manifest_sha256"],
+              list(doc))
+        check("manifest: it names the commit the deploy came from",
+              doc["commit"] == FIXTURE_HEAD, doc["commit"])
+        check("manifest: ... and the VERSION the deploy wrote",
+              doc["version"] == FIXTURE_DESKTOP_VERSION, doc["version"])
+        check("manifest: it lists every managed leaf and nothing else",
+              tuple(sorted(doc["files"])) == FIXTURE_MANIFEST_LEAVES,
+              sorted(doc["files"]))
+        check("manifest: the manifest never lists itself",
+              "DEPLOY-MANIFEST" not in doc["files"])
+        # EVERY listed byte is the live byte, hashed here independently - the
+        # deploy's own record is checked against the folder, never trusted.
+        wrong = []
+        for leaf, entry in sorted(doc["files"].items()):
+            data = (live / leaf).read_bytes()
+            if (entry.get("size") != len(data)
+                    or entry.get("sha256") != hashlib.sha256(data).hexdigest()):
+                wrong.append(leaf)
+        check("manifest: every file's size+sha256 is the deployed bytes' own",
+              wrong == [], wrong)
+        canonical = R.manifest_canonical(doc["files"])
+        check("manifest: the canonical string is sorted 'leaf sha256 size' lines",
+              canonical == "".join(
+                  f"{leaf} {doc['files'][leaf]['sha256']} "
+                  f"{doc['files'][leaf]['size']}\n"
+                  for leaf in sorted(doc["files"])), canonical[:160])
+        check("manifest: the seal is sha256 of that canonical string",
+              doc["manifest_sha256"] == R.manifest_digest(doc["files"])
+              == hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+              doc["manifest_sha256"])
+        check("manifest: the report says how many files it hashed",
+              f"DEPLOY-MANIFEST: wrote ({len(doc['files'])} file(s) hashed, "
+              f"manifest_sha256 {doc['manifest_sha256'][:12]})" in text,
+              release_report(text))
+        # WRITTEN LAST: not until the probes have passed, so it can never claim a
+        # release that a failed run did not finish.
+        probe_at = text.find("ROUTE PROBES:")
+        manifest_at = text.find("DEPLOY-MANIFEST: wrote")
+        result_at = text.find("RESULT: PASS")
+        check("manifest: it is written AFTER the route probes passed, before the PASS",
+              -1 < probe_at < manifest_at < result_at,
+              (probe_at, manifest_at, result_at))
+        check("manifest: ... and it counts in `wrote N`",
+              "wrote" in text and "DEPLOY-MANIFEST" in
+              next((line for line in reversed(lines) if " of them release markers"
+                    in line), ""), release_report(text))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_two_applies_over_the_same_bytes_produce_the_same_manifest_hash():
+    """Determinism: no timestamp, no path, no dict order - the same bytes hash alike."""
+    root = tmpdir()
+    root2 = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        run_fixture(repo, live, apply=True, desktop_exe=exe, version_reader=reader)
+        first = manifest_record(live)
+        first_bytes = (live / "DEPLOY-MANIFEST").read_bytes()
+
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("manifest: a second apply over the same bytes changes nothing",
+              code == 0 and (live / "DEPLOY-MANIFEST").read_bytes() == first_bytes,
+              (code, lines[-6:]))
+        check("manifest: ... so its manifest_sha256 is identical",
+              manifest_record(live)["manifest_sha256"] == first["manifest_sha256"],
+              (first["manifest_sha256"],
+               manifest_record(live)["manifest_sha256"]))
+        check("manifest: ... and it is reported unchanged, never rewritten",
+              "DEPLOY-MANIFEST: unchanged (" in text
+              and "DEPLOY-MANIFEST: wrote" not in text, release_report(text))
+
+        # A SEPARATE folder with the same deployed bytes hashes identically.
+        repo2, live2, _show2 = make_fixture_pc(root2)
+        exe2 = fake_desktop(root2)
+        reader2 = fixture_version_reader(exe2)
+        run_fixture(repo2, live2, apply=True, desktop_exe=exe2, version_reader=reader2)
+        other = manifest_record(live2)
+        check("manifest: two different folders with the same bytes hash the same",
+              other["manifest_sha256"] == first["manifest_sha256"],
+              (first["manifest_sha256"], other["manifest_sha256"]))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(root2, ignore_errors=True)
+
+
+def t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted():
+    """The reader's own rule: present but unusable is NAMED, never 'no manifest'."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        missing = R.read_deploy_manifest(live)
+        check("manifest: a folder with no manifest reads as 'not there', not an error",
+              missing == {"present": False, "ok": False, "why": "",
+                          "doc": None, "files": {}}, missing)
+        run_fixture(repo, live, apply=True, desktop_exe=exe, version_reader=reader)
+        path = live / "DEPLOY-MANIFEST"
+        good_bytes = path.read_bytes()
+        good = R.read_deploy_manifest(live)
+        check("manifest: the written manifest validates",
+              good["present"] is True and good["ok"] is True
+              and len(good["files"]) == len(FIXTURE_MANIFEST_LEAVES), good)
+        doc = json.loads(good_bytes)
+        tampered = json.loads(good_bytes)
+        leaf = sorted(tampered["files"])[0]
+        tampered["files"][leaf]["size"] += 1
+        cases = {
+            "not JSON at all": b"{ this is not json",
+            "a JSON list, not an object": json.dumps([1, 2, 3]).encode("utf-8"),
+            "an empty files map": json.dumps({**doc, "files": {}}).encode("utf-8"),
+            "an edited per-file size": json.dumps(tampered).encode("utf-8"),
+            "no manifest_sha256 at all": json.dumps(
+                {key: value for key, value in doc.items()
+                 if key != "manifest_sha256"}).encode("utf-8"),
+            "a manifest_sha256 that does not recompute": json.dumps(
+                {**doc, "manifest_sha256": "0" * 64}).encode("utf-8"),
+            "a commit that is not a commit": json.dumps(
+                {**doc, "commit": "not-a-commit"}).encode("utf-8"),
+            "no VERSION": json.dumps({**doc, "version": "  "}).encode("utf-8"),
+            "a negative file size": json.dumps(
+                {**doc, "files": {"one.py": {"size": -1,
+                                             "sha256": "0" * 64}}}).encode("utf-8"),
+            "a leaf named with a path": json.dumps(
+                {**doc, "files": {"../one.py": {"size": 1,
+                                                "sha256": "0" * 64}}}).encode("utf-8"),
+        }
+        for why, blob in sorted(cases.items()):
+            path.write_bytes(blob)
+            record = R.read_deploy_manifest(live)
+            check(f"manifest: {why} is present but NOT valid, and says why",
+                  record["present"] is True and record["ok"] is False
+                  and bool(record["why"]), record)
+        path.write_bytes(good_bytes)
+        check("manifest: the original record still validates afterwards",
+              R.read_deploy_manifest(live)["ok"] is True)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_no_installed_desktop_means_no_manifest_rather_than_a_guessed_one():
+    """A manifest needs a commit AND a VERSION; without one it is skipped, not faked."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        missing = root / "no-desktop" / "jarvis-desktop.exe"
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines,
+                           desktop_exe=missing,
+                           version_reader=R.read_desktop_version)
+        text = "\n".join(lines)
+        check("manifest: an apply with no installed desktop succeeds", code == 0,
+              (code, lines[-8:]))
+        check("manifest: it writes NO manifest, because it cannot state a VERSION",
+              not (live / "DEPLOY-MANIFEST").exists())
+        check("manifest: ... and says so on its own line",
+              "DEPLOY-MANIFEST: skipped (no readable VERSION" in text,
+              [line for line in lines if line.startswith("DEPLOY-MANIFEST")])
+        check("manifest: ... so the folder is not claimed as a deploy-managed one "
+              "by a manifest it does not have",
+              not (live / "DEPLOY-MANIFEST").is_file())
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -6974,6 +7212,10 @@ def main():
                t_release_markers_never_touch_the_owners_toml_or_the_excluded_files,
                t_a_missing_installed_desktop_is_skipped_not_guessed,
                t_release_markers_leave_unchanged_files_alone,
+               t_the_deploy_manifest_records_the_release_and_every_managed_leaf,
+               t_two_applies_over_the_same_bytes_produce_the_same_manifest_hash,
+               t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted,
+               t_no_installed_desktop_means_no_manifest_rather_than_a_guessed_one,
                t_source_commit_is_recorded_beside_version_and_never_guessed,
                t_source_commit_blob_is_stable_and_validated,
                t_the_lists_parse_from_apply_patches,

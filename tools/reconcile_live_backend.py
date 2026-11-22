@@ -167,7 +167,8 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
         differs from the installed desktop's FileVersion, and 0 when they are all
         unchanged - so the runbook's formula is
         `add + update + insert + beside + version` (plus the stale `.pyc`
-        purges). Their own `VERSION:` / `BESIDE:` lines say what changed, and the
+        purges and the deploy manifest, step 6a). Their own `VERSION:` /
+        `BESIDE:` lines say what changed, and the
         `RELEASE MARKERS (N in the formula: ...)` header states N. A second run
         on an already-current folder plans none of them. A dry run prints
         `VERSION: would write ...` / `BESIDE: would write ...` and writes nothing.
@@ -242,6 +243,41 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        It prints PASS / FAIL / SKIP per probe and exits non-zero if an expected probe
        fails.
 
+    6a. THE CONTENT-HASH DEPLOY MANIFEST - written LAST (Gemini's ruling 4,
+        2026-11-21). `<live>/DEPLOY-MANIFEST` is a JSON record of this deploy,
+        beside `VERSION`:
+
+            {"commit": "<sha>", "version": "<VERSION>",
+             "files": {"<leaf>": {"size": N, "sha256": "<hex>"}, ...},
+             "manifest_sha256": "<sha256 of the canonical pairing string>"}
+
+        It covers every live file the deploy manages - every `$SHIPPED` leaf,
+        every file the HUD deltas touch, and the release markers `VERSION`,
+        `SOURCE-COMMIT` and the beside-files - so the folder can answer "which
+        bytes was this deployed with?" and not merely "which commit". The
+        canonical pairing string is the file map sorted by leaf name, one
+        `<leaf> <sha256> <size>` line per file (newline-terminated);
+        `manifest_sha256` is the sha256 of that string, so a reader can
+        recompute the seal from the manifest's own `files` map and any edited
+        hash, size or leaf list changes it - the record is TAMPER-EVIDENT. No
+        timestamp and no path goes into it, so a second apply over the same
+        bytes plans "unchanged" and two runs over the same bytes produce the
+        same manifest.
+        It is planned with the release markers (and counts as one more write in
+        `PLANNED CHANGES` / `wrote N`), but it is WRITTEN only here, after
+        every live file is written and the deploy proved them: the managed
+        leaves are re-read and re-hashed now, the rebuilt manifest must be
+        exactly the planned bytes, and the write is read back. A run whose
+        probes failed never reaches this step, so a failed deploy can never
+        leave a record claiming it passed. The old manifest (when there is one)
+        is backed up first. When the deploy cannot state what it deployed - no
+        readable commit, or no installed desktop's `VERSION` - no manifest is
+        written and its own line says so, never a guessed record.
+        `tools/update_backend.py` reads it as the STRONGEST deploy evidence and
+        verifies every listed live file's size+sha256 against it; a malformed
+        one, or one whose seal does not recompute, is a refusal there - never a
+        fallback.
+
     A second `--apply` on an already-current tree changes nothing and all probes pass.
 
 WHAT IT DOES NOT DO
@@ -282,7 +318,7 @@ USAGE
 
 EXIT CODES
     0 success (dry run planned cleanly, or apply + all probes PASS)
-    1 a plugin add or a route probe failed
+    1 a plugin add, a route probe or the deploy manifest write failed
     2 refused before writing (bad arguments, working tree not at --ref, unknown HUD
       delta, missing anchor, a patch whose presence cannot be proved, a shipped
       module calling a name the target folder's patched base file does not bind,
@@ -292,6 +328,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import os
 import py_compile
@@ -353,6 +390,21 @@ SOURCE_COMMIT_SCHEMA = "jarvis-source-commit/1"
 #: identity a program compares, not a place to echo whatever an environment
 #: variable happens to hold.
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{7,40}$")
+
+#: The content-hash deploy manifest, written BESIDE `VERSION` (Gemini's ruling 4,
+#: 2026-11-21). It records the deploy itself: which commit and `VERSION` this
+#: folder was deployed at, and the size + sha256 of every live file the deploy
+#: manages, sealed with one `manifest_sha256` over the sorted map. It is
+#: tamper-evident: a reader can recompute the seal from the manifest's own
+#: `files` map without trusting any other field, and `tools/update_backend.py`
+#: verifies every listed live file's size and hash against it - a partial or
+#: manual edit fails that comparison. Written LAST, on a run that finished and
+#: passed (or whose probes were skipped for a stated reason), never before the
+#: deploy has written the bytes it describes.
+DEPLOY_MANIFEST = "DEPLOY-MANIFEST"
+
+#: The one digest shape a manifest may carry (both per-file and the seal).
+_MANIFEST_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 #: Where the stack puts the setup block: before the plugin-loader block, which is LAST.
 PLUGIN_LOADER_MARKER = "    # plugin-loader.patch (this branch)."
@@ -2322,11 +2374,34 @@ class ReleaseAction:
 
 
 @dataclass
+class ManifestAction:
+    """The content-hash deploy manifest planned for this run (ruling 4).
+
+    `status` is `write` when this run must create/replace `DEPLOY-MANIFEST`,
+    `unchanged` when the live file's bytes are already exactly the planned ones
+    (so a second apply plans and writes nothing), and `skip` when the run cannot
+    state what it deployed (no readable commit or no `VERSION`) - never a
+    manifest from a guess. `names` is the managed leaf list the manifest covers;
+    the writer re-reads those files at the end so the recorded bytes are the
+    ones that are really there, not the ones the plan hoped for.
+    """
+    status: str             # "write" | "unchanged" | "skip"
+    blob: Optional[bytes] = None
+    detail: str = ""        # skip reason
+    files: int = 0          # how many leaves the manifest covers
+    digest: str = ""        # the manifest_sha256 it carries
+    names: tuple = ()       # the managed leaves, sorted
+    commit: str = ""        # the commit it names
+    version: str = ""       # the VERSION it names
+
+
+@dataclass
 class Plan:
     shipped: list = field(default_factory=list)
     deltas: list = field(default_factory=list)
     staged: dict = field(default_factory=dict)   # file -> new text, only for changed files
     release: list = field(default_factory=list)  # VERSION + BESIDE, reported apart
+    manifest: Optional[ManifestAction] = None    # the deploy manifest, written LAST
     refusals: list = field(default_factory=list)
     pycache: list = field(default_factory=list)
     plugins_missing: list = field(default_factory=list)
@@ -4169,6 +4244,147 @@ def source_commit_blob(commit: str, ref: str, *, version: str = "") -> bytes:
     return (json.dumps(doc, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
+# ---------------------------------------------------------------------------
+#   The deploy manifest: a content-hash record of what a deploy wrote (ruling 4)
+# ---------------------------------------------------------------------------
+
+def manifest_canonical(files: dict) -> str:
+    """The canonical pairing string a manifest's `manifest_sha256` is built from.
+
+    Deterministic ON PURPOSE: the file map sorted by leaf name, one
+    `<leaf> <sha256> <size>` line per file, each line newline-terminated. Two
+    runs over the same bytes produce the same `manifest_sha256`, and a reader can
+    recompute the seal from the manifest's own `files` map alone - which is what
+    makes the marker tamper-evident (a changed hash, size or leaf list changes
+    the canonical string and the recomputed digest with it).
+    """
+    return "".join(f"{leaf} {files[leaf]['sha256']} {files[leaf]['size']}\n"
+                   for leaf in sorted(files))
+
+
+def manifest_digest(files: dict) -> str:
+    """sha256 of the canonical pairing string - the manifest's own seal."""
+    return hashlib.sha256(manifest_canonical(files).encode("utf-8")).hexdigest()
+
+
+def file_fingerprint(data: bytes) -> dict:
+    """One live file's `{"size", "sha256"}`, the only shape the files map holds."""
+    data = bytes(data or b"")
+    return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def build_deploy_manifest(commit: str, version: str, files: dict) -> bytes:
+    """The manifest's bytes for one deploy: deterministic, no timestamp.
+
+    The shape is ruling 4's: `{"commit", "version", "files", "manifest_sha256"}`,
+    where `files` maps each managed live leaf to `{"size", "sha256"}` and
+    `manifest_sha256` is `manifest_digest(files)`. The fields are written in that
+    order and the leaves are inserted sorted, so the same commit, version and
+    bytes always produce the same file - a second apply plans "unchanged" and a
+    timestamped record is exactly what this is NOT.
+
+    Refuses rather than writing a record it cannot stand behind: a non-commit, an
+    empty version, a non-integer size or a non-sha256 digest.
+    """
+    commit = str(commit or "").strip().lower()
+    if not _SOURCE_SHA.match(commit):
+        raise Refused(f"the manifest will not name {commit!r} as the commit")
+    version = str(version or "").strip()
+    if not version:
+        raise Refused("the manifest will not name an empty VERSION")
+    clean = {}
+    for leaf in sorted(files):
+        entry = files[leaf] or {}
+        size = entry.get("size")
+        digest = str(entry.get("sha256") or "").lower()
+        if not isinstance(leaf, str) or not leaf or "/" in leaf or "\\" in leaf:
+            raise Refused(f"the manifest will not list {leaf!r} - a managed file "
+                          "is named by its leaf name and nothing else")
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            raise Refused(f"the manifest has no usable size for {leaf!r}")
+        if not _MANIFEST_SHA.match(digest):
+            raise Refused(f"the manifest has no usable sha256 for {leaf!r}")
+        clean[leaf] = {"size": size, "sha256": digest}
+    if not clean:
+        raise Refused("the manifest would list no managed file")
+    doc = {"commit": commit, "version": version, "files": clean,
+           "manifest_sha256": manifest_digest(clean)}
+    return (json.dumps(doc, indent=2) + "\n").encode("utf-8")
+
+
+def read_deploy_manifest(live) -> dict:
+    """Read and validate `<live>/DEPLOY-MANIFEST`; never raise, never guess.
+
+    Returns `{"present": bool, "ok": bool, "why": str, "doc": dict or None,
+    "files": {leaf: {"size", "sha256"}}}`. `ok` is True only when the file IS
+    this tool's own shape AND its `manifest_sha256` recomputes from its own
+    `files` map; every other state is `present: True, ok: False` with its own
+    words in `why` (a corrupt marker is named, never treated as "no manifest").
+    A missing file is `present: False` and is not an error: an install from
+    before this ruling has no manifest, and `SOURCE-COMMIT` stays its evidence.
+
+    `files` is returned even when `ok` is False if it could be read, so a caller
+    can say how much of the record was usable; it is only trusted when `ok`.
+    """
+    path = Path(live) / DEPLOY_MANIFEST
+    if not path.is_file():
+        return {"present": False, "ok": False, "why": "", "doc": None, "files": {}}
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"present": True, "ok": False,
+                "why": f"{DEPLOY_MANIFEST} cannot be read ({exc})",
+                "doc": None, "files": {}}
+    try:
+        doc = json.loads(raw)
+    except ValueError as exc:
+        return {"present": True, "ok": False,
+                "why": f"{DEPLOY_MANIFEST} is not JSON ({exc})",
+                "doc": None, "files": {}}
+    if not isinstance(doc, dict):
+        return {"present": True, "ok": False,
+                "why": f"{DEPLOY_MANIFEST} is not a JSON object",
+                "doc": None, "files": {}}
+    files = doc.get("files")
+    checked, why = {}, ""
+    if not isinstance(files, dict) or not files:
+        why = f"{DEPLOY_MANIFEST} has no 'files' map"
+    else:
+        for leaf, entry in files.items():
+            if not isinstance(leaf, str) or not leaf or "/" in leaf or "\\" in leaf:
+                why = (f"{DEPLOY_MANIFEST}'s files map names {leaf!r}, which is not "
+                       "a leaf name beside the backend")
+                break
+            if not isinstance(entry, dict):
+                why = f"{DEPLOY_MANIFEST} has no size/hash record for {leaf!r}"
+                break
+            size = entry.get("size")
+            digest = entry.get("sha256")
+            if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+                why = f"{DEPLOY_MANIFEST}'s size for {leaf!r} is not a byte count"
+                break
+            if not isinstance(digest, str) or not _MANIFEST_SHA.match(digest.lower()):
+                why = f"{DEPLOY_MANIFEST}'s sha256 for {leaf!r} is not a sha256"
+                break
+            checked[leaf] = {"size": size, "sha256": digest.lower()}
+    commit = doc.get("commit")
+    version = doc.get("version")
+    sealed = doc.get("manifest_sha256")
+    if not why and (not isinstance(commit, str)
+                    or not _SOURCE_SHA.match(commit.strip().lower())):
+        why = f"{DEPLOY_MANIFEST}'s commit is not a commit"
+    if not why and (not isinstance(version, str) or not version.strip()):
+        why = f"{DEPLOY_MANIFEST} names no VERSION"
+    if not why and (not isinstance(sealed, str)
+                    or not _MANIFEST_SHA.match(sealed.lower())):
+        why = f"{DEPLOY_MANIFEST} carries no manifest_sha256"
+    if not why and sealed.lower() != manifest_digest(checked):
+        why = (f"{DEPLOY_MANIFEST}'s manifest_sha256 does not recompute from its "
+               "own files map - the record has been altered")
+    return {"present": True, "ok": bool(checked) and not why, "why": why,
+            "doc": doc, "files": checked}
+
+
 def plan_release_files(repo: Path, ref: str, live: Path, *, desktop_exe=None,
                        version_reader: Optional[Callable] = None,
                        show: Optional[Callable] = None,
@@ -4292,6 +4508,156 @@ def release_write_count(actions: Iterable[ReleaseAction]) -> int:
     VERSION (no installed desktop) or a skipped SOURCE-COMMIT (no readable
     commit) writes nothing and counts 0, never 1."""
     return sum(1 for action in actions if action.status == "write")
+
+
+def planned_managed_bytes(plan: Plan, live) -> dict:
+    """The post-write bytes of every live file this deploy manages, by leaf name.
+
+    The manifest's coverage, exactly: every `$SHIPPED` leaf, every live file the
+    HUD deltas touch, and the release markers this run writes or leaves in place
+    (`VERSION`, `SOURCE-COMMIT`, the beside-files). The five patched base files
+    are in it because this tool writes their deltas; the owner's own
+    `jarvis-framework.toml`, the live-only look spec and the plug-in folders are
+    deliberately NOT (this tool does not manage them). Raises `OSError` when a
+    file the plan says is unchanged cannot be read - the manifest may never
+    describe a file it could not see.
+    """
+    live = Path(live)
+    files = {}
+    for action in plan.shipped:
+        if action.status == "unchanged":
+            files[action.live_name] = (live / action.live_name).read_bytes()
+        else:
+            files[action.live_name] = action.blob or b""
+    for delta in plan.deltas:
+        name = str(delta.file)
+        if name in plan.staged:
+            files[name] = plan.staged[name].encode("utf-8", "surrogateescape")
+        else:
+            files[name] = (live / name).read_bytes()
+    for action in plan.release:
+        if action.status == "skip":
+            continue
+        if action.status == "unchanged":
+            files[action.name] = (live / action.name).read_bytes()
+        else:
+            files[action.name] = action.blob or b""
+    return files
+
+
+def plan_deploy_manifest(plan: Plan, live) -> ManifestAction:
+    """Plan the content-hash manifest this run will write LAST (ruling 4).
+
+    The bytes are PLANNED here, before the writes, so `PLANNED CHANGES` and a
+    dry run can report them and a second apply sees them unchanged - but the
+    write itself happens only after the deploy has written and proved the live
+    files (`apply_deploy_manifest`). The plan is built from the post-write bytes
+    the plan itself names: a `write` action's blob, the staged HUD text, or the
+    live bytes of a file this run leaves untouched.
+
+    No manifest is planned when the deploy cannot state what it deployed - no
+    readable commit (`SOURCE-COMMIT` skipped) or no installed desktop's `VERSION`
+    - because a manifest's whole value is that pairing, and an invented one is
+    exactly the guess this tool never makes. It says so on its own line instead.
+    """
+    live = Path(live)
+    commit = ""
+    for action in plan.release:
+        if action.name == SOURCE_COMMIT and action.status != "skip":
+            commit = str(action.commit or "").strip().lower()
+    version = ""
+    version_known = False
+    for action in plan.release:
+        if action.name != "VERSION" or action.status == "skip":
+            continue
+        version_known = True
+        if action.status == "write":
+            version = (action.blob or b"").decode("utf-8", "replace").strip()
+        else:
+            version = str(action.old or "").strip()
+    if not commit:
+        return ManifestAction("skip", detail="no readable commit "
+                              "(the deploy's SOURCE-COMMIT was skipped)")
+    if not version:
+        return ManifestAction("skip", detail="no readable VERSION "
+                              "(the installed desktop's version was not available)")
+    try:
+        files = {leaf: file_fingerprint(data)
+                 for leaf, data in planned_managed_bytes(plan, live).items()}
+        blob = build_deploy_manifest(commit, version, files)
+    except (OSError, Refused) as exc:
+        return ManifestAction("skip",
+                              detail=f"the managed live files could not be read ({exc})")
+    unchanged = False
+    try:
+        target = live / DEPLOY_MANIFEST
+        unchanged = target.is_file() and target.read_bytes() == blob
+    except OSError:
+        unchanged = False
+    return ManifestAction("unchanged" if unchanged else "write", blob=blob,
+                          files=len(files), digest=manifest_digest(files),
+                          names=tuple(sorted(files)), commit=commit, version=version)
+
+
+def manifest_write_count(plan: Plan) -> int:
+    """1 when this run must write `DEPLOY-MANIFEST`, 0 when it is already there."""
+    manifest = getattr(plan, "manifest", None)
+    return 1 if manifest is not None and manifest.status == "write" else 0
+
+
+def manifest_lines(action: Optional[ManifestAction], *, done: bool = False) -> list:
+    """The one `DEPLOY-MANIFEST:` line, in the same shape as the marker lines."""
+    if action is None:
+        return []
+    if action.status == "skip":
+        return [f"{DEPLOY_MANIFEST}: skipped ({action.detail})"]
+    shape = (f"{action.files} file(s) hashed, manifest_sha256 "
+             f"{action.digest[:12]}")
+    if action.status == "unchanged":
+        return [f"{DEPLOY_MANIFEST}: unchanged ({shape})"]
+    if done:
+        return [f"{DEPLOY_MANIFEST}: wrote ({shape})"]
+    return [f"{DEPLOY_MANIFEST}: would write ({shape})"]
+
+
+def apply_deploy_manifest(action: ManifestAction, live, backup: Backup) -> dict:
+    """Write the planned manifest LAST, after proving the bytes it records.
+
+    Not from the plan's hope: every managed leaf is re-read now, re-hashed and
+    rebuilt into the manifest, and the result must be exactly the planned bytes.
+    A live folder that moved under the run is a failure that names it, never a
+    record of bytes nobody has. The old manifest (when there is one) is backed up
+    first, the new bytes are written, and the write is read back before it is
+    claimed. Returns `{"ok": bool, "why": str}`.
+    """
+    live = Path(live)
+    try:
+        raw = {leaf: (live / leaf).read_bytes() for leaf in action.names}
+        blob = build_deploy_manifest(
+            action.commit, action.version,
+            {leaf: file_fingerprint(data) for leaf, data in raw.items()})
+    except (OSError, Refused) as exc:
+        return {"ok": False, "why": f"the live files could not be re-read ({exc})"}
+    if blob != action.blob:
+        return {"ok": False,
+                "why": "the live files changed after this run's plan, so the "
+                       "manifest would not describe the bytes that are there"}
+    target = live / DEPLOY_MANIFEST
+    try:
+        if target.exists():
+            backup.save(target)          # the old record is kept for a rollback
+        else:
+            backup.record_new(target)    # a new record is removed by a rollback
+        target.write_bytes(blob)
+    except OSError as exc:
+        return {"ok": False, "why": f"{DEPLOY_MANIFEST} could not be written ({exc})"}
+    try:
+        read_back = target.read_bytes()
+    except OSError as exc:
+        return {"ok": False, "why": f"{DEPLOY_MANIFEST} could not be read back ({exc})"}
+    if read_back != blob:
+        return {"ok": False, "why": f"{DEPLOY_MANIFEST} did not read back as written"}
+    return {"ok": True, "why": ""}
 
 
 def apply_release_files(actions: Iterable[ReleaseAction], live: Path,
@@ -4509,11 +4875,17 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         out(f"REFUSED: {exc}")
         return 2
     release_count = release_write_count(plan.release)
+    # The deploy manifest is planned here, with the release markers, but written
+    # LAST - only once the files it describes have been written and proved.
+    plan.manifest = plan_deploy_manifest(plan, live)
+    manifest_count = manifest_write_count(plan)
     if not apply:
         out("")
-        out(f"RELEASE MARKERS ({release_count} in the formula: VERSION, "
-            f"SOURCE-COMMIT and the beside-files):")
+        out(f"RELEASE MARKERS ({release_count + manifest_count} in the formula: "
+            f"VERSION, SOURCE-COMMIT, the beside-files and the deploy manifest):")
         for line in release_lines(plan.release):
+            out(line)
+        for line in manifest_lines(plan.manifest):
             out(line)
 
     # 2c. CROSS-FILE CHECK. The pieces must fit on the TARGET folder, not merely be
@@ -4570,11 +4942,12 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         out("READY PLUG-INS: skipped (--skip-plugins)")
 
     changes = (len(adds) + len(updates) + len(inserts) + release_count
-               + len(plan.pycache))
+               + manifest_count + len(plan.pycache))
     out("")
     out(f"PLANNED CHANGES: {changes} file-level change(s) = "
         f"add {len(adds)} + update {len(updates)} + insert {len(inserts)} + "
-        f"beside+version {release_count} + pycache {len(plan.pycache)}"
+        f"beside+version {release_count} + manifest {manifest_count} + "
+        f"pycache {len(plan.pycache)}"
         + ("" if apply else " - DRY RUN, nothing written"))
     if not apply:
         out("Probes are not run in a dry run; use --apply after reviewing this plan.")
@@ -4584,6 +4957,7 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     # its journal are created and PRINTED before the first live write, so a
     # failure half-way through always has a named recovery point.
     has_writes = bool(adds or updates or inserts or plan.pycache or release_count
+                      or manifest_count
                       or (not skip_plugins and plan.plugins_missing))
     backup = Backup(live, stamp=stamp)
     written = []
@@ -4611,8 +4985,8 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
 
     # 6. Purge stale bytecode (backed up first when this is a real apply).
     out("")
-    out(f"RELEASE MARKERS ({release_count} in the formula: VERSION, "
-        f"SOURCE-COMMIT and the beside-files):")
+    out(f"RELEASE MARKERS ({release_count + manifest_count} in the formula: "
+        f"VERSION, SOURCE-COMMIT, the beside-files and the deploy manifest):")
     for line in release_lines(plan.release, done=True):
         out(line)
     purged = purge_pycache(live, backup if has_writes else None)
@@ -4679,6 +5053,35 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
             out(f"RESULT: FAIL ({probe_failures} expected probe failure(s)). Nothing "
                 "was written in this run, so there is nothing to restore.")
         return 1
+
+    # 9. THE CONTENT-HASH MANIFEST - written LAST (Gemini's ruling 4, 2026-11-21).
+    #    It is the deploy's own record of what it wrote, so it is written only
+    #    after every live file is written and the deploy has proved them: the
+    #    managed leaves are re-read and re-hashed NOW, and the rebuilt manifest
+    #    must be exactly the planned bytes. A run that failed above never gets
+    #    here, so a failed deploy can never leave a record claiming it passed.
+    #    A report failure here is an honest FAIL (the bytes are written; nothing
+    #    is rolled back) - the one thing that must not happen is a silent claim.
+    out("")
+    if plan.manifest is not None and plan.manifest.status == "write":
+        outcome = apply_deploy_manifest(plan.manifest, live, backup)
+        if not outcome["ok"]:
+            out(f"FAIL  {DEPLOY_MANIFEST} was not written: {outcome['why']}")
+            if has_writes:
+                out(f"RESULT: FAIL. The files were all written; this run did NOT "
+                    f"roll them back.")
+                out(f"BACKUP: {backup.root} (journal: {backup.journal.name})")
+                out("        Restart Jarvis, re-check, or run --rollback <the backup "
+                    "folder> to put the files back.")
+            else:
+                out("RESULT: FAIL. No file changed in this run, so there is nothing "
+                    "to restore.")
+            return 1
+        written.append(DEPLOY_MANIFEST)
+        released.append(DEPLOY_MANIFEST)
+    for line in manifest_lines(plan.manifest, done=True):
+        out(line)
+    out("")
     out("RESULT: PASS - backend reconciled; restart Jarvis and read the start-up banner.")
     if written:
         out(f"        wrote {len(written)} file(s)"

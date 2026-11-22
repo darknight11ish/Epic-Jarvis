@@ -46,6 +46,11 @@ WHAT IT PROVES
      keys and its status codes, the build notes 88.10/88.11 point at it, and
      `tools/check_parity.py` keeps them classified the way the freeze says -
      the shared three `ported`, the desktop-only export `deliberate`.
+  8. The Updates card's `PROOF:` phase labels are FROZEN in section 184.12
+     (ruling 2, 2026-11-21): the page's four labels are exactly
+     `BOUNDED_PROOF_PHASES`' four names, in order, and the section says that
+     changing one is a breaking change with the same treatment as a route
+     change. The page is read against `tools/update_backend.py`'s own tuple.
 
 No network, no model.
 """
@@ -751,6 +756,72 @@ def t_the_pm4_parity_classification_is_frozen():
                   "phone" in low and "deliberate" in low, why[:160])
 
 
+# -------------------------- the bounded proof's PROOF: contract, frozen (ruling 2)
+
+#: Ruling 2 (Gemini, 2026-11-21): the four phase labels the Updates card shows
+#: are frozen into this page, because the card renders the
+#: `PROOF: Step N/4 - <phase> - x of y` line VERBATIM. The section is ONE stable
+#: heading on purpose - a moved or renamed frozen contract is a contract change,
+#: and this check names it instead of quietly comparing nothing to nothing.
+PROOF_HEADING = "### 184.12 The Updates card's PROOF: contract (FROZEN, 2026-11-21)"
+PROOF_END = "## 185. Jarvis measures its own token speed"
+
+
+def bounded_proof_phase_names() -> list:
+    """`BOUNDED_PROOF_PHASES`'s four `name` values, in order, from the tool's source.
+
+    Read by parsing `tools/update_backend.py` with `ast`, never by importing it:
+    the contract this check needs is the literal tuple, and a tool that failed
+    to import for an unrelated reason must not turn a doc check into a skip.
+    """
+    path = REPO / "tools" / "update_backend.py"
+    if not path.is_file():
+        raise Anchor(f"{path} is not in this checkout, so the frozen phase "
+                     "list cannot be read")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name)
+                   and target.id == "BOUNDED_PROOF_PHASES"
+                   for target in node.targets):
+            continue
+        if not isinstance(node.value, ast.Tuple):
+            raise Anchor("BOUNDED_PROOF_PHASES is no longer a tuple of dicts")
+        names = []
+        for element in node.value.elts:
+            if not isinstance(element, ast.Dict):
+                raise Anchor("BOUNDED_PROOF_PHASES is no longer a tuple of dicts")
+            keyed = {key.value: value for key, value in zip(element.keys,
+                                                           element.values)
+                     if isinstance(key, ast.Constant)}
+            name = keyed.get("name")
+            if not isinstance(name, ast.Constant) or not isinstance(name.value, str):
+                raise Anchor("a BOUNDED_PROOF_PHASES entry has no string 'name'")
+            names.append(name.value)
+        if names:
+            return names
+    raise Anchor("tools/update_backend.py has no BOUNDED_PROOF_PHASES tuple of names")
+
+
+def t_the_bounded_proof_phase_names_are_frozen_in_the_page():
+    """Ruling 2: the page's four frozen labels ARE the code's four names, in order."""
+    block = section(text(), PROOF_HEADING, PROOF_END, "the frozen PROOF: contract")
+    documented = re.findall(r"^- `([^`]+)`$", block, re.M)
+    code = bounded_proof_phase_names()
+    check("the frozen PROOF: contract lists four phase labels", len(documented) == 4,
+          documented)
+    check("... and they are BOUNDED_PROOF_PHASES' four names, in order",
+          documented == code, (documented, code))
+    flat = " ".join(block.split())
+    check("... the section says changing a label is now a BREAKING change",
+          "breaking change" in flat, block[:240])
+    check("... and that it needs the same treatment as a route change",
+          "same treatment as a route change" in flat, flat[:400])
+    check("... and it names the card's progress line shape",
+          "PROOF: Step 2/4 - instant API answers - 1 of 1" in flat, flat[:400])
+
+
 # ------------------------------------- "not in this repository", the family
 
 #: Modules this check holds the document to. Every one of them is in the
@@ -796,6 +867,7 @@ def main():
                t_the_pm4_requests_and_status_lists_are_the_codes_own,
                t_the_pm4_write_and_export_answers_are_the_codes_own,
                t_the_pm4_parity_classification_is_frozen,
+               t_the_bounded_proof_phase_names_are_frozen_in_the_page,
                t_nothing_held_here_is_called_absent):
         print(f"\n--- {fn.__name__} ---")
         try:
