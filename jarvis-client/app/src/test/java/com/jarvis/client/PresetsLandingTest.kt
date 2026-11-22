@@ -210,28 +210,39 @@ class PresetsLandingTest {
     @Test
     fun `the open preset and its refusal survive a rotation`() {
         // 2026-10-27 accessibility audit, finding 9 (WCAG 1.3.4, orientation):
-        // `open` and `notice` decide what is on screen, and a plain `remember`
-        // threw them away when the phone rotated - so a preset the owner had
-        // expanded closed itself, and an in-flight "Asking…" vanished.
+        // `open` decides what is on screen, and a plain `remember` threw it
+        // away when the phone rotated - so a preset the owner had expanded
+        // closed itself.
+        //
+        // The refusal and the in-flight "Being prepared" row changed owners on
+        // 2026-11-21 (the owner's report that leaving the screen cancelled the
+        // load): both now live on the runtime, so they survive a rotation AND a
+        // trip to another menu, and the plate must not keep either of its own -
+        // a local `busy` would come back enabled while the PC is still loading.
         val plate = source("ui/screens/FocusPresetsPlate.kt")
         assertTrue(
             "the open preset is not saveable across a rotation",
             plate.contains("var open by rememberSaveable { mutableStateOf(false) }"),
         )
         assertTrue(
-            "a refusal is not saveable across a rotation",
-            plate.contains("var notice by rememberSaveable { mutableStateOf<String?>(null) }"),
-        )
-        assertTrue(
             "rememberSaveable is not imported",
             plate.contains("import androidx.compose.runtime.saveable.rememberSaveable"),
         )
-        // `busy` must NOT be saveable: the coroutine that set it dies with the
-        // composition, so a restored `busy` would be a row stuck on "Asking…"
-        // for ever - worse than losing the line.
         assertTrue(
-            "an in-flight ask is now saveable and can come back stuck",
-            plate.contains("var busy by remember { mutableStateOf<String?>(null) }"),
+            "the in-flight press is not read from the runtime",
+            plate.contains("val applying by JarvisRuntime.presetApplying.collectAsState()"),
+        )
+        assertTrue(
+            "the refusal is not read from the runtime",
+            plate.contains("val notice by JarvisRuntime.presetNotice.collectAsState()"),
+        )
+        assertFalse(
+            "the plate keeps its own busy again, so a navigation loses it",
+            plate.contains("var busy by remember"),
+        )
+        assertFalse(
+            "the plate keeps its own notice again, so it dies with the screen",
+            plate.contains("var notice by remember"),
         )
     }
 

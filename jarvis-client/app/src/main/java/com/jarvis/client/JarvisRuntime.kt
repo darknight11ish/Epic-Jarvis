@@ -78,6 +78,7 @@ import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.VoiceTraining
 import com.jarvis.client.voice.liveIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
@@ -789,12 +790,41 @@ object JarvisRuntime {
 
     /**
      * The focus presets (`GET /api/work`'s `presets[]`, net/FocusPresets.kt):
-     * the one contract both apps render. Nothing here switches a model by
-     * itself; [useFocusPreset] posts the contract's one apply action, which
-     * raises the existing approval card.
+     * the one contract both apps render. [useFocusPresetNow] (and its
+     * suspended twin [useFocusPreset]) posts the contract's one apply action -
+     * a local row applies at once with NO card, the heavy rows included since
+     * 2026-11-16 - and then watches the PC's own lane until the preset it
+     * pressed is the lane its chat is really on. The Cloud row is the one
+     * preset whose own pick still raises a card, and the PC sends it as a
+     * separate row this list does not draw.
      */
     private val _focusPresets = MutableStateFlow<FocusPresets.Read>(FocusPresets.Read.NotAsked)
     val focusPresets: StateFlow<FocusPresets.Read> = _focusPresets.asStateFlow()
+
+    /**
+     * The preset whose load is in flight on the PC, or null when none is.
+     *
+     * Process-wide rather than remembered in the composition, for the owner's
+     * report of 2026-11-21: a press used to run on the screen's own coroutine
+     * scope, so going to another menu cancelled the phone's half of the
+     * request, and the row came back pressable while the PC was still
+     * preparing the model. [useFocusPresetNow] runs on [scope] and sets this
+     * for the whole press, clearing it on success OR failure, so leaving and
+     * returning to the plate still says [FocusPresets.PENDING] instead of
+     * offering a second press.
+     */
+    private val _presetApplying = MutableStateFlow<String?>(null)
+    val presetApplying: StateFlow<String?> = _presetApplying.asStateFlow()
+
+    /**
+     * What the last preset press said, in the PC's or this app's own words.
+     * Held here for the same reason as [presetApplying]: the screen that
+     * pressed may be gone when the PC answers, and its sentence must not be
+     * lost with it. Null before the first press and cleared when a new one
+     * starts.
+     */
+    private val _presetNotice = MutableStateFlow<String?>(null)
+    val presetNotice: StateFlow<String?> = _presetNotice.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -3081,43 +3111,225 @@ object JarvisRuntime {
     // does not draw. Never name a preset here: the old comment named Coding and
     // Cloud and drifted from the PC, which is exactly why the plate's sentence
     // is now the data-free constant net/FocusPresets.HOW_PICKING_WORKS.
+    //
+    // A PRESS OUTLIVES THE SCREEN (owner report 2026-11-21). The owner tapped a
+    // heavy preset, moved to another menu, and the phone's half of the request
+    // died with the composition while the PC went on loading - so the list came
+    // back pressable and could say "Chosen - not running now" over a model that
+    // WAS being prepared. The press now runs on [scope] ([useFocusPresetNow]),
+    // its id is published while it waits ([presetApplying]) and its sentence is
+    // kept after it ([presetNotice]); the plate owns none of that. After a 200
+    // the phone re-reads `/api/work` every [PRESET_POLL_INTERVAL_MS] until the
+    // PC's own lane says the pressed preset is running ([awaitPresetRunning]),
+    // for at most [PRESET_POLL_CAP_MS], and it never re-posts the apply while
+    // it waits.
+
+    /**
+     * How often the phone re-reads `/api/work` while the PC prepares a preset,
+     * and how long it keeps asking before saying it could not confirm. The
+     * heavy loads the owner measured on his Pixel on 2026-11-21 took 55-66 s,
+     * so the cap is comfortably past them; a load that outlives it is not
+     * re-posted and not guessed at - the notice says it could not confirm and
+     * the row keeps saying whatever the PC's own lane says.
+     */
+    internal const val PRESET_POLL_INTERVAL_MS = 2_000L
+    internal const val PRESET_POLL_CAP_MS = 120_000L
+
+    /**
+     * Where one preset press gets its answers: the real PC through [api] in
+     * production, a fake in a JVM test. It exists for the same reason
+     * [undoNoticeWait] does - the whole press must be provable on a plain
+     * computer, with no Android device and no desktop behind it. [blocker] is
+     * here too so the stale-link rule can be exercised without touching the
+     * private link state the app really uses.
+     */
+    internal interface PresetIo {
+        /** The app's existing stale/link check ([actionBlocker]); a fake answers null or a sentence. */
+        fun blocker(): String?
+
+        /** One `GET /api/work`, parsed. */
+        suspend fun read(): FocusPresets.Read
+
+        /** The contract's ONE apply action, posted once per press. */
+        suspend fun apply(route: String, body: String): ApiResult<Pair<Int, JsonObject?>>
+
+        /** The reads that follow an answer: the approval queue and the hardware card. */
+        suspend fun afterApply()
+    }
+
+    private val livePresetIo: PresetIo = object : PresetIo {
+        override fun blocker(): String? = actionBlocker()
+
+        override suspend fun read(): FocusPresets.Read = FocusPresets.readOf(api.focusPresets())
+
+        override suspend fun apply(
+            route: String,
+            body: String,
+        ): ApiResult<Pair<Int, JsonObject?>> = api.focusPresetApply(route, body)
+
+        override suspend fun afterApply() {
+            refreshPending()
+            refreshHardware()
+        }
+    }
+
+    /** The press's outside world; production is [livePresetIo]. A JVM test installs its own. */
+    internal var presetIo: PresetIo = livePresetIo
+
+    /**
+     * The wait between the reads that follow an apply. Production waits for
+     * real; a JVM test replaces it with a virtual clock so the two-minute cap
+     * is driven without sleeping it - the same seam shape as [undoNoticeWait].
+     */
+    internal var presetPollWait: suspend (Long) -> Unit = { delay(it) }
+
+    /**
+     * One press at a time: a second tap while a preset is loading is refused
+     * with [FocusPresets.ALREADY_APPLYING] before anything is posted. The
+     * button is disabled by the same [presetApplying] state, but a queued
+     * second tap from a screen that has not redrawn yet reaches here too.
+     */
+    private val presetApplyLock = Mutex()
+
+    /** Test only: put the seams and the two flows back after a failing test. */
+    internal fun resetPresetApplyState() {
+        presetIo = livePresetIo
+        presetPollWait = { delay(it) }
+        _presetApplying.value = null
+        _presetNotice.value = null
+    }
 
     /** Re-reads the preset contract. Reads only; a failed read is said in words. */
     suspend fun refreshFocusPresets() {
-        _focusPresets.value = FocusPresets.readOf(api.focusPresets())
+        readPresetsNow()
     }
 
     /**
-     * Uses the preset [id] by posting the ONE apply action the contract names
-     * (never a route invented here). Held on a stale link (rule 4); a pending
-     * preset is never posted. Every row this list offers is a local preset and
-     * switches at once with no card, heavy or not; only the Cloud row answers
-     * with a card asked for, and this list does not offer it. Either way the
-     * list is re-read and the PC's answer says which.
+     * Uses the preset [id] from the app's own long-lived [scope].
+     *
+     * The screen calls THIS, never the suspend form: [scope] outlives the
+     * composition, so moving to another menu or another part of the map cannot
+     * cancel the press, and [presetApplying] keeps the row saying
+     * [FocusPresets.PENDING] when the owner comes back. Returns the job so a
+     * caller that wants to know the press ended (a JVM test) can join it; the
+     * plate ignores it.
      */
-    suspend fun useFocusPreset(id: String): String {
-        actionBlocker()?.let { return it }
-        refreshFocusPresets()
-        val view = (_focusPresets.value as? FocusPresets.Read.Loaded)?.view
+    fun useFocusPresetNow(id: String): Job = scope.launch { applyFocusPreset(id) }
+
+    /**
+     * [useFocusPresetNow] for a caller that has its own coroutine: the same
+     * press, awaited. Kept for tests and direct callers; the plate uses the
+     * non-suspending form because a screen's own scope is exactly what used to
+     * cancel the press (owner report 2026-11-21).
+     */
+    suspend fun useFocusPreset(id: String): String = applyFocusPreset(id)
+
+    /**
+     * The ONE preset press: the contract's apply action, posted once, then the
+     * wait for the PC to report the pressed preset's lane active
+     * ([awaitPresetRunning]). Nothing is posted while waiting.
+     *
+     * [presetApplying] is set before the first suspension and cleared in
+     * [finally], so a stale link, a failed read, a refused POST, a timed-out
+     * wait and a success all end with a pressable button and a readable
+     * sentence in [presetNotice].
+     */
+    private suspend fun applyFocusPreset(id: String): String {
+        if (!presetApplyLock.tryLock()) return FocusPresets.ALREADY_APPLYING
+        _presetApplying.value = id
+        _presetNotice.value = null
+        try {
+            val said = postPresetAndWatch(id)
+            _presetNotice.value = said
+            return said
+        } finally {
+            _presetApplying.value = null
+            presetApplyLock.unlock()
+        }
+    }
+
+    /**
+     * Re-reads `/api/work` through [presetIo] and keeps the answer in
+     * [focusPresets] for the screens. The returned value is the one the caller
+     * checks, so a concurrent screen refresh cannot change what was read.
+     */
+    private suspend fun readPresetsNow(): FocusPresets.Read =
+        presetIo.read().also { _focusPresets.value = it }
+
+    /**
+     * Posts the one apply action the contract names (never a route invented
+     * here) and, on a 200, waits for the PC to say the pressed preset is the
+     * one running. Held on a stale link (rule 4); a pending preset is never
+     * posted. Every row this list offers is a local preset and switches at
+     * once with no card, heavy or not; only the Cloud row answers with a card
+     * asked for, and this list does not offer it.
+     */
+    private suspend fun postPresetAndWatch(id: String): String {
+        presetIo.blocker()?.let { return it }
+        val view = (readPresetsNow() as? FocusPresets.Read.Loaded)?.view
             ?: return FocusPresets.UPDATE
         val preset = view.preset(id)
             ?: return "That preset is not there any more. Open it again."
         FocusPresets.blocker(view, preset, stale = false, linkUp = true)
             ?.let { return it }
         val route = FocusPresets.applyRoute(preset) ?: return FocusPresets.APPLY_UNPUBLISHED
-        val result = api.focusPresetApply(route, FocusPresets.applyBody(preset).toString())
-        refreshFocusPresets()
-        return when (result) {
+        return when (val result = presetIo.apply(route, FocusPresets.applyBody(preset).toString())) {
             is ApiResult.Ok -> {
-                refreshPending()
-                refreshHardware()
-                FocusPresets.replyLine(result.value.first, result.value.second)
+                val (code, body) = result.value
+                if (code == 200) {
+                    val running = awaitPresetRunning(preset)
+                    presetIo.afterApply()
+                    if (running) {
+                        // The PC's own sentence wins when it sent one; otherwise
+                        // this says only what the re-reads proved - its lane.
+                        FocusPresets.applyWords(body) ?: FocusPresets.APPLIED
+                    } else {
+                        FocusPresets.COULD_NOT_CONFIRM
+                    }
+                } else {
+                    // 202 is the PC's card; any other code is its refusal.
+                    // Either way it is an answer, not a switch, so the queue
+                    // and the card are re-read as they were before.
+                    presetIo.afterApply()
+                    FocusPresets.replyLine(code, body)
+                }
             }
             is ApiResult.Failed -> when (result.error) {
                 ApiError.BadToken -> com.jarvis.client.net.KeyRefusal.words()
                     ?: "Your PC did not accept this phone's key any more. Pair again."
                 else -> "Not changed. " + describe(result.error)
             }
+        }
+    }
+
+    /**
+     * True when the PC's own answer, freshly read, says [preset] is the saved
+     * pick AND its lane is the lane its chat is on now. [FocusPresets.chosenNotRunning]
+     * is the authority - the same rule the row's mark uses, so the phone
+     * confirms only what it can also draw - and the two extra clauses add
+     * only that the answer still carries the row and names it.
+     */
+    private fun presetRunning(view: FocusPresets.View, preset: FocusPresets.Preset): Boolean =
+        view.preset(preset.id) != null &&
+            view.chosen == preset.id &&
+            !FocusPresets.chosenNotRunning(view)
+
+    /**
+     * Re-reads `/api/work` every [PRESET_POLL_INTERVAL_MS] until the PC reports
+     * [preset]'s lane active ([presetRunning]) or [PRESET_POLL_CAP_MS] passes.
+     * A failed read is not a reason to post anything again: it counts as "not
+     * yet", and the wait either ends in the PC's own answer or honestly says it
+     * could not confirm. The caller re-reads nothing more on a match - the read
+     * that saw it is the one already in [focusPresets].
+     */
+    private suspend fun awaitPresetRunning(preset: FocusPresets.Preset): Boolean {
+        var waited = 0L
+        while (true) {
+            val view = (readPresetsNow() as? FocusPresets.Read.Loaded)?.view
+            if (view != null && presetRunning(view, preset)) return true
+            if (waited >= PRESET_POLL_CAP_MS) return false
+            presetPollWait(PRESET_POLL_INTERVAL_MS)
+            waited += PRESET_POLL_INTERVAL_MS
         }
     }
 
