@@ -168,8 +168,14 @@ class Engine:
                           "being asked to unload"]}
 
     def load_coder(self, *, port=11450, num_ctx=None, allow_spill=None,
-                   mode=None):
-        self.calls.append(("load", port, num_ctx, allow_spill))
+                   mode=None, keep_alive=None):
+        # The four-element call is what every pre-2026-11-22 check pins; the
+        # residency ask is appended ONLY when a caller names one, so those
+        # checks still read the exact tuple they always did.
+        call = ("load", port, num_ctx, allow_spill)
+        if keep_alive is not None:
+            call = call + (keep_alive,)
+        self.calls.append(call)
         if not self.load_ok:
             return {"ok": False,
                     "why": (f"{MODEL} loaded with 300000000 B of spill, over the "
@@ -1292,6 +1298,33 @@ def t_a_pooled_start_asks_for_the_measured_49152_window():
           eng.rows)
 
 
+def t_a_pooled_start_can_ask_the_model_to_stay_resident():
+    """The start-up preset's eager load must outlive Ollama's idle timer.
+
+    MEASURED 2026-11-22: General (15.5 GB) was applied at 02:41 and Ollama's
+    default idle timer had unloaded it by 10:30 - `/api/ps` on 11450 was empty
+    while `/api/work` still said `chosen: "general"`. So the start-up road asks
+    the lane for `keep_alive: -1`, and this check proves the ask reaches the ONE
+    loader (`jarvis_big_coder.load_coder`) through this same start - not a second
+    loader, and not a request Ollama would ignore.
+    """
+    eng = Engine()
+    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True),
+                                     keep_alive=-1)
+    loads = [c for c in eng.calls if c[0] == "load"]
+    check("start_pooled_lane hands keep_alive -1 to the one loader",
+          code == 200 and loads and loads[0][-1] == -1
+          and len(loads[0]) == 5, (code, loads))
+    # Every other caller - the route, the apps' preset click, chat - makes the
+    # exact call it made before: no keep_alive field at all.
+    eng2 = Engine()
+    L.start_pooled_lane(engine=eng2, gate=lambda *a, **k: Verdict(True))
+    loads2 = [c for c in eng2.calls if c[0] == "load"]
+    check("... and with no ask the load call carries no keep_alive at all, "
+          "exactly as before",
+          loads2 and len(loads2[0]) == 4, loads2)
+
+
 def t_a_suite_run_can_never_touch_the_owners_live_files():
     saved = os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
     try:
@@ -1346,6 +1379,7 @@ def main() -> int:
                t_stopping_the_mode_never_leaves_chat_on_a_dead_pooled_port,
                t_the_pooled_child_env_still_holds_the_measured_settings,
                t_a_pooled_start_asks_for_the_measured_49152_window,
+               t_a_pooled_start_can_ask_the_model_to_stay_resident,
                t_a_suite_run_can_never_touch_the_owners_live_files,
                t_install_runs_the_restart_check_once_on_a_real_hud_start):
         fn()

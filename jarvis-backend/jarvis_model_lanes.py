@@ -776,7 +776,8 @@ def _start_refused(code: int, *, error: str, undo: dict, extra=None) -> tuple:
 
 
 def start_pooled_lane(*, gate=None, engine=None, by: str = "",
-                      tasks=None, mode: str = "coding") -> tuple:
+                      tasks=None, mode: str = "coding",
+                      keep_alive=None) -> tuple:
     """Start the ONE three-card lane for a heavy preset. `(status, body)`.
 
     `mode` chooses which pooled mode the lane carries: `coding` (the shipped
@@ -786,6 +787,14 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
     exist so the whole order can be proved without a graphics card: `gate` is
     the approval, `engine` is `jarvis_big_coder` (a fake in the suites), and
     `tasks` says whether a multi-step job is running.
+
+    `keep_alive` is passed to the engine's own `load_coder` ONLY when the caller
+    names one (`-1` for the start-up preset, 2026-11-22, so its eager load is not
+    evicted by Ollama's idle timer). Every existing caller leaves it `None` and
+    makes exactly the call it made before - including every fake engine in the
+    suites, whose `load_coder` does not take the keyword. One preset's model at a
+    time still holds: ending the lane unloads it (`stop_pooled_lane`), so this
+    cannot leave a second copy resident.
 
     THE LIVE FAILURE THIS FIXES (2026-11-17, measured on the owner's PC at
     02:3x, source 02332ecc). A Coding click on the apps' own route answered:
@@ -904,9 +913,12 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                    "still": still})
 
     try:
+        # `keep_alive` is named ONLY when the caller asked for one: every
+        # existing caller and every fake engine keeps this exact call.
+        extra_load = {} if keep_alive is None else {"keep_alive": keep_alive}
         loaded = eng.load_coder(port=port, num_ctx=profile["num_ctx"],
                                 allow_spill=profile["spill_allowance"],
-                                mode=profile["key"])
+                                mode=profile["key"], **extra_load)
     except Exception as exc:
         loaded = {"ok": False,
                   "why": (f"{profile['model']} could not be loaded "

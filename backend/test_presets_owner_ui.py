@@ -605,11 +605,19 @@ def t_the_body_cannot_ask_for_the_uncarded_road():
                         and isinstance(kw.value.value, bool)):
                     roads.append((top.name, name, kw.value.value))
     uncarded = [r for r in roads if r[2] is True]
-    check("the uncarded road has exactly two literal callers: the route wrapper "
-          "and the receipt restorer",
+    check("the uncarded road has exactly THREE literal callers: the route wrapper, "
+          "the receipt restorer, and the start-up preload",
           sorted(uncarded) == sorted([("install", "_apply_body", True),
-                                     ("restore_from_before", "apply_preset", True)]),
+                                     ("restore_from_before", "apply_preset", True),
+                                     ("apply_startup_preset", "_apply_body", True)]),
           roads)
+    # WHY THE THIRD ONE IS ALLOWED HERE (2026-11-22). The owner asked for a
+    # preset that loads by itself when Atlas starts, and the start-up step has to
+    # take the SAME road a click takes - `_apply_body(..., owner_ui=True)` - or
+    # it is a second implementation of "apply a preset". It raises no card of its
+    # own because the ONE `change_own_config` card that saved the setting was the
+    # owner's yes; the road it calls is unchanged, and this pin still fails for
+    # any OTHER caller that reaches for `owner_ui=True`.
     check("the public entry point is the carded road",
           ("apply_from_body", "_apply_body", False) in roads, roads)
 
