@@ -1447,6 +1447,24 @@ def shipped_leaves(repo) -> list:
                         "cannot be verified.")
 
 
+def bounded_proof_phrase(bounded_result: dict) -> str:
+    """The `ROUTE:` half that reports the bounded proof, skips included.
+
+    A check can pass while checks INSIDE its suite were skipped for this PC
+    (measured 2026-11-21: 4 inside `test_reconcile_live_backend`). The bounded
+    result carries that count, so the one sentence that names the proof must
+    carry it too - "9 of 9" is true at check granularity, but a skipped check is
+    never counted as proven.
+    """
+    proof = (f"and the bounded checks above passed "
+             f"({bounded_result['passed']} of {bounded_result['total']})")
+    skipped = bounded_result.get("skipped") or 0
+    if skipped:
+        proof += (f", with {skipped} check(s) inside those suites skipped for "
+                  "this PC and not counted as proven")
+    return proof + "; they are a subset, not the full suite"
+
+
 def verify_live_files(repo, backend) -> list:
     """Every shipped file on the PC against its twin in this repository.
 
@@ -3876,10 +3894,7 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             # deploy actually proved.
             say("")
             if bounded_result is not None:
-                proof = (f"and the bounded checks above passed "
-                         f"({bounded_result['passed']} of "
-                         f"{bounded_result['total']}); they are a subset, not the "
-                         "full suite")
+                proof = bounded_proof_phrase(bounded_result)
             elif not unproven:
                 proof = "and the checks above are the proof"
             else:
