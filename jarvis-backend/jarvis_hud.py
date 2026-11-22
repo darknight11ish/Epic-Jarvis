@@ -5378,6 +5378,30 @@ class Handler(BaseHTTPRequestHandler):
         # chosen lane, and on a refusal walk one step down and try again -
         # downward only, never back into the lane that just said no.
         def _open(lane: str):
+            # cloud-turn-identity (2026-11-22, review ruling 5.3). ONE fixed
+            # sentence, and it travels with every request that leaves for a
+            # lane that is not the local model. It is not a prompt this PC
+            # writes per turn and no model produced it; it is the truth about
+            # the lane, because a cloud lane carries no identity, no tools and
+            # no private files. Measured on the live app with the standing
+            # switch on: asked "what do you know about your own GitHub
+            # repository" the cloud model answered "I don't have a GitHub
+            # repository of my own", and asked to compare itself with another
+            # agent it called itself "Me (OpenAI model via API/ChatGPT)" on a
+            # PC whose configured provider is deepseek_api. It says only what
+            # is true of the lane - no local tools, no private files - so it
+            # cannot invite the model to claim either.
+            #
+            # Built HERE, per request, inside the one function every hop of the
+            # degrade loop comes through, so it cannot be forgotten on a hop
+            # and cannot be carried twice: `body` is a fresh dict each call and
+            # the cut below replaces its `messages` outright. Added AFTER the
+            # cut, never before it - the cut keeps only `role == "user"`
+            # turns, so a system message put in earlier would be dropped.
+            cloud_identity = {"role": "system", "content": (
+                "You are Atlas, answering an escalated complex question via "
+                "the user's configured cloud provider with no local tools or "
+                "private files.")}
             body = dict(payload); body["model"] = lane
             # chat-history.patch: the apps' own bookkeeping (provenance,
             # conversation_id, device) never reaches a model - not on the
@@ -5434,7 +5458,14 @@ class Handler(BaseHTTPRequestHandler):
                 # private stays in any case.
                 said = [m for m in (body.get("messages") or [])
                         if isinstance(m, dict) and m.get("role") == "user"]
-                body["messages"] = said[-1:]
+                # cloud-turn-identity: the fixed sentence above is the ONLY
+                # message besides the newest question, and it comes first, so
+                # the model is told what it is before it reads what was asked.
+                # `+ said[-1:]` keeps every earlier user turn out, exactly as
+                # cloud-one-turn.patch does; nothing here can add a second copy
+                # of the sentence because `body["messages"]` is replaced, not
+                # appended to.
+                body["messages"] = [cloud_identity] + said[-1:]
             return urllib.request.urlopen(
                 urllib.request.Request(
                     _completions_url(lane),

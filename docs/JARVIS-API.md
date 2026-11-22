@@ -983,7 +983,7 @@ privacy, availability and budget gate still runs first, in the same order
 PC is the router's answer, never the pick). A pick the router would not have
 escalated is answered on the LOCAL model, and the header carries the router's
 own `gate` (`"taint"`, `"image"`, `"screen"`, `"private"`, `"secret"`,
-`"budget"`, `"complexity"`, `"lockdown"`, `"unavailable"`, `"cloud_model"`) with
+`"self_repo"`, `"budget"`, `"complexity"`, `"lockdown"`, `"unavailable"`, `"cloud_model"`) with
 `reason` in one plain sentence: `you chose <lane>, but this turn stays local:
 <why>`. No field was added - a refused pick looks exactly like a refused
 automatic turn, `where` is `"local"`, and both apps already draw every `gate`

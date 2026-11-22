@@ -336,6 +336,94 @@ def looks_like_a_secret(text: str) -> Optional[str]:
 
 
 # --------------------------------------------------------------------------
+#   What only THIS machine can answer: its own repository, PRs, CI, defects
+# --------------------------------------------------------------------------
+#
+# THE TWO MEASURED FAILURES THIS ANSWERS (2026-11-22, the live app). With the
+# standing escalation switch on, "what do you know about your own GitHub
+# repository" and "compare yourself to the Hermes agent" auto-escalated on
+# complexity (`gate: "escalate"`, `where: "cloud"`), and the answers said "I
+# don't have a GitHub repository of my own" and described the assistant as "Me
+# (OpenAI model via API/ChatGPT)" - on a PC whose chosen provider is
+# `deepseek_api`. A cloud lane carries no tools and no files, by rule 1, so a
+# question about Atlas's own repository is not a question that lane can answer
+# at all: it can only guess.
+#
+# So a question about THIS repository (by its own name, or by "my/your/this
+# repo"), about the GitHub reads this PC owns (PRs, issues, CI), about its own
+# defect register, or about the tools it has here, is answered on this machine
+# BEFORE the complexity gate and whatever the switch says. Ruling 5.3 of the
+# 2026-11-22 external review. A manual "Try the cloud model" click cannot lift
+# it either: there is nothing on the other side to answer with. That is the
+# same shape as the picture, screen and file gates - a capability refusal, not
+# a privacy one - and it can only ever send the answer DOWNWARD, toward local.
+#
+# NARROW ON PURPOSE, and the narrowness is the part to keep. The question has
+# to name a repository this PC owns, or ask about the tools or the defect
+# register HERE. A question that merely mentions GitHub is an ordinary coding
+# question and keeps every ordinary gate, the cloud one included: "how do I
+# write a GitHub Action for my project" must still escalate. The negative cases
+# are in `backend/test_router_self_repo.py`, which is the proof this is a test
+# of the question and not a keyword list.
+#
+# The self phrases are deliberately the ones `jarvis_github.repo_from_words()`
+# already resolves for the GitHub tools ("my repo", "my open PRs", "this
+# repository", "Epic-Jarvis"), plus the second person, which is how the owner
+# asks Atlas about itself ("your own GitHub repository"). "my project" is not
+# one of them: the owner has more than one project, and a project is not a
+# repository. Nor is "this issue" or "this PR": those are ordinary words for
+# any codebase, so only "this repo(sitory)" carries the this-phrase.
+_OWN_REPO_WORDS = re.compile(
+    # This repository by name - bare, or the full owner/name form.
+    r"\bepic[\s\-_]?jarvis\b"
+    # "my repo", "my own GitHub repository", "your repositories", "our repos";
+    # "this repo" / "this repository", and NOT "this issue" or "this PR".
+    r"|\b(?:my|our|your)\s+(?:own\s+)?(?:github\s+)?(?:repositor(?:y|ies)|repos?)\b"
+    r"|\bthis\s+(?:github\s+)?(?:repositor(?:y|ies)|repos?)\b"
+    # "my open PRs", "your pull requests" - a PR is always a repository's.
+    r"|\b(?:my|our|your)\s+(?:own\s+)?(?:open\s+)?(?:prs?|pull\s+requests?)\b"
+    # Issues only when they are this PC's GitHub issues: "my issue is that
+    # the build fails" is an ordinary coding question, not a repository one.
+    r"|\b(?:my|our|your)\s+(?:own\s+)?(?:open|github)\s+issues?\b"
+    # "Atlas's own repository" - the product's name for itself.
+    r"|\batlas'?s?\s+(?:own\s+)?(?:github\s+)?(?:repositor(?:y|ies)|repos?)\b"
+    # "your own GitHub" with the noun left off.
+    r"|\b(?:my|our|your)\s+(?:own\s+)?github\b",
+    re.I)
+
+_OWN_TOOLS_WORDS = re.compile(
+    # What this machine can do, which a cloud lane cannot: "your tools",
+    # "your local tools", "what tools do you have", "the local tools".
+    r"\byour\s+(?:own\s+)?(?:github\s+|local\s+)?tools?\b"
+    r"|\blocal\s+tools?\b"
+    r"|\bwhat\s+tools\s+(?:do\s+you\s+have|have\s+you\s+got|are\s+available)\b"
+    # The three GitHub reads this PC owns, by name. Naming one is the
+    # strongest signal there is that the local tool lane is the answer.
+    r"|\bgithub_(?:list|ci_status|pr_detail)\b"
+    # This PC's own CI, and the defect register - this project's own artefact.
+    r"|\byour\s+(?:own\s+)?(?:ci|defects?)\b"
+    r"|\bdefect\s+register\b"
+    r"|\byour\s+(?:own\s+)?github\s+(?:ci|actions?|workflows?|checks?)\b",
+    re.I)
+
+
+def asks_about_own_repo(text) -> bool:
+    """Is this question about what only THIS machine can answer?
+
+    True for a question about Atlas's own repository (its PRs, issues, CI),
+    its own defect register, or the tools it has on this PC; False for
+    everything else, including an ordinary coding question that merely
+    mentions GitHub. `choose()` reads this at gate 3b and nowhere else, and
+    the module note above says why. Never raises: a non-string is simply not
+    a self-repo question.
+    """
+    low = " ".join(str(text or "").replace("\u2019", "'").split())
+    if not low:
+        return False
+    return bool(_OWN_REPO_WORDS.search(low) or _OWN_TOOLS_WORDS.search(low))
+
+
+# --------------------------------------------------------------------------
 #   The budget
 # --------------------------------------------------------------------------
 
@@ -1105,7 +1193,7 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            **_extra) -> Decision:
     """Which lane answers this turn.
 
-    Nine gates, in this order, and the order is the policy. Each one can only
+    Ten gates, in this order, and the order is the policy. Each one can only
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
@@ -1119,6 +1207,9 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
          or a FILE the owner attached (2026-10-29)
       2. private content matched     -> local
       3. a real secret was found     -> local, unconditionally
+      3b. the question is about Atlas's own repository, its PRs, CI, defects
+          or the tools it has here   -> local, BEFORE the complexity gate
+          (gate "self_repo", 2026-11-22)
       4. not complex enough          -> local, UNLESS the 2-strike fallback
                                         below applies to a coding turn
       5. budget spent                -> local
@@ -1324,6 +1415,24 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision(
             "secret", f"the message contains what looks like {secret}, not "
                       f"just a word for one, so it stayed on this machine")
+    # GATE 3b - THE QUESTION IS ABOUT THIS MACHINE ITSELF (2026-11-22, ruling
+    # 5.3). A cloud lane carries no tools and no private files, so a question
+    # about Atlas's own repository, its pull requests, CI or defects, or the
+    # tools it has here, is one that lane cannot answer at all - it can only
+    # guess, and it did: "I don't have a GitHub repository of my own". Sits
+    # ABOVE the complexity gate on purpose, so the standing switch and a high
+    # score cannot hand it out, and above the budget and the offer because
+    # there is nothing to spend and nothing to ask about. An explicit click
+    # cannot lift it either - there is no version of a cloud lane that has the
+    # tools. Its reason is one plain sentence, and the gate's own test
+    # (`asks_about_own_repo`) is narrow: a question that merely mentions
+    # GitHub keeps every ordinary gate (test_router_self_repo.py proves it).
+    if asks_about_own_repo(query):
+        return local_decision(
+            "self_repo",
+            "the question is about this PC's own repository, its pull requests, "
+            "CI or defects, or the tools it has here, so it is answered on this "
+            "machine where those tools are")
     # GATE 4 - STAGE 1, the deterministic complexity pre-gate (ruling 6.1 keeps
     # it), PAIRED with the 2-strike fallback for coding turns. The fallback can
     # only turn a would-be local answer into "carry on to gate 5", and only for
