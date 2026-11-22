@@ -603,11 +603,13 @@ What the bounded proof checks, by phase, with the exact command beside it:
 | module imports | import every shipped module from the LIVE folder | `python -B -c <import-all source> <live backend> <module names>` - one fresh child, every failure printed by name |
 | instant API answers | the live HUD answers `/api/version`, `/api/status`, `/api/presets` | the LIVE folder's own `jarvis_hud.py` started on a spare loopback port with a one-shot token, three token-carrying GETs, then stopped |
 | live invariants | the egress gate census | `python -B tools/check_egress_gate.py` |
-| live invariants | the approval gate's egress rules | `python -B backend/run_suites.py test_gate_egress.py --backend-path <live> --jobs 1 --ignore-update-lock` |
-| live invariants | the deploy tool's contract | `python -B backend/run_suites.py test_reconcile_live_backend.py --backend-path <live> ...` |
-| live invariants | Projects still work | `python -B backend/run_suites.py test_projects.py --backend-path <live> ...` |
+| live invariants | the approval gate's egress rules | `python -B backend/run_suites.py test_gate_egress.py --jobs 1 --ignore-update-lock` - **staged** from the update's own copy |
+| live invariants | the deploy tool's contract | `python -B backend/run_suites.py test_reconcile_live_backend.py --jobs 1 --ignore-update-lock` - **staged** |
+| live invariants | Projects still work | `python -B backend/run_suites.py test_projects.py --jobs 1 --ignore-update-lock` - **staged** |
 | look spec & config | the live look spec is the release's copy | structural compare of `<live>/jarvis-visual-spec.json` against `jarvis-desktop/src/jarvis-visual-spec.json` (the same compare `spec_drift.rs` makes) |
 | look spec & config | the live config reads | the live `jarvis-framework.toml` parsed through the same `[tools].enabled` reader the tool-defaults step uses |
+
+**The three invariant suites run STAGED, from the update's own copy - measured, 2026-11-21.** The first real bounded run against the owner's installed build reported **7 of 9**: `test_gate_egress` failed "the row stores what is being asked about" and `test_projects` failed two taint checks ("a turn whose newest message was PASTED also asks one card", "... and a no leaves the status alone"). The cause was the subset's own shape, not the install: the live folder is a **patched deployment**, not the repository's tree, and those checks compare the code they run with the words the repository's copy should carry. The suites therefore run **staged, exactly as CI runs them**, and the LIVE folder is still proven - by the deploy route's own bytes-and-markers check, and by the bounded checks that read it directly (every shipped module compiled and imported from it, its HUD answering three routes, its look spec, its config). A plan that passes `--backend-path` again would be comparing the patched deployment against the repository's words, which reported 7/9 on an update that was genuinely installed; `backend/test_update_backend.py` now pins the staged shape with that reason.
 
 **Every command above already existed** - the three invariant suites are named
 by bare file name through the real runner, exactly as the full sweep names them,

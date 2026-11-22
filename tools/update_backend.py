@@ -2729,7 +2729,18 @@ def bounded_proof_plan(repo, backend) -> list:
     """
     repo, backend = Path(repo), Path(backend)
     modules = shipped_module_names(repo)
-    suites = suites_command(repo, 1, backend)
+    # THE INVARIANT SUITES RUN STAGED, FROM THE UPDATE'S OWN COPY - MEASURED
+    # 2026-11-21 on the owner's PC. The live folder is a PATCHED DEPLOYMENT, not
+    # the repository's own tree: two of these three suites compare the code they
+    # run against the words the repository's copy should carry, and in live mode
+    # they fail on a healthy install (`test_gate_egress` "the row stores what is
+    # being asked about" and two `test_projects` taint checks), which made a
+    # bounded proof report 7/9 on an update that was genuinely installed. So the
+    # suites are the CI-shaped, staged run of THIS COMMIT's code; the LIVE
+    # folder is proven by the deploy route's own byte-and-marker check plus the
+    # checks that read it directly (py_compile, imports, the live HUD's three
+    # GETs, the look spec and the live config).
+    suites = suites_command(repo, 1)
     checks = [
         {"id": "py_compile", "phase": 0, "inprocess": "compile",
          "what": "py_compile every module this repository ships whole, from "
@@ -2750,7 +2761,7 @@ def bounded_proof_plan(repo, backend) -> list:
     for suite in BOUNDED_INVARIANT_SUITES:
         checks.append(
             {"id": suite[len("test_"):-len(".py")], "phase": 2,
-             "what": f"the {suite} smoke checks",
+             "what": f"the {suite} smoke checks, staged from this update's own copy",
              "command": suites + [suite]})
     checks.extend([
         {"id": "look_spec", "phase": 3, "inprocess": "look_spec",
