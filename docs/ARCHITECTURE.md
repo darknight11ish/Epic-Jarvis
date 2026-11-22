@@ -3017,6 +3017,20 @@ backend routes, in both directions; the rest are listed here only.
   multi-column drag-and-drop editor on the phone, per section 6.2: the phone's
   own Projects list is the summary/next-3/tap-to-done half.
 
+- **Cleaning up duplicate/inactive devices is the desktop's button for now**
+  (2026-11-21, Gemini ruling 5.6). Settings -> Devices on the desktop offers
+  "Clean up duplicate/inactive devices": a dry run asks the PC what WOULD be
+  removed (names and how long ago each was last seen), the PC itself preserves
+  anything active within 30 days, nothing is pruned on load or on a timer, and
+  only the confirm applies it - ending in the PC's own `devices_cleanup`
+  approval card (`POST /api/devices/cleanup`: dry run answers the would-remove
+  list; the confirm answers 202 while the card waits and 200 with the
+  removed/kept counts after the owner answers). **The phone's Settings ->
+  Devices keeps the list and Remove it already has and gains no clean-up button
+  in this slice**, so `tools/check_parity.py` records the route as `deliberate`;
+  the phone half is its own follow-up against the same contract, not a decision
+  that the phone never gets it.
+
 - **Call recording is split by hardware, and each half is one-sided on
   purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
   'record call' ... transcribe it ... identify the speakers ... store all of it
@@ -5519,29 +5533,40 @@ what is missing is only the Settings screen agreeing about who turned it off.
   is a second path, and `tools/check_parity.py` classifies nothing new (no
   route).
 
-- **The device list's cleanup is the backend half, and the Settings button that
-  calls it is a separate lane - one-sided for now** (2026-11-21, Gemini's ruling
+- **The device list's cleanup is one-sided on purpose: the desktop's Settings ->
+  Devices button ships it, the phone has no button** (2026-11-21, Gemini's ruling
   5.6; `backend/jarvis_devices.py` `cleanup()`, `backend/test_devices.py`,
   `JARVIS-API.md` section 231). The ruling is that concurrent multi-device
   polling is expected, so a phone that polls for months leaves a trail of
   pairing rows, and the owner needs an owner-card-approved, dry-run-first "Clean
   up duplicate/inactive devices" action - never an automatic prune. This slice
-  is the backend and the card: `POST /api/devices/cleanup {"dry_run": true}`
-  answers 200 with the plan and writes nothing and raises no card;
+  is the backend, the card and the desktop button: `POST /api/devices/cleanup
+  {"dry_run": true}` answers 200 with the plan, writes no pairing data (the
+  requesting device's `last_seen` can move like any other request) and raises no
+  card;
   `{"dry_run": false}` raises ONE `devices_cleanup` card at tier "ask" and
   answers 202 while it waits, and a later call collects 200 with the counts. A
   device used in the last 30 days, the newest device and the device making the
   request are never removed, a copy of the registry is written beside it first,
   and a removed row is removed exactly the way Remove removes one. **What is
-  deliberately NOT here:** the desktop Settings, Devices button (and, later, the
-  phone's Devices screen) is its own lane, so no app calls the route on this
-  tree - `tools/check_parity.py` classifies it `planned` and names that lane in
-  `PENDING_CLIENTS`, and the moment either app calls it the checker fails until
-  the entry is reclassified. **NOT-TESTABLE until the button lands:** no real
+  deliberately NOT here:** the phone's Settings -> Devices screen has no
+  clean-up button in this slice. The DESKTOP button is here (#1446), so
+  `tools/check_parity.py` classifies the route `deliberate` - the desktop calls
+  it and the phone does not - with no `PENDING_CLIENTS` entry. **NOT-TESTABLE
+  until an owner drives it:** no real
   owner has run the dry run or answered the card from a screen, so the field
   test - press the button, compare the list with the device list, approve, see
   the rows go and the `registry.json.before-cleanup-<stamp>` copy land - is owed
   rather than implied.
+  **CORRECTED by the #1446 merge (2026-11-21):** that separate lane is not
+  separate any more. #1446 ships the desktop's Settings -> Devices button, whose
+  `devices_cleanup` command calls this route
+  (`jarvis-desktop/src-tauri/src/devices.rs` `CLEANUP_PATH`; `src/devices.js`),
+  so on the merged tree the DESKTOP calls it. The phone still has no call site,
+  so `tools/check_parity.py` classifies the route `deliberate` (the row #1446
+  added) instead of `planned`, and its `PENDING_CLIENTS` line is gone - the
+  checker fails a pending route once its first client lands. The field test
+  above is still owed: the button shipped, and no owner has driven it yet.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

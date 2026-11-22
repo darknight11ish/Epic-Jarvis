@@ -578,6 +578,82 @@ changes no other setting, touches no network beyond the one local `/api/self`
 read, and never fetches anything from GitHub. It is the owner's own update
 action continuing, not a new one.
 
+### The card says which half is missing, and the HUD's warning clears in place (2026-11-21)
+
+Four owner reports the same morning, ~10:12 PT, while a real update was running.
+They are one rule each, and all of them are words and lifetimes - no new update
+path, no card, no gate:
+
+1. **The card's state is the release check AND the two halves, never either
+   alone.** *"when i go to updates in settings it says none available when i
+   click check for updates"* is true about a NEWER release and was misleading
+   mid-update, when the backend was still behind and the card implied there was
+   nothing to do. `settings.js` now composes the card's one state line from
+   both answers it reads (`updateStateWords`):
+
+   - the two halves equal and a finished check that found nothing newer ->
+     **"Up to date."** followed by the check's own line ("Version X — the newest
+     published. Last checked …"), so the Check button still has its answer on
+     screen;
+   - the backend older (the measured case: Desktop 0.2.492 installed, backend
+     0.2.491) -> **"Jarvis Desktop 0.2.492 is installed; the backend is 0.2.491
+     - press Update everything to finish the backend half."** The check's own
+     line is APPENDED, never substituted, so a no-newer-release answer can never
+     hide a half that still needs finishing;
+   - a backend half running right now -> **"Finishing the backend half now.
+     Jarvis Desktop 0.2.492 is installed; the backend is 0.2.491 - the card
+     updates when it ends."** The "running" fact is the shell's, not the page's
+     guess: `update.rs` marks a live backend half (the press and the automatic
+     finish both take the mark), and `backend_self.rs` carries it out as
+     `VersionSync.running`. Equal halves are never made to say "finishing", and
+     a NEWER backend is not something this app is writing.
+   - "Up to date." is reachable only with a finished check behind it: an equal
+     pair with no check yet still says "Not checked yet".
+
+2. **The HUD's version line is ONE line, rewritten in place.** *"MISMATCH: the
+   backend 0.2.491, but this HUD expects 0.2.492 ... this usually clears on its
+   own" stayed visible after the backend half had finished* - `VERSION` already
+   read 0.2.492 while the banner still said 0.2.491. The handshake line used to
+   be a chat message APPENDED once and only for state `older`, so the run's own
+   later states landed nowhere. `hud_bootstrap.js`'s `handleVersion` now owns one
+   note and:
+   - a mismatch, a run starting, and every ending REWRITE its words - the
+     automatic finish's opening line says **"Finishing the backend half now"**
+     (`auto_finish_opening`), and every ending carries the two versions RE-READ
+     after the attempt, so a bound's honest partial ending replaces the stale
+     0.2.491 rather than living beside it;
+   - an `ok`/`in-sync` read-back REMOVES the note. A warning about a mismatch is
+     not left standing after the mismatch is gone, and no manual restart is
+     needed for that - nor is a second line appended to retell the same story.
+
+3. **The card shows the bounded proof's own step line, over a banner above every
+   card** (Gemini rulings 5.2 and 5.4, later the same day). While the bounded
+   subset runs, `update_progress.rs` carries the runner's
+   `PROOF: Step N/M - <phase> - x of y` lines to Settings verbatim, and the
+   Updates card renders the newest as its one clean phase+count line -
+   **"Step 3/4: Live invariants - 8 of 12…"**. Only that exact shape is a step:
+   the five-minute `PROOF: still running - ...` liveness heartbeat and a legacy
+   full sweep's suite lines are not, so a legacy run keeps the card's existing
+   words rather than inventing a count. The five-minute heartbeat and the
+   fifteen-minute silence bound underneath are untouched - they still end a real
+   hang, and the card line is drawn from the same output, never a replacement.
+   A banner at the TOP of Settings is shown while the backend half is behind or
+   a run is in flight, names both versions, links to the card, and clears in
+   place on an IN SYNC read-back with nothing running. And a run whose file half
+   has already written VERSION (the measured 0.2.492 proof run, ended by the
+   3-hour ceiling at 20:32:11Z) does not read "Up to date.": the card says the
+   two halves are not claimed to match YET and names the restart whose handshake
+   reads IN SYNC.
+
+Both rules are held by tests: the card's three states are browser checks in
+`jarvis-desktop/tests/updates.mjs` (with the release check and handshake fixtures
+driving the real page), the "a no-newer check does not hide a behind backend"
+case among them; the HUD line's rewrite-then-clear is a check in
+`tests/hud-window.mjs` that feeds the REAL injected bootstrap through its own
+`version` channel; and the Rust words (`backend_self::finishing_words` /
+`words_for`, `update::auto_finish_opening`) plus the running flag are unit tests.
+"Both or neither" is untouched: nothing here installs, approves or starts
+anything.
 ### The proof is bounded, and a deploy-managed install is recognised before it starts (Gemini rulings 5.1, 5.2 and 5.5, 2026-11-21)
 
 The owner's standing rule is that an update finishes - and the ruling that came

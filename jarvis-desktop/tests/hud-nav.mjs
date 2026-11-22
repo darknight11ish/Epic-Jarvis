@@ -45,6 +45,9 @@ const LOCK_RS = read(join(TAURI, "src", "lock.rs"));
 const MEMORY_RS = read(join(TAURI, "src", "window_memory.rs"));
 const TRAY_RS = read(join(TAURI, "src", "tray.rs"));
 const SETTINGS_JS = read(join(SRC, "settings.js"));
+const PROGRESS_RS = read(join(TAURI, "src", "update_progress.rs"));
+const BACKEND_UPDATE_RS = read(join(TAURI, "src", "backend_update.rs"));
+const TOOL_PY = read(join(HERE, "..", "..", "tools", "update_backend.py"));
 const SURFACES = read(join(TAURI, "permissions", "surfaces.toml"));
 const HUD_CAP = read(join(TAURI, "capabilities", "hud.json"));
 const SETTINGS_CAP = read(join(TAURI, "capabilities", "settings.json"));
@@ -243,6 +246,46 @@ check("the version handshake reads the backend's real version block, not just a 
     SURFACES.length
   );
   assert.match(set, /"allow-shell-version-sync"/, "the version-handshake set lacks its permission");
+});
+
+check("the card's clean step line is carried from the runner, over the guards", () => {
+  // Gemini rulings 5.2 and 5.4 (2026-11-21). The runner prints
+  // `PROOF: Step N/M - <phase> - x of y`; the log tailer must carry the newest
+  // one to the page verbatim, the page must draw it as the card's one clean
+  // line, and the 5-minute heartbeat + 15-minute silence guard underneath must
+  // still be there - they are what ends a REAL hang, and the step line never
+  // replaces them.
+  assert.match(PROGRESS_RS, /pub proof: Option<String>/,
+    "the progress reader has no field to carry the proof step line");
+  assert.match(PROGRESS_RS, /strip_prefix\("PROOF: Step "\)/,
+    "the progress reader does not read the runner's PROOF: Step shape");
+  assert.match(PROGRESS_RS, /pub fn proof_line\(/,
+    "the PROOF line's shape is not read in one pure, testable place");
+  // A run in flight (and the finish the bound ends) still says the halves are
+  // NOT claimed in sync until the read-back with nothing running says so.
+  assert.match(SETTINGS_JS, /not claimed to match yet/,
+    "the card can claim IN SYNC while a run's checks are unfinished");
+  assert.match(SETTINGS_JS, /Restart[\s\S]{0,48}?Jarvis and it will read IN SYNC/,
+    "the card has no read-back hint for a check the bound may end");
+  // The page draws the newest step as the card's clean line, and it reads the
+  // one field the Rust reader sets - no invented event shape.
+  assert.match(SETTINGS_JS, /updatePhase:\s*\$\("update-phase"\)/,
+    "Settings does not hold the card's phase line element");
+  assert.match(SETTINGS_JS, /typeof p\.proof === "string"/,
+    "the card does not read the progress event's `proof` field");
+  assert.match(SETTINGS_JS, /PROOF:\\s\*Step/,
+    "the page has no reader for the runner's PROOF: Step shape");
+  assert.match(read(join(SRC, "settings.html")), /id="update-phase"/,
+    "the Updates card has no element for the phase line");
+  // The guards underneath are untouched by this line's addition.
+  assert.match(BACKEND_UPDATE_RS, /SCRIPT_SILENCE_LIMIT/,
+    "the fifteen-minute silence bound is gone");
+  assert.match(BACKEND_UPDATE_RS, /struct RunWatch/,
+    "the progress-measuring run bound is gone");
+  assert.match(TOOL_PY, /PROOF_HEARTBEAT_SECONDS = 300\.0/,
+    "the runner's five-minute proof heartbeat is gone");
+  assert.match(TOOL_PY, /PROOF_HEARTBEAT_PREFIX = "PROOF: "/,
+    "the runner no longer prints a PROOF: liveness line");
 });
 
 check("/api/self and /api/conversations are on the HUD's fixed read allowlist", () => {

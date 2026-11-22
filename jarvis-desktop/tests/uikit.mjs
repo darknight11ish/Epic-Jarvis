@@ -3709,6 +3709,27 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true, waiting: true, http: 202 };
           }
+          // The clean-up door (2026-11-21): `POST /api/devices/cleanup` behind
+          // the one command. A scenario's `cleanupDry` / `cleanupApply` stand in
+          // for the route's answers; a dry run COUNTS on `__calls` as
+          // `__cleanupDry`, the confirm as `__cleanupApply`, so a test can prove
+          // nothing was applied without the owner's confirm and that the page
+          // never removes a device one by one through devices_remove.
+          case "devices_cleanup": {
+            const d = window.__devices || {};
+            if (d.cleanFails) throw new Error(d.cleanFails);
+            const dry = !args || args.dryRun !== false;
+            if (dry) {
+              window.__calls.push(["__cleanupDry", { dryRun: true }]);
+              window.__cleanupDryAsks = (window.__cleanupDryAsks || 0) + 1;
+              return JSON.parse(JSON.stringify(d.cleanupDry || {
+                ok: true, dry_run: true, total: 0, keep_active_30d: 0, would_remove: [],
+              }));
+            }
+            window.__calls.push(["__cleanupApply", { dryRun: false }]);
+            window.__cleanupApplyAsks = (window.__cleanupApplyAsks || 0) + 1;
+            return JSON.parse(JSON.stringify(d.cleanupApply || { ok: true, removed: 0, kept: 0 }));
+          }
           // Navigation only (plain_errors.rs `open_fix_place`): the "What's
           // new in Jarvis" pane's one button opens Settings at its Updates
           // card. Recorded so a test proves it asked for THAT place, and that

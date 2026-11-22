@@ -68,6 +68,20 @@
         <h1>Atlas Desktop</h1>
         <p class="sub" id="version">settings</p>
       </header>
+
+      <!-- ── The version banner (2026-11-21) ─────────────────────────────────
+           The owner's standing rule is that the HUD and the backend update
+           together; when they do not, this page must say so at the TOP, not
+           only inside one card he has to scroll to. It appears only while the
+           backend half is behind or being finished right now, names both
+           versions, and links to the card whose buttons fix it. It is a
+           view of the same handshake the card reads, and it CLEARS IN PLACE -
+           no reload, no restart - the moment a read-back says the two halves
+           are IN SYNC (settings.js's paintVersionBanner). -->
+      <div class="settings-banner" id="settings-update-banner" role="status" hidden>
+        <span class="settings-banner-words" id="settings-update-banner-words"></span>
+        <a class="settings-banner-link" id="settings-update-banner-link" href="#updates">Go to Updates</a>
+      </div>
       <!-- "Open the card" (card-link.js): shown while an approval card waits -
            one raised by a button in this window, or anywhere else. Its button
            opens the Jarvis bar on the card; it decides nothing. -->
@@ -112,6 +126,27 @@
         </p>
         <span class="sr-only" id="settings-search-count" role="status" aria-live="polite"></span>
       </section>
+
+      <!-- ── The one quick entry ─────────────────────────────────────────────
+           The owner, 2026-11-21: *"when i search updates in the settings i have
+           to scroll all the way to the bottom of the list to find the update
+           section for jarvis. it should be at the top of the list."* The
+           Updates card is the one place anybody goes looking for by name often
+           (it is the card behind a MISMATCH warning, a tray row and the phone's
+           "Check for new versions"), and it sat second-from-last on this page.
+           So it gets ONE obvious row above the grouped "Jump to:" list, and the
+           search box pins it first for the update words as well
+           (settings-search.js). It is hidden WITH the jump list while a search
+           is on: a map of the whole page over a filtered page points at cards
+           that are not drawn. It adds no setting and writes nothing. A plain
+           div rather than a second nav landmark: the grouped map below already
+           is the page's one navigation landmark, and a test that slices the
+           jump list out of this file ends at the first nav CLOSING TAG -
+           another one above it would silently empty that slice. -->
+      <div class="settings-quick" id="settings-quick" role="navigation"
+           aria-label="Quick entries">
+        <a href="#updates">Updates</a>
+      </div>
 
       <nav class="settings-jump" id="settings-jump" aria-label="Jump to a section">
         <p class="settings-jump-title">Jump to:</p>
@@ -603,6 +638,36 @@
           <h3 class="subhead">Paired devices</h3>
           <ul class="sc-cards" id="dv-list"></ul>
           <span class="status" id="dv-status" role="status"></span>
+
+          <!-- ── Clean up duplicate/inactive devices (2026-11-21) ──────────
+               The owner's requested housekeeping: pressing the button first
+               asks the PC WHAT WOULD BE REMOVED and shows it here - names and
+               how long ago each was last seen - so nothing happens unseen. A
+               device active in the last 30 days is always kept and is never
+               offered. Only the confirm applies it, and the PC raises its own
+               approval card before a single device goes; the page never removes
+               anything of its own accord. The contract this draws is
+               `POST /api/devices/cleanup` (devices.js's header): dry run -> the
+               would-remove list; confirm -> the owner's `devices_cleanup` card,
+               then the removed/kept counts. -->
+          <h3 class="subhead">Clean up duplicate/inactive devices</h3>
+          <p class="note">
+            Shows you devices Jarvis has not seen for a while and offers to
+            remove them. Any device active in the last 30 days is kept. Nothing
+            is removed until you confirm, and the removal asks on a card first.
+          </p>
+          <div class="row">
+            <button class="btn ghost small" id="dv-clean" type="button">Clean up duplicate/inactive devices</button>
+            <span class="status" id="dv-clean-status" role="status"></span>
+          </div>
+          <div id="dv-clean-panel" hidden>
+            <p class="state" id="dv-clean-words"></p>
+            <ul class="sc-cards" id="dv-clean-list"></ul>
+            <div class="row">
+              <button class="btn danger" id="dv-clean-apply" type="button" hidden>Remove them…</button>
+              <button class="btn ghost" id="dv-clean-cancel" type="button">Cancel</button>
+            </div>
+          </div>
 
           <!-- The old shared key -->
           <h3 class="subhead">Old shared key</h3>
@@ -3254,6 +3319,19 @@
              read answers, so a card that has not asked shows nothing rather
              than "unknown". -->
         <p class="state" id="update-sync" role="status" hidden></p>
+
+        <!-- The backend half's own phase, in the runner's words (2026-11-21).
+             `update_backend.py` prints `PROOF: Step N/M - <phase> - x of y`
+             lines while it checks; settings.js renders the latest as
+             "Step N/M: <phase> - x of y…". It appears ONLY while a backend half
+             is running and only when the run is the bounded-proof one that
+             prints those lines: a legacy full sweep (an older desktop release's
+             161-suite run) prints none, so this stays hidden and the card keeps
+             its own "Finishing the backend half now" sentence. The 5-minute
+             PROOF heartbeat and the 15-minute silence bound underneath are
+             untouched - this line is drawn from the same output, never a
+             replacement for that guard. -->
+        <p class="state" id="update-phase" role="status" hidden></p>
 
         <div class="progress-track" id="update-progress" hidden>
           <div class="progress-fill" id="update-progress-fill"></div>

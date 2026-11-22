@@ -1583,6 +1583,7 @@ pub fn run() {
             devices::devices_remove,
             devices::devices_label,
             devices::devices_shared,
+            devices::devices_cleanup,
             tool_updates::get_tool_updates,
             tool_updates::check_tool_updates,
             plain_errors::get_manner,

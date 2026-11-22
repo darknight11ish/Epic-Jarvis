@@ -517,7 +517,8 @@
       else if (channel === "nav") handleNav(payload);
       /* The honest "this desktop has no such screen" sentence. */
       else if (channel === "notice") handleNotice(payload);
-      /* The version handshake: one line, only when the backend is older. */
+      /* The version handshake: one line, rewritten in place as the story moves
+       * from "the backend is behind" to "finishing it now" to "in sync". */
       else if (channel === "version") handleVersion(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
@@ -3220,9 +3221,70 @@
     hudNavNote(payload.words.trim());
   }
 
+  /* THE ONE VERSION LINE (2026-11-21).
+   *
+   * The owner's report: *"MISMATCH: the backend 0.2.491, but this HUD expects
+   * 0.2.492 ... this usually clears on its own" stayed visible after the backend
+   * half had finished* - VERSION already read 0.2.492 while the banner still
+   * said 0.2.491. The handshake line was a chat message APPENDED once and never
+   * touched again, so every later state of the same story (a run started, the
+   * run finished, the two halves now match) landed nowhere: this function only
+   * ever drew state "older". It is now ONE note we own and REWRITE IN PLACE:
+   *
+   *   - "older" and "running"/"finishing" replace its words - a run in flight
+   *     says "Finishing the backend half now", never a stale mismatch; so does
+   *     any other ending ("partial"/"failed"), because the ending carries the
+   *     versions RE-READ after the attempt and is the truest sentence there is;
+   *   - "ok"/"in-sync" mean the read-back really found the two halves in step,
+   *     and the note is REMOVED: a warning about a mismatch is not left standing
+   *     once the mismatch is gone, and no restart is needed for that.
+   *
+   * The note is a chat-log row, so "in place" means the same row's body text
+   * changes: nothing is appended twice and the log does not fill with the
+   * retelling of one mismatch. `versionNote` is private to this file.
+   */
+  var versionNote = null;
+
+  function showVersionNote(words) {
+    var text = String(words || "").trim();
+    if (!text) return;
+    if (versionNote && versionNote.body && versionNote.body.parentNode) {
+      versionNote.body.textContent = text;
+      return;
+    }
+    if (typeof window.addMessage !== "function") {
+      console.warn("[jarvis] " + text);
+      return;
+    }
+    var body = null;
+    try {
+      body = window.addMessage("system", text);
+    } catch (err) {
+      console.error("[jarvis] version line failed", err);
+      return;
+    }
+    versionNote = body ? { body: body, row: body.parentNode } : null;
+  }
+
+  function clearVersionNote() {
+    if (versionNote && versionNote.row && versionNote.row.parentNode) {
+      versionNote.row.parentNode.removeChild(versionNote.row);
+    }
+    versionNote = null;
+  }
+
   function handleVersion(payload) {
-    if (!payload || typeof payload.words !== "string") return;
-    if (String(payload.state || "") === "older") hudNavNote(payload.words);
+    if (!payload || typeof payload.words !== "string" || !payload.words.trim()) return;
+    var state = String(payload.state || "");
+    // The read-back that says the two halves really are in step: the warning
+    // has nothing left to warn about, so it goes. Every other state (a mismatch,
+    // a run starting, a bound's honest partial ending, a failure) REWRITES the
+    // one line - the last sentence the shell said is always the one on screen.
+    if (state === "ok" || state === "in-sync") {
+      clearVersionNote();
+      return;
+    }
+    showVersionNote(payload.words);
   }
 
   if (document.readyState === "loading") {

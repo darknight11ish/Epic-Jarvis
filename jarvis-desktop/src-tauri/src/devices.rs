@@ -59,6 +59,7 @@ const VERSION_PATH: &str = "/api/version";
 const REMOVE_PATH: &str = "/api/devices/remove";
 const LABEL_PATH: &str = "/api/devices/label";
 const SHARED_PATH: &str = "/api/devices/shared";
+const CLEANUP_PATH: &str = "/api/devices/cleanup";
 const PAIR_START_PATH: &str = "/api/pair/start";
 const PAIR_SESSION_PATH: &str = "/api/pair/session";
 const PAIR_CANCEL_PATH: &str = "/api/pair/cancel";
@@ -786,6 +787,21 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
     Err(backend_refusal(status, body))
 }
 
+/// A cleanup answer (Gemini ruling 5.6, 2026-11-21). Unlike a change's answer,
+/// a 202 is NOT a failure: it is the confirm's own honest state - the PC has
+/// raised the owner's `devices_cleanup` card and nothing has been removed yet.
+/// The page says that in words and waits; the page never treats it as done.
+/// A dry run is a read and answers 200 with the would-remove list. Anything
+/// outside 2xx is the PC's refusal in the PC's own words, like every other door.
+pub(crate) fn cleanup_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let mut v = json_object(body).ok_or_else(|| UNREADABLE.to_string())?;
+        v["http"] = serde_json::json!(status);
+        return Ok(v);
+    }
+    Err(backend_refusal(status, body))
+}
+
 // ---------------------------------------------------------------------------
 // The settings window's screen-capture guard (design 7.1)
 // ---------------------------------------------------------------------------
@@ -1043,6 +1059,33 @@ pub async fn devices_shared(app: AppHandle, retired: bool) -> Result<serde_json:
     let (status, text) =
         post_raw(&app, SHARED_PATH, serde_json::json!({ "retired": retired })).await?;
     change_answer(status, &text)
+}
+
+/// Cleans up duplicate/inactive devices (the owner's ruling 5.6, 2026-11-21:
+/// *"dry-run-first"*). Two presses with two meanings:
+///
+/// - `dry_run: true` is a READ. It answers the PC's `would_remove` list (names
+///   and how many days since each was last seen), `total` and
+///   `keep_active_30d`, and removes nothing. A read is never held on a stale
+///   link.
+/// - `dry_run: false` is an ACTION. It ends in the PC's OWN `devices_cleanup`
+///   approval card - 202 `{"waiting": true}` while that card waits, 200
+///   `{"removed": N, "kept": N}` after the owner answers - so the press is held
+///   on a live link, exactly like "Bring it back". `kept_last_active` says the
+///   PC made the 30-day preservation decision itself: the page never prunes, on
+///   load or on a timer, and never removes a device of its own accord.
+#[tauri::command]
+pub async fn devices_cleanup(app: AppHandle, dry_run: bool) -> Result<serde_json::Value, String> {
+    if !dry_run && stale(&app) {
+        return Err(STALE.to_string());
+    }
+    let (status, text) = post_raw(
+        &app,
+        CLEANUP_PATH,
+        serde_json::json!({ "dry_run": dry_run }),
+    )
+    .await?;
+    cleanup_answer(status, &text)
 }
 
 #[cfg(test)]
@@ -1538,5 +1581,55 @@ mod tests {
             .unwrap_err(),
             "Pair it first."
         );
+    }
+
+    /// THE CLEANUP CONTRACT (Gemini ruling 5.6, 2026-11-21). The dry run and the
+    /// confirm are two different answers, and 202 is a real answer for the
+    /// confirm - the PC's own card is waiting and NOTHING has been removed yet.
+    /// The page must be able to tell those apart, so both are held here.
+    #[test]
+    fn a_cleanup_answers_the_dry_run_and_the_waiting_card_separately() {
+        // The dry run: a READ that says exactly what would go and why the rest
+        // is kept. Nothing in this answer says a device was removed.
+        let dry = cleanup_answer(
+            200,
+            r#"{"ok": true, "dry_run": true, "total": 4, "keep_active_30d": 2,
+                "would_remove": [{"name": "Old phone", "last_seen_days": 42},
+                                 {"name": "Tablet", "last_seen_days": 91}],
+                "kept_last_active": true}"#,
+        )
+        .unwrap();
+        assert_eq!(dry["http"], 200);
+        assert_eq!(dry["dry_run"], true);
+        assert_eq!(dry["total"], 4);
+        assert_eq!(dry["keep_active_30d"], 2);
+        assert_eq!(dry["kept_last_active"], true);
+        assert_eq!(dry["would_remove"][0]["name"], "Old phone");
+        assert_eq!(dry["would_remove"][0]["last_seen_days"], 42);
+        assert_eq!(dry["would_remove"].as_array().unwrap().len(), 2);
+        assert!(dry.get("removed").is_none(), "a dry run claimed a removal");
+        // The confirm: 202 is the owner's card waiting - not a failure, not a
+        // completion - and the page says so in words.
+        let waiting = cleanup_answer(202, r#"{"ok": true, "waiting": true}"#).unwrap();
+        assert_eq!(waiting["http"], 202);
+        assert_eq!(waiting["waiting"], true);
+        assert!(
+            waiting.get("removed").is_none(),
+            "a waiting card claimed a removal"
+        );
+        // ...and after the owner answers, the counts.
+        let done = cleanup_answer(200, r#"{"ok": true, "removed": 2, "kept": 2}"#).unwrap();
+        assert_eq!(done["removed"], 2);
+        assert_eq!(done["kept"], 2);
+        // A refusal is the PC's own words, never invented here.
+        assert!(!cleanup_answer(400, r#"{"reason": "bad_request"}"#)
+            .unwrap_err()
+            .is_empty());
+        assert_eq!(
+            cleanup_answer(409, r#"{"error": "The device list is busy right now."}"#).unwrap_err(),
+            "The device list is busy right now."
+        );
+        // A 2xx whose body is not a JSON object is unreadable, not a success.
+        assert_eq!(cleanup_answer(200, "not json").unwrap_err(), UNREADABLE);
     }
 }

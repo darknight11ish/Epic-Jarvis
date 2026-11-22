@@ -821,15 +821,19 @@ CLASSIFICATION = {
     "/api/devices/remove": ("ported", "Remove ONE device, immediate, no card (it only takes access away, like Forget); a list is refused. Both apps ask \"Remove <name>?\" first."),
     "/api/devices/label": ("ported", "The owner's own name for a device he already paired (docs/MULTI-DEVICE-DESIGN.md, the first slice, 2026-10-09): kept beside the key and shown in both apps; immediate, no card, and never held - a label grants nothing and revokes nothing, unlike the pairing card it can never raise. An empty label clears it, and the device goes back to the name it gave itself. Both apps: Settings, Devices (devices.js, DevicesPlate.kt)."),
     "/api/devices/shared": ("ported", "Retire the old shared key for other devices ({\"retired\": true}): immediate, from either app; refused (409 uses_it_yourself) when the request itself used the shared key from another device. Bring it back ({\"retired\": false}) is the desktop's only: PC only, ONE unretire_shared_key card with Windows Hello, refused under Lockdown - the phone never sends it (docs/PAIRING-DESIGN.md 7.2, ARCHITECTURE section 8)."),
-    # Cleaning up duplicate/inactive devices (Gemini's ruling 5.6, 2026-11-21;
-    # docs/JARVIS-API.md section 90; backend/jarvis_devices.py cleanup). The
-    # BACKEND half and its card ship first: the dry run writes nothing and
-    # raises no card, and the real run removes nothing until ONE
-    # `devices_cleanup` card is approved on the PC. The desktop Settings,
-    # Devices button is a SEPARATE lane, so neither app calls the route yet and
-    # this is `planned` on purpose - that lane reclassifies it (ported, or
-    # todo while the phone's Devices screen catches up) when its button lands.
-    "/api/devices/cleanup": ("planned", "The owner-approved device-list cleanup (docs/JARVIS-API.md section 231): POST {\"dry_run\": true} answers 200 with the plan and writes nothing / raises no card; {\"dry_run\": false} raises ONE devices_cleanup card at tier ask and answers 202 while it waits, and a later call collects 200 with the counts. A device used in the last 30 days, the newest device and the device making the request are never removed, and the registry is copied before it changes. The desktop Settings, Devices button is a separate lane (2026-11-21, Gemini's ruling 5.6), which is why neither app calls it yet."),
+    # The owner's clean-up of duplicate/inactive devices (Gemini ruling 5.6,
+    # 2026-11-21): the DESKTOP's Settings -> Devices offers it. The dry run asks
+    # what WOULD be removed (a read); the confirm ends in the PC's own
+    # `devices_cleanup` approval card. The phone gets no clean-up button in this
+    # slice, so this is a recorded one-sided decision, not a missing screen.
+    # MERGED 2026-11-21 with main's #1451 backend half (the same route, shipped
+    # `planned` + PENDING_CLIENTS because no app called it): this branch ships
+    # the desktop button that CALLS it (jarvis-desktop/src-tauri/src/devices.rs
+    # CLEANUP_PATH, src/devices.js `devices_cleanup`), the phone still has no
+    # call site, so the route is `deliberate` here and main's PENDING_CLIENTS
+    # line was removed with it - a pending entry must not survive its first
+    # client (the checker fails on that, section "PENDING_CLIENTS" below).
+    "/api/devices/cleanup": ("deliberate", "The owner's dry-run-first clean-up of duplicate/inactive devices (Gemini ruling 5.6, 2026-11-21) is the DESKTOP's button: Settings -> Devices asks the PC what WOULD be removed, preserves anything active within 30 days, and only the confirm applies it - ending in the PC's own `devices_cleanup` approval card (202 while it waits, 200 with the removed/kept counts after the owner answers). The phone's Settings -> Devices keeps the list and Remove it already has and gains no clean-up button in this slice; the phone half is its own follow-up against this same contract. ARCHITECTURE section 8."),
     # PWA slice 2 (2026-10-23): the BROWSER is the client here. The phone is
     # already a paired device with its own key and never opens a cookie session,
     # so neither route is ported to it - ARCHITECTURE section 8.
@@ -1688,11 +1692,6 @@ PENDING_CLIENTS = {
         "`desktop_update` card, the fingerprint approval and the runner are built "
         "and tested here, and docs/ARCHITECTURE.md section 8 records the "
         "one-sidedness for now"),
-    "/api/devices/cleanup": (
-        "the desktop Settings, Devices button is a separate lane (Gemini's ruling "
-        "5.6, 2026-11-21): the backend half and its one card are built and tested "
-        "here (backend/test_devices.py, docs/JARVIS-API.md section 231), and the "
-        "lane that ships the button removes this line and reclassifies the route"),
 }
 
 

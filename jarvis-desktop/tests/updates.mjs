@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
 import { DESKTOP_FAQ } from "../src/desktop-help.js";
+import { buildPalette, search as searchPalette } from "../src/palette.js";
+import { asksForUpdates, UPDATE_WORDS } from "../src/settings-search.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
@@ -749,6 +751,483 @@ await check("an OPEN window hears the place instead of being reloaded", async ()
   assert.equal(seen.inside, true,
     `focus is on "${seen.active}", outside the card the event named`);
   assert.equal(errorsAfter, errorsBefore, "a place the page does not have threw");
+});
+
+/* ── The update words put the Updates card first (the owner, 2026-11-21) ───
+ *
+ * *"when i search updates in the settings i have to scroll all the way to the
+ * bottom of the list to find the update section for jarvis. it should be at the
+ * top of the list."* Ranking by the words on the card already did it for
+ * "update"/"updates", but NOT for the words a person types for the card:
+ * "upgrade" appears on no card on the page (it matched nothing at all) and
+ * "version" appears on several (About outranked Updates). These checks drive
+ * the real page and THE update words, including the two that were wrong, so the
+ * old tree fails them. */
+
+await check("every update word puts the Updates card first in the search results", async () => {
+  const words = ["update", "updates", "upgrade", "upgrades", "upgrading", "version", "versions"];
+  for (const word of words) {
+    const page = await open();
+    await page.waitForTimeout(300);
+    await page.locator("#settings-search-input").fill(word);
+    await page.waitForTimeout(250);
+    const left = await page.evaluate(() =>
+      [...document.querySelectorAll("main .card")].filter((card) => !card.hidden)
+        .map((card) => card.id));
+    await page.close();
+    assert.ok(left.includes("updates"), `"${word}" hid the Updates card: ${left.join(", ")}`);
+    assert.equal(left[0], "updates",
+      `"${word}" put ${left[0] ?? "nothing"} first, not Updates: ${left.join(", ")}`);
+  }
+});
+
+await check("an update word shows the Update card even when no card spells it", async () => {
+  // "upgrade" is on no card's words on this page, so before the pin the search
+  // answered "Nothing here matches" about the one card the owner was looking
+  // for. It is still not claimed to contain the word - the card is just the
+  // place the word means.
+  const page = await open();
+  await page.waitForTimeout(300);
+  await page.locator("#settings-search-input").fill("upgrade");
+  await page.waitForTimeout(250);
+  const left = await page.evaluate(() =>
+    [...document.querySelectorAll("main .card")].filter((card) => !card.hidden)
+      .map((card) => card.id));
+  const count = await page.locator("#settings-search-status").innerText();
+  const noneHidden = await page.evaluate(() =>
+    document.getElementById("settings-search-none").hidden);
+  await page.close();
+  assert.deepEqual(left, ["updates"], `"upgrade" showed ${left.join(", ") || "nothing"}`);
+  assert.match(count, /1 setting matches/i, `the count said "${count}"`);
+  assert.equal(noneHidden, true, "the page said nothing matched while the card was shown");
+});
+
+await check("a search that is not about updates is left to the ordinary ranking", async () => {
+  // The pin is for update words only: no unrelated search is reordered for it.
+  const page = await open();
+  await page.waitForTimeout(300);
+  await page.locator("#settings-search-input").fill("backup");
+  await page.waitForTimeout(250);
+  const left = await page.evaluate(() =>
+    [...document.querySelectorAll("main .card")].filter((card) => !card.hidden)
+      .map((card) => card.id));
+  await page.close();
+  assert.equal(left[0], "backup",
+    `"backup" put ${left[0] ?? "nothing"} first: ${left.join(", ")}`);
+  assert.notEqual(left[0], "updates", "an unrelated search was pinned to Updates");
+});
+
+await check("only an update-intent query is pinned to Updates, word for word", () => {
+  // The ruling's own vocabulary (Gemini 5.4, 2026-11-21): the card's name, both
+  // spellings of the action, the version word, the two words the HANDSHAKE
+  // prints when the halves differ ("sync" / "mismatch"), and the card's own
+  // button name ("check now"). Every one is update-intent on its own.
+  for (const word of ["update", "updates", "upgrade", "version", "versions",
+    "sync", "mismatch"]) {
+    assert.ok(UPDATE_WORDS.includes(word), `"${word}" is not an update word`);
+    assert.equal(asksForUpdates(word), true, `"${word}" is not pinned to Updates`);
+  }
+  for (const phrase of ["check now", "check for updates", "check for update"]) {
+    assert.equal(asksForUpdates(phrase), true, `"${phrase}" is not pinned to Updates`);
+  }
+  // ANY other word turns the pin off. An unrelated search is never reordered,
+  // even when one of its words is an update word - so "version history" is a
+  // question about History, not a second way to spell the Updates card.
+  for (const query of ["", "backup", "version history", "sync settings", "check",
+    "now", "check now please", "update the lights", "mismatched", "resync"]) {
+    assert.equal(asksForUpdates(query), false, `"${query}" was pinned to Updates`);
+  }
+});
+
+await check("the handshake's own words find the Updates card, and so does its button name", async () => {
+  // "sync" and "mismatch" are what the version line prints when the halves
+  // differ, and "check now" is printed on the card's own button: after reading
+  // either, searching that word must land on the card, not below it.
+  for (const query of ["sync", "mismatch", "check now"]) {
+    const page = await open();
+    await page.waitForTimeout(300);
+    await page.locator("#settings-search-input").fill(query);
+    await page.waitForTimeout(250);
+    const left = await page.evaluate(() =>
+      [...document.querySelectorAll("main .card")].filter((card) => !card.hidden)
+        .map((card) => card.id));
+    await page.close();
+    assert.ok(left.includes("updates"), `"${query}" hid the Updates card: ${left.join(", ")}`);
+    assert.equal(left[0], "updates",
+      `"${query}" put ${left[0] ?? "nothing"} first, not Updates: ${left.join(", ")}`);
+  }
+});
+
+await check("the one quick entry sits above the jump list and opens the Updates card", async () => {
+  const page = await open();
+  await page.waitForTimeout(400);
+  const entry = await page.evaluate(() => {
+    const quick = document.getElementById("settings-quick");
+    const link = quick && quick.querySelector("a");
+    const jump = document.getElementById("settings-jump");
+    return {
+      exists: Boolean(quick),
+      visible: Boolean(quick && !quick.hidden),
+      href: link ? link.getAttribute("href") : null,
+      words: link ? link.textContent.trim() : "",
+      beforeJump: Boolean(quick && jump &&
+        (quick.compareDocumentPosition(jump) & Node.DOCUMENT_POSITION_FOLLOWING)),
+    };
+  });
+  assert.equal(entry.exists, true, "the page has no quick entry above the jump list");
+  assert.equal(entry.visible, true, "the quick entry is hidden with nothing typed");
+  assert.equal(entry.href, "#updates", `the quick entry points at "${entry.href}"`);
+  assert.equal(entry.words, "Updates", `the quick entry says "${entry.words}"`);
+  assert.equal(entry.beforeJump, true, "the quick entry is below the jump list");
+  // ...and it really opens the card (the jump the owner does not have to make).
+  await page.locator("#settings-quick a").click();
+  await page.waitForTimeout(500);
+  const top = await page.evaluate(() =>
+    Math.round(document.getElementById("updates").getBoundingClientRect().top));
+  assert.ok(top >= -4 && top < 120, `the Update card is ${top}px from the top of the window`);
+  // A filtered page does not keep a map to the cards it hid.
+  await page.locator("#settings-search-input").fill("voice");
+  await page.waitForTimeout(250);
+  const hiddenWhileSearching = await page.evaluate(() =>
+    document.getElementById("settings-quick").hidden);
+  await page.close();
+  assert.equal(hiddenWhileSearching, true,
+    "the quick entry stayed over a filtered page it cannot point at");
+});
+
+await check("the app-wide Find list puts the Updates row first for the update words", () => {
+  // The compiled menu catalogue is the third box the owner may have called
+  // "settings search" (the bar's Find, built from backend/jarvis_menus.py). It
+  // shared the bug: "upgrade" found nothing, "version" found About first. The
+  // pin is the SAME `asksForUpdates` rule the Settings page uses, so the two
+  // boxes cannot disagree about what "the update card" is.
+  const items = buildPalette();
+  for (const word of ["update", "updates", "upgrade", "upgrades", "upgrading",
+    "version", "versions", "sync", "mismatch"]) {
+    const rows = searchPalette(items, word);
+    assert.equal(rows[0] && rows[0].item.id, "settings.updates",
+      `"${word}" put ${rows[0] ? rows[0].item.id : "nothing"} first`);
+  }
+  // "upgrade" has to BE the row, not merely be ranked: before the pin the list
+  // came back empty and the bar said "Nothing matches that".
+  assert.equal(searchPalette(items, "upgrade")[0].item.title, "Updates");
+  // An unrelated search is not reordered.
+  assert.notEqual(searchPalette(items, "backup")[0].item.id, "settings.updates");
+});
+
+await check("the Updates card says the three states plainly - equal, behind, finishing", async () => {
+  const read = async (data) => {
+    const page = await open(data);
+    await page.waitForTimeout(400);
+    const out = await page.evaluate(() => ({
+      state: document.getElementById("update-state").textContent,
+      checkDisabled: document.getElementById("update-check").disabled,
+      installHidden: document.getElementById("update-install").hidden,
+    }));
+    await page.close();
+    return out;
+  };
+  const checkedNoNewer = { ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2026-11-09 14:32" };
+  const equalSync = {
+    desktop: "0.2.492", backend: "0.2.492", state: "in-sync",
+    words: "Jarvis Desktop 0.2.492 and the backend 0.2.492 - IN SYNC.",
+  };
+  const behindSync = {
+    desktop: "0.2.492", backend: "0.2.491", state: "backend-older",
+    words: "MISMATCH: the backend 0.2.491, but this HUD expects 0.2.492.",
+  };
+
+  // 1. Both halves equal, and the check found nothing newer: "Up to date."
+  const equal = await read({ update: checkedNoNewer, versionSync: equalSync });
+  assert.match(equal.state, /^Up to date\./, `said "${equal.state}"`);
+  assert.match(equal.state, /newest published/i,
+    `the finished check's own line was lost: "${equal.state}"`);
+  assert.equal(equal.checkDisabled, false, "the Check button went dead on an equal pair");
+
+  // 2. The backend is behind: the INSTALLED desktop and the OLDER backend are
+  //    named, and the one press that finishes it is named.
+  const behind = await read({ update: checkedNoNewer, versionSync: behindSync });
+  assert.match(behind.state,
+    /Jarvis Desktop 0\.2\.492 is installed; the backend is 0\.2\.491/,
+    `said "${behind.state}"`);
+  assert.match(behind.state, /Update everything to finish the backend half/,
+    `the one press is not named: "${behind.state}"`);
+  assert.doesNotMatch(behind.state, /^Up to date\./,
+    "the card claimed to be up to date with a backend behind it");
+
+  // 3. A run is in flight: it says so, and does not restate a mismatch.
+  const finishing = await read({
+    update: checkedNoNewer,
+    versionSync: { ...behindSync, running: true },
+  });
+  assert.match(finishing.state, /^Finishing the backend half now\./,
+    `said "${finishing.state}"`);
+  assert.match(finishing.state, /0\.2\.491/, `said "${finishing.state}"`);
+  assert.doesNotMatch(finishing.state, /MISMATCH/, "the card repeated the stale mismatch");
+
+  // The three are three different sentences.
+  assert.notEqual(equal.state, behind.state);
+  assert.notEqual(behind.state, finishing.state);
+  assert.notEqual(equal.state, finishing.state);
+});
+
+await check("a check that finds no newer release never hides a backend half behind", async () => {
+  // The owner's measured complaint: *"when i go to updates in settings it says
+  // none available when i click check for updates"* - true about the RELEASE and
+  // misleading about the machine, because the backend half was still behind and
+  // the card implied there was nothing to do. Pressing Check must not repaint
+  // over the half that needs finishing.
+  const page = await open({
+    update: { ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2026-11-09 14:32" },
+    versionSync: {
+      desktop: "0.2.492", backend: "0.2.491", state: "backend-older",
+      words: "MISMATCH: the backend 0.2.491, but this HUD expects 0.2.492.",
+    },
+  });
+  await page.waitForTimeout(400);
+  await page.locator("#update-check").click();
+  await page.waitForTimeout(500);
+  const state = await page.locator("#update-state").innerText();
+  const status = await page.locator("#update-status").innerText();
+  await page.close();
+  assert.match(status, /Nothing newer/i, `the press did not answer: "${status}"`);
+  assert.match(state, /Jarvis Desktop 0\.2\.492 is installed; the backend is 0\.2\.491/,
+    `the no-newer answer hid the backend half: "${state}"`);
+  assert.match(state, /Update everything to finish the backend half/,
+    `the card stopped offering the one press: "${state}"`);
+});
+
+/* ── The Settings banner and the bounded proof's phase line ───────────────
+ *
+ * Gemini's rulings 5.2 and 5.4 (2026-11-21). Two things the owner must not have
+ * to scroll for, or wait for a release check to learn:
+ *
+ *   - the top banner, whenever the backend half is behind or a half is being
+ *     finished right now, clearing in place on an IN SYNC read-back;
+ *   - the clean `Step N/M: <phase> - x of y…` line while a bounded proof runs,
+ *     fed by the runner's own `PROOF: Step N/M - <phase> - x of y` output.
+ */
+
+const BEHIND_SYNC = {
+  desktop: "0.2.492", backend: "0.2.491", state: "backend-older",
+  words: "MISMATCH: the backend 0.2.491, but this HUD expects 0.2.492.",
+};
+const EQUAL_SYNC = {
+  desktop: "0.2.492", backend: "0.2.492", state: "in-sync",
+  words: "Jarvis Desktop 0.2.492 and the backend 0.2.492 - IN SYNC.",
+};
+
+await check("a banner at the top of Settings says when the backend half is behind", async () => {
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, versionSync: BEHIND_SYNC });
+  await page.waitForTimeout(400);
+  const seen = await page.evaluate(() => {
+    const banner = document.getElementById("settings-update-banner");
+    const link = document.getElementById("settings-update-banner-link");
+    const card = document.getElementById("updates");
+    return {
+      hidden: banner.hidden,
+      tone: banner.dataset.tone,
+      words: document.getElementById("settings-update-banner-words").textContent,
+      linkHref: link.getAttribute("href"),
+      linkWords: link.textContent.trim(),
+      beforeCard: Boolean(banner.compareDocumentPosition(card)
+        & Node.DOCUMENT_POSITION_FOLLOWING),
+      top: Math.round(banner.getBoundingClientRect().top),
+      cardTop: Math.round(card.getBoundingClientRect().top),
+    };
+  });
+  await page.close();
+  assert.equal(seen.hidden, false, "no banner while the backend half was behind");
+  assert.equal(seen.tone, "bad", "a pair that does not match was painted as fine");
+  // It names BOTH halves, says what is wrong in the card's own words, and
+  // points at the one press that fixes it.
+  assert.match(seen.words, /0\.2\.492/, `the banner does not name the desktop: "${seen.words}"`);
+  assert.match(seen.words, /0\.2\.491/, `the banner does not name the backend: "${seen.words}"`);
+  assert.match(seen.words, /do not match yet/i, `the banner does not say what is wrong: "${seen.words}"`);
+  assert.match(seen.words, /Update everything/, `the banner does not name the fix: "${seen.words}"`);
+  assert.equal(seen.linkHref, "#updates", `the banner links at "${seen.linkHref}"`);
+  assert.equal(seen.linkWords, "Go to Updates");
+  assert.equal(seen.beforeCard, true, "the banner is not above the Updates card");
+  assert.ok(seen.top < seen.cardTop,
+    `the banner (${seen.top}px) is below the card it is about (${seen.cardTop}px)`);
+});
+
+await check("the banner stays away when there is nothing to act on", async () => {
+  // Equal halves: the ruling's own clearing state. A newer backend: safe, and
+  // "Update everything" would be the wrong instruction. Unreachable: the card
+  // says so in its own sentence, and a banner cannot compare what it cannot
+  // read. None of these is a reason to put a banner at the top of Settings.
+  for (const versionSync of [
+    EQUAL_SYNC,
+    { desktop: "0.2.486", backend: "0.2.490", state: "backend-newer",
+      words: "The backend 0.2.490 is newer than Jarvis Desktop 0.2.486." },
+    { desktop: "0.2.486", backend: null, state: "unreachable",
+      words: "Jarvis Desktop 0.2.486: backend unreachable." },
+  ]) {
+    const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, versionSync });
+    await page.waitForTimeout(350);
+    const hidden = await page.evaluate(() =>
+      document.getElementById("settings-update-banner").hidden);
+    await page.close();
+    assert.equal(hidden, true,
+      `a banner appeared for state "${versionSync.state}"`);
+  }
+});
+
+await check("the banner clears in place when the read-back says IN SYNC (no reload)", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2026-09-20 14:32" },
+    versionSync: BEHIND_SYNC,
+  });
+  await page.waitForTimeout(400);
+  const before = await page.evaluate(() => {
+    // A marker on THIS document: if the page reloaded, it is gone.
+    window.__bannerPageMarker = "same-page";
+    return !document.getElementById("settings-update-banner").hidden;
+  });
+  assert.equal(before, true, "the check needs a banner to clear");
+  await page.evaluate(() => {
+    window.__versionSync = {
+      desktop: "0.2.492", backend: "0.2.492", state: "in-sync",
+      words: "Jarvis Desktop 0.2.492 and the backend 0.2.492 - IN SYNC.",
+    };
+    // The run's own ending event: the card reads the two versions back.
+    window.__emit("backend-update-progress", { phase: "done", verdict: "ok", done: 1, total: 1 });
+  });
+  await page.waitForFunction(
+    () => document.getElementById("settings-update-banner").hidden,
+    null, { timeout: 3000 }).catch(() => {});
+  const after = await page.evaluate(() => ({
+    hidden: document.getElementById("settings-update-banner").hidden,
+    marker: window.__bannerPageMarker,
+    sync: document.getElementById("update-sync").textContent,
+    card: document.getElementById("update-state").textContent,
+  }));
+  await page.close();
+  assert.equal(after.hidden, true, "the banner stayed after the read-back said IN SYNC");
+  assert.equal(after.marker, "same-page", "the page reloaded instead of clearing the banner in place");
+  assert.match(after.sync, /IN SYNC/, `the read-back was not the in-sync one: "${after.sync}"`);
+  assert.match(after.card, /^Up to date\./, `the card did not follow the read-back: "${after.card}"`);
+});
+
+await check("a run that has written the file half does not claim 'Up to date.'", async () => {
+  // MEASURED 2026-11-21: the 0.2.492 proof run was ended by the 3-hour ceiling
+  // at 20:32:11Z AFTER the file half had written VERSION. In that window the
+  // version read-back already says IN SYNC while the run's own checks are
+  // unfinished - so "Up to date." is a claim the run has not earned, and the
+  // card must say so and name the read-back that settles it.
+  const page = await open({
+    update: { ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2026-11-21 12:30" },
+    versionSync: { ...EQUAL_SYNC, running: true },
+  });
+  await page.waitForTimeout(400);
+  const seen = await page.evaluate(() => ({
+    card: document.getElementById("update-state").textContent,
+    bannerHidden: document.getElementById("settings-update-banner").hidden,
+    banner: document.getElementById("settings-update-banner-words").textContent,
+  }));
+  await page.close();
+  assert.doesNotMatch(seen.card, /^Up to date\./,
+    `the card claimed "Up to date." while the run's checks were unfinished: "${seen.card}"`);
+  assert.match(seen.card, /not claimed to match yet/,
+    `the card and the banner must agree the halves are not claimed in step: "${seen.card}"`);
+  assert.match(seen.card, /Restart Jarvis and it will read IN SYNC/,
+    `the card has no restart hint for a check that cannot finish: "${seen.card}"`);
+  assert.equal(seen.bannerHidden, false, "no banner while a backend half was mid-update");
+  assert.match(seen.banner, /Updating now/, `the banner said "${seen.banner}"`);
+});
+
+await check("the Updates card shows the bounded proof's own phase and count line", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, ...FOUND },
+    versionSync: { ...BEHIND_SYNC, running: true },
+  });
+  await page.waitForTimeout(400);
+  const read = () => page.evaluate(() => ({
+    hidden: document.getElementById("update-phase").hidden,
+    words: document.getElementById("update-phase").textContent,
+  }));
+  // The runner's exact shape, carried by the Rust reader as `proof`.
+  await page.evaluate(() => window.__emit("backend-update-progress", {
+    phase: "testing", done: 2, total: 8, fraction: 0.25, mode: "responsive",
+    proof: "PROOF: Step 3/4 - live invariants - 8 of 12",
+  }));
+  await page.waitForTimeout(150);
+  const first = await read();
+  assert.equal(first.hidden, false, "the bounded proof's step line never appeared");
+  assert.equal(first.words, "Step 3/4: Live invariants - 8 of 12…",
+    `the card line said "${first.words}"`);
+  // The five-minute heartbeat is the SILENCE GUARD's sign of life, not progress:
+  // it carries no step, so it must leave the last one standing.
+  await page.evaluate(() =>
+    window.__emit("backend-update-progress", { phase: "testing", note: "still running" }));
+  await page.waitForTimeout(120);
+  assert.deepEqual(await read(), first, "a heartbeat erased or replaced the step line");
+  // The newest step wins: the card follows the run.
+  await page.evaluate(() => window.__emit("backend-update-progress", {
+    phase: "testing", proof: "PROOF: Step 4/4 - look spec & config - 3 of 3",
+  }));
+  await page.waitForTimeout(120);
+  assert.equal((await read()).words, "Step 4/4: Look spec & config - 3 of 3…");
+  // The line belongs to the RUN, so the run's ending takes it down.
+  await page.evaluate((sync) => {
+    window.__versionSync = sync;
+    window.__emit("backend-update-progress", { phase: "done", verdict: "ok", done: 12, total: 12 });
+  }, EQUAL_SYNC);
+  await page.waitForFunction(
+    () => document.getElementById("update-phase").hidden,
+    null, { timeout: 3000 }).catch(() => {});
+  const ended = await read();
+  await page.close();
+  assert.equal(ended.hidden, true, `the step line outlived its run: "${ended.words}"`);
+});
+
+await check("a legacy full sweep keeps the card's own words - no invented step line", async () => {
+  // An older desktop's full sweep prints suites and a liveness heartbeat, never
+  // a `PROOF: Step` line, so no progress event carries `proof`. The card must
+  // fall back to its current words rather than invent a phase or a count.
+  const page = await open({
+    update: { ...K.UPDATE_NONE, ...FOUND },
+    versionSync: { ...BEHIND_SYNC, running: true },
+  });
+  await page.waitForTimeout(400);
+  for (const event of [
+    { phase: "reading" },
+    { phase: "testing", done: 0, total: null },
+    { phase: "testing", done: 3 },
+  ]) {
+    await page.evaluate((payload) =>
+      window.__emit("backend-update-progress", payload), event);
+  }
+  await page.waitForTimeout(200);
+  const seen = await page.evaluate(() => ({
+    hidden: document.getElementById("update-phase").hidden,
+    words: document.getElementById("update-phase").textContent,
+    state: document.getElementById("update-state").textContent,
+  }));
+  await page.close();
+  assert.equal(seen.hidden, true,
+    `a full sweep invented a step line: "${seen.words}"`);
+  assert.equal(seen.words, "");
+  assert.match(seen.state, /^Finishing the backend half now\./,
+    `the legacy fallback words changed: "${seen.state}"`);
+});
+
+await check("an equal pair with no finished check does not claim 'Up to date.'", async () => {
+  // "Up to date." is a claim about the release check AND the two halves. A pair
+  // that matches with no check behind it is not licence to say it.
+  const page = await open({
+    update: { ...K.UPDATE_NONE },   // state "unknown", no checked_at
+    versionSync: {
+      desktop: "0.2.492", backend: "0.2.492", state: "in-sync",
+      words: "Jarvis Desktop 0.2.492 and the backend 0.2.492 - IN SYNC.",
+    },
+  });
+  await page.waitForTimeout(400);
+  const state = await page.locator("#update-state").innerText();
+  await page.close();
+  assert.doesNotMatch(state, /^Up to date\./, `claimed "${state}" with no check`);
+  assert.match(state, /Not checked yet/i, `said "${state}"`);
 });
 
 await check("CONTROL: no page threw", async () => {

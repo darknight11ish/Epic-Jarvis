@@ -182,6 +182,13 @@ const dom = {
   // own `backend.version`, read back from GET /api/self. Its own line, because
   // it is about BOTH halves - the two cards above each describe one.
   updateSync: $("update-sync"),
+  // The top banner (2026-11-21): the SAME handshake, where the owner cannot miss
+  // it. It is the card's two-halves state raised to the top of the page.
+  updateBanner: $("settings-update-banner"),
+  updateBannerWords: $("settings-update-banner-words"),
+  // The backend half's phase line, from the runner's own `PROOF: Step N/M …`
+  // lines (2026-11-21). Empty/hidden until one arrives and a run is in flight.
+  updatePhase: $("update-phase"),
 
   // "Update both halves" (2026-10-13). Its own ids, because it is its own
   // control: the halves it drives are the same two the two cards above drive,
@@ -1868,8 +1875,250 @@ function checkedWords(checkedAt, now = new Date()) {
   return day === today ? time : `${day} ${time}`;
 }
 
+/**
+ * The last answers the two reads gave, so ONE line can be composed from both.
+ *
+ * WHY BOTH. The owner's report of 2026-11-21: *"when i go to updates in
+ * settings it says none available when i click check for updates"* - correct
+ * about a NEWER release, and misleading while the two halves differed, because
+ * the card then implied there was nothing to do. So the card's state line is
+ * the release check AND the version handshake together, never either alone: a
+ * check that finds no newer release must never hide a backend half that still
+ * needs finishing.
+ */
+let lastUpdateStatus = null;
+let lastVersionSync = null;
+
+/**
+ * What the release check alone says - the four states of `update.rs`'s
+ * `Status.state`, in the words this card has always used. Unchanged from
+ * before 2026-11-21; the handshake is laid over it by [`updateStateWords`].
+ */
+function updateCheckWords(status) {
+  const state = updateStateOf(status);
+  const when = checkedWords(status.checked_at);
+  // The time is said only when a check really ran. `up_to_date` without one
+  // cannot happen on the PC (Rust computes both), but if a status ever
+  // arrives that way this page must not invent the time either.
+  const checked = when ? ` Last checked ${when}.` : "";
+  if (state === "update_available" && status.available) {
+    return `Version ${status.available} is available. You are running ${status.current}` +
+      (status.date ? ` · published ${status.date}` : "") + "." + checked;
+  }
+  if (state === "cannot_check") {
+    return status.error
+      ? `Version ${status.current}. ${status.error}${checked}`
+      : `Version ${status.current}. The last check could not run, so whether ` +
+        `this is the newest is unknown.` + checked;
+  }
+  if (state === "up_to_date") {
+    return `Version ${status.current} — the newest published.` + checked;
+  }
+  // `unknown`: no check has run, so the card says exactly that instead of
+  // claiming this build is the newest.
+  return `Version ${status.current}. Not checked yet — press Check now to compare ` +
+    `with the newest release.`;
+}
+
+/**
+ * ONE line for the card's state, from the release check AND the two versions.
+ *
+ * The three states the owner asked for on 2026-11-21 sound like this:
+ *
+ *   - the two halves are equal, and nothing newer is published ->
+ *     **"Up to date."** followed by the check's own line, so the Check button
+ *     still has its answer on screen;
+ *   - the backend is older (the measured case: Desktop 0.2.492 installed,
+ *     backend 0.2.491) -> "Jarvis Desktop 0.2.492 is installed; the backend is
+ *     0.2.491 - press Update everything to finish the backend half." The check's
+ *     own line is APPENDED, never substituted, so a check that found no newer
+ *     release cannot make the card look finished while a half is behind;
+ *   - a backend half is running now -> "Finishing the backend half now. ... - the
+ *     card updates when it ends." (a stale MISMATCH is never left standing).
+ *
+ * A backend that is NEWER, or two version schemes that cannot be compared, are
+ * left to the handshake's own sentence (#update-sync) plus the check's line:
+ * neither is something "Update everything" would fix, so this line does not ask
+ * for it. Pure: the caller stores the two answers and this composes the words.
+ */
+function updateStateWords(status, sync) {
+  const check = updateCheckWords(status);
+  if (!sync || typeof sync !== "object") return check;
+  const older = sync.state === "backend-older";
+  const inSync = sync.state === "in-sync";
+  const desktop = String(sync.desktop || status.current || "the version this app is running");
+  const backend = String(sync.backend || "an older one");
+  if (sync.running && inSync) {
+    // A RUN IN FLIGHT WITH THE FILE HALF ALREADY WRITTEN (measured 2026-11-21:
+    // the 0.2.492 proof run, ended by the 3-hour ceiling at 20:32:11Z). The
+    // VERSION file is updated the moment the file half lands, so the version
+    // read-back already says IN SYNC while the run's own checks are still
+    // going - and "Up to date." would be a claim the run has not yet earned.
+    // Say exactly what is true, and name the read-back that settles it if the
+    // check cannot finish (the same sentence `bound_ending_words` uses).
+    return `Finishing the update's checks now. Jarvis Desktop ${desktop} and the backend ` +
+      `${backend} read the same version, but the run has not finished its own checks, so ` +
+      `the two halves are not claimed to match yet. If the check cannot finish, Restart ` +
+      `Jarvis and it will read IN SYNC.`;
+  }
+  if (!older) {
+    // "Up to date." is a claim about BOTH halves and the check: only the equal
+    // pair with a finished check that found nothing newer may say it.
+    if (inSync && updateStateOf(status) === "up_to_date") {
+      return `Up to date. ${check}`;
+    }
+    return check;
+  }
+  if (sync.running) {
+    return `Finishing the backend half now. Jarvis Desktop ${desktop} is installed; ` +
+      `the backend is ${backend} - the card updates when it ends.`;
+  }
+  return `Jarvis Desktop ${desktop} is installed; the backend is ${backend} - ` +
+    `press Update everything to finish the backend half. ${check}`;
+}
+
+/**
+ * The banner at the top of the page (2026-11-21, Gemini ruling 5.4): shown
+ * while the backend half is BEHIND or a backend half is being finished right
+ * now - the two states in which the halves are not in step, and the only two
+ * the owner has to act on. It is hidden once a read-back says the halves are
+ * IN SYNC with no run in flight - with no reload and no restart:
+ * `paintVersionBanner` is called by every version read, and a finished run, a
+ * visible poll and a returning window all trigger one. It names both halves and
+ * links to the card whose buttons fix it.
+ */
+function versionBannerWords(sync) {
+  const desktop = String(sync.desktop || "this app");
+  const backend = String(sync.backend || "an older one");
+  if (sync.running) {
+    const head = sync.state === "backend-older"
+      ? "Finishing the backend half now."
+      : "Updating now.";
+    return `${head} Jarvis Desktop ${desktop} is installed and the backend is ` +
+      `${backend} - this line clears itself when the read-back says IN SYNC.`;
+  }
+  return `Updates: Jarvis Desktop ${desktop} is installed and the backend is ` +
+    `${backend} - the two halves do not match yet. Press Update everything on ` +
+    `the Updates card to finish the backend half.`;
+}
+
+function paintVersionBanner(sync) {
+  if (!dom.updateBanner) return;
+  const state = String((sync && sync.state) || "");
+  // Behind, or a backend half being finished right now. A backend that is
+  // NEWER, two schemes that cannot be compared, and a backend that cannot be
+  // reached are the card's business, not a banner's: "Update everything" is not
+  // what fixes any of them.
+  const behind = state === "backend-older";
+  // MID-UPDATE IS NOT A CLAIM OF SYNC, even when the version read-back already
+  // says IN SYNC: the file half writes VERSION before the run's own checks
+  // finish (measured 2026-11-21), so a run in flight still clears only when it
+  // ends and a fresh read-back says IN SYNC with nothing running. That is the
+  // ruling's own clearing condition, and `bannerPoll` below re-reads it.
+  const midUpdate = Boolean(sync && sync.running);
+  if (!sync || (!behind && !midUpdate)) {
+    dom.updateBanner.hidden = true;
+    delete dom.updateBanner.dataset.tone;
+    stopBannerPoll();
+    return;
+  }
+  if (dom.updateBannerWords) dom.updateBannerWords.textContent = versionBannerWords(sync);
+  dom.updateBanner.dataset.tone = midUpdate ? "warn" : "bad";
+  dom.updateBanner.hidden = false;
+  // While this banner is on screen, keep reading the two versions back: the
+  // run that fixes them is happening in the next window (or was started at
+  // launch), and it publishes no event this page can rely on when a BOUND ends
+  // it. The read-back is what clears the banner, so a visible banner is exactly
+  // when one is worth taking - and it stops as soon as the banner hides.
+  startBannerPoll();
+}
+
+/** Re-read the handshake while the banner is visible, and only then. */
+const BANNER_POLL_MS = 8000;
+let bannerPoll = null;
+function startBannerPoll() {
+  if (bannerPoll || !IS_TAURI) return;
+  bannerPoll = setInterval(() => loadVersionSync(), BANNER_POLL_MS);
+}
+function stopBannerPoll() {
+  if (bannerPoll) {
+    clearInterval(bannerPoll);
+    bannerPoll = null;
+  }
+}
+
+/** The latest `PROOF: Step N/M - <phase> - x of y` line the runner printed:
+ *  "Step N/M: <Phase> - x of y…", or "" for anything that is not one. Only the
+ *  bounded-proof lane prints that shape. A legacy full sweep prints no such
+ *  line (its `PROOF: still running - ...` heartbeat is a liveness sign, not a
+ *  step), so it keeps the card's own "Finishing the backend half now" words. */
+function proofPhaseWords(text) {
+  const m = String(text || "").match(
+    /PROOF:\s*Step\s+(\d+)\s*\/\s*(\d+)\s*-\s*(.+?)\s*-\s*(\d+)\s+of\s+(\d+)/i);
+  if (!m) return "";
+  const phase = m[3].trim();
+  const shown = phase.charAt(0).toUpperCase() + phase.slice(1);
+  return `Step ${m[1]}/${m[2]}: ${shown} - ${m[4]} of ${m[5]}…`;
+}
+
+/** The card's clean phase+count line (Gemini ruling 5.2).
+ *
+ *  Fed from ONE source: `backend-update-progress` events, which only exist
+ *  while the backend patch program is running - so this line can never stand
+ *  over a card with nothing running. The newest step line wins; a later
+ *  heartbeat line leaves it standing. The 5-minute heartbeat and the 15-minute
+ *  silence guard underneath are untouched - they are the runner's and
+ *  `update.rs`'s own defence against a real hang, and this line is drawn from
+ *  the same output, never a replacement for them. Cleared by the run's own
+ *  ending event, by the run starting/ending on this page, and by a version
+ *  read-back that says no backend half is running. */
+let backendPhaseWords = "";
+function paintBackendPhase(line) {
+  const words = proofPhaseWords(line);
+  if (words) backendPhaseWords = words;
+  if (!dom.updatePhase) return;
+  if (!backendPhaseWords) {
+    dom.updatePhase.hidden = true;
+    return;
+  }
+  dom.updatePhase.textContent = backendPhaseWords;
+  dom.updatePhase.hidden = false;
+}
+
+function clearBackendPhase() {
+  backendPhaseWords = "";
+  if (dom.updatePhase) {
+    dom.updatePhase.textContent = "";
+    dom.updatePhase.hidden = true;
+  }
+}
+
+/**
+ * Paint the card's ONE state line, from both reads. Split out so `paintUpdate`
+ * and `paintVersionSync` can land in any order and the last answer always wins,
+ * instead of one read painting over the other's truth.
+ *
+ * It deliberately does NOT touch the buttons: the Install button's visibility is
+ * the release check's answer (`paintUpdate`), and a version-sync repaint after a
+ * finished install must not put the Install button back beside the Restart one.
+ */
+function paintUpdateState() {
+  const status = lastUpdateStatus;
+  if (!status) return;
+  if (!status.supported) {
+    // A Check button that can only ever fail invites someone to keep pressing
+    // it, so say what is actually true about this build instead.
+    dom.updateState.textContent =
+      `Version ${status.current}. This build has no update key, so it cannot ` +
+      `verify a download and will not offer one.`;
+    return;
+  }
+  dom.updateState.textContent = updateStateWords(status, lastVersionSync);
+}
+
 function paintUpdate(status) {
   if (!status) return;
+  lastUpdateStatus = status;
   // About's version, from the same read as everything else here - never a
   // second, separately-maintained copy of the number that could drift from
   // the one actually running.
@@ -1887,50 +2136,24 @@ function paintUpdate(status) {
   dom.updateNotesBody.textContent = notes;
 
   if (!status.supported) {
-    // A Check button that can only ever fail invites someone to keep pressing
-    // it, so say what is actually true about this build instead.
-    dom.updateState.textContent =
-      `Version ${status.current}. This build has no update key, so it cannot ` +
-      `verify a download and will not offer one.`;
     dom.updateCheck.disabled = true;
     dom.updateInstall.hidden = true;
+    paintUpdateState();
     return;
   }
-
   dom.updateCheck.disabled = false;
+  // The Install button is the release check's alone. A version handshake that
+  // arrives later only rewrites the words (paintUpdateState), so a finished
+  // install's "Install" is never put back after the page has swapped it for
+  // Restart.
   const state = updateStateOf(status);
-  const when = checkedWords(status.checked_at);
-  // The time is said only when a check really ran. `up_to_date` without one
-  // cannot happen on the PC (Rust computes both), but if a status ever
-  // arrives that way this page must not invent the time either.
-  const checked = when ? ` Last checked ${when}.` : "";
-
   if (state === "update_available" && status.available) {
-    dom.updateState.textContent =
-      `Version ${status.available} is available. You are running ${status.current}` +
-      (status.date ? ` · published ${status.date}` : "") + "." + checked;
     dom.updateInstall.hidden = false;
     dom.updateInstall.textContent = `Install ${status.available}`;
-    return;
+  } else {
+    dom.updateInstall.hidden = true;
   }
-  dom.updateInstall.hidden = true;
-  if (state === "cannot_check") {
-    dom.updateState.textContent = status.error
-      ? `Version ${status.current}. ${status.error}${checked}`
-      : `Version ${status.current}. The last check could not run, so whether ` +
-        `this is the newest is unknown.` + checked;
-    return;
-  }
-  if (state === "up_to_date") {
-    dom.updateState.textContent =
-      `Version ${status.current} — the newest published.` + checked;
-    return;
-  }
-  // `unknown`: no check has run, so the card says exactly that instead of
-  // claiming this build is the newest.
-  dom.updateState.textContent =
-    `Version ${status.current}. Not checked yet — press Check now to compare ` +
-    `with the newest release.`;
+  paintUpdateState();
 }
 
 async function loadUpdate() {
@@ -1950,6 +2173,8 @@ async function loadUpdate() {
  *  works. */
 function paintVersionSync(sync) {
   if (!dom.updateSync || !sync || typeof sync !== "object") return;
+  lastVersionSync = sync;
+  paintVersionBanner(sync);
   const state = String(sync.state || "");
   dom.updateSync.textContent = String(sync.words || "");
   // "in-sync" is the only state allowed to paint green. Everything else is
@@ -1963,6 +2188,14 @@ function paintVersionSync(sync) {
       : "";
   dom.updateSync.dataset.tone = tone;
   dom.updateSync.hidden = false;
+  // ...and the card's own state line is recomposed from both reads, so a
+  // no-newer-release check cannot hide the backend half this handshake just
+  // reported (the owner's 2026-11-21 complaint).
+  paintUpdateState();
+  // A read-back that says no backend half is running takes the phase line
+  // down: the latest PROOF step is not left standing after the run ended. A
+  // read that catches the run in flight leaves it where it is.
+  if (!sync.running) clearBackendPhase();
 }
 
 /** Reads the two versions back. Never throws: a backend that is down has its
@@ -1976,10 +2209,18 @@ async function loadVersionSync() {
   try {
     paintVersionSync(await invoke("shell_version_sync"));
   } catch (error) {
+    // The handshake could not answer at all: the card must not keep drawing a
+    // pair from the last answer as if it were current.
+    lastVersionSync = null;
     dom.updateSync.textContent =
       "Could not compare the two versions: " + String((error && error.message) || error);
     dom.updateSync.dataset.tone = "bad";
     dom.updateSync.hidden = false;
+    // No answer is no licence to keep a banner (or a phase line) about a pair
+    // of versions this page can no longer read.
+    paintVersionBanner(null);
+    clearBackendPhase();
+    paintUpdateState();
   }
 }
 
@@ -2150,6 +2391,13 @@ dom.updateAuto.addEventListener("change", async () => {
 if (IS_TAURI) TAURI.event.listen("update-status", (event) => paintUpdate(event.payload));
 // Emitted only while `install_update` is downloading — see `paintProgress`.
 if (IS_TAURI) TAURI.event.listen("update-progress", (event) => paintProgress(event.payload));
+// The two versions are read back when this window comes forward again: a
+// backend half finished while the page sat behind another window must clear the
+// top banner the moment the owner looks at it, with no reload and no restart.
+window.addEventListener("focus", () => loadVersionSync());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") loadVersionSync();
+});
 
 /* ==========================================================================
    Update both halves
@@ -2598,7 +2846,22 @@ function paintProblems(p) {
 function paintBackendProgress(p) {
   paintProgressBar(p);
   const line = progressLine(p);
-  if (p && p.phase === "done") paintProblems(p);
+  if (p && p.phase === "done") {
+    paintProblems(p);
+    // The run is over: take the step line down NOW, and read the two versions
+    // back so the top banner clears in place when they are IN SYNC - no reload,
+    // no restart (the ruling's clearing condition).
+    clearBackendPhase();
+    loadVersionSync();
+  }
+  // The bounded proof prints `PROOF: Step N/M - <phase> - x of y` lines and
+  // `update_progress.rs` carries the newest verbatim as `proof`. That exact
+  // shape is the ONLY thing that paints the card's clean step line. A run that
+  // prints none - the legacy full sweep - leaves every field empty, the line
+  // hidden, and the card keeps its existing "Finishing the backend half now"
+  // words, which is the fallback. A later heartbeat line carries no `proof`, so
+  // it never blanks or replaces the step the card already shows.
+  if (p && typeof p.proof === "string") paintBackendPhase(p.proof);
   // Nothing readable: leave the last line standing. Blanking it here would put
   // the card back to the silence this exists to remove.
   if (line) report(dom.ubStatus, line, p && p.verdict && p.verdict !== "ok" ? "bad" : "");
@@ -2728,6 +2991,9 @@ async function runBoth(modeId) {
   // from a hang — which is the owner's actual complaint ("if its checking
   // anything"). Written here, before the invoke, because the first progress
   // event may be the thing that never arrives.
+  // A backend half was just started or just ended: the phase line belongs to
+  // the run, not to the page, so it starts empty and is taken down at the end.
+  clearBackendPhase();
   report(dom.ubStatus, UPDATE_STARTING, "");
   // Last run's verdict list must not stand as this run's: the new run has not
   // failed at anything yet.
@@ -2756,9 +3022,14 @@ async function runBoth(modeId) {
   } finally {
     ubBusy = false;
     showFallback(false);
+    clearBackendPhase();
     // Re-read WHICH folders there are, and leave the ending it just wrote on
     // screen alone — see `keepState` above.
     loadBoth(true);
+    // ...and re-read the two versions: the run has just moved one or both
+    // halves, so the card line and the top banner may both be out of date.
+    // A read-back that says IN SYNC is what clears the banner, in place.
+    loadVersionSync();
     // The Start-backend button was disabled for the duration; repaint it now.
     paintBackend();
   }
@@ -2822,7 +3093,15 @@ if (dom.ubSave) {
 // Emitted by `update_both` as each half starts and ends. Nothing that receives
 // this starts, resumes or approves anything — it is `update-status`'s shape,
 // one step at a time, so a card is not silent for the minutes a patch run takes.
-if (IS_TAURI) TAURI.event.listen("update-step", (event) => paintStep(event.payload));
+if (IS_TAURI) {
+  TAURI.event.listen("update-step", (event) => {
+    paintStep(event.payload);
+    // A step is the run changing the halves underneath this page: re-read the
+    // two versions so the top banner and the card line are never a stale pair.
+    // On the ending step this is what clears the banner in place.
+    loadVersionSync();
+  });
+}
 
 // The same run, in much finer steps: `update_progress.rs` tails the log the
 // patch program is writing and emits one of these per new line, so the line

@@ -801,6 +801,92 @@ await check("with no saved layout, or no shell, the page's own look is left alon
     "a page served on its own has no shell command to ask");
 });
 
+/* ── 3. The version line under the chat log ────────────────────────────────
+ * THE OWNER'S REPORT, 2026-11-21: "MISMATCH: the backend 0.2.491, but this HUD
+ * expects 0.2.492 ... this usually clears on its own" stayed visible after the
+ * backend half had finished - VERSION already read 0.2.492 while the line still
+ * said 0.2.491. `hud_bootstrap.js` used to append that sentence as a chat
+ * message for state "older" only, so the run's own later states (running, then
+ * the in-sync read-back) were never drawn. The checks below drive the REAL
+ * injected bootstrap through its own feed, with a chat log that records what a
+ * person would see: one line that is REWRITTEN in place, never appended twice,
+ * and GONE once the read-back says the halves are in step. */
+
+/** A chat log as the bootstrap sees it: `addMessage` returns the body node a
+ *  row was drawn with (the real page's return value), and the row can be
+ *  removed the way the real `hudNavNote`'s parent can. */
+function versionLog(run) {
+  const rows = [];
+  const log = {
+    removeChild(row) {
+      const at = rows.indexOf(row);
+      if (at >= 0) rows.splice(at, 1);
+    },
+  };
+  run.window.addMessage = (role, text) => {
+    const row = { parentNode: log, body: { parentNode: null, textContent: text } };
+    row.body.parentNode = row;
+    rows.push(row);
+    return row.body;
+  };
+  return { rows, text: () => rows.map((row) => row.body.textContent).join(" | ") };
+}
+
+await check("the version line says it is finishing the backend half now, then clears", () => {
+  const run = runBootstrap({ shell: true });
+  const log = versionLog(run);
+  // 1. The mismatch, as the start-up handshake says it.
+  run.otherChannel("version", {
+    state: "older",
+    words: "MISMATCH: the backend 0.2.491, but this HUD expects 0.2.492. The update " +
+      "runs both halves - Jarvis finishes the backend half automatically after a " +
+      "desktop-only update, so this usually clears on its own.",
+  });
+  assert.equal(log.rows.length, 1, "the mismatch was not shown at all");
+  assert.match(log.text(), /MISMATCH/, log.text());
+  // 2. The automatic finish starts: the SAME line is rewritten, so the owner
+  //    never has a stale mismatch beside a run that is fixing it.
+  run.otherChannel("version", {
+    state: "running",
+    words: "Finishing the backend half now. Jarvis Desktop 0.2.492 is installed " +
+      "and the backend is 0.2.491.",
+  });
+  assert.equal(log.rows.length, 1,
+    "the running line was appended instead of replacing the stale mismatch");
+  assert.match(log.text(), /finishing the backend half now/i, log.text());
+  assert.doesNotMatch(log.text(), /MISMATCH|0\.2\.491, but/, log.text());
+  // 3. The read-back says the two halves really are in step: the warning has
+  //    nothing left to warn about, so it is REMOVED (no manual restart, no
+  //    leftover line).
+  run.otherChannel("version", {
+    state: "ok",
+    words: "The backend half finished, and both halves now match: Jarvis Desktop " +
+      "0.2.492 and the backend 0.2.492.",
+  });
+  assert.equal(log.rows.length, 0, "the in-sync read-back did not clear the line");
+  assert.equal(log.text(), "", "the cleared line is still in the log");
+  // 4. An ending that is not a pass still says itself, and still replaces a
+  //    stale mismatch rather than living beside it: a bound that ended a healthy
+  //    file half promises the NEXT start reads IN SYNC, and that is what the
+  //    line says - never the old 0.2.491.
+  run.otherChannel("version", {
+    state: "older",
+    words: "MISMATCH: the backend 0.2.491, but this HUD expects 0.2.492.",
+  });
+  run.otherChannel("version", {
+    state: "partial",
+    words: "The patch run was ended by the silence bound after 48m 10s. The backend's " +
+      "files and version are updated. Restart Jarvis and it will read IN SYNC.",
+  });
+  assert.equal(log.rows.length, 1, "the partial ending was appended, not rewritten");
+  assert.match(log.text(), /Restart Jarvis and it will read IN SYNC/, log.text());
+  assert.doesNotMatch(log.text(), /MISMATCH/, log.text());
+  // 5. A payload with no words (or no payload) changes nothing and cannot throw.
+  run.otherChannel("version", null);
+  run.otherChannel("version", { state: "running", words: "   " });
+  assert.equal(log.rows.length, 1, "an empty version line changed the log");
+});
+
 if (fails.length) {
   console.error(`\n${fails.length} test(s) failed`);
   process.exit(1);

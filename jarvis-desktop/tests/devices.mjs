@@ -662,6 +662,251 @@ await check("a reloaded window with a pairing open shows its state, never its co
   assert.match(said, /no longer shown here/);
 });
 
+/* ── "Clean up duplicate/inactive devices" (Gemini ruling 5.6, 2026-11-21) ──
+ *
+ * The owner's housekeeping ask, owner-first: press once to see WHAT WOULD be
+ * removed (names and how long ago each was last seen), anything active within
+ * 30 days preserved, nothing pruned on load or on a timer, and only the confirm
+ * applies it - ending in the PC's own `devices_cleanup` approval card. The
+ * contract is `POST /api/devices/cleanup` (dry run -> the would-remove list;
+ * confirm -> 202 while the card waits, 200 {removed, kept} after approval).
+ *
+ * A card that was DENIED, a card nobody answered and a refusal all come back
+ * 200 `{ok: false, removed: 0, kept: N, denied|timed_out|refused: true,
+ * error: "<the PC's own sentence>"}`. None of them removed anything, so none
+ * of them may be painted as a success.
+ */
+
+/** The PC's dry-run answer, exactly the contract's shape. */
+function cleanupDry({ total = 4, keep = 2, rows = [
+  { name: "Old phone", last_seen_days: 42 },
+  { name: "Tablet", last_seen_days: 91 },
+] } = {}) {
+  return {
+    ok: true, dry_run: true, total, keep_active_30d: keep,
+    would_remove: rows, kept_last_active: true,
+  };
+}
+
+/** Press the cleanup button, confirm it, and read what the page said back.
+ *  `cleanupApply` is the PC's confirm answer, exactly as the route gives it. */
+async function confirmCleanup(cleanupApply) {
+  const page = await open({
+    devices: { list: list(), cleanupDry: cleanupDry(), cleanupApply },
+  });
+  await page.waitForTimeout(400);
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  await page.locator("#dv-clean-apply").click();
+  await page.waitForTimeout(450);
+  const seen = await page.evaluate(() => ({
+    said: document.getElementById("dv-clean-status").textContent,
+    tone: document.getElementById("dv-clean-status").dataset.tone || "",
+  }));
+  await page.close();
+  return seen;
+}
+
+await check("clean up asks what WOULD be removed first, and removes nothing on its own", async () => {
+  const commandNames = (p) => p.evaluate(() => window.__calls.map((c) => c[0]));
+  const page = await open({
+    devices: {
+      list: list({ extra: [
+        { id: "aaa111111", name: "Old phone", kind: "phone", created: 1700000000,
+          last_seen: NOW - 42 * 86400, removable: true, approval_key: false },
+        { id: "bbb222222", name: "Tablet", kind: "phone", created: 1700000000,
+          last_seen: NOW - 91 * 86400, removable: true, approval_key: false },
+      ] }),
+      cleanupDry: cleanupDry(),
+    },
+  });
+  await page.waitForTimeout(400);
+  // Nothing happens by itself: no dry run, no apply, no per-device removal.
+  const onLoad = await commandNames(page);
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(400);
+  const out = await page.evaluate(() => ({
+    words: document.getElementById("dv-clean-words").textContent,
+    rows: [...document.querySelectorAll("#dv-clean-list li")].map((li) => li.textContent),
+    panelHidden: document.getElementById("dv-clean-panel").hidden,
+    applyHidden: document.getElementById("dv-clean-apply").hidden,
+    applyWords: document.getElementById("dv-clean-apply").textContent,
+  }));
+  const seen = await commandNames(page);
+  await page.close();
+  assert.deepEqual(
+    onLoad.filter((c) => c === "__cleanupDry" || c === "__cleanupApply" || c === "devices_remove"),
+    [], `something ran on load: ${onLoad.join(", ")}`);
+  assert.deepEqual(
+    seen.filter((c) => c === "__cleanupApply" || c === "devices_remove"), [],
+    "the dry run removed a device");
+  assert.equal(seen.filter((c) => c === "__cleanupDry").length, 1,
+    "the press was not exactly one read of what would be removed");
+  // The PC's own would-remove list, in the owner's words: names and ages.
+  assert.equal(out.panelHidden, false, "the would-remove panel never appeared");
+  assert.equal(out.rows.length, 2, `the page showed ${out.rows.length} row(s)`);
+  assert.match(out.rows[0], /Old phone - last seen 42 days ago/, out.rows[0]);
+  assert.match(out.rows[1], /Tablet - last seen 91 days ago/, out.rows[1]);
+  // Kept devices are the PC's own 30-day decision, said as a reason - and the
+  // count that the confirm would remove is named, not left to be counted.
+  assert.match(out.words, /4 devices paired/, out.words);
+  assert.match(out.words, /2 active in the last 30 days are kept/, out.words);
+  assert.match(out.words, /2 would be removed after you confirm/, out.words);
+  assert.match(out.words, /asks on a card first/, out.words);
+  assert.equal(out.applyHidden, false, "no confirm button was offered");
+  assert.equal(out.applyWords, "Remove 2 devices…");
+});
+
+await check("only the confirm applies it, and a card that is still waiting removes nothing", async () => {
+  const page = await open({
+    devices: {
+      list: list(),
+      cleanupDry: cleanupDry({ total: 3, keep: 1,
+        rows: [{ name: "Old phone", last_seen_days: 45 }] }),
+      // The PC raises its own `devices_cleanup` approval card; 202 means it is
+      // waiting and NOTHING has been removed yet.
+      cleanupApply: { ok: true, waiting: true, http: 202 },
+    },
+  });
+  await page.waitForTimeout(400);
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  // Cancel puts the plan away and applies nothing.
+  await page.locator("#dv-clean-cancel").click();
+  await page.waitForTimeout(150);
+  const afterCancel = await page.evaluate(() => ({
+    panelHidden: document.getElementById("dv-clean-panel").hidden,
+    status: document.getElementById("dv-clean-status").textContent,
+  }));
+  assert.deepEqual(await calls(page, "__cleanupApply"), [],
+    "Cancel still applied the cleanup");
+  assert.equal(afterCancel.panelHidden, true, "Cancel left the plan on screen");
+  assert.equal(afterCancel.status, "", "Cancel left the old words behind");
+  // Ask again, then confirm: the only press that changes anything.
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  await page.locator("#dv-clean-apply").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#dv-clean-status").innerText();
+  const applied = await calls(page, "__cleanupApply");
+  const removedOneByOne = await calls(page, "devices_remove");
+  await page.close();
+  assert.equal(applied.length, 1, "the confirm did not ask the PC exactly once");
+  assert.deepEqual(applied[0], { dryRun: false }, "the confirm sent a dry run");
+  assert.deepEqual(removedOneByOne, [], "the page removed devices one by one");
+  assert.match(said, /Waiting for your approval on the card/i, `said "${said}"`);
+  assert.match(said, /Nothing has been removed yet/i, `said "${said}"`);
+});
+
+await check("the approved cleanup says how many went and keeps the rest", async () => {
+  const page = await open({
+    devices: {
+      list: list(),
+      cleanupDry: cleanupDry({ total: 4, keep: 2 }),
+      cleanupApply: { ok: true, removed: 2, kept: 2, http: 200 },
+    },
+  });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { window.__calls.length = 0; });
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  await page.locator("#dv-clean-apply").click();
+  await page.waitForTimeout(450);
+  const said = await page.locator("#dv-clean-status").innerText();
+  const after = await page.evaluate(() => window.__calls.map((c) => c[0]));
+  await page.close();
+  assert.match(said, /Removed 2 devices; kept 2\./, `said "${said}"`);
+  assert.ok(after.filter((c) => c === "devices_list").length >= 1,
+    "the device list was not re-read after the removal");
+});
+
+await check("rule 4: the cleanup's dry run reads on a stale link; its confirm waits", async () => {
+  const page = await open({
+    link: { stale: true },
+    devices: { list: list(), cleanupDry: cleanupDry() },
+  });
+  await page.waitForTimeout(400);
+  const cleanEnabled = await page.locator("#dv-clean").isEnabled();
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  const seen = await page.evaluate(() => ({
+    panelHidden: document.getElementById("dv-clean-panel").hidden,
+    applyDisabled: document.getElementById("dv-clean-apply").disabled,
+  }));
+  await page.close();
+  assert.equal(cleanEnabled, true, "the dry run was held on a stale link - it only reads");
+  assert.equal(seen.panelHidden, false, "a stale link hid the would-remove list");
+  assert.equal(seen.applyDisabled, true,
+    "the confirm was offered on a stale link - it ends in a card");
+});
+
+await check("a cleanup the PC refuses is said in the PC's own words", async () => {
+  const page = await open({
+    devices: { list: list(), cleanFails: "The device list is busy right now." },
+  });
+  await page.waitForTimeout(400);
+  await page.locator("#dv-clean").click();
+  await page.waitForTimeout(350);
+  const seen = await page.evaluate(() => ({
+    said: document.getElementById("dv-clean-status").textContent,
+    tone: document.getElementById("dv-clean-status").dataset.tone,
+    panelHidden: document.getElementById("dv-clean-panel").hidden,
+  }));
+  await page.close();
+  assert.match(seen.said, /busy right now/, `said "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a refused read was painted as fine");
+  assert.equal(seen.panelHidden, true, "a refusal left an empty plan on screen");
+});
+
+await check("a cleanup the owner DENIED is the card's own words, never a success", async () => {
+  const seen = await confirmCleanup({
+    ok: false, removed: 0, kept: 3, denied: true, http: 200,
+    error: "You said no on the card, so nothing was removed. The device list is unchanged.",
+  });
+  assert.match(seen.said, /You said no on the card/, `said "${seen.said}"`);
+  assert.match(seen.said, /nothing was removed/, `said "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a denied cleanup was painted as a success: "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a denied cleanup was painted as fine (green)");
+});
+
+await check("a cleanup nobody ANSWERED changes nothing and says so", async () => {
+  const seen = await confirmCleanup({
+    ok: false, removed: 0, kept: 3, timed_out: true, http: 200,
+    error: "Nobody answered the card in time, so nothing was removed. The device list is unchanged.",
+  });
+  assert.match(seen.said, /Nobody answered the card in time/, `said "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a timed-out cleanup was painted as a success: "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a timed-out cleanup was painted as fine (green)");
+});
+
+await check("a REFUSED cleanup says nothing was removed and names the reason", async () => {
+  // A refusal's `error` is the gate's bare reason, which does not carry the
+  // "nothing was removed" half - the page has to say it itself.
+  const seen = await confirmCleanup({
+    ok: false, removed: 0, kept: 3, refused: true, http: 200,
+    error: "the approval gate failed (TimeoutError)",
+  });
+  assert.match(seen.said, /Nothing was removed\./, `said "${seen.said}"`);
+  assert.match(seen.said, /approval gate failed/, `the PC's reason was dropped: "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a refused cleanup was painted as a success: "${seen.said}"`);
+  assert.equal(seen.tone, "bad", "a refused cleanup was painted as fine (green)");
+});
+
+await check("a cleanup with no reported count never invents one", async () => {
+  // The old fallback was `rows.length`: the dry run's plan reported as if it
+  // had been removed. The PC's answer here carries no `removed` at all.
+  const seen = await confirmCleanup({ ok: true, kept: 1, http: 200 });
+  assert.match(seen.said, /did not say how many devices were removed/, `said "${seen.said}"`);
+  assert.doesNotMatch(seen.said, /Removed \d+ device/, `a made-up count was reported: "${seen.said}"`);
+  assert.notEqual(seen.tone, "ok", "an unreported count was painted as a clean success");
+});
+
+await check("a real approved cleanup still shows its counts", async () => {
+  const seen = await confirmCleanup({ ok: true, removed: 2, kept: 3, http: 200 });
+  assert.equal(seen.said, "Removed 2 devices; kept 3.", `said "${seen.said}"`);
+  assert.equal(seen.tone, "ok", "an approved cleanup was not painted as done");
+});
+
 await browser.close();
 close();
 
@@ -680,11 +925,42 @@ function fnBody(src, name) {
 await check("CONTROL: the Devices commands are in the settings window's set only", async () => {
   const sets = SURFACES.split("[[set]]");
   for (const cmd of ["pair-phone-address", "pair-start", "pair-session", "pair-cancel",
-    "devices-list", "devices-remove", "devices-shared"]) {
+    "devices-list", "devices-remove", "devices-label", "devices-shared", "devices-cleanup"]) {
     const holders = sets.filter((s) => s.includes(`"allow-${cmd}"`));
     assert.equal(holders.length, 1, `${cmd} is in ${holders.length} sets`);
     assert.match(holders[0], /identifier = "settings-surface"/, cmd);
   }
+});
+
+await check("CONTROL: the cleanup door is dry-run-first, and only its confirm is held on a stale link", () => {
+  // Gemini ruling 5.6 (2026-11-21): the owner saw the list of what WOULD go
+  // before anything goes. The Rust door must therefore send the contract's own
+  // body, never a device list, and must refuse the CONFIRM - never the dry run -
+  // on a stale link. 202 is the PC's own "the card is waiting" answer, not a
+  // failure, and Rust must pass it through like 200.
+  const door = fnBody(RUST, "devices_cleanup");
+  assert.match(door, /CLEANUP_PATH/, "the command does not call the cleanup route");
+  assert.match(door, /serde_json::json!\(\{\s*"dry_run": dry_run\s*\}\)/,
+    "the command does not send the contract's dry_run body");
+  assert.match(door, /if !dry_run && stale\(&app\)/,
+    "the confirm is not held on a stale link (or the dry run wrongly is)");
+  assert.match(fnBody(RUST, "devices_cleanup") + RUST, /fn cleanup_answer\(/,
+    "there is no single reader for the cleanup answer");
+  assert.match(
+    RUST.slice(RUST.indexOf("fn cleanup_answer("),
+      RUST.indexOf("fn cleanup_answer(") + 700),
+    /\(200\.\.300\)\.contains\(&status\)/,
+    "a 202 waiting card is not accepted as an answer");
+  // The one settings window holds its permission, and the command is registered.
+  assert.equal((SURFACES.match(/"allow-devices-cleanup"/g) || []).length, 1,
+    "devices-cleanup is not in exactly one permission set");
+  assert.match(read("src-tauri/src/lib.rs"), /devices::devices_cleanup/,
+    "the cleanup command is not registered with the window handler");
+  // No page may prune: the only command it can call for this is the cleanup
+  // door, and the dry run is the default - the apply only after the confirm.
+  const JS = read("src/devices.js");
+  assert.doesNotMatch(JS, /call\("devices_remove"[\s\S]{0,200}cleanupDryRun/,
+    "the cleanup path removes devices one by one");
 });
 
 await check("CONTROL: the window is hidden from capture BEFORE the code is handed over", async () => {

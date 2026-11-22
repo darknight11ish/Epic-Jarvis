@@ -82,6 +82,20 @@
  * down it is two orders at once. Everything comes back, in its original order,
  * when the box is cleared.
  *
+ * THE UPDATE CARD IS PINNED FIRST FOR THE UPDATE WORDS (the owner, 2026-11-21):
+ * *"when i search updates in the settings i have to scroll all the way to the
+ * bottom of the list to find the update section for jarvis. it should be at the
+ * top of the list."* Ranking by the words on the card already put Updates first
+ * for "update"/"updates", but not for the words a person naturally types for it:
+ * "upgrade" is on no card this page prints, and "version" is on half of them, so
+ * About outranked Updates. So for a query made only of [`UPDATE_WORDS`] - or one
+ * of the update phrases ("check now", the card's own button name), plus the
+ * handshake's own words "sync" and "mismatch" - the Updates card is placed first
+ * even when its own text does not contain the query, and it is shown even when
+ * no card's text matches at all - one obvious top row, whatever the owner called
+ * the thing. A query with any other word in it is left to the ordinary ranking,
+ * so this can never reorder an unrelated search.
+ *
  * @module settings-search
  */
 
@@ -105,6 +119,59 @@ const CATALOGUE_WORDS = (() => {
   }
   return words;
 })();
+
+/**
+ * The settings card the update words always mean, and must always be first for.
+ * Both ids are the page's own: `#updates` is the card, `updates` is what the
+ * menus catalogue calls it. The palette (`palette.js`) imports [`asksForUpdates`]
+ * so the app-wide find box and this page's search cannot disagree about what
+ * "the update card" is.
+ */
+export const UPDATE_CARD_ID = "updates";
+
+/**
+ * The words that ask for the Updates card, and nothing else - each one is a word
+ * a person types when they mean "how do I update Jarvis": the noun, the plural,
+ * both spellings of the action and its -ing/-ed forms, the doer, and the word
+ * printed all over the rest of the page ("version", which is why About used to
+ * outrank it). A query made only of these words is update-intent; ANY other word
+ * in the query (a name, a setting) turns the pin off and leaves the ordinary
+ * ranking alone.
+ */
+export const UPDATE_WORDS = Object.freeze([
+  "update",
+  "updates",
+  "upgrade",
+  "upgrades",
+  "upgraded",
+  "upgrading",
+  "updater",
+  "updaters",
+  "version",
+  "versions",
+  // The two words the version handshake prints when the halves differ, and
+  // what an owner types when he has just seen that line.
+  "sync",
+  "mismatch",
+]);
+
+/**
+ * Whole phrases that ask for the Updates card even though one of their words is
+ * not an update word. "check now" is the card's own button name (`update-check`
+ * prints "Check now"), so it is the obvious thing to search after reading a
+ * card that says "press Check now".
+ */
+const UPDATE_PHRASES = Object.freeze(["check now", "check for updates", "check for update"]);
+
+/** Is this query only update words (or one of the update phrases)? Pure - the
+ *  pin's whole rule, testable. */
+export function asksForUpdates(query) {
+  const q = normalise(query);
+  if (!q) return false;
+  if (UPDATE_PHRASES.includes(q)) return true;
+  const tokens = q.split(" ").filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => UPDATE_WORDS.includes(token));
+}
 
 /** The box's words, the same on the phone (`SettingsSearchWords`). */
 export const SEARCH_LABEL = "Search settings";
@@ -429,6 +496,10 @@ export function mountSettingsSearch(doc = document) {
   const status = doc.getElementById("settings-search-status");
   const say = doc.getElementById("settings-search-count");
   const jump = doc.getElementById("settings-jump");
+  // The one-row quick list above the grouped jump list ("Updates", the card a
+  // person looks for by name). It is a map of the page too, so it goes away with
+  // the jump list while a search is on and comes back with the rest.
+  const quick = doc.getElementById("settings-quick");
   const box = doc.getElementById("settings-search");
 
   /** Every card, in page order. */
@@ -560,6 +631,30 @@ export function mountSettingsSearch(doc = document) {
 
     if (searching) {
       ranked.sort(compareMatches);
+      // THE UPDATE CARD, PINNED (2026-11-21). For a query made only of
+      // UPDATE_WORDS the card is first whatever the ranking said, and it is
+      // shown even when its own text contains none of the query ("upgrade" is on
+      // no card, "version" is on half of them). It is never invented: a card
+      // hidden by "Show or hide menus" stays hidden, and a page without the card
+      // simply has nothing to pin.
+      const pinned = asksForUpdates(query)
+        ? units().find((unit) =>
+          unit.cards.some((card) => card.id === UPDATE_CARD_ID && !hiddenByMenu(card)))
+        : null;
+      const pinnedCard = pinned ? pinned.cards.find((card) => card.id === UPDATE_CARD_ID) : null;
+      if (pinnedCard) {
+        if (pinnedCard.hidden) {
+          pinnedCard.hidden = false;
+          showing += 1;
+        }
+        if (pinnedCard.classList.contains("card-collapsed")) {
+          pinnedCard.classList.remove("card-collapsed");
+          pinnedCard.dataset.searchWasCollapsed = "true";
+        }
+        const already = ranked.findIndex((row) => row.node === pinned.node);
+        if (already >= 0) ranked.splice(already, 1);
+        ranked.unshift({ node: pinned.node, rank: 0, title: normalise("updates") });
+      }
       orderMatches(ranked);
     } else {
       restoreOrder();
@@ -573,8 +668,10 @@ export function mountSettingsSearch(doc = document) {
     }
 
     // The jump list is a map of the WHOLE page, so while the page is filtered
-    // it would point at cards that are not there. It comes back on its own.
+    // it would point at cards that are not there. It comes back on its own. The
+    // one-row quick list is the same kind of map, for the same reason.
     if (jump) jump.hidden = searching;
+    if (quick) quick.hidden = searching;
 
     const empty = searching && showing === 0;
     if (none) none.hidden = !empty;

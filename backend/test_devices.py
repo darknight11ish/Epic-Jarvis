@@ -3077,13 +3077,15 @@ def t_the_cleanup_route_is_installed_and_documented_in_parity_and_the_api():
     entry = parity.CLASSIFICATION.get("/api/devices/cleanup")
     check("check_parity.py classifies POST /api/devices/cleanup", entry is not None,
           entry)
-    check("... as planned: the backend half ships before either app's button",
-          bool(entry) and entry[0] == "planned" and len(entry) > 1
+    check("... as deliberate: the desktop's Settings button calls it, the phone's "
+          "Devices screen gains no clean-up button in this slice (the phone half is "
+          "its own follow-up, so the phone never calls it)",
+          bool(entry) and entry[0] == "deliberate" and len(entry) > 1
           and bool(entry[1].strip()), entry)
     pending = parity.PENDING_CLIENTS.get("/api/devices/cleanup")
-    check("... and names the lane that owns the button as its pending client",
-          bool(pending) and "Settings" in pending and "separate lane" in pending,
-          pending)
+    check("... and main's PENDING_CLIENTS line for it is gone: a backend-first "
+          "route must not stay pending after its first client lands",
+          pending is None, pending)
     doc = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     start = doc.find("## 231.")
     block = doc[start:] if start >= 0 else ""

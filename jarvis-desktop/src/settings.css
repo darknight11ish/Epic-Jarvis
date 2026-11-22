@@ -66,6 +66,73 @@ body {
   margin-bottom: 16px;
 }
 
+/* The version banner above everything (2026-11-21): the one state that must be
+   visible before the owner scrolls anywhere - the two halves are not in step,
+   or a backend half is being finished right now. Same raised-card look as the
+   rest of the page, with the warning colour on the words; hidden whenever the
+   handshake says the halves are in step, other than "older", or could not
+   answer. */
+.settings-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--warn);
+  border-left: 4px solid var(--warn);
+  border-radius: 10px;
+  padding: 10px 18px;
+  margin-bottom: 16px;
+  font-size: var(--text-sm);
+}
+
+.settings-banner[data-tone="bad"] {
+  border-color: var(--bad);
+  border-left-color: var(--bad);
+}
+
+.settings-banner-words { color: var(--bad-text); }
+
+.settings-banner[data-tone="warn"] .settings-banner-words { color: var(--text); }
+
+.settings-banner-link {
+  color: var(--cyan);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-banner-link:hover,
+.settings-banner-link:focus-visible { text-decoration: underline; }
+
+/* The one quick entry above the grouped map (2026-11-21). Same card look as
+   the jump list - it is the same kind of thing, a way to a card, not a setting -
+   and deliberately one line: the owner asked for the Updates card at the top of
+   the list, not for a second list to read. */
+.settings-quick {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.settings-quick a {
+  color: var(--cyan);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-quick a:hover,
+.settings-quick a:focus-visible {
+  text-decoration: underline;
+}
+
 /* Ease-of-use audit #10: a map at the top of a ~21-card page, so finding a
    setting does not mean scrolling past everything before it. Each link is
    an in-page anchor to a card's own id; clicking one just jumps there, it

@@ -99,6 +99,14 @@ pub struct Progress {
     pub fallback: Option<bool>,
     /// One plain sentence from the tool about this event (a fallback note).
     pub note: Option<String>,
+    // ---- the bounded proof's own step line (Gemini rulings 5.1/5.2) --------
+    /// The newest `PROOF: Step N/M - <phase> - x of y` line the proof stage
+    /// printed, verbatim. `Some` only for that exact shape: the full sweep's
+    /// older `PROOF: still running - ...` heartbeat and every other line leave
+    /// it `None`, so the card can fall back to its own words for a legacy run.
+    /// The 5-minute heartbeat keeps feeding the silence guard underneath; this
+    /// is the readable line, not a replacement for that guard.
+    pub proof: Option<String>,
 }
 
 /// Applies one `JARVIS-EVENT` body to `p`. Pure; a malformed body does nothing.
@@ -187,6 +195,44 @@ pub fn could_not_run(reason: &str) -> bool {
     said.contains("access is denied") || said.contains("__pycache__")
 }
 
+/// The bounded proof's own step line, if `text` is one: the exact shape
+/// `PROOF: Step N/M - <phase> - x of y` (`tools/update_backend.py` prints it
+/// for the app path's 4-phase bounded proof; Gemini rulings 5.1/5.2).
+///
+/// Deliberately strict, in both directions:
+///
+/// - the **legacy full sweep** prints no such line, so it stays `None` and the
+///   card keeps its own "Finishing the backend half now" words;
+/// - the proof stage's `PROOF: still running - 24m 05s elapsed, checking the
+///   backend against the live folder` heartbeat is NOT a step line either - it
+///   is the silence guard's sign of life, not progress, and rendering it as
+///   "Step" would invent a count. It is ignored here and keeps the last real
+///   step line standing.
+///
+/// Pure, so the reading is a test rather than a hope.
+pub fn proof_line(text: &str) -> Option<String> {
+    let line = text.trim();
+    let rest = line.strip_prefix("PROOF: Step ")?;
+    let mut parts = rest.split(" - ");
+    let step = parts.next()?;
+    let phase = parts.next()?;
+    let count = parts.next()?;
+    if parts.next().is_some() || phase.trim().is_empty() {
+        return None;
+    }
+    let (step_done, step_total) = step.trim().split_once('/')?;
+    let (done, total) = count.trim().split_once(" of ")?;
+    if !(digits(step_done) && digits(step_total) && digits(done) && digits(total)) {
+        return None;
+    }
+    Some(line.to_string())
+}
+
+/// Is this the digits of a count? Empty is not a number.
+fn digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Reads one line of the patcher's output into `p`. Pure; no I/O, no globals.
 ///
 /// Every branch below is a line shape taken from the owner's own logs
@@ -195,6 +241,17 @@ pub fn could_not_run(reason: &str) -> bool {
 pub fn progress_of(line: &str, p: &mut Progress) {
     let text = line.trim_end();
     let trimmed = text.trim();
+
+    // --- the bounded proof's own step line (Gemini rulings 5.1 and 5.2) -----
+    // `PROOF: Step N/4 - <phase> - x of y`: the app path's proof stage prints
+    // it a handful of times, and it is what the Updates card renders as
+    // "Step N/M: <phase> - x of y…". A legacy full sweep prints none, and the
+    // heartbeat line ("PROOF: still running - ...") is deliberately not one:
+    // the card keeps the last real step standing while the silence guard is fed.
+    if let Some(line) = proof_line(trimmed) {
+        p.proof = Some(line);
+        return;
+    }
 
     // --- the update tool's own machine-readable events ---------------------
     // `tools/update_backend.py` prints one `JARVIS-EVENT {json}` line per
@@ -668,5 +725,117 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("re-running the safe way"));
+    }
+
+    /// THE BOUNDED PROOF'S OWN LINE (Gemini rulings 5.1 and 5.2, 2026-11-21).
+    /// `tools/update_backend.py` prints `PROOF: Step N/4 - <phase> - x of y` for
+    /// the app path's 4-phase bounded proof; the Updates card renders the newest
+    /// one as "Step N/M: <phase> - x of y…". So the reader must carry it
+    /// VERBATIM on the wire, as `proof`, and replace it as the run moves on.
+    #[test]
+    fn the_bounded_proofs_step_line_is_carried_verbatim_on_the_wire() {
+        let mut p = Progress::default();
+        progress_of("PROOF: Step 2/4 - instant API answers - 1 of 1", &mut p);
+        // The field name the page reads: the serializer is camelCase, and
+        // `proof` is one word, but a rename of it would silently grey out the
+        // card's line - so the wire shape is pinned here, not only in Rust.
+        let said = serde_json::to_value(&p).unwrap();
+        assert_eq!(
+            said["proof"],
+            "PROOF: Step 2/4 - instant API answers - 1 of 1"
+        );
+        // A later line replaces the older one: the card shows where it is NOW.
+        progress_of("PROOF: Step 3/4 - live invariants - 8 of 12", &mut p);
+        let said = serde_json::to_value(&p).unwrap();
+        assert_eq!(said["proof"], "PROOF: Step 3/4 - live invariants - 8 of 12");
+        // Whitespace around the line is not part of it; the CRLF line ending a
+        // Windows log carries is not either.
+        progress_of("  PROOF: Step 4/4 - look spec & config - 3 of 3\r", &mut p);
+        let said = serde_json::to_value(&p).unwrap();
+        assert_eq!(
+            said["proof"],
+            "PROOF: Step 4/4 - look spec & config - 3 of 3"
+        );
+    }
+
+    /// The two other `PROOF:` lines in the world must never be mistaken for a
+    /// step: the proof stage's five-minute HEARTBEAT (the silence guard's sign
+    /// of life, with no phase or count) and the legacy full sweep (which prints
+    /// no step at all). The card falls back to its existing words for those.
+    #[test]
+    fn the_heartbeat_and_the_legacy_sweep_never_become_a_step_line() {
+        let mut p = Progress::default();
+        progress_of("PROOF: Step 1/4 - module imports - 2 of 7", &mut p);
+        let held = serde_json::to_value(&p).unwrap()["proof"].clone();
+        progress_of(
+            "PROOF: still running - 24m 05s elapsed, checking the backend \
+             against the live folder",
+            &mut p,
+        );
+        assert_eq!(
+            serde_json::to_value(&p).unwrap()["proof"],
+            held,
+            "the liveness heartbeat overwrote or cleared the step line"
+        );
+        // A fresh legacy run prints suites and heartbeat lines, never a step.
+        let mut legacy = Progress::default();
+        for line in [
+            "Running the test suites against the patched backend.",
+            "  ok    test_agent.py",
+            "PROOF: still running - 5m 00s elapsed, checking the backend against the live folder",
+            "  ok    test_decks.py",
+        ] {
+            progress_of(line, &mut legacy);
+        }
+        assert!(
+            serde_json::to_value(&legacy).unwrap()["proof"].is_null(),
+            "a full sweep invented a step line"
+        );
+        // Shapes that look close but are not the contract are refused whole.
+        for bad in [
+            "PROOF: Step 2/4 - module imports - 1",
+            "PROOF: Step two/four - module imports - 1 of 1",
+            "PROOF: Step 2/4 -  - 1 of 1",
+            "PROOF: Step 2/4 - module imports - 1 of 1 - extra",
+            "BOUNDED PROOF: Step 2/4 - module imports - 1 of 1",
+            "PROOF: Step 2/4 module imports 1 of 1",
+        ] {
+            let mut p = Progress::default();
+            progress_of(bad, &mut p);
+            assert!(
+                serde_json::to_value(&p).unwrap()["proof"].is_null(),
+                "{bad:?} was accepted as a step line"
+            );
+        }
+    }
+
+    /// The proof's step line carries the SAME ` - ` separator the failing-suite
+    /// line does, and its phase can even end in `.py` - so the two wires are
+    /// one edit apart. The proof branch consumes it first (see `progress_of`),
+    /// and this pins what that buys: no item counted, no failed check, no
+    /// reason split - while the real suite line beside it still is.
+    #[test]
+    fn a_proof_step_line_is_never_counted_as_a_check() {
+        let mut p = Progress::default();
+        progress_of("PROOF: Step 2/4 - test_real.py - 1 of 1", &mut p);
+        assert_eq!(
+            p.proof.as_deref(),
+            Some("PROOF: Step 2/4 - test_real.py - 1 of 1")
+        );
+        assert_eq!(p.done, 0, "a proof step line was counted as an item");
+        assert_eq!(p.failed, 0, "a proof step line was counted as a failure");
+        assert!(
+            p.bad.is_empty(),
+            "a proof step line was named as a failed check"
+        );
+        // The control: the real failing-suite line is still read, reason and all.
+        progress_of(
+            "  FAIL  test_real.py - three rows came back instead of four",
+            &mut p,
+        );
+        assert_eq!(p.failed, 1);
+        assert_eq!(p.bad.len(), 1);
+        assert_eq!(p.bad[0].name, "test_real.py");
+        assert_eq!(p.bad[0].reason, "three rows came back instead of four");
     }
 }
