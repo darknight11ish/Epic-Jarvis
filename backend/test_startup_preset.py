@@ -52,8 +52,10 @@ Every file lives under this suite's own `OPENJARVIS_CONFIG_DIR`, so the owner's
 """
 from __future__ import annotations
 
+import importlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -980,6 +982,153 @@ def t_an_unknown_preset_in_chat_says_so_without_a_card():
         clean()
 
 
+def t_the_route_is_reachable_after_the_patch_stack():
+    """The route must exist in the STACKED HUD, not only in this module.
+
+    WHERE THE ROUTE REALLY LIVES. `presets.patch` does not dispatch
+    `/api/work/apply` itself - it installs `jarvis_presets.install(Handler, ...)`,
+    and that module's own `do_POST` wrapper owns `/api/work/apply`,
+    `/api/work/cloud-escalate` and now `/api/work/startup-preset`. So no patch
+    edit is needed for the new path, and this test is what proves it: it builds
+    `jarvis_hud.py` from the REAL patch stack (`_stack.stand_in`), takes every
+    installer that runs AFTER the presets block **in that built text**, installs
+    them for real on a fake Handler, and posts to the new path. An outer wrapper
+    that swallowed `/api/work/*` before the presets wrapper would fail here.
+    """
+    import _stack
+    text, log = _stack.stand_in("jarvis_hud.py")
+    check("the patch stack reconstructs jarvis_hud.py", bool(text), log)
+    if not text:
+        return
+    lines = text.splitlines()
+    idx = next((i for i, l in enumerate(lines) if "jarvis_presets.install(" in l), -1)
+    check("presets.patch's block is in the stacked HUD and installs the module",
+          idx >= 0
+          and any("presets.patch" in l for l in lines[max(0, idx - 8):idx]),
+          (idx, lines[max(0, idx - 8):idx + 1]))
+    later = []
+    for line in lines[idx + 1:]:
+        m = re.match(r"\s*print\((jarvis_\w+)\.install\(Handler", line)
+        if m and m.group(1) not in later:
+            later.append(m.group(1))
+    check("the stacked HUD installs wrappers AFTER the presets block, so this "
+          "proof cannot be vacuous",
+          len(later) >= 2 and later[-1] == "jarvis_picture_card", later)
+
+    reached = []
+
+    class ChainHandler:
+        do_GET = lambda self: None          # noqa: E731 - attribute, not a method
+
+        def __init__(self, path, body):
+            self.path, self._body, self.sent = path, body, None
+
+        def do_POST(self):
+            reached.append("base")
+
+        def _send(self, code, out):
+            self.sent = (code, out)
+
+    real_body = P.startup_from_body
+    real_warm = P._warm_on_startup
+    P.startup_from_body = lambda body: (reached.append(("presets", dict(body)))
+                                        or (200, {"ok": True, "changed": False,
+                                                  "card": False,
+                                                  "message": "stub"}))
+    P._warm_on_startup = lambda: False
+    try:
+        read = lambda s: json.dumps(s._body).encode()   # noqa: E731
+        P.install(ChainHandler, origin_ok=lambda s: True,
+                  token_ok=lambda s: True, read_body=read)
+        failed = []
+        for name in later:
+            try:
+                importlib.import_module(name).install(
+                    ChainHandler, origin_ok=lambda s: True,
+                    token_ok=lambda s: True, read_body=read)
+            except Exception as exc:             # noqa: BLE001 - named below
+                failed.append((name, type(exc).__name__))
+        check("every wrapper the stack installs after presets installs here",
+              failed == [], failed)
+        h = ChainHandler(P.STARTUP_PATH, {"preset": "general"})
+        h.do_POST()
+        check("POST /api/work/startup-preset reaches the writer through the WHOLE "
+              "stacked chain",
+              h.sent is not None and h.sent[0] == 200
+              and reached == [("presets", {"preset": "general"})],
+              (h.sent, reached))
+        h2 = ChainHandler("/api/not-a-route", {})
+        h2.do_POST()
+        check("... and a path nobody owns still falls through to the base handler, "
+              "so the chain is not swallowing everything",
+              "base" in reached, reached)
+    finally:
+        P.startup_from_body = real_body
+        P._warm_on_startup = real_warm
+
+
+class _FakeSched:
+    """`jarvis_quick.answer()`'s scheduler, with nothing to do.
+
+    Passing it keeps the real scheduler (and its background jobs) out of the
+    suite: `answer()` only calls these four methods for an ordinary intent.
+    """
+
+    def mark_command(self, text):
+        pass
+
+    def note_set(self, *a, **k):
+        pass
+
+    def mark_changed(self, *a, **k):
+        pass
+
+    def note_clear(self, *a, **k):
+        pass
+
+
+def t_the_chat_entry_point_executes_the_intent():
+    """THE EXECUTOR, not only the matcher: `jarvis_quick.answer()`.
+
+    `answer()` is the door the HUD's chat path calls, and `run()` is where
+    intents are executed - the same place `settings_choice` and the
+    cloud-escalation switch are. This proves the owner's sentence reaches the
+    SAME writer the route calls, with the ONE card, and that a private chat
+    (read-only by rule) refuses it and writes nothing.
+    """
+    clean()
+    gate = Gate()
+    real_gate = P._gate
+    P._gate = gate
+    try:
+        out = Q.answer("load the general preset when you start",
+                       sched=_FakeSched(), now=time.time())
+        check("the sentence is EXECUTED: intent, one card, the file written",
+              out is not None and out.intent == "startup_preset"
+              and len(gate.calls) == 1
+              and gate.calls[0][0] == "change_own_config"
+              and _startup_file().exists(), (out, gate.calls))
+        check("... and the answer names the next start",
+              out is not None and "every time it starts" in out.reply,
+              None if out is None else out.reply)
+        clean()
+        gate.calls.clear()
+        out = Q.answer("load the general preset when you start",
+                       sched=_FakeSched(), private=True, now=time.time())
+        check("a private chat refuses the change with no card and no write",
+              out is not None and gate.calls == []
+              and not _startup_file().exists()
+              and "private chat" in out.reply.lower(), (out, gate.calls))
+        out = Q.answer("stop loading a preset when you start",
+                       sched=_FakeSched(), now=time.time())
+        check("clearing through the same entry point asks no card",
+              out is not None and gate.calls == []
+              and "No preset" in out.reply, (out, gate.calls))
+    finally:
+        P._gate = real_gate
+        clean()
+
+
 # ==========================================================================
 
 TESTS = [
@@ -988,6 +1137,8 @@ TESTS = [
     t_clearing_is_instant_and_removes_the_file,
     t_an_unknown_id_and_a_bad_body_are_400s_with_no_card,
     t_the_route_sets_and_clears_through_the_one_door,
+    t_the_route_is_reachable_after_the_patch_stack,
+    t_the_chat_entry_point_executes_the_intent,
     t_the_startup_apply_loads_the_preset_through_the_routes_road,
     t_the_keep_alive_reaches_the_lanes_one_loader,
     t_rest_hours_are_respected_and_no_energy_rest_setting_is_invented,

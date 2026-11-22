@@ -41631,7 +41631,12 @@ used (an unreadable file, an id this PC does not have). This block starts
 nothing, writes nothing and raises no card. `restart_reconcile` is reported
 beside it and now also carries the start-up step's outcome (below).
 
-**`POST /api/work/startup-preset` - NEW.**
+**`POST /api/work/startup-preset` - NEW.** The route is wired by
+`jarvis_presets.install()`, the module `presets.patch` installs into the HUD -
+the same place `/api/work/apply` and `/api/work/cloud-escalate` live - so no
+patch dispatches this path itself and no patch edit was needed for it. The
+module's `do_POST` wrapper does the origin check, the pairing-token check, the
+body read and `_send(code, out)` exactly as it does for its two neighbours.
 
 | Body | Answer |
 |---|---|
@@ -41732,14 +41737,21 @@ hijack would change the wrong thing.
 Settings page (`jarvis-desktop/src/settings.html`), which another lane owns; the
 route and the chat sentence are the two doors that exist.
 
-**Proof.** `backend/test_startup_preset.py` (101 checks, offline: no lane, no
+**Proof.** `backend/test_startup_preset.py` (111 checks, offline: no lane, no
 model, no card, its own `OPENJARVIS_CONFIG_DIR`): the file, its exact shape and
 its honest reads; ONE card and nothing written before the yes; already set, a
 denial, a clear (instant, no card), an unknown id, the Cloud row, a pending
 preset and every malformed body; the route and `startup_from_body` calling the
-one door; the start-up apply through the real `apply_preset` with the lane start
-and the model switch recorded and the lane and choice persisted; **the load
-asking for `keep_alive: -1`**, and that the ask reaches the ONE loader
+one door; **the route reachable through the WHOLE STACKED chain** - the test
+builds `jarvis_hud.py` from the real patch stack (`_stack.stand_in`), installs
+every wrapper the built text puts after the presets block, and proves
+`POST /api/work/startup-preset` still reaches the writer while an unowned path
+still falls through to the base handler; **the chat entry point executes it** -
+`jarvis_quick.answer()` reaches the same writer with the one card, and a private
+chat refuses it with no card and no write; the start-up apply through the real
+`apply_preset` with the lane start and the model switch recorded and the lane
+and choice persisted; **the load asking for `keep_alive: -1`**, and that the ask
+reaches the ONE loader
 (`jarvis_big_coder.load`'s own `/api/generate` body, `load_coder`'s forwarding)
 rather than a second one; **rest hours** (standby and quiet windows, and an
 unreadable clock) turning the hold off with the reason recorded; **a later
