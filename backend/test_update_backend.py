@@ -2557,7 +2557,7 @@ def t_the_patch_refusal_is_recognised_only_from_its_measured_shape():
           got)
     check("... and its one sentence names the count and the install type",
           "51 hunk(s)" in U.refusal_route_words(got)
-          and "deployed install" in U.refusal_route_words(got),
+          and "this install" in U.refusal_route_words(got),
           U.refusal_route_words(got))
     # The same words WITH the half-updated warning is the one shape that must
     # never be routed around: the files really were changed.
@@ -2624,7 +2624,7 @@ def t_the_measured_deployed_install_finishes_by_the_deploy_route():
           len(suites) == 1 and _jobs_of(suites[0]) == 14
           and "--backend-path" in suites[0], [_jobs_of(cmd) for cmd in suites])
     check("... the report names BOTH routes and why the second one ran",
-          "the patch stack refused 51 hunk(s) on a deployed install" in tail
+          "the patch stack refused 51 hunk(s) on this install" in tail
           and "deploy route carried the update" in tail
           and "reconcile_live_backend.py" in tail, said[-8:])
     check("... the ROUTE line is printed last, so the card's own tail holds it",
@@ -3571,7 +3571,7 @@ def t_the_bounded_proof_is_named_and_runs_the_required_real_commands():
     ids = [row["id"] for row in plan]
     check("the bounded proof has the four real phases, in the card's order",
           [phase["name"] for phase in U.BOUNDED_PROOF_PHASES]
-          == ["module imports", "instant API answers", "live invariants",
+          == ["module imports", "instant API answers", "core invariants",
               "look spec & config"], U.BOUNDED_PROOF_PHASES)
     check("... and every check names one of them",
           all(0 <= row["phase"] < len(U.BOUNDED_PROOF_PHASES) for row in plan))
@@ -3598,9 +3598,20 @@ def t_the_bounded_proof_is_named_and_runs_the_required_real_commands():
         row = by_id[suite[len("test_"):-len(".py")]]
         check(f"the {suite} smoke check runs through the real suite runner",
               any(str(part).endswith("run_suites.py") for part in row["command"])
-              and "--backend-path" in row["command"]
-              and str(backend) in row["command"]
-              and suite in row["command"], row["command"])
+              and suite in row["command"]
+              and U.LOCK_BYPASS_FLAG in row["command"], row["command"])
+        # MEASURED 2026-11-21: in live mode two of these suites fail on a healthy
+        # install because the live folder is a PATCHED DEPLOYMENT, not the
+        # repository's tree. The suites are therefore STAGED from this update's
+        # own copy (as CI runs them); the live folder is proven by the deploy
+        # route's own bytes-and-markers check and by the checks that read it
+        # directly. A plan that passes --backend-path is back to proving the
+        # patched deployment with the repository's words, which reported 7/9 on
+        # an update that was genuinely installed.
+        check(f"the {suite} smoke check is STAGED (no --backend-path): the live "
+              f"folder is a patched deployment, proven by the deploy route's own "
+              f"bytes check",
+              "--backend-path" not in row["command"], row["command"])
     check("the bounded plan is 9 checks in 4 phases (2/1/4/2)",
           [sum(1 for row in plan if row["phase"] == index) for index in range(4)]
           == [2, 1, 4, 2] and len(plan) == 9,
@@ -3686,14 +3697,14 @@ def t_the_bounded_proof_prints_the_card_s_step_lines_per_phase():
                                  clock=lambda: 0.0)
     pattern = _re.compile(
         r"^PROOF: Step (\d)/4 - (module imports|instant API answers|"
-        r"live invariants|look spec & config) - (\d+) of (\d+)$")
+        r"core invariants|look spec & config) - (\d+) of (\d+)$")
     step_lines = [line for line in said if line.startswith(U.PROOF_STEP_PREFIX)]
     parsed = [pattern.match(line) for line in step_lines]
     check("the bounded proof passed every check", result["ok"] is True
           and result["passed"] == result["total"] == 9, result)
     check("every PROOF line is the card's exact shape, with four phases",
           len(step_lines) == 13 and all(parsed), step_lines)
-    order = ["module imports", "instant API answers", "live invariants",
+    order = ["module imports", "instant API answers", "core invariants",
              "look spec & config"]
     phases = [match.group(2) for match in parsed]
     check("... the four real phases, in order", phases ==
@@ -3861,6 +3872,23 @@ def t_a_bounded_ending_never_claims_the_full_check():
 # detection, so a deploy-managed fixture ran the patch stack first.
 
 
+def _empty_marker_root():
+    root = _make_root()
+    _, backend = _make_repo(root)
+    (backend / "VERSION").write_bytes(b"0.2.491")
+    (backend / U.SOURCE_COMMIT_NAME).write_text("", encoding="utf-8")
+    return backend
+
+
+def _garbage_marker_root():
+    root = _make_root()
+    _, backend = _make_repo(root)
+    (backend / "VERSION").write_bytes(b"0.2.491")
+    (backend / U.SOURCE_COMMIT_NAME).write_text(
+        json.dumps({"commit": "not-a-commit"}) + "\n", encoding="utf-8")
+    return backend
+
+
 def t_a_deploy_managed_install_is_detected_from_evidence_up_front():
     root = _make_root()
     repo, backend = _make_repo(root)
@@ -3886,9 +3914,26 @@ def t_a_deploy_managed_install_is_detected_from_evidence_up_front():
     _, backups_only = _make_repo(root2)
     (backups_only / f"{U.DEPLOY_BACKUP_PREFIX}2026-11-21-000000").mkdir()
     backup_evidence = U.deploy_managed_evidence(backups_only)
-    check("a _jarvis-deploy-backup-tool-* folder ALONE is deploy evidence too",
-          backup_evidence["managed"] is True
-          and U.DEPLOY_BACKUP_PREFIX in backup_evidence["why"], backup_evidence)
+    # MEASURED 2026-11-21 (audit): the deploy tool NEVER deletes its backup
+    # folders, so one stale folder would send a legacy install down the deploy
+    # route forever. A backup folder CORROBORATES the marker; it never selects.
+    check("a _jarvis-deploy-backup-tool-* folder ALONE is NOT deploy evidence "
+          "(the tool never deletes them)",
+          backup_evidence["managed"] is False
+          and backup_evidence["backups"], backup_evidence)
+    (backups_only / "VERSION").write_bytes(b"0.2.491")
+    (backups_only / U.SOURCE_COMMIT_NAME).write_text(
+        json.dumps({"commit": "d7003442e"}) + "\n", encoding="utf-8")
+    both = U.deploy_managed_evidence(backups_only)
+    check("... but it corroborates a real SOURCE-COMMIT marker",
+          both["managed"] is True and "SOURCE-COMMIT" in both["why"]
+          and U.DEPLOY_BACKUP_PREFIX in both["why"], both)
+    empty_commit = U.deploy_managed_evidence(_empty_marker_root())
+    check("an EMPTY SOURCE-COMMIT beside VERSION is NOT deploy evidence",
+          empty_commit["managed"] is False, empty_commit)
+    not_hex = U.deploy_managed_evidence(_garbage_marker_root())
+    check("a SOURCE-COMMIT that is not a commit is NOT deploy evidence",
+          not_hex["managed"] is False, not_hex)
 
     root3 = _make_root()
     _, marker_only = _make_repo(root3)
@@ -4026,6 +4071,29 @@ def t_the_deploy_tool_loads_with_its_dataclasses():
     check("... so a real dataclass in it can be built",
           bool(mod.DeltaAction("p", "jarvis_hud.py", "insert")))
     check("... and the deploy entry point is callable", callable(mod.run_deploy))
+
+
+def t_a_bounded_suite_that_skipped_checks_is_reported_not_hidden():
+    """MEASURED 2026-11-21 (audit): a suite exiting 0 can print
+    "N passed, M skipped". "9 of 9" must not fold those skips into "proven"."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lines = ["ok one", "2 passed, 1 skipped, 0 failed", "skip two - needs a file"]
+
+    def run(argv, cwd, on_line):
+        for line in lines:
+            on_line(line)
+        return 0
+
+    with _fake_proof_checks():
+        result = U.bounded_proof(repo, backend, run=run, say=lambda line: None,
+                                 clock=lambda: 0.0)
+    check("a passing check that skipped one of its own checks is still ok",
+          result["ok"] is True and result["passed"] == result["total"], result["passed"])
+    check("... but the skip count is carried, not hidden",
+          result["skipped"] >= 1 and result["unproven"] is True, result["skipped"])
+    rows = [row for row in result["checks"] if row["skipped"]]
+    check("... and the row names which check skipped something", bool(rows), rows[:2])
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

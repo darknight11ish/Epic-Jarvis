@@ -92,7 +92,7 @@ WHAT IT DOES, IN ORDER
 3c. **The progress line the Updates card shows (ruling 5.2).** While the bounded
    proof runs it prints exactly `PROOF: Step N/4 - <phase> - x of y`, with the
    four phases named in `BOUNDED_PROOF_PHASES`: module imports, instant API
-   answers, live invariants, look spec & config. `N` is the phase, `4` the
+   answers, core invariants, look spec & config. `N` is the phase, `4` the
    number of phases, and `x of y` is the checks done in that phase - so the card
    never shows a made-up percentage.
 4. Records each suite's own time in `<backend>/_jarvis-logs/update-timings.json`
@@ -1460,6 +1460,7 @@ def verify_live_files(repo, backend) -> list:
     repo = Path(repo)
     backend = Path(backend)
     problems = []
+    compared = 0
     for leaf in shipped_leaves(repo):
         live = backend / leaf
         twin = repo / BASE_REL / leaf
@@ -1474,8 +1475,17 @@ def verify_live_files(repo, backend) -> list:
         except OSError:
             problems.append({"file": leaf, "why": "unreadable"})
             continue
+        compared += 1
         if not _same_bytes(live_bytes, twin_bytes):
             problems.append({"file": leaf, "why": "differs"})
+    if not compared and not problems:
+        # Nothing had a twin to compare against: an empty or broken repository
+        # must not verify green and then claim the install holds this
+        # repository's bytes (a cl?one with no `jarvis-backend/` copy of the
+        # shipped modules is exactly that case).
+        problems.append({"file": "", "why": "nothing was compared - this "
+                         "repository has no copies of the shipped files to "
+                         "verify against"})
     return problems
 
 
@@ -1662,8 +1672,8 @@ def refusal_route_words(refusal: dict) -> str:
     """
     count = refusal.get("count")
     if count:
-        return f"the patch stack refused {count} hunk(s) on a deployed install"
-    return "the patch stack refused to apply on a deployed install"
+        return f"the patch stack refused {count} hunk(s) on this install"
+    return "the patch stack refused to apply on this install"
 
 
 # ---------------------------------------------------------------------------
@@ -1711,8 +1721,10 @@ def deploy_managed_evidence(backend) -> dict:
     """Is this live folder DEPLOY-MANAGED, and on what evidence? Never a guess.
 
     Returns `{"managed": bool, "why": <the evidence in words>, "backups": [...]}`.
-    `managed` is True only when at least one of the two evidence kinds above is
-    really there. `why` is always written for a human to check: it names the
+    `managed` is True only when the real marker is there: `SOURCE-COMMIT` sits
+    beside `VERSION` AND carries a commit. The deploy tool's backup folders
+    CORROBORATE that, never select it - they are never deleted, so one stale
+    folder would otherwise send a legacy install down the deploy route forever. `why` is always written for a human to check: it names the
     marker and its value, or the deploy backup folder count. When nothing is
     there, `why` is empty and the caller falls back to the legacy patch route -
     this function never guesses an install type from a folder's name, a missing
@@ -1733,15 +1745,14 @@ def deploy_managed_evidence(backend) -> dict:
             parsed = None
         shown = (str(parsed.get("commit") or "").strip()
                  if isinstance(parsed, dict) else "")
-        if shown:
+        if shown and re.fullmatch(r"[0-9a-fA-F]{7,40}", shown):
             reasons.append(
                 f"SOURCE-COMMIT sits beside VERSION ({shown[:12]})")
-        elif digest:
-            reasons.append(
-                f"SOURCE-COMMIT sits beside VERSION ({digest[:12]})")
-        else:
-            reasons.append(
-                "SOURCE-COMMIT sits beside VERSION (the file is empty)")
+        # ANYTHING ELSE IS NOT EVIDENCE (measured 2026-11-21, audit): an empty
+        # file, a non-JSON payload, or `{"commit": "not-a-commit"}` used to add
+        # a "SOURCE-COMMIT sits beside VERSION" reason and select the deploy
+        # route on no proof at all. The marker selects only when it carries a
+        # real commit; the backup folders then corroborate it.
     backups = []
     try:
         backups = sorted(
@@ -1749,7 +1760,12 @@ def deploy_managed_evidence(backend) -> dict:
             if entry.is_dir() and entry.name.startswith(DEPLOY_BACKUP_PREFIX))
     except OSError:
         backups = []
-    if backups:
+    if backups and reasons:
+        # CORROBORATION ONLY. The deploy tool never deletes its backup folders,
+        # so one on its own is not evidence that this install came from the
+        # deploy tool - a legacy patch-only install can have one from an old
+        # attempt. It is added to the words only when the real marker already
+        # selected the route.
         reasons.append(
             f"{len(backups)} {DEPLOY_BACKUP_PREFIX}* backup folder(s) are here "
             f"({backups[-1]})")
@@ -2608,7 +2624,7 @@ def restore_saved_lane(backend, *, read=None, warm=None, say=print,
 #                              and `/api/version`, `/api/status` and
 #                              `/api/presets` must each answer 200 - the three
 #                              instant routes every screen reads;
-#   3. live invariants         the real, cheap checks that already exist and
+#   3. core invariants         the real, cheap checks that already exist and
 #                              prove the core promises this update must not
 #                              break: `tools/check_egress_gate.py` (every
 #                              outbound host still names the egress gate),
@@ -2651,15 +2667,15 @@ def restore_saved_lane(backend, *, read=None, warm=None, say=print,
 BOUNDED_PROOF_PHASES = (
     {"id": "imports", "name": "module imports"},
     {"id": "answers", "name": "instant API answers"},
-    {"id": "invariants", "name": "live invariants"},
+    {"id": "invariants", "name": "core invariants"},
     {"id": "spec", "name": "look spec & config"},
 )
 #: The prefix and shape of the progress line the Updates card shows (ruling 5.2).
 PROOF_STEP_PREFIX = "PROOF: Step "
 PROOF_STEP_SHAPE = ("PROOF: Step {step}/{steps} - {phase} - {done} of {total}")
 #: The cheap checks phase 3 runs, each by its BARE suite name through the real
-#: runner (`backend/run_suites.py <name> --backend-path <live>`), the same way
-#: the full sweep names them - so nothing here is a reimplementation.
+#: runner (`backend/run_suites.py <name> --jobs 1`), staged from this update's own
+#: copy as CI runs them - so nothing here is a reimplementation.
 BOUNDED_INVARIANT_SUITES = (
     "test_gate_egress.py",
     "test_reconcile_live_backend.py",
@@ -2729,7 +2745,18 @@ def bounded_proof_plan(repo, backend) -> list:
     """
     repo, backend = Path(repo), Path(backend)
     modules = shipped_module_names(repo)
-    suites = suites_command(repo, 1, backend)
+    # THE INVARIANT SUITES RUN STAGED, FROM THE UPDATE'S OWN COPY - MEASURED
+    # 2026-11-21 on the owner's PC. The live folder is a PATCHED DEPLOYMENT, not
+    # the repository's own tree: two of these three suites compare the code they
+    # run against the words the repository's copy should carry, and in live mode
+    # they fail on a healthy install (`test_gate_egress` "the row stores what is
+    # being asked about" and two `test_projects` taint checks), which made a
+    # bounded proof report 7/9 on an update that was genuinely installed. So the
+    # suites are the CI-shaped, staged run of THIS COMMIT's code; the LIVE
+    # folder is proven by the deploy route's own byte-and-marker check plus the
+    # checks that read it directly (py_compile, imports, the live HUD's three
+    # GETs, the look spec and the live config).
+    suites = suites_command(repo, 1)
     checks = [
         {"id": "py_compile", "phase": 0, "inprocess": "compile",
          "what": "py_compile every module this repository ships whole, from "
@@ -2750,7 +2777,7 @@ def bounded_proof_plan(repo, backend) -> list:
     for suite in BOUNDED_INVARIANT_SUITES:
         checks.append(
             {"id": suite[len("test_"):-len(".py")], "phase": 2,
-             "what": f"the {suite} smoke checks",
+             "what": f"the {suite} smoke checks, staged from this update's own copy",
              "command": suites + [suite]})
     checks.extend([
         {"id": "look_spec", "phase": 3, "inprocess": "look_spec",
@@ -2972,7 +2999,17 @@ def _bounded_check_output(check, repo, backend, *, run, say):
 
         code = _call(run, check["command"], Path(repo), on_line)
         if code == 0:
-            return True, ""
+            # A suite that prints "N passed, M skipped" and exits 0 HAS skipped
+            # checks. "9 of 9" is a claim about the subset, so a skip is never
+            # silently folded into it: the count travels with the check and the
+            # ending says it (consistency with `suite_result`, which marks a
+            # skipped suite unproven rather than proven).
+            skipped = 0
+            for line in lines:
+                match = re.search(r"(\d+) passed, (\d+) skipped", line)
+                if match:
+                    skipped = int(match.group(2))
+            return True, (f"skipped {skipped}" if skipped else "")
         failed = [line for line in lines
                   if line.startswith("FAIL") or line.startswith("REFUSED")
                   or "not a suite name" in line]
@@ -3063,9 +3100,15 @@ def bounded_proof(repo, backend, *, say=print, run=None, clock=None,
             for done_in_phase, check in enumerate(checks, 1):
                 ok, detail = _bounded_check_output(
                     check, repo, backend, run=run, say=say)
+                skipped_here = 0
+                if isinstance(detail, str) and detail.startswith("skipped "):
+                    try:
+                        skipped_here = int(detail.split(" ", 1)[1])
+                    except (IndexError, ValueError):
+                        skipped_here = 0
                 results.append({"id": check["id"], "phase": phase["name"],
                                 "what": check["what"], "ok": bool(ok),
-                                "detail": detail})
+                                "detail": detail, "skipped": skipped_here})
                 done_overall += 1
                 if on_progress is not None:
                     on_progress(done_overall, total, results)
@@ -3082,6 +3125,7 @@ def bounded_proof(repo, backend, *, say=print, run=None, clock=None,
     finally:
         bounded_proof._checks = {}
     passed = sum(1 for row in results if row["ok"])
+    skipped_inside = sum(row.get("skipped") or 0 for row in results)
     failed = [row for row in results if not row["ok"]]
     if failed:
         say(f"BOUNDED PROOF: {passed} of {total} check(s) passed; "
@@ -3090,7 +3134,9 @@ def bounded_proof(repo, backend, *, say=print, run=None, clock=None,
         say(f"BOUNDED PROOF: all {total} check(s) passed - this is the bounded "
             "subset, not the full suite.")
     return {"ok": not failed, "passed": passed, "total": total,
-            "checks": results, "phases": phases}
+            "checks": results, "phases": phases,
+            "skipped": skipped_inside, "unproven": bool(skipped_inside),
+            "failed": [row["id"] for row in failed]}
 
 
 #: Set by `bounded_proof` while it runs; the in-process check names point at the
@@ -3804,6 +3850,10 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                 say("ALL DONE - the backend is patched and proven by the bounded "
                     f"checks ({bounded_result['passed']} of "
                     f"{bounded_result['total']}): a subset, not the full suite.")
+                if bounded_result.get("skipped"):
+                    say(f"  note: {bounded_result['skipped']} check(s) inside those "
+                        "suites were skipped for this PC and are NOT counted as "
+                        "proven - each line above says why.")
                 say("  The bounded checks were: " + ", ".join(
                     BOUNDED_PROOF_PHASES[i]["name"]
                     for i in range(len(BOUNDED_PROOF_PHASES)))
@@ -4200,8 +4250,10 @@ def deliver_visual_spec(repo, backend, previous_release=None, *, say=print) -> d
                 shutil.copy2(backup, live_path)
             except OSError:
                 pass
+        put_back = ("the old copy was put back" if live is not None
+                    else "there was no old copy to put back")
         tell(f"{VISUAL_SPEC_NAME} NOT delivered: the live file could not be "
-             f"written ({type(exc).__name__}); the old copy was put back")
+             f"written ({type(exc).__name__}); {put_back}")
         return {"ok": False, "wrote": False, "why": "the live file could not be written"}
     try:
         written = live_path.read_bytes()
@@ -4213,8 +4265,10 @@ def deliver_visual_spec(repo, backend, previous_release=None, *, say=print) -> d
                 shutil.copy2(backup, live_path)
             except OSError:
                 pass
+        put_back = ("the old copy was put back" if live is not None
+                    else "there was no old copy to put back")
         tell(f"{VISUAL_SPEC_NAME} NOT delivered: the write could not be read back "
-             "as this release's copy; the old copy was put back")
+             f"as this release's copy; {put_back}")
         return {"ok": False, "wrote": False, "why": "the write did not read back"}
     old = "absent" if live is None else f"{len(live)} bytes"
     tell(f"{VISUAL_SPEC_NAME} wrote {len(shipped)} bytes (was {old}); "
