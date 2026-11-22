@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    "The Updates card's proof sentence is compact, and the 22:22 rulings are in the record",
     'The wake-phrase copy is the factual "Wake phrase: Hey Jarvis." everywhere',
     'The Updates card shows its skips, its proof phases are frozen, and the deploy records the bytes it wrote',
     'Three PM5 rulings are written down: the combined records chore, the desktop-only device clean-up and the HUD-owned executor',
     "The deploy route's proof sentence names checks skipped inside the suites",
-    'The preset contract reports the lane a preset was applied to, not the default lane',
 )
 
 

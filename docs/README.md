@@ -9,7 +9,7 @@ whenever you want today's numbers rather than this page's:
 ```powershell
 (Get-ChildItem docs -Recurse -Filter *.md).Count                        # 424 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
-  Measure-Object -Property Length -Sum).Sum                             # about 13,750,664 bytes
+  Measure-Object -Property Length -Sum).Sum                             # about 13,756,825 bytes
 ```
 
 Both lines count the documents in the subfolders too, not only the ones sitting
