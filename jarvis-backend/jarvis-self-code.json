@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "18eb3eeaacf86c354c9e7e6dac9a5dc86c81fbe2",
- "built_at": "2026-11-21T22:55:38-08:00",
+ "ref": "5b7e34a7d0bab9a7f106ce1d5cb47ce55a30fe40",
+ "built_at": "2026-11-22T00:36:34-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6178,9 +6178,49 @@
  ],
  "recent_commits": [
   {
+   "sha": "5b7e34a7d0bab9a7f106ce1d5cb47ce55a30fe40",
+   "date": "2026-11-22",
+   "subject": "chore(records): roll the 22:22 rulings fragments"
+  },
+  {
+   "sha": "b910a0cf8714ab2e593c0446e87c8aa8e129fac0",
+   "date": "2026-11-22",
+   "subject": "Merge pull request #1463 from darknight11ish/fix/22-22-rulings-follow-through-2026-11-21"
+  },
+  {
+   "sha": "393ff4d9cb8c350bf927ad84beeaa9f8d17c76d4",
+   "date": "2026-11-22",
+   "subject": "Merge pull request #1464 from darknight11ish/chore/records-and-generated-refresh"
+  },
+  {
+   "sha": "463336f2169bb0386c86bad863d27037b2ecca06",
+   "date": "2026-11-21",
+   "subject": "docs(update): the live manifest measured all five patched base files"
+  },
+  {
+   "sha": "54ea10da8a9397d080c00962d89b4cda9431101c",
+   "date": "2026-11-21",
+   "subject": "fix(update): the manifest's skip-probe path and its unreadable-bytes path tell the truth"
+  },
+  {
+   "sha": "157760fc86c4191ff5e84e5a57f76e642106bad9",
+   "date": "2026-11-21",
+   "subject": "docs(update): the manifest covers four of the five patched base files"
+  },
+  {
+   "sha": "954867d86c17e6c90b420e3c516917095b62fae8",
+   "date": "2026-11-21",
+   "subject": "chore(generated): refresh the self-code map and the docs map"
+  },
+  {
    "sha": "18eb3eeaacf86c354c9e7e6dac9a5dc86c81fbe2",
    "date": "2026-11-21",
    "subject": "chore(records): roll the wave-21 fragments into the record"
+  },
+  {
+   "sha": "c34d9e7beaca930283d86628bed08a3e4ce74d4c",
+   "date": "2026-11-21",
+   "subject": "fix(update): the proof card stays compact and the 22:22 rulings are recorded"
   },
   {
    "sha": "b611efd1a47d3078a16809e4f580ecd0ce6f0ba0",
@@ -6236,46 +6276,6 @@
    "sha": "2359914b1018a3eb092a612982982ac4f64aaa5a",
    "date": "2026-11-21",
    "subject": "Merge pull request #1457 from darknight11ish/fix/the-proof-sentence-carries-its-skips-2026-11-21"
-  },
-  {
-   "sha": "b580b69db7cfde1852f6ebea639a0b45c6b4d048",
-   "date": "2026-11-21",
-   "subject": "Merge pull request #1455 from darknight11ish/chore/roll-changelog-4-2026-11-21"
-  },
-  {
-   "sha": "7214e14c73a5c69de3871dbcd51ee34943414ae7",
-   "date": "2026-11-21",
-   "subject": "Merge pull request #1456 from darknight11ish/chore/roll-decisions-4-2026-11-21"
-  },
-  {
-   "sha": "def7a3efd24ce506243087385b99eb12f1ac2873",
-   "date": "2026-11-21",
-   "subject": "docs(decisions): use the em dash the fragment checker requires"
-  },
-  {
-   "sha": "f7262251f82bac8ce7628106faf0b54d05ac7cb1",
-   "date": "2026-11-21",
-   "subject": "fix(update): the deploy route's proof sentence names the checks skipped inside its suites"
-  },
-  {
-   "sha": "c27d37583404c58c1c94902d932a214e53e2a867",
-   "date": "2026-11-21",
-   "subject": "docs(decisions): roll the last fragments into docs/DECISIONS.md"
-  },
-  {
-   "sha": "917a1b00ef3aa50654c9d75e5f7137d48de4e955",
-   "date": "2026-11-21",
-   "subject": "docs(changelog): roll the last fragments into CHANGELOG.md"
-  },
-  {
-   "sha": "3a23ef2501511262f5fcf578c7717685a6fdd93e",
-   "date": "2026-11-21",
-   "subject": "Merge pull request #1446 from darknight11ish/fix/settings-updates-truth-2026-11-21"
-  },
-  {
-   "sha": "cc5f19a95fbd5890c7f124e17c82a86a9349056f",
-   "date": "2026-11-21",
-   "subject": "Merge pull request #1452 from darknight11ish/fix/the-bounded-proof-checks-staged-suites-2026-11-21"
   }
  ],
  "top_level": [
