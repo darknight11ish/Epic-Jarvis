@@ -70,10 +70,21 @@ def _script_separator():
 
 
 def _parser_separator():
-    """The separator the Rust splits that line on."""
+    """The separator the Rust splits a FAILING-SUITE line's name from its reason.
+
+    Deliberately NOT "the first `.split_once(...)` in the file". The reader now
+    handles TWO wire shapes: the bounded proof's `PROOF: Step N/M - <phase> -
+    x of y` step line (whose count it splits on ` of `) and the `ok`/`FAIL`/
+    `skip` item lines the failing suite's reason rides on. The proof's split
+    appears EARLIER in the file, so a first-match regex reads the wrong wire -
+    it reports a disagreement that does not exist (this is exactly how the
+    check went red on 2026-11-21, when the proof reader landed) and would miss
+    a real one the day the item separator moved. The item parser's own split is
+    the one taken on `rest`, the line's body after `ok `/`FAIL `/`skip `.
+    """
     rust = RUST.read_text(encoding="utf-8")
-    return _must(r'\.split_once\("([^"]*)"\)', rust,
-                 "the separator the parser splits on").group(1)
+    return _must(r'rest\.split_once\("([^"]*)"\)', rust,
+                 "the separator the parser splits a failing-suite line on").group(1)
 
 
 def t_the_script_prints_the_reason_after_a_separator():
@@ -96,6 +107,37 @@ def t_the_two_ends_agree_about_the_separator():
           f"the script prints {printed!r}, the parser splits on {parsed!r} - a "
           f"failing suite's reason would reach the screen glued to its name, or "
           f"be dropped, and NOTHING ELSE IN CI WOULD NOTICE")
+
+
+def t_a_proof_step_line_is_never_read_as_a_suite():
+    """The bounded proof added a second line shape; the suite wire must stay apart.
+
+    `tools/update_backend.py` prints `PROOF: Step N/M - <phase> - x of y` for the
+    app path's bounded proof, and that line carries the SAME ` - ` separator the
+    failing suite's line does. So the parser must consume a proof line FIRST, by
+    its own prefix, and return: a proof line must never be counted as a check,
+    named as a failed one, or have its words split as a failure's reason. This
+    is what keeps the guarantee this whole file exists for true under the new
+    output - and it is why `_parser_separator` reads the ITEM branch's split
+    rather than the proof's count split (` of `) earlier in the same file.
+    """
+    rust = RUST.read_text(encoding="utf-8")
+    check("the proof line has its own reader", "pub fn proof_line" in rust)
+    check("... it is told apart from an item line by its own prefix",
+          'strip_prefix("PROOF: Step ")' in rust)
+    proof_at = rust.find("if let Some(line) = proof_line(trimmed)")
+    item_at = rust.find('let body = ["ok ", "FAIL ", "skip "]')
+    check("... and a proof line is consumed before an item line is classified",
+          proof_at != -1 and item_at != -1 and proof_at < item_at,
+          f"the proof branch is at {proof_at}, the item branch at {item_at} - a "
+          f"PROOF line could reach the item branch, and its ` - ` words would be "
+          f"read as a failed suite's name and reason")
+    check("... and it returns, so the item branch never reads a proof line",
+          re.search(r"if let Some\(line\) = proof_line\(trimmed\) \{\s*"
+                    r"p\.proof = Some\(line\);\s*return;", rust) is not None,
+          "the proof branch no longer returns before the item classifier - a "
+          "PROOF line would fall through and its ` - ` separator would be read "
+          "as the failing-suite separator")
 
 
 def t_a_suite_the_script_runs_is_a_name_the_parser_counts():

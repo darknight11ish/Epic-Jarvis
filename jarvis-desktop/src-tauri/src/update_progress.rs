@@ -808,4 +808,34 @@ mod tests {
             );
         }
     }
+
+    /// The proof's step line carries the SAME ` - ` separator the failing-suite
+    /// line does, and its phase can even end in `.py` - so the two wires are
+    /// one edit apart. The proof branch consumes it first (see `progress_of`),
+    /// and this pins what that buys: no item counted, no failed check, no
+    /// reason split - while the real suite line beside it still is.
+    #[test]
+    fn a_proof_step_line_is_never_counted_as_a_check() {
+        let mut p = Progress::default();
+        progress_of("PROOF: Step 2/4 - test_real.py - 1 of 1", &mut p);
+        assert_eq!(
+            p.proof.as_deref(),
+            Some("PROOF: Step 2/4 - test_real.py - 1 of 1")
+        );
+        assert_eq!(p.done, 0, "a proof step line was counted as an item");
+        assert_eq!(p.failed, 0, "a proof step line was counted as a failure");
+        assert!(
+            p.bad.is_empty(),
+            "a proof step line was named as a failed check"
+        );
+        // The control: the real failing-suite line is still read, reason and all.
+        progress_of(
+            "  FAIL  test_real.py - three rows came back instead of four",
+            &mut p,
+        );
+        assert_eq!(p.failed, 1);
+        assert_eq!(p.bad.len(), 1);
+        assert_eq!(p.bad[0].name, "test_real.py");
+        assert_eq!(p.bad[0].reason, "three rows came back instead of four");
+    }
 }
