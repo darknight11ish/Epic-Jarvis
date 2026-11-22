@@ -46,29 +46,40 @@ import kotlinx.coroutines.launch
  *  - a Settings -> Hardware "Focus presets" plate, replacing the old work
  *    setups plate in the same section.
  *
- * Nothing auto-applies: each button posts the contract's one apply action; the
- * list is re-read afterwards. EVERY row this list draws is a local preset, and
- * the PC's own apply route applies one with NO approval card - the heavy ones
- * included since 2026-11-16. The Cloud row is the only preset whose own pick
- * still raises one card; the PC sends it as a separate `cloud_preset` row, which
- * this list does not draw, so no row here can claim a card that never comes.
- * Every press is disabled while the link is stale (rule 4), and a pending
- * preset shows the PC's "being prepared" words and no button.
+ * Nothing auto-applies: each button asks the runtime to post the contract's one
+ * apply action; the runtime then watches the PC's own lane and refreshes the
+ * list. EVERY row this list draws is a local preset, and the PC's own apply
+ * route applies one with NO approval card - the heavy ones included since
+ * 2026-11-16. The Cloud row is the only preset whose own pick still raises one
+ * card; the PC sends it as a separate `cloud_preset` row, which this list does
+ * not draw, so no row here can claim a card that never comes. Every press is
+ * disabled while the link is stale (rule 4), and a pending preset shows the
+ * PC's "being prepared" words and no button.
+ *
+ * A PRESS BELONGS TO THE RUNTIME, NOT TO THIS SCREEN (owner report 2026-11-21).
+ * The owner tapped General, went to another menu, and the phone lost the
+ * request while the PC kept loading it - so the row came back pressable. The
+ * press now runs on the runtime's own scope ([JarvisRuntime.useFocusPresetNow])
+ * and this file reads both halves of its state from the runtime:
+ * [JarvisRuntime.presetApplying] keeps the pressed row on
+ * [FocusPresets.PENDING] and every other button disabled, and
+ * [JarvisRuntime.presetNotice] carries the sentence the PC or the runtime
+ * answered with. Neither is remembered here, so leaving and returning to Brain
+ * cannot lose either one.
  */
 @Composable
 fun FocusPresetChip(link: LinkState, stale: Boolean) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val read by JarvisRuntime.focusPresets.collectAsState()
-    // 2026-10-27 accessibility audit, finding 9: `open` and `notice` decide what
-    // is on screen, so a rotation must not silently throw them away - rotating
-    // with a preset expanded closed it, and dropped an in-flight "Asking…".
-    // `busy` stays a plain `remember` on purpose: the coroutine that set it dies
-    // with the composition, so a saved `busy` would come back as a button row
-    // stuck on "Asking…" for ever.
+    // The press's state lives on the runtime (see the KDoc above), so a
+    // rotation and a trip to another screen both come back to the same busy
+    // row and the same notice. `open` stays saveable for the same reason it
+    // always was: it decides what is on screen, and a rotation must not close
+    // the list the owner had open.
+    val applying by JarvisRuntime.presetApplying.collectAsState()
+    val notice by JarvisRuntime.presetNotice.collectAsState()
     var open by rememberSaveable { mutableStateOf(false) }
-    var busy by remember { mutableStateOf<String?>(null) }
-    var notice by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { JarvisRuntime.refreshFocusPresets() }
     val view = (read as? FocusPresets.Read.Loaded)?.view
     Column(Modifier.fillMaxWidth()) {
@@ -92,22 +103,8 @@ fun FocusPresetChip(link: LinkState, stale: Boolean) {
                 view = view,
                 link = link,
                 stale = stale,
-                busy = busy,
-                notice = notice,
-                onUse = { id ->
-                    if (busy == null) {
-                        busy = id
-                        notice = null
-                        scope.launch {
-                            try {
-                                notice = JarvisRuntime.useFocusPreset(id)
-                                JarvisRuntime.refreshFocusPresets()
-                            } finally {
-                                busy = null
-                            }
-                        }
-                    }
-                },
+                busy = applying,
+                onUse = { id -> JarvisRuntime.useFocusPresetNow(id) },
             )
         }
         notice?.let {
@@ -131,8 +128,8 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val read by JarvisRuntime.focusPresets.collectAsState()
-    var busy by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    val applying by JarvisRuntime.presetApplying.collectAsState()
+    val notice by JarvisRuntime.presetNotice.collectAsState()
     LaunchedEffect(Unit) { JarvisRuntime.refreshFocusPresets() }
     val view = (read as? FocusPresets.Read.Loaded)?.view
     Gap(12)
@@ -175,22 +172,8 @@ internal fun FocusPresetsSection(canAct: Boolean) {
         view = view,
         link = LinkState.CONNECTED,
         stale = !canAct,
-        busy = busy,
-        notice = notice,
-        onUse = { id ->
-            if (busy == null) {
-                busy = id
-                notice = null
-                scope.launch {
-                    try {
-                        notice = JarvisRuntime.useFocusPreset(id)
-                        JarvisRuntime.refreshFocusPresets()
-                    } finally {
-                        busy = null
-                    }
-                }
-            }
-        },
+        busy = applying,
+        onUse = { id -> JarvisRuntime.useFocusPresetNow(id) },
     )
     notice?.let {
         Gap(6)
@@ -215,6 +198,12 @@ internal fun FocusPresetsSection(canAct: Boolean) {
  * it is worse at:" - waits behind one "Why this one" tap per row (the audit of
  * 2026-11-15). Folded, never removed: opening the row draws every one of them, so
  * nothing the contract says has become unreachable.
+ *
+ * [busy] is [JarvisRuntime.presetApplying]'s id, passed down instead of being
+ * remembered per screen: the press runs on the runtime's long-lived scope, so
+ * the pressed row says [FocusPresets.PENDING] and every other button stays
+ * disabled for as long as the PC is preparing the model - across a trip to
+ * another screen and back (owner report 2026-11-21).
  */
 @Composable
 private fun FocusPresetList(
@@ -222,7 +211,6 @@ private fun FocusPresetList(
     link: LinkState,
     stale: Boolean,
     busy: String?,
-    notice: String?,
     onUse: (String) -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -315,7 +303,11 @@ private fun FocusPresetList(
             Text(blocker, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         } else {
             Secondary(
-                text = if (busy == p.id) "Asking…" else FocusPresets.USE_THIS,
+                // The owner's report of 2026-11-21: "the preset should finish
+                // loading even if i exit the app or go to another menu". The row
+                // says what is happening for as long as the PC is loading it,
+                // and every other button waits - one load at a time.
+                text = if (busy == p.id) FocusPresets.PENDING else FocusPresets.USE_THIS,
                 enabled = busy == null,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onUse(p.id) },
@@ -345,7 +337,6 @@ private fun FocusPresetList(
             modifier = Modifier.liveStatus(),
         )
     }
-    notice?.let { /* drawn by the caller, under the list */ }
     Gap(4)
     Text(
         "These are combinations of models already on your PC; there is no catalogue here and no search.",

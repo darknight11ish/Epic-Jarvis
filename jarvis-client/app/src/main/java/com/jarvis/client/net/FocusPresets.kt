@@ -137,6 +137,29 @@ object FocusPresets {
     const val HELPER = "Second worker:"
     const val PENDING = "Being prepared"
     /**
+     * A second press while one preset is still being loaded is answered with
+     * this and posts nothing: one load at a time. The row's own button says
+     * [PENDING] while it waits (owner report 2026-11-21: a load that outlives
+     * the screen must never look pressable again).
+     */
+    const val ALREADY_APPLYING = PENDING + " - wait for that one to finish."
+    /**
+     * The notice when the PC answered the apply but did not report the pressed
+     * preset's own lane active within the wait ([com.jarvis.client.JarvisRuntime]'s
+     * two minutes). An honest stop, not a failure: the load may still be
+     * going, so nothing is re-posted and nothing is claimed either way.
+     */
+    const val COULD_NOT_CONFIRM =
+        "Your PC accepted the preset, but did not report it running within two " +
+            "minutes. It may still be loading - open this again to check."
+    /**
+     * The notice once the re-reads showed the pressed preset's own lane
+     * active, when the PC's apply answer carried no sentence of its own
+     * ([applyWords] wins over this). It names no model: the phone can see a
+     * LANE, never which model is loaded (see the top of this object).
+     */
+    const val APPLIED = "Preset applied - your PC's chat is on that preset's lane now."
+    /**
      * The COST of a heavy preset: all three cards at once, and the other models
      * paused while it runs. It is not a refusal any more (2026-11-02): the PC
      * has a pooled both-card lane, so the phone offers the preset and this is
@@ -579,22 +602,32 @@ object FocusPresets {
         }
     }
 
+    /**
+     * The PC's own sentence on an apply answer, or null when it sent none.
+     * The same three fields [replyLine] reads, exposed so the runtime can keep
+     * the PC's words once it has watched the load finish ([APPLIED] is the
+     * fallback when there are none).
+     */
+    fun applyWords(body: JsonObject?): String? =
+        body?.str("words") ?: body?.str("message") ?: body?.str("line")
+
     /** What the PC answered to the one apply POST, in its own words when it gives any. */
     fun replyLine(code: Int, body: JsonObject?): String = when (code) {
-        200 -> body?.str("words") ?: body?.str("message") ?: body?.str("line")
+        200 -> applyWords(body)
             ?: if (body?.bool("changed") == true) {
                 // The apply route's success body carries no sentence of its own
                 // (backend/jarvis_presets.py's 200 body has `preset`, `model`,
                 // `switched` and the rest, but no `words`). A 200 also does not
-                // prove the switch happened - the caller re-reads the list - so
-                // this says only what the phone knows: the PC answered, and the
-                // re-read shows what is in use now. Never "nothing else changed".
+                // prove the switch happened - the caller watches the PC's lane
+                // ([com.jarvis.client.JarvisRuntime.presetApplying] and the two
+                // minutes of reads) - so this fallback says only what the phone
+                // knows: the PC answered, and the reads show what is in use now.
                 "Preset applied. Your PC answered; the list is being re-read to " +
                     "show what is in use now."
             } else {
                 WAITING
             }
-        202 -> body?.str("words") ?: body?.str("message") ?: body?.str("line") ?: WAITING
+        202 -> applyWords(body) ?: WAITING
         else -> body?.str("error")?.let { "Not changed. $it" } ?: NOTHING_CHANGED
     }
 
