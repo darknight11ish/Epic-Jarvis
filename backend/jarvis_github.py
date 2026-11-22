@@ -2652,8 +2652,12 @@ def _git_auth_env(token: str) -> dict:
     documented way to set a config entry for a single process. The token is the
     VALUE of `http.extraheader`, so it is never in the command's arguments (which
     `Get-CimInstance Win32_Process` and ps can read) and never in the folder's
-    own config file. Both the clone (prepare) and the push use this one function,
-    so the two stages cannot drift apart.
+    own config file. Every git step that reaches github.com takes it from this
+    one function - the prepare clone AND the `pull/<n>/head` fetch that follows
+    it, the open-PR clone, and both pushes - so no stage can drift from another.
+    The fetch was the one that did not, and on a private repository that made
+    `github_fix_and_push` fail before it ever reached the write stage
+    (measured 2026-11-21; fixed 2026-11-22).
 
     WHY BASIC AND NOT BEARER - measured on the owner's PC, 2026-11-13. GitHub's
     REST API accepts `Authorization: Bearer <token>`, which is why every GitHub
@@ -5816,9 +5820,17 @@ def _run_prepare(r: Request, fetch: Callable, token: str, headers: dict,
         return failed(_git_words("Copying the pull request",
                                  err_text or out, token))
     local = f"fix-pr-{r.number}"
+    # The SAME credential environment the clone was just given, from the one
+    # builder: fetching `pull/<n>/head` is an authenticated READ on a private
+    # repository. Without it GitHub answers 401, git falls back to its
+    # interactive credential prompt, that prompt cannot run in this process, and
+    # the owner got "could not read Username for 'https://github.com'" - so a
+    # private repository could never be fixed at all (measured 2026-11-21 on the
+    # private proof repo; a PUBLIC repository hides it, because an anonymous
+    # fetch works there). Ruling 5.3 of the 2026-11-22 review.
     code, out, err_text = _git(git, ["fetch", "origin",
                                      f"pull/{r.number}/head:refs/heads/{local}"],
-                               cwd=target)
+                               cwd=target, env=_git_auth_env(token))
     if code != 0:
         return failed(_git_words("Fetching the pull request",
                                  err_text or out, token))

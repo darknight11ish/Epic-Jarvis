@@ -1605,8 +1605,9 @@ def t_the_token_never_rides_a_git_argument():
                       if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                       and n.func.id == "_git_auth_env"]
         check("... and ONE environment helper is used by every authenticating "
-              "git step (both clones and both pushes)",
-              len(auth_calls) == 4, len(auth_calls))
+              "git step (both clones, the prepare stage's pull-request fetch, "
+              "and both pushes)",
+              len(auth_calls) == 5, len(auth_calls))
     finally:
         restore()
 
