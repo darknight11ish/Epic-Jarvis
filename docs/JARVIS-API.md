@@ -36014,11 +36014,13 @@ relabelling one of these four.
 **The route sentence's own count.** The `ROUTE:` line that ends an
 `update_backend.py` run is rendered verbatim by the desktop's `route_lines`,
 so its numbers are contract too: a bounded pass with skips inside its suites
-reads `and the bounded checks above passed (9 of 9, 4 skipped) - checks
-skipped for this PC are not counted as proven; they are a subset, not the full
-suite` (ruling 1, 2026-11-21). The count in the parenthesis is what passed plus
-what inside those suites was skipped, and a skipped check is never counted as
-proven.
+reads `and the bounded checks above passed (9 of 9, 4 skipped - a subset, not
+the full suite)` (rulings 1 and 5.3, 2026-11-21). The count in the parenthesis
+is what passed plus what inside those suites was skipped. The card keeps that
+much and no more; the full explanation is not dropped - it is in the transcript
+lines above the card line, where the run's `ALL DONE` sentence says the bounded
+checks are "a subset, not the full suite" and its skip note says those skipped
+checks "are NOT counted as proven".
 
 ## 185. Jarvis measures its own token speed: one run, two rates, and its own history (backend phase 1, added 2026-11-04)
 

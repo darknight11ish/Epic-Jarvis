@@ -720,14 +720,17 @@ printed verbatim, and `x of y` counts that phase's checks. `backend/test_update_
 pins the four exact strings, and `backend/test_api_doc.py` proves this page's
 list and the code's tuple agree.
 
-**And the route sentence's count is part of the claim (ruling 1, 2026-11-21).**
-A bounded check can pass while checks inside its suite were skipped for this PC
-(measured 2026-11-21: 4 inside `test_reconcile_live_backend`). The one sentence
-that names the proof shows that compactly - `passed (9 of 9, 4 skipped)` - and
-keeps the honest clause: *"checks skipped for this PC are not counted as
-proven; they are a subset, not the full suite."* With no skips the sentence is
-byte-identical to what it was, `passed (9 of 9); they are a subset, not the full
-suite`.
+**And the route sentence's count is part of the claim (rulings 1 and 5.3,
+2026-11-21).** A bounded check can pass while checks inside its suite were
+skipped for this PC (measured 2026-11-21: 4 inside
+`test_reconcile_live_backend`). The one sentence that names the proof - the line
+the Updates card renders verbatim - shows that compactly:
+`passed (9 of 9, 4 skipped - a subset, not the full suite)`. That is all the card
+carries; the full explanation stays in the transcript above it, where the
+`ALL DONE` line says the bounded checks are "a subset, not the full suite" and
+the skip note says the skipped checks "are NOT counted as proven". With no skips
+the sentence is byte-identical to what it was:
+`passed (9 of 9); they are a subset, not the full suite`.
 
 **The app's bounds are unchanged.** The five-minute proof heartbeat (#1442) is
 still there for a quiet child and for the `--full-proof` sweep; a healthy

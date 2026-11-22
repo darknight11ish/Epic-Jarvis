@@ -1465,21 +1465,22 @@ def shipped_leaves(repo) -> list:
 def bounded_proof_phrase(bounded_result: dict) -> str:
     """The `ROUTE:` half that reports the bounded proof, skips included.
 
-    THE COUNT IS THE CLAIM (Gemini's ruling 1, 2026-11-21). A check can pass
-    while checks INSIDE its suite were skipped for this PC (measured
-    2026-11-21: 4 inside `test_reconcile_live_backend`), and the card must show
-    that compactly - `(9 of 9, 4 skipped)` - rather than in a trailing clause a
-    reader can miss. Both numbers are part of the same parenthesis: what passed,
-    and what inside those suites was skipped and is therefore not counted as
-    proven. The no-skip sentence is byte-identical to what it was before this
-    ruling, and the honest subset clause stays on the end in both shapes.
+    THE COUNT IS THE CLAIM (Gemini's rulings 1 and 5.3, 2026-11-21). A check can
+    pass while checks INSIDE its suite were skipped for this PC (measured
+    2026-11-21: 4 inside `test_reconcile_live_backend`), and the card - which
+    renders this one line verbatim - shows the count and the honesty marker
+    COMPACTLY: `(9 of 9, 4 skipped - a subset, not the full suite)`. Ruling 5.3
+    keeps that card line scannable and puts the full explanation in the
+    transcript instead, where the `ALL DONE` line above says the bounded checks
+    are "a subset, not the full suite" and the skip note says those skipped
+    checks "are NOT counted as proven". The no-skip sentence is byte-identical
+    to what it was before ruling 1.
     """
     skipped = bounded_result.get("skipped") or 0
     count = f"{bounded_result['passed']} of {bounded_result['total']}"
     if skipped:
-        return (f"and the bounded checks above passed ({count}, {skipped} skipped) - "
-                "checks skipped for this PC are not counted as proven; they are a "
-                "subset, not the full suite")
+        return (f"and the bounded checks above passed ({count}, {skipped} skipped - "
+                "a subset, not the full suite)")
     return (f"and the bounded checks above passed ({count}); they are a subset, "
             "not the full suite")
 

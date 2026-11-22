@@ -4328,10 +4328,11 @@ def t_the_deploy_route_proof_sentence_reports_checks_skipped_inside_suites():
     checks inside test_reconcile_live_backend were skipped. The count must travel
     with the claim, so the one sentence that names the proof says it too.
 
-    Gemini's ruling 1 (2026-11-21) then made the card show it COMPACTLY - the
-    skip count belongs in the same parenthesis as the pass count, not in a
-    trailing clause: `(9 of 9, 4 skipped)`. The no-skip wording is byte-identical
-    to what it was before that ruling, and the honest subset clause stays.
+    Gemini's rulings 1 and 5.3 (2026-11-21) then made the card show it COMPACTLY
+    - the skip count and the honesty marker in one parenthesis - while the full
+    explanation stays in the transcript: `(9 of 9, 4 skipped - a subset, not the
+    full suite)`. The no-skip wording is byte-identical to what it was before the
+    rulings.
     """
     plain = {"passed": 9, "total": 9, "skipped": 0}
     check("with no skips the sentence is byte-identical to before ruling 1",
@@ -4340,16 +4341,17 @@ def t_the_deploy_route_proof_sentence_reports_checks_skipped_inside_suites():
           "not the full suite", U.bounded_proof_phrase(plain))
     with_skips = {"passed": 9, "total": 9, "skipped": 4}
     said = U.bounded_proof_phrase(with_skips)
-    check("... and the skip count is shown COMPACTLY with the pass count",
-          said == ("and the bounded checks above passed (9 of 9, 4 skipped) - "
-                   "checks skipped for this PC are not counted as proven; they "
-                   "are a subset, not the full suite"), said)
-    check("... the old trailing 'with 4 check(s) ...' clause is gone",
+    check("... and the skip count plus the honesty marker are shown COMPACTLY, "
+          "in one parenthesis",
+          said == ("and the bounded checks above passed (9 of 9, 4 skipped - "
+                   "a subset, not the full suite)"), said)
+    check("... the old trailing 'with 4 check(s) ...' clause is still gone",
           "with 4 check(s)" not in said, said)
-    check("... a skipped check is never counted as proven",
-          "not counted as proven" in said, said)
-    check("... while the subset claim stays exactly as it was",
-          "they are a subset, not the full suite" in said, said)
+    check("... the long explanation is NOT carried on the card (ruling 5.3 puts "
+          "it in the transcript)",
+          "not counted as proven" not in said, said)
+    check("... while the subset marker stays in the sentence",
+          "a subset, not the full suite" in said, said)
     check("... and the phrase holds no full stop of its own (the ROUTE sentence "
           "supplies the one that ends it)",
           "." not in said, said)
