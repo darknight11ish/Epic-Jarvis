@@ -150,6 +150,54 @@ def test_capability_answers():
                                                      "reminder", "timer", "alarm")), reply[:220])
 
 
+#: THE LIVE TURN THAT WAS SWALLOWED (2026-11-22). The owner typed this into the
+#: app and got the canned reminder-closed paragraph - no model, no tools, no
+#: GitHub - because the family's closed regex is a plain "Jarvis ... off"
+#: search: "Epic-Jarvis" and the later "switched off" matched. It names no
+#: reminder, timer, alarm or notification at all, so it is not this family's
+#: question and must reach the model.
+GITHUB_TURN = (
+    "Use github_list for darknight11ish/Epic-Jarvis and github_ci_status on the "
+    "latest run of main. Report exactly what each tool returned. If a tool is "
+    "switched off or has no credential, say which one and why - do not guess.")
+
+
+def test_the_closed_family_needs_reminder_context():
+    """The 2026-11-22 fix: "while the app is closed" needs a reminder subject.
+
+    The family's closed regex is a "Jarvis ... off" search, so it used to claim
+    any sentence that named the app/PC and then said "off" or "closed" - the
+    owner's GitHub turn above among them. It now answers only when the sentence
+    also carries its own subject (a reminder, timer, alarm, notification, or
+    what one of those makes), and the true positives that name their subject
+    keep their answer.
+    """
+    got = Q.match(GITHUB_TURN, now=NOW)
+    r, sched = ask(GITHUB_TURN)
+    check("the owner's exact GitHub turn is NOT answered as reminder_closed",
+          r is None or r.intent != "reminder_closed",
+          r.intent if r else "model")
+    check("... the quick matcher claims no intent for it at all", got is None,
+          getattr(got, "name", None))
+    check("... and it raises no card and adds nothing", sched.calls == [],
+          str(sched.calls))
+    for text in ("can you remind me even if the app is closed?",
+                 "does it ring if the PC is off?",
+                 "do notifications show when the computer is off?",
+                 "will my timers still run when Jarvis is off?"):
+        r, sched = ask(text)
+        check(f"a real closed question still answers: {text!r}",
+              r is not None and r.intent == "reminder_closed",
+              r.intent if r else "model")
+        check("... no card and nothing added", sched.calls == [], str(sched.calls))
+    # The old wildcard's other half - "even if ... closed" with no app word -
+    # matched any sentence carrying those two words, so this was claimed too.
+    r, _ = ask("even if the window is closed?")
+    check("'even if the window is closed?' is not a reminder question either",
+          r is None or r.intent != "reminder_closed",
+          r.intent if r else "model")
+
+
 def test_phone_surface():
     r, _ = ask("can you make a reminder for me?", "phone")
     check("the phone answer names the PC as the clock",
@@ -200,6 +248,7 @@ def main():
     tests = [test_relative_reminders_parse_and_compute,
              test_bare_relative_is_a_timer_not_a_reminder,
              test_real_requests_are_not_stolen, test_capability_answers,
+             test_the_closed_family_needs_reminder_context,
              test_phone_surface, test_every_answer_is_read_only,
              test_system_prompt_line, test_catalogue_row_carries_the_truth]
     for t in tests:

@@ -9157,6 +9157,35 @@ _REMINDER_NOTIFY_RX = re.compile(
 _REMINDER_CLOSED_RX = re.compile(
     r"\b(?:app|jarvis|computer|pc)\b.*\b(?:closed|off|shut\s*down|not\s+running)\b|"
     r"\beven\s+if\b.*\bclosed\b")
+#: What makes a sentence genuinely about THIS family's subject: a reminder, a
+#: timer, an alarm, their notification, or the thing one of those makes (ring,
+#: pop up, beep, toast).
+#:
+#: THE GUARD IS THE 2026-11-22 FIX, and `_REMINDER_CLOSED_RX` above is why it is
+#: needed: its `.*` spans everything from the app's name to ANY later "off" or
+#: "closed", so every sentence that says "Jarvis"/"app"/"PC" and then one of
+#: those words was read as this question. A REAL turn was swallowed: the owner
+#: asked for `github_list` on darknight11ish/Epic-Jarvis and `github_ci_status`
+#: on the latest run of main, and added "If a tool is switched off or has no
+#: credential, say which one and why" - "Epic-Jarvis" ... "off" matched, and the
+#: whole answer became this paragraph: no model, no tools, nothing about GitHub.
+#: The family now answers only when the sentence also carries one of these
+#: words, so a sentence about a tool, a setting or anything else falls through
+#: to the lane that owns it. Every genuine question keeps its own answer:
+#: "can you remind me even if the app is closed?" carries "remind", "does it
+#: ring if the PC is off?" carries "ring", and "do notifications show when the
+#: computer is off?" carries "notifications".
+#:
+#: THE HONEST BOUND: the guard reads the whole message, not one clause, so a
+#: long multi-topic message that names both a reminder and a later "Jarvis ...
+#: off" could still be claimed. A closed question with no noun at all ("will I
+#: still get it when the app is closed?") is no longer answerable here either -
+#: it falls to the model, which has the conversation, instead of this family
+#: guessing that "it" must be a reminder, which is the same guessing that
+#: swallowed the live turn.
+_REMINDER_CLOSED_CONTEXT_RX = re.compile(
+    r"\bremind\w*\b|\btimers?\b|\balarms?\b|\bnotif\w*\b|"
+    r"\b(?:ring|rings|ringing|pop\s*up|popup|beeps?|toast)\b")
 #: "how do I ask for a reminder?" / "how do I set a timer up". The HOW shape is
 #: the family's even when the object is a pronoun ("how do I ask for one?", a
 #: follow-up); a named feature's "how do I set X up" has already stepped aside
@@ -9321,7 +9350,13 @@ def _reminders_question(raw) -> Optional[Intent]:
         row = _cap_resolve(str(raw or ""))
         if row is not None and str(row.get("id") or "") not in _CAP_REMINDER_ROWS:
             return None
-    if _REMINDER_CLOSED_RX.search(text):
+    # "while the app is closed" only when the sentence is genuinely about a
+    # reminder, timer, alarm or notification (the 2026-11-22 guard above). The
+    # closed regex on its own is a "jarvis ... off" search and answered any
+    # sentence that merely mentioned the app and a switch - the owner's GitHub
+    # turn among them - so it may not answer without its own subject.
+    if (_REMINDER_CLOSED_RX.search(text)
+            and _REMINDER_CLOSED_CONTEXT_RX.search(text)):
         return Intent("reminder_closed", {"surface": "closed"})
     # A question whose nouns are another feature's and which never says reminder,
     # timer or alarm is that feature's question, not this family's (2026-11-01).
