@@ -4323,6 +4323,12 @@ def read_deploy_manifest(live) -> dict:
     A missing file is `present: False` and is not an error: an install from
     before this ruling has no manifest, and `SOURCE-COMMIT` stays its evidence.
 
+    "NEVER RAISE" includes bytes that are not UTF-8: a file whose bytes cannot
+    be decoded is a corrupt marker with its own `why`, not an exception (it is
+    named the same way as a manifest that is not JSON - a `UnicodeDecodeError`
+    is a `ValueError`, and the read itself is caught here rather than left to
+    the caller).
+
     `files` is returned even when `ok` is False if it could be read, so a caller
     can say how much of the record was usable; it is only trusted when `ok`.
     """
@@ -4331,7 +4337,7 @@ def read_deploy_manifest(live) -> dict:
         return {"present": False, "ok": False, "why": "", "doc": None, "files": {}}
     try:
         raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return {"present": True, "ok": False,
                 "why": f"{DEPLOY_MANIFEST} cannot be read ({exc})",
                 "doc": None, "files": {}}
@@ -4514,13 +4520,15 @@ def planned_managed_bytes(plan: Plan, live) -> dict:
     """The post-write bytes of every live file this deploy manages, by leaf name.
 
     The manifest's coverage, exactly: every `$SHIPPED` leaf, every live file the
-    HUD deltas touch, and the release markers this run writes or leaves in place
-    (`VERSION`, `SOURCE-COMMIT`, the beside-files). The five patched base files
-    are in it because this tool writes their deltas; the owner's own
-    `jarvis-framework.toml`, the live-only look spec and the plug-in folders are
-    deliberately NOT (this tool does not manage them). Raises `OSError` when a
-    file the plan says is unchanged cannot be read - the manifest may never
-    describe a file it could not see.
+    HUD deltas touch (the patched base files, when this run manages them - the
+    owner's first live manifest, 2026-11-21, listed all five), and the release
+    markers this run writes or leaves in place (`VERSION`, `SOURCE-COMMIT`, the
+    beside-files). A patched base file the run manages nothing in is not a leaf
+    of that run's manifest, so a hermetic fixture without the delta lists four.
+    The owner's own `jarvis-framework.toml`, the live-only look spec and the
+    plug-in folders are deliberately NOT in it (this tool does not manage them).
+    Raises `OSError` when a file the plan says is unchanged cannot be read - the
+    manifest may never describe a file it could not see.
     """
     live = Path(live)
     files = {}

@@ -35692,8 +35692,12 @@ file, written atomically, and it writes nothing else.
 2026-11-21).** The deploy route also writes `<backend>/DEPLOY-MANIFEST`, a JSON
 record of the release it wrote: the commit, the `VERSION`, and every managed
 live file's `{"size", "sha256"}`, sealed with a `manifest_sha256` over the
-sorted `leaf sha256 size` lines. It is written LAST - after the files and the
-route probes - and it is what lets the update path prove the installed BYTES
+sorted `leaf sha256 size` lines. It is written LAST - after the files, with the
+managed leaves re-read and re-hashed, and after the route probes when this run
+runs them (the in-app backend half is stopped for the update and skips them for
+that stated reason, printed as `SKIP  ...` and "This is NOT a route pass"; a
+skip is never counted as a pass and never blocks the record of the bytes) - and
+it is what lets the update path prove the installed BYTES
 rather than only the commit: a valid manifest beside `VERSION` is the strongest
 deploy evidence (the older `SOURCE-COMMIT` stays the fallback), every listed
 file is verified against its recorded size+sha256 before the usual twin compare,
@@ -36014,11 +36018,13 @@ relabelling one of these four.
 **The route sentence's own count.** The `ROUTE:` line that ends an
 `update_backend.py` run is rendered verbatim by the desktop's `route_lines`,
 so its numbers are contract too: a bounded pass with skips inside its suites
-reads `and the bounded checks above passed (9 of 9, 4 skipped) - checks
-skipped for this PC are not counted as proven; they are a subset, not the full
-suite` (ruling 1, 2026-11-21). The count in the parenthesis is what passed plus
-what inside those suites was skipped, and a skipped check is never counted as
-proven.
+reads `and the bounded checks above passed (9 of 9, 4 skipped - a subset, not
+the full suite)` (rulings 1 and 5.3, 2026-11-21). The count in the parenthesis
+is what passed plus what inside those suites was skipped. The card keeps that
+much and no more; the full explanation is not dropped - it is in the transcript
+lines above the card line, where the run's `ALL DONE` sentence says the bounded
+checks are "a subset, not the full suite" and its skip note says those skipped
+checks "are NOT counted as proven".
 
 ## 185. Jarvis measures its own token speed: one run, two rates, and its own history (backend phase 1, added 2026-11-04)
 

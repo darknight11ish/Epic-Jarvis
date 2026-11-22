@@ -94,7 +94,14 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
   an unreadable commit is `SOURCE-COMMIT: skipped (...)`;
 - it writes the live folder's **content-hash deploy manifest**,
   `DEPLOY-MANIFEST`, beside `VERSION` (Gemini's ruling 4, 2026-11-21) - **last
-  of all**, only after every file is written and the route probes have passed.
+  of all**, only after every file is written and the deploy has re-read and
+  re-hashed the managed leaves it is about to record, so it describes the live
+  bytes at write time. The route probes are among the proofs it waits for **when
+  this run runs them**; the in-app backend half runs with the server stopped and
+  passes `skip_probes` with that reason, and the run prints `SKIP  ...` plus
+  **"This is NOT a route pass"** instead of counting the skip as one - the
+  manifest is still written, because the files are the deploy's own checked
+  bytes.
   It records the commit, the `VERSION`, and every live file the deploy manages
   (every `$SHIPPED` leaf, every file the HUD deltas touch, and the markers
   themselves) as `{"size": N, "sha256": "<hex>"}`, sealed with a

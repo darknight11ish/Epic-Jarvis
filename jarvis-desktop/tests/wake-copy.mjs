@@ -22,6 +22,15 @@
  * not a string). docs/ and decisions.d/ are records, not user-facing copy, and
  * are not scanned at all.
  *
+ * WHAT IS NOT SCANNED, AND WHY (Gemini's ruling 5.4, 2026-11-21): the ruling is
+ * that a wake-copy guard scans the new-user guide's SOURCE Markdown or
+ * template, never the built PDF. There is no guide source in this repository
+ * today - the 2026-11-21 guide was built outside the tree and only its PDF
+ * exists - so there is no file here for this suite to read. That gap is said
+ * plainly instead of being covered by a check that could not read anything.
+ * When the guide's source lands in this repository, add it to COPY_FILES and
+ * the same refusals apply to it; the binary PDF is never parsed in CI.
+ *
  * Browser-free on purpose: it imports no Playwright, so it runs at a desk and
  * in CI's frontend job alike.
  */

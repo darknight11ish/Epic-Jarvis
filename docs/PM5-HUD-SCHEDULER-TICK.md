@@ -182,43 +182,47 @@ outcome_unknown, memo, idempotency, shown-hash decisions) stay as they are; PM5
 adds what is genuinely new — the clock, the door, the end-to-end path through
 the desktop process, and the Run Step dispatch above them.
 
-## 7. The one open design question for Gemini
+## 7. The state store is ruled: `jarvis_tasks` SQLite (Gemini 5.1, 2026-11-21)
 
 **Where does the persistent state live, and what is its schema?**
 
-The ruling fixes *that* state is on disk. It does not fix which store owns it.
-The facts the state has to hold are known: (a) each job's steps, finished
-results and next step index; (b) the lease/running marker per job; (c) the
-waiting-card and question state; (d) the `outcome_unknown` and idempotency
-facts for actions; (e) the stop/pause flags; (f) the run history and feed; and
-(g) whatever the tick loop itself needs to be honest across a restart (its
-last tick, whether it is paused, whether it should refuse to resume).
+Answered by Gemini's ruling 5.1 of 2026-11-21 22:22 PT: **Candidate A**. All
+PM5 scheduler and step state lives in the **existing `jarvis_tasks` SQLite
+database** — its `tasks`, `runs`, `run_events`, `actions`, `memo` and `control`
+tables — **plus one `scheduler_tick` control row**. One SQLite store guarantees
+atomic restart recovery, automatic `jarvis_backup.py` coverage, and zero
+split-brain between the Rust HUD and the Python executor.
 
-Two candidate shapes, and the question is which — or which mixture — Gemini
-rules for:
+The facts the state has to hold, and where each one lives under the ruling:
+(a) each job's steps, finished results and next step index → `tasks`/`runs`;
+(b) the lease/running marker per job → the store's existing lease columns;
+(c) the waiting-card and question state → `actions`/`memo` as today;
+(d) the `outcome_unknown` and idempotency facts for actions → `actions`;
+(e) the stop/pause flags → `control`; (f) the run history and feed →
+`run_events`; and (g) whatever the tick loop itself needs to be honest across a
+restart (its last tick, whether it is paused, whether it should refuse to
+resume) → **the one `scheduler_tick` row in `control`**. That single row is the
+whole schema change: no new table, no new database file, and no Rust-owned state
+file.
 
-- **A. The existing `jarvis_tasks` store is the state.** `backend/jarvis_tasks.py`
-  already keeps a SQLite file (`tasks.db`, WAL) with tables `tasks`, `runs`,
-  `run_events`, `actions`, `memo` and `control`, and that is exactly where
-  (a)–(f) live today. Under this shape PM5 adds **no new schema and no new
-  file**: the HUD's tick is stateless except for its timer, and restart
-  recovery is the store's own `boot_once()`/`_recover_leases` rules. The open
-  part is only (g): does the loop need a small control fact of its own, and does
-  it fit in the existing `control` table rather than somewhere new?
-- **B. A Rust-owned state file beside the desktop's other state.** The tick
-  loop's own facts (and possibly a mirror of the counted progress for the HUD
-  to draw) live in a file the desktop app owns, next to its existing state;
-  the authoritative job state stays in `tasks.db`. The risk this must answer:
-  two copies of one truth, and a schema that can drift from the store's.
+Candidate B (a Rust-owned state file beside the desktop's other state) is
+**rejected**: the authoritative job state stays in `tasks.db` under either
+shape, so B would keep the tick's own facts in a second place and invite exactly
+the drift and the two-copies-of-one-truth risk it was supposed to answer. The
+HUD's tick is stateless except for its timer, and the only thing it owns on disk
+is the `scheduler_tick` row it reads and writes through the store.
 
-What the answer must keep, whichever way it goes: `jarvis_tasks.tick()` stays
-the only executor and the only writer of job state, the phone reads progress
-through the existing API shapes only, the owner's private job words do not
-move to a new plain-text file, and a restart of either process is recovered
-honestly rather than replayed.
+What the build must keep now that the store is ruled: `jarvis_tasks.tick()`
+stays the only executor and the only writer of job state, the phone reads
+progress through the existing API shapes only, the owner's private job words
+stay inside the store rather than moving to a new plain-text file, and a restart
+of either process is recovered honestly rather than replayed.
 
-**No code is written for PM5 until Gemini answers this**, because building the
-wrong store first is how the second copy of the truth gets made.
+**The store question is answered, so the build may start** from Candidate A.
+Anything the build finds that would need a second store, a second copy of
+progress, or a schema change outside that one `control` row comes back to the
+record first — building the wrong store is still how a second copy of the truth
+gets made.
 
 ## 8. What this note does not do
 
@@ -250,6 +254,7 @@ For the next session, so nothing has to be rediscovered:
 - `backend/jarvis_tasks.py` — only if the build has to supply a new caller
   contract; its "WHO TICKS IT" docstring stops saying "no production caller"
   and says what calls it and when.
-- The decisions record — the open question in §7 is answered as its own dated
-  entry (or a `decisions.d/` fragment), and this note is marked built or
-  superseded rather than left as "next build" forever.
+- The decisions record — §7 is answered in the record
+  (`decisions.d/2026-11-21-the-22-22-rulings-are-applied.md`), and when the
+  build lands this note is marked built rather than left as "next build"
+  forever.

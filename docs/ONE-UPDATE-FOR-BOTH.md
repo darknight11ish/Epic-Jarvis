@@ -720,14 +720,17 @@ printed verbatim, and `x of y` counts that phase's checks. `backend/test_update_
 pins the four exact strings, and `backend/test_api_doc.py` proves this page's
 list and the code's tuple agree.
 
-**And the route sentence's count is part of the claim (ruling 1, 2026-11-21).**
-A bounded check can pass while checks inside its suite were skipped for this PC
-(measured 2026-11-21: 4 inside `test_reconcile_live_backend`). The one sentence
-that names the proof shows that compactly - `passed (9 of 9, 4 skipped)` - and
-keeps the honest clause: *"checks skipped for this PC are not counted as
-proven; they are a subset, not the full suite."* With no skips the sentence is
-byte-identical to what it was, `passed (9 of 9); they are a subset, not the full
-suite`.
+**And the route sentence's count is part of the claim (rulings 1 and 5.3,
+2026-11-21).** A bounded check can pass while checks inside its suite were
+skipped for this PC (measured 2026-11-21: 4 inside
+`test_reconcile_live_backend`). The one sentence that names the proof - the line
+the Updates card renders verbatim - shows that compactly:
+`passed (9 of 9, 4 skipped - a subset, not the full suite)`. That is all the card
+carries; the full explanation stays in the transcript above it, where the
+`ALL DONE` line says the bounded checks are "a subset, not the full suite" and
+the skip note says the skipped checks "are NOT counted as proven". With no skips
+the sentence is byte-identical to what it was:
+`passed (9 of 9); they are a subset, not the full suite`.
 
 **The app's bounds are unchanged.** The five-minute proof heartbeat (#1442) is
 still there for a quiet child and for the `--full-proof` sweep; a healthy
@@ -776,7 +779,12 @@ bounded checks above passed (9 of 9); they are a subset, not the full suite."*
 **THE DEPLOY MANIFEST - content, not just a commit (Gemini's ruling 4,
 2026-11-21).** `tools/reconcile_live_backend.py --apply` now writes
 `DEPLOY-MANIFEST` beside `VERSION`, **last of all** - after every live file is
-written and the route probes have passed - never before the bytes it describes:
+written and the managed leaves are re-read and re-hashed, never before the bytes
+it describes. The route probes it waits for are the ones this run actually runs;
+the in-app backend half is stopped for the update and passes `skip_probes` with
+that reason, and the run prints `SKIP  ...` and "This is NOT a route pass"
+instead of turning the skip into a pass. That skip is not a manifest failure:
+the manifest records the deploy's own checked bytes either way:
 
 ```json
 {"commit": "<sha>", "version": "<VERSION>",
@@ -803,8 +811,15 @@ Its three rules in the update path:
 - **verification uses it.** Before the existing `jarvis-backend/` twin compare,
   every file the manifest lists is checked against its recorded size+sha256, so
   a manual edit, a half-write or a deleted file is a failed update - including
-  the five patched base files this repository holds no copy of. The twin compare
-  still runs afterwards, so the shipped bytes are proved twice over.
+  the patched base files this repository holds no copy of, when this deploy
+  manages them. The **first live manifest** measured it (2026-11-21, deploy of
+  `b611efd1a`): **352 leaves**, `manifest_sha256 60c1082d3790`, and **all five**
+  patched base files are listed - `jarvis_hud.py`, `jarvis_gate.py`,
+  `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py` - with every
+  recorded sha256 matching the live file. A patched base file appears in the map
+  only when the run manages it, which is why a hermetic fixture without that
+  delta can list four. The twin compare still runs afterwards, so the shipped
+  bytes are proved twice over.
 - **a corrupt one refuses.** A manifest that is there but unusable - malformed,
   a seal that no longer recomputes, or no `VERSION` beside it - is a REFUSAL in
   the update tool: it names the corrupt marker and how to repair it

@@ -6298,7 +6298,11 @@ they landed):
   stand-in runner would move rows while nothing ran (PM3's own note in §8 and
   `decisions.d/2026-11-20-the-plan-store-bridges.md`). The same absence is why
   the board has no Sync button: `POST /api/projects/<id>/sync` is built and
-  read-only, but no app calls it yet.
+  read-only, but no app calls it yet. PM5's design note
+  (`docs/PM5-HUD-SCHEDULER-TICK.md`) is the build plan, and its last blocking
+  question is now answered (Gemini 5.1, 2026-11-21): the tick's state lives in
+  the existing `jarvis_tasks` SQLite store plus one `scheduler_tick` control
+  row, never a second store and never a Rust-owned state file.
 
 **Present, but only on the owner's PC** (not missing, and not in this
 repository either):
