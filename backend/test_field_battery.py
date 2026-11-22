@@ -19,6 +19,9 @@ What this proves, with NO HUD, NO network and NO token:
 5. `read_project_rows()` is read-only and honest about a missing store.
 6. The recorder's own contract: a true check is a PASS, a false check is a
    FAIL (so a section cannot quietly pass everything).
+7. EFFICIENCY's expectation is a RANGE derived from the per-turn figure it
+   already measures, and the run FAILs only when the real spend is above the
+   hard $0.05 safety ceiling (ruling 5.4).
 
 Run: python3 backend/test_field_battery.py
 """
@@ -304,6 +307,69 @@ def t_the_pm4_section_is_registered_in_the_battery():
     """
     check("the PM4 section exists", callable(getattr(F, "section_pm4", None)))
     check("... and one run executes it", F.section_pm4 in F.SECTIONS)
+
+
+def t_efficiency_spend_is_an_estimated_range_with_a_hard_ceiling():
+    """Ruling 5.4: the expectation is a RANGE; only the $0.05 ceiling FAILs.
+
+    MEASURED 2026-11-22: EFFICIENCY printed "Announced maximum: 4 turn(s) x
+    $0.004050 = $0.0162" and then FAILED runs whose four escalated turns really
+    spent $0.0177 and $0.0218 - an estimate presented as a ceiling. The range is
+    derived from the same per-turn figure `_eff_estimate` measures, and the
+    failure line is the hard safety ceiling. These are the pure seams the
+    section calls, so no network, ledger or token is involved.
+    """
+    per_turn, turns = 0.00405, 4
+    low, high = F.eff_spend_range(per_turn, turns)
+    check("the estimate is a range around the per-turn figure x the turns",
+          abs(low - per_turn * turns * 0.5) < 1e-12
+          and abs(high - per_turn * turns * 2.0) < 1e-12, (low, high))
+    check("... and the old $0.0162 expectation sits inside it", low < 0.0162 < high,
+          (low, 0.0162, high))
+    wider = F.eff_spend_range(per_turn, turns * 2)
+    check("... and it scales with the number of escalated turns",
+          abs(wider[0] - low * 2) < 1e-12 and abs(wider[1] - high * 2) < 1e-12, wider)
+
+    # The numbers really come from the same measurement the battery already
+    # makes - `_eff_estimate`'s own per-turn figure, not today's observed cost.
+    ledger = {"prices": {"deepseek": {"deepseek-flash": {"in": 1.0, "out": 2.0}}}}
+    est = F._eff_estimate(ledger, "deepseek", turns)
+    measured_low, measured_high = F.eff_spend_range(est["per_turn"], turns)
+    check("... derived from _eff_estimate's own per-turn figure",
+          abs(measured_low - est["total"] * 0.5) < 1e-12
+          and abs(measured_high - est["total"] * 2.0) < 1e-12,
+          (est, measured_low, measured_high))
+
+    words = F.eff_spend_words(per_turn, turns)
+    check("the printed expectation is a tilde RANGE (not a single number)",
+          "~$0.0081" in words[0] and "$0.0324" in words[0], words)
+    check("... and says plainly that it is an ESTIMATE, not a ceiling",
+          "ESTIMATE" in words[0] and "RANGE" in words[0]
+          and "not a ceiling" in words[0], words)
+    check("... and the second line names $0.05 as the failure line",
+          "Hard safety ceiling: $0.05" in words[1] and "failure line" in words[1]
+          and "FAILS" in words[1], words)
+    check("... and still names the running stop line", "$0.04" in words[1], words[1])
+
+    # A spend inside the range passes.
+    for spent in (0.0081, 0.0162, 0.0177, 0.0218, 0.0324):
+        ok, why = F.eff_spend_verdict(spent)
+        check(f"a spend of {F.pennies(spent)} inside the range passes", ok, why)
+    # The measured overruns were ABOVE the old announced maximum; only the
+    # ceiling may fail them.
+    for spent in (0.04, 0.05):
+        ok, why = F.eff_spend_verdict(spent)
+        check(f"a spend of {F.pennies(spent)} above the range but not the ceiling "
+              f"passes", ok, why)
+    # A spend above the hard ceiling fails.
+    for spent in (0.0501, 0.06, 0.1):
+        ok, why = F.eff_spend_verdict(spent)
+        check(f"a spend of {F.pennies(spent)} above the $0.05 ceiling FAILS",
+              not ok and "safety ceiling" in why, (ok, why))
+    ok, why = F.eff_spend_verdict(0.02, ceiling=0.01)
+    check("the verdict reads the ceiling it is given (a control)",
+          not ok and "safety ceiling" in why, why)
+
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
