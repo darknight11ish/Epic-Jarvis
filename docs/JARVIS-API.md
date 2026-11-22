@@ -27261,6 +27261,20 @@ the other two models paused while it runs). Both fields are additive: a reader t
 ignores them behaves exactly as before. `chosen` is the id last applied;
 `active_lane` is the lane chat is pointed at now.
 
+**`lane` and `active_lane` report the APPLIED preset's lane, not the default
+(fixed 2026-11-21).** When a preset has been applied, its lane is persisted in
+`presets-active-lane.json` (loopback only) - the same file a chat turn is
+pointed by (`jarvis_hud.active_ollama_url()`), so `lane` and `active_lane`
+carry that lane's `key`, `card`, `words` and `base_url`. Only when no applied
+lane exists do they fall back to the configured default lane (`OLLAMA_URL`).
+A file naming a loopback address that is not one of the presets' own lanes
+leaves `key` null and `ready` false, with `why` saying so - never a guessed
+key. Read `active_lane.key` together with the chosen preset's own `lane.key`:
+they name the same lane whenever the chosen preset is the one running, and a
+reader must not call the chosen preset "not running" on anything else. (Before
+the fix, every apply still reported the default lane, so the phone drew
+"General - Chosen - not running now" over a running General lane.)
+
 **The speed each preset row shows is DATED and the PC's own (added 2026-11-17).**
 Every preset's `measured` object now carries `tok_s`, `tok_s_on` and
 `tok_s_note` beside the older receipts it already had. `tok_s` is the decode

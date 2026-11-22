@@ -385,6 +385,13 @@ def t_get_work_serves_the_new_contract():
             seen.append((code, body))
             return code
 
+    # The lane file a real apply persists. Written here explicitly so this check
+    # does not depend on an earlier test's leftovers: with an applied lane
+    # recorded, GET /api/work must report THAT lane (the pooled one here) - the
+    # phone bug fixed 2026-11-21, where the contract kept reporting the default
+    # 11436 while the applied preset's lane was 11450.
+    (Path(TMP) / P.LANE_FILE_NAME).write_text(
+        json.dumps({"base_url": "http://127.0.0.1:11450"}), encoding="utf-8")
     P.install(H, origin_ok=lambda h: True, token_ok=lambda h: True,
               read_body=lambda h: b"{}")
     h = H(); h.path = "/api/work"
@@ -401,11 +408,16 @@ def t_get_work_serves_the_new_contract():
           and body["hardware"]["questionnaire"]["focus_choices"] == list(P.PRESET_IDS)
           and sorted(body["recommendations"]["by_gpu_count"]) == ["1", "2", "3"]
           and "questionnaire" not in body, body.keys())
-    check("... and a top-level lane/lane_status beside active_lane",
+    check("... and a top-level lane/lane_status beside active_lane, naming the "
+          "APPLIED preset's lane",
           "lane" in body and "lane_status" in body and "active_lane" in body
-          and body["lane"]["key"] == "main"
-          and body["lane"]["card"] == "RTX 2060"
-          and "everyday lane" in body["lane"]["label"])
+          and body["active_lane"] == {"key": "pooled",
+                                      "base_url": "http://127.0.0.1:11450"}
+          and body["lane"]["key"] == "pooled"
+          and body["lane"]["card"] == "all three cards"
+          and body["lane"]["ready"] is True
+          and "one model across all three cards" in body["lane"]["label"])
+    (Path(TMP) / P.LANE_FILE_NAME).unlink(missing_ok=True)
     check("... the hardware shape is the fixture's nested shape",
           sorted(body["hardware"]) == ["detected", "questionnaire"]
           and sorted(body["hardware"]["detected"]) == ["cards", "count", "source"],
