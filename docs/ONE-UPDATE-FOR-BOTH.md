@@ -811,13 +811,15 @@ Its three rules in the update path:
 - **verification uses it.** Before the existing `jarvis-backend/` twin compare,
   every file the manifest lists is checked against its recorded size+sha256, so
   a manual edit, a half-write or a deleted file is a failed update - including
-  the four patched base files this tool writes deltas into (`jarvis_hud.py`,
-  `jarvis_gate.py`, `jarvis_extract.py`, `jarvis_skills.py`). The fifth patched
-  base file, `jarvis_models.py`, is **not** in the manifest and is **not**
-  twin-verified: this tool writes no delta into it and the repository holds no
-  copy of it, so nothing here proves its live bytes - the cross-file dependency
-  table checks the functions it must expose, not its bytes. The twin compare
-  still runs afterwards, so the shipped bytes are proved twice over.
+  the patched base files this repository holds no copy of, when this deploy
+  manages them. The **first live manifest** measured it (2026-11-21, deploy of
+  `b611efd1a`): **352 leaves**, `manifest_sha256 60c1082d3790`, and **all five**
+  patched base files are listed - `jarvis_hud.py`, `jarvis_gate.py`,
+  `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py` - with every
+  recorded sha256 matching the live file. A patched base file appears in the map
+  only when the run manages it, which is why a hermetic fixture without that
+  delta can list four. The twin compare still runs afterwards, so the shipped
+  bytes are proved twice over.
 - **a corrupt one refuses.** A manifest that is there but unusable - malformed,
   a seal that no longer recomputes, or no `VERSION` beside it - is a REFUSAL in
   the update tool: it names the corrupt marker and how to repair it
