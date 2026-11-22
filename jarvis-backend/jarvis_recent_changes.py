@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    "The proof stage says it is alive, so the update's silence bound only ends a real hang",
-    "The phone's Projects screen shows the next 3 ready tasks, marks one Done, and takes a quick add",
-    "A release's new tools reach the owner's own config, additively",
-    "The update's bound now measures progress, every ending re-reads the two versions, and the release's look spec goes with the file half",
-    "The desktop's Projects page gets the plan board: 4-column Kanban, Ready List, milestones and a one-click Obsidian hub note",
+    'The wake-phrase copy is the factual "Wake phrase: Hey Jarvis." everywhere',
+    'The Updates card shows its skips, its proof phases are frozen, and the deploy records the bytes it wrote',
+    'Three PM5 rulings are written down: the combined records chore, the desktop-only device clean-up and the HUD-owned executor',
+    "The deploy route's proof sentence names checks skipped inside the suites",
+    'The preset contract reports the lane a preset was applied to, not the default lane',
 )
 
 
