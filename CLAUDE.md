@@ -559,7 +559,9 @@ tripped Syncthing's "< 1% free" database halt.
   `py -3 tools/gen_self_code_map.py --check` after every merge and goes red,
   naming the one command, when the map no longer describes main's tree; whoever
   sees it runs `py -3 tools/gen_self_code_map.py` on a branch off `main` and
-  opens ONE small pull request with only the two map files. The generator still
+  opens ONE small pull request with only the two map files - or rides the
+  combined `chore/records-and-generated-refresh` chore defined in the record
+  section below (Gemini's ruling 3, 2026-11-21). The generator still
   writes BOTH copies in that one run - `backend/jarvis-self-code.json` and
   `jarvis-backend/jarvis-self-code.json` - and refuses to write at all on a
   dirty tree, because the map records the commit it was built from and a map
@@ -575,7 +577,9 @@ tripped Syncthing's "< 1% free" database halt.
   `py -3 tools/gen_recent_changes.py`. The same workflow,
   `.github/workflows/self-code-map.yml` (its job is now named for generated
   files rather than the map), runs `py -3 tools/gen_recent_changes.py --check`
-  after every merge and names the one command when main is behind. The required
+  after every merge and names the one command when main is behind - and that
+  re-take may ride the combined `chore/records-and-generated-refresh` chore
+  (Gemini's ruling 3, 2026-11-21; the record section below). The required
   `backend` suite no longer demands byte-exact freshness on a PR, because it
   cannot be had there: `backend/test_self_knowledge_honesty.py` proves every
   bullet the module carries is a real run of the record's own order, and
@@ -599,9 +603,12 @@ the same lines and always conflict. The rule:
   never run the generator from a feature PR to achieve it.
 - **The size is refreshed periodically instead:**
   `python -B tools/gen_docs_map.py`, on its own branch off a quiet `main`, in
-  its own pull request with nothing else in it. Run by whoever notices the
-  figures have drifted (the checker prints both numbers it measured). Nothing
-  runs it on a schedule yet, and nothing needs to.
+  its own pull request with nothing else in it - or as one command of the
+  combined `chore/records-and-generated-refresh` chore (Gemini's ruling 3,
+  2026-11-21; the record section below has its exact limits and command order),
+  which is the one allowed way to carry generated files beside the rolls. Run
+  by whoever notices the figures have drifted (the checker prints both numbers
+  it measured). Nothing runs it on a schedule yet, and nothing needs to.
 
 Why leaving the size stale is safe, and this is the part to check rather than
 believe - all measured on the tree of 2026-10-13, which holds 377 documents and
@@ -896,7 +903,9 @@ now, and it is the one to follow:
   bullets newest first under *Not in a numbered version yet*, keeps every
   existing entry, and removes the fragment files. Open ONE pull request with
   the roll and nothing else in it - the same shape as the periodic docs size
-  refresh.
+  refresh - **unless it rides the combined
+  `chore/records-and-generated-refresh` chore below (Gemini's ruling 3,
+  2026-11-21), which is the only exception.**
 - **`py -3 tools/roll_changelog.py --check`** validates every fragment's name
   and shape and that the heading still exists; it deliberately does not require
   fragments to be rolled yet. `backend/test_roll_changelog.py` proves the roll
@@ -919,7 +928,10 @@ either. Same shape, with the one difference that matters:
   oldest-first, so it is not `CHANGELOG.md`'s newest-first - keeps every existing
   entry, re-anchors any `docs/CLAIMS.tsv` source that cited a fragment, and
   removes the fragment files. Open ONE pull request with the roll and nothing
-  else in it. No workflow runs it, and a feature PR must not.
+  else in it - **unless it rides the combined
+  `chore/records-and-generated-refresh` chore below (Gemini's ruling 3,
+  2026-11-21), which is the only exception.** No workflow runs it, and a
+  feature PR must not.
 - **`py -3 tools/roll_decisions.py --check`** validates every fragment's name, its
   bullet shape, that the date in the name matches the date in the bullet, and
   that the anchor heading is still at the end of the record; it deliberately does
@@ -928,6 +940,41 @@ either. Same shape, with the one difference that matters:
   different fragments change no file in common.
 - **The record itself is untouched.** No old entry is reworded, moved or removed;
   a decision already written in `docs/DECISIONS.md` stays exactly where it is.
+
+**Gemini's ruling 3 (2026-11-21): the records and the generated files may be
+ONE chore pull request.** The two rolls and the three generated refreshes are
+all deterministic scripts writing files no person hand-edits, and each separate
+pull request pays the same roughly one-hour CI cycle (`frontend` was measured at
+about 61-71 minutes). So the "ONE pull request with the roll and nothing else"
+wording above is **superseded for this combined chore, and for nothing else**: a
+branch named `chore/records-and-generated-refresh` may run BOTH rolls AND the
+generated refreshes in one pull request. Its limits are the rule:
+
+- **Records and generated files only, nothing hand-written else.** The PR may
+  carry `CHANGELOG.md`, `docs/DECISIONS.md`, the two self-code map files
+  (`backend/jarvis-self-code.json`, `jarvis-backend/jarvis-self-code.json`),
+  the two recent-changes modules (`backend/jarvis_recent_changes.py`,
+  `jarvis-backend/jarvis_recent_changes.py`), `docs/README.md`, and the
+  fragment files the rolls remove. No feature work, no code, no hand-written
+  docs page, no `docs/CLAIMS.tsv` row and no defect row - a hand-written change
+  keeps its own pull request.
+- **The exact commands, in this order**, on a quiet `main`:
+  `py -3 tools/roll_changelog.py`, then `py -3 tools/roll_decisions.py`, then
+  `py -3 tools/gen_recent_changes.py`, `py -3 tools/gen_self_code_map.py`,
+  `py -3 tools/gen_docs_map.py`.
+- **The rolls and the recent-changes module are committed before the map is
+  taken.** `tools/gen_self_code_map.py` refuses to WRITE while another tracked
+  file is dirty, because the map records the commit it was built from and its
+  file lists come from the index: on a dirty tree it would describe a commit
+  that never had those files. So commit the rolls first, then
+  `gen_recent_changes.py`, then run the map on that clean tree, then commit it
+  with the docs-map refresh.
+- **What does not change.** The race reasoning in this section is untouched:
+  a feature PR still writes only its own `changelog.d/` and `decisions.d/`
+  fragments and still never runs a roll or a generator, `docs/CLAIMS.tsv` and
+  the defect register are still hand-written and still keep the
+  append-and-keep-both rule, and the docs size is still left stale by a feature
+  PR (only the count is bumped by hand).
 
 The three files above (`docs/CLAIMS.tsv` and the defect register's two) keep the
 append-and-keep-both rule; they are now the only ones written by hand in a PR.

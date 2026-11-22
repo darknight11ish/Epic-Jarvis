@@ -3017,8 +3017,9 @@ backend routes, in both directions; the rest are listed here only.
   multi-column drag-and-drop editor on the phone, per section 6.2: the phone's
   own Projects list is the summary/next-3/tap-to-done half.
 
-- **Cleaning up duplicate/inactive devices is the desktop's button for now**
-  (2026-11-21, Gemini ruling 5.6). Settings -> Devices on the desktop offers
+- **Cleaning up duplicate/inactive devices is the desktop's button, and it
+  stays that way** (2026-11-21, Gemini's rulings 5.6 and 5). Settings -> Devices
+  on the desktop offers
   "Clean up duplicate/inactive devices": a dry run asks the PC what WOULD be
   removed (names and how long ago each was last seen), the PC itself preserves
   anything active within 30 days, nothing is pruned on load or on a timer, and
@@ -3026,10 +3027,13 @@ backend routes, in both directions; the rest are listed here only.
   approval card (`POST /api/devices/cleanup`: dry run answers the would-remove
   list; the confirm answers 202 while the card waits and 200 with the
   removed/kept counts after the owner answers). **The phone's Settings ->
-  Devices keeps the list and Remove it already has and gains no clean-up button
-  in this slice**, so `tools/check_parity.py` records the route as `deliberate`;
-  the phone half is its own follow-up against the same contract, not a decision
-  that the phone never gets it.
+  Devices keeps the list and Remove it already has, gains no clean-up button,
+  and never will** - Gemini's ruling 5 (2026-11-21) keeps the clean-up
+  desktop-only: concurrent Pixel 9 + OnePlus polling is expected, pruning paired
+  devices is an administrative, destructive-adjacent action whose backup lives
+  on the host filesystem, and the desktop's Settings -> Devices is the only
+  door. `tools/check_parity.py` records the route as `deliberate` for good, not
+  as a slice.
 
 - **Call recording is split by hardware, and each half is one-sided on
   purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
@@ -5549,8 +5553,12 @@ what is missing is only the Settings screen agreeing about who turned it off.
   device used in the last 30 days, the newest device and the device making the
   request are never removed, a copy of the registry is written beside it first,
   and a removed row is removed exactly the way Remove removes one. **What is
-  deliberately NOT here:** the phone's Settings -> Devices screen has no
-  clean-up button in this slice. The DESKTOP button is here (#1446), so
+  deliberately NOT here, and will never be:** the phone's Settings -> Devices
+  screen has no clean-up button - Gemini's ruling 5 (2026-11-21) makes the
+  clean-up desktop-only by decision, because concurrent Pixel 9 + OnePlus
+  polling is expected and pruning paired devices is an administrative,
+  destructive-adjacent action whose backup is kept on the host filesystem. The
+  DESKTOP button is here (#1446), so
   `tools/check_parity.py` classifies the route `deliberate` - the desktop calls
   it and the phone does not - with no `PENDING_CLIENTS` entry. **NOT-TESTABLE
   until an owner drives it:** no real
@@ -5567,6 +5575,13 @@ what is missing is only the Settings screen agreeing about who turned it off.
   added) instead of `planned`, and its `PENDING_CLIENTS` line is gone - the
   checker fails a pending route once its first client lands. The field test
   above is still owed: the button shipped, and no owner has driven it yet.
+  **Made permanent by Gemini's ruling 5 (2026-11-21):** the "in this slice"
+  wording above is superseded - the phone keeps the list and Remove it already
+  has and never gains a clean-up button, `tools/check_parity.py` keeps the route
+  `deliberate`, and the desktop's Settings -> Devices is the only door. The
+  reason is the ruling's own: concurrent Pixel 9 + OnePlus polling is expected,
+  and pruning paired devices is an administrative, destructive-adjacent action
+  whose backup lives on the host filesystem.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

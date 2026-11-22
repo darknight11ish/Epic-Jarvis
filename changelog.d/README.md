@@ -27,7 +27,18 @@ py -3 tools/roll_changelog.py             # fold them in and remove the fragment
 
 The roll is **deliberate, never automatic**, and it is idempotent. Open ONE
 pull request with the roll and nothing else in it — the same shape as the
-periodic `docs/README.md` size refresh.
+periodic `docs/README.md` size refresh. **The one exception is Gemini's ruling
+3 (2026-11-21):** this roll may ride in ONE combined
+`chore/records-and-generated-refresh` pull request with `roll_decisions.py` and
+the three generated refreshes (`gen_recent_changes.py`, `gen_self_code_map.py`,
+`gen_docs_map.py`, in that order after the two rolls), because both halves are
+deterministic scripts and each separate pull request pays the same roughly
+one-hour CI cycle. That combined pull request carries records and generated
+files only — nothing hand-written — and the rolls and `gen_recent_changes.py`
+are committed before the map is taken, because the map refuses to write on a
+dirty tree. The old "one PR with the roll and nothing else" wording is
+superseded only for that combined chore; every other pull request still
+follows it.
 
 **What is checked, and what is not.** `--check` validates every fragment's name
 and shape and that `CHANGELOG.md` still carries its `## Not in a numbered
