@@ -2995,9 +2995,11 @@ def t_git_auth_is_basic_and_one_helper_serves_both_git_stages():
     with `remote: invalid credentials` / `fatal: Authentication failed`. The same
     command with `Authorization: Basic base64("x-access-token:" + token)`
     exited **0** and listed the refs. So the value git is handed must DECODE to
-    exactly `x-access-token:<token>`, must not say Bearer, and BOTH stages (the
-    prepare clone and the push) must get it from the one `_git_auth_env` - a
-    second copy is what would drift back.
+    exactly `x-access-token:<token>`, must not say Bearer, and EVERY
+    authenticating git step (the prepare clone, the `pull/<n>/head` fetch right
+    after it, and the push) must get it from the one `_git_auth_env` - a second
+    copy is what would drift back, and a step that skips the helper entirely is
+    what broke `github_fix_and_push` on private repositories (2026-11-21).
     """
     env = GH._git_auth_env(TOKEN)
     check("one config entry is set, as git's env config, and it is http.extraheader",
@@ -3045,8 +3047,9 @@ def t_git_auth_is_basic_and_one_helper_serves_both_git_stages():
             check("the push stage runs", out2.get("ok") is True, out2)
     finally:
         GH._git_auth_env = real
-    check("both authenticating stages asked the ONE helper for the header",
-          len(seen) == 2, seen)
+    check("the prepare stage's TWO authenticating git steps (the clone and the "
+          "pull-request head fetch) and the push all asked the ONE helper",
+          len(seen) == 3, seen)
     check("... the prepare clone carried the Basic header, not Bearer",
           bool([c for c in prepare_git.calls if c["args"][:1] == ["clone"]])
           and all(_auth_header_is_basic(c["env"].get("GIT_CONFIG_VALUE_0"), TOKEN)
@@ -3062,6 +3065,187 @@ def t_git_auth_is_basic_and_one_helper_serves_both_git_stages():
                   or "Authorization" in " ".join(c["args"])
                   for c in prepare_git.calls + push_git.calls),
           prepare_git.commands() + push_git.commands())
+
+
+# --------------------------------------------------------------------------
+#   14b. a PRIVATE repository (2026-11-22): the fetch's credential
+# --------------------------------------------------------------------------
+
+#: git's own failure on a PRIVATE repository when it has no credential it can
+#: use: GitHub answers 401, git falls back to its credential prompt, the prompt
+#: cannot run in a non-interactive process, and this is what the owner saw on a
+#: real private repository on 2026-11-21.
+_NO_CREDENTIAL = ("error: failed to execute prompt script (exit code 66)\n"
+                  "fatal: could not read Username for 'https://github.com': "
+                  "No such file or directory")
+
+
+class PrivateGit(FakeGit):
+    """git against a PRIVATE repository: a network command needs the credential.
+
+    GitHub answers an unauthenticated `clone` / `fetch` / `push` on a private
+    repository with 401, so git falls back to its credential prompt - which
+    cannot run in a non-interactive process - and the command exits 128 with
+    `could not read Username for 'https://github.com'`. This fake models exactly
+    that: a network command whose ENVIRONMENT carries the Basic
+    `http.extraheader` the product builds succeeds, and one without it fails in
+    those words. The local commands (checkout, branch, status, diff, add,
+    commit) never need it, exactly as they do not in real life.
+
+    Nothing here starts a process or opens a socket. What it can prove is that
+    the product PASSES the credential to every command that needs it - the one
+    thing that was wrong, and the one thing a machine with no GitHub access can
+    check honestly.
+    """
+
+    #: The git verbs that reach github.com. Everything else is local.
+    NETWORK = ("clone", "fetch", "push", "pull", "ls-remote")
+
+    def __call__(self, args, *, cwd=None, env=None):
+        code, out, err = super().__call__(args, cwd=cwd, env=env)
+        first = str(args[0]) if args else ""
+        if first in self.NETWORK and not _auth_header_is_basic(
+                (env or {}).get("GIT_CONFIG_VALUE_0"), TOKEN):
+            return 128, "", _NO_CREDENTIAL
+        return code, out, err
+
+
+def _private_push_git(**over):
+    """`_push_git`'s local answers, as git against a private repository."""
+    return PrivateGit(_push_git(**over).answers)
+
+
+def t_a_private_repository_fix_and_push_carries_the_token_on_the_head_fetch():
+    """Ruling 5.3: on a PRIVATE repository, fix-and-push did not work at all.
+
+    Measured on a real private repository on 2026-11-21: `github_open_pr` and
+    `github_merge_pr` worked, and `github_fix_and_push` failed at its prepare
+    stage with
+
+        Fetching the pull request did not finish: ... fatal: could not read
+        Username for 'https://github.com': No such file or directory
+
+    The prepare stage cloned WITH the token and then fetched the pull request's
+    head WITHOUT it. On a private repository that fetch is an unauthenticated
+    read, so GitHub answers 401 and that sentence is the whole answer; on a
+    PUBLIC repository an anonymous fetch works, which is why no hermetic test
+    ever saw it.
+
+    This is that missing test, in the one shape a machine with no GitHub access
+    can prove it: `PrivateGit` behaves like git against a private repository, so
+    the WHOLE flow (prepare -> write -> push) finishes only when every network
+    command it runs carries the Basic `http.extraheader` the one `_git_auth_env`
+    builds. The head fetch must carry the SAME environment the clone was given,
+    the token must still never be in an argument, and the private copy's local
+    steps must behave like any other copy's.
+    """
+    routes = [("/pulls/1116", (200, _pr_doc())),
+              ("/check-runs", (200, json.dumps({"check_runs": []})))]
+    # The fake is not vacuous: the same fetch with NO credential gets git's real
+    # private-repository failure - which is exactly what the product used to do.
+    refused = PrivateGit()(
+        ["fetch", "origin", "pull/1116/head:refs/heads/fix-pr-1116"],
+        cwd="C:/scratch", env=None)
+    check("a private repository refuses a fetch with no credential, in git's own "
+          "words", refused[0] == 128 and "could not read Username" in refused[2],
+          refused)
+    with _Scratch() as box:
+        folder = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        prepare_git = PrivateGit()
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        out = _run_request(r, Routed(routes), git=prepare_git)
+        check("prepare finishes on a PRIVATE repository", out.get("ok") is True, out)
+        clone = [c for c in prepare_git.calls if c["args"][:1] == ["clone"]]
+        head = [c for c in prepare_git.calls
+                if c["args"][:1] == ["fetch"]
+                and "pull/1116/head:refs/heads/fix-pr-1116" in " ".join(c["args"])]
+        check("it clones, then fetches the pull request's head",
+              len(clone) == 1 and len(head) == 1, prepare_git.commands())
+        check("the head fetch carries the credential environment",
+              bool(head) and _auth_header_is_basic(
+                  head[0]["env"].get("GIT_CONFIG_VALUE_0"), TOKEN),
+              head[0]["env"] if head else "")
+        check("... and it is the SAME environment the clone was given - the one "
+              "builder, not a copy",
+              bool(head) and bool(clone)
+              and head[0]["env"] == clone[0]["env"] == GH._git_auth_env(TOKEN),
+              (clone[0]["env"] if clone else None,
+               head[0]["env"] if head else None))
+
+        write_git = PrivateGit()
+        write = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "write", "worktree": str(folder),
+             "path": "src/tray.rs", "content": "fn tray() {}\n",
+             "message": "Add the missing tray function"}, git=write_git)
+        wrote = _run_request(write, Routed([]), git=write_git)
+        check("the write stage finishes on a PRIVATE repository's copy",
+              wrote.get("ok") is True, wrote)
+
+        push_git = _private_push_git()
+        push = GH.plan_fix_and_push(
+            {"repo": "darknight11ish/Epic-Jarvis", "number": "1116",
+             "stage": "push", "worktree": str(folder)}, git=push_git)
+        pushed = _run_request(push, Routed([("/pulls/1116", (200, _pr_doc()))]),
+                              git=push_git)
+        check("the push stage finishes on a PRIVATE repository",
+              pushed.get("ok") is True, pushed)
+        check("... and the push carried the same credential environment",
+              bool(push_git.pushes()) and _auth_header_is_basic(
+                  push_git.pushes()[0]["env"].get("GIT_CONFIG_VALUE_0"), TOKEN),
+              [c["env"] for c in push_git.pushes()])
+        check("the token is in NO argument of ANY git call in the whole flow",
+              not any(TOKEN in " ".join(c["args"])
+                      for c in prepare_git.calls + write_git.calls
+                      + push_git.calls),
+              prepare_git.commands() + write_git.commands() + push_git.commands())
+        check("... and in no word of any of the three answers",
+              TOKEN not in "".join(str(x) for x in (
+                  out.get("text", ""), wrote.get("text", ""),
+                  pushed.get("text", ""))))
+
+
+def t_a_private_repository_fetch_that_is_refused_is_one_plain_sentence():
+    """The other half of ruling 5.3: the failure it removes is still SAID well.
+
+    Passing the environment is the fix. When the fetch is refused anyway - a
+    revoked token, a repository the token cannot see, a machine where git cannot
+    prompt - the owner must still get words rather than a crash: ONE plain
+    sentence that names the step, carries git's own words, has no token in it,
+    offers no traceback or exit code, and never claims anything was written or
+    pushed. The half-made scratch folder must go with it, so the next prepare can
+    run (a folder left behind is what made the next clone fail for a reason that
+    named neither the folder nor the earlier failure).
+    """
+    routes = [("/pulls/1116", (200, _pr_doc())),
+              ("/check-runs", (200, json.dumps({"check_runs": []})))]
+    git = FakeGit([("fetch origin", (128, "", _NO_CREDENTIAL))])
+    with _Scratch() as box:
+        target = box.root / "darknight11ish__Epic-Jarvis__pr1116"
+        r = GH.plan_fix_and_push(dict(ARGS["github_fix_and_push"]))
+        out = _run_request(r, Routed(routes), git=git)
+        said = str(out.get("error") or "")
+        check("a refused head fetch is refused, never claimed as done",
+              out.get("ok") is False, out)
+        check("... in ONE plain sentence that names the step it failed at",
+              said.startswith("Fetching the pull request did not finish"), said)
+        check("... carrying git's own words, so the cause is visible",
+              "could not read Username" in said, said)
+        check("... with no token in it", TOKEN not in said, said)
+        check("... and no traceback, exception name or exit code",
+              "Traceback" not in said and "Exception" not in said
+              and "128" not in said, said)
+        check("... and it never claims anything was written or pushed",
+              "Pushed " not in said and "Wrote " not in said
+              and "Nothing has been pushed" not in said, said)
+        check("the half-made scratch folder is gone, so the next prepare can run",
+              not target.exists(), str(target))
+        clones = [c for c in git.calls if c["args"][:1] == ["clone"]]
+        check("the clone that DID carry the credential ran first, so the "
+              "failure really is the fetch",
+              bool(clones) and _auth_header_is_basic(
+                  clones[0]["env"].get("GIT_CONFIG_VALUE_0"), TOKEN),
+              git.commands())
 
 
 def t_fix_and_push_run_refuses_unapproved_and_unknown_stages():
@@ -4800,6 +4984,8 @@ if __name__ == "__main__":
                    t_the_push_plan_refuses_every_unsafe_folder,
                    t_the_push_run_rechecks_everything_then_pushes_once,
                    t_git_auth_is_basic_and_one_helper_serves_both_git_stages,
+                   t_a_private_repository_fix_and_push_carries_the_token_on_the_head_fetch,
+                   t_a_private_repository_fetch_that_is_refused_is_one_plain_sentence,
                    t_fix_and_push_run_refuses_unapproved_and_unknown_stages,
                    t_the_twins_are_byte_identical,
                    t_the_two_shipped_tomls_are_one_file,
