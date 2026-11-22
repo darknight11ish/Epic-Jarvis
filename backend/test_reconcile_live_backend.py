@@ -5884,6 +5884,43 @@ def t_two_applies_over_the_same_bytes_produce_the_same_manifest_hash():
         shutil.rmtree(root2, ignore_errors=True)
 
 
+def t_the_manifest_is_written_even_when_the_route_probes_are_skipped():
+    """The in-app backend half runs with the server stopped, so its deploy SKIPS
+    the route probes for a stated reason (`skip_probes`). The docs used to say
+    the manifest is "written after the route probes have passed", which is only
+    true when the run runs them - the truth is narrower and this pins it: the
+    manifest is written after the files are written and re-proved, the skip is
+    printed as `SKIP  ...` plus "This is NOT a route pass", and the manifest is
+    still the record of the deploy's own checked bytes.
+    """
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader,
+                           skip_probes="the backend is stopped for this update")
+        text = "\n".join(lines)
+        check("manifest: a deploy that SKIPS the route probes still writes it",
+              code == 0 and "DEPLOY-MANIFEST: wrote" in text, release_report(text))
+        check("manifest: ... the skip is reported as NOT a route pass, never a pass",
+              "SKIP  the backend is stopped for this update" in text
+              and "This is NOT a route pass" in text, release_report(text))
+        skip_at = text.find("ROUTE PROBES:")
+        manifest_at = text.find("DEPLOY-MANIFEST: wrote")
+        result_at = text.find("RESULT: PASS")
+        check("manifest: ... and it is still written after that step, before the PASS",
+              -1 < skip_at < manifest_at < result_at,
+              (skip_at, manifest_at, result_at))
+        check("manifest: ... and it validates against the live bytes it records",
+              R.read_deploy_manifest(live)["ok"] is True,
+              R.read_deploy_manifest(live))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted():
     """The reader's own rule: present but unusable is NAMED, never 'no manifest'."""
     root = tmpdir()
@@ -5925,6 +5962,7 @@ def t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted():
             "a leaf named with a path": json.dumps(
                 {**doc, "files": {"../one.py": {"size": 1,
                                                 "sha256": "0" * 64}}}).encode("utf-8"),
+            "bytes that are not UTF-8": b"\xff\xfe\x00not a manifest",
         }
         for why, blob in sorted(cases.items()):
             path.write_bytes(blob)
@@ -7214,6 +7252,7 @@ def main():
                t_release_markers_leave_unchanged_files_alone,
                t_the_deploy_manifest_records_the_release_and_every_managed_leaf,
                t_two_applies_over_the_same_bytes_produce_the_same_manifest_hash,
+               t_the_manifest_is_written_even_when_the_route_probes_are_skipped,
                t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted,
                t_no_installed_desktop_means_no_manifest_rather_than_a_guessed_one,
                t_source_commit_is_recorded_beside_version_and_never_guessed,

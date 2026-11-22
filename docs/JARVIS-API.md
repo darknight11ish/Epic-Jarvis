@@ -35692,8 +35692,12 @@ file, written atomically, and it writes nothing else.
 2026-11-21).** The deploy route also writes `<backend>/DEPLOY-MANIFEST`, a JSON
 record of the release it wrote: the commit, the `VERSION`, and every managed
 live file's `{"size", "sha256"}`, sealed with a `manifest_sha256` over the
-sorted `leaf sha256 size` lines. It is written LAST - after the files and the
-route probes - and it is what lets the update path prove the installed BYTES
+sorted `leaf sha256 size` lines. It is written LAST - after the files, with the
+managed leaves re-read and re-hashed, and after the route probes when this run
+runs them (the in-app backend half is stopped for the update and skips them for
+that stated reason, printed as `SKIP  ...` and "This is NOT a route pass"; a
+skip is never counted as a pass and never blocks the record of the bytes) - and
+it is what lets the update path prove the installed BYTES
 rather than only the commit: a valid manifest beside `VERSION` is the strongest
 deploy evidence (the older `SOURCE-COMMIT` stays the fallback), every listed
 file is verified against its recorded size+sha256 before the usual twin compare,

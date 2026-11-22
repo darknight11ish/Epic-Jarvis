@@ -4323,6 +4323,12 @@ def read_deploy_manifest(live) -> dict:
     A missing file is `present: False` and is not an error: an install from
     before this ruling has no manifest, and `SOURCE-COMMIT` stays its evidence.
 
+    "NEVER RAISE" includes bytes that are not UTF-8: a file whose bytes cannot
+    be decoded is a corrupt marker with its own `why`, not an exception (it is
+    named the same way as a manifest that is not JSON - a `UnicodeDecodeError`
+    is a `ValueError`, and the read itself is caught here rather than left to
+    the caller).
+
     `files` is returned even when `ok` is False if it could be read, so a caller
     can say how much of the record was usable; it is only trusted when `ok`.
     """
@@ -4331,7 +4337,7 @@ def read_deploy_manifest(live) -> dict:
         return {"present": False, "ok": False, "why": "", "doc": None, "files": {}}
     try:
         raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return {"present": True, "ok": False,
                 "why": f"{DEPLOY_MANIFEST} cannot be read ({exc})",
                 "doc": None, "files": {}}

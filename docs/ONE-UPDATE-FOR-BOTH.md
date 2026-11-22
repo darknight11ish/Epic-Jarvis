@@ -779,7 +779,12 @@ bounded checks above passed (9 of 9); they are a subset, not the full suite."*
 **THE DEPLOY MANIFEST - content, not just a commit (Gemini's ruling 4,
 2026-11-21).** `tools/reconcile_live_backend.py --apply` now writes
 `DEPLOY-MANIFEST` beside `VERSION`, **last of all** - after every live file is
-written and the route probes have passed - never before the bytes it describes:
+written and the managed leaves are re-read and re-hashed, never before the bytes
+it describes. The route probes it waits for are the ones this run actually runs;
+the in-app backend half is stopped for the update and passes `skip_probes` with
+that reason, and the run prints `SKIP  ...` and "This is NOT a route pass"
+instead of turning the skip into a pass. That skip is not a manifest failure:
+the manifest records the deploy's own checked bytes either way:
 
 ```json
 {"commit": "<sha>", "version": "<VERSION>",
