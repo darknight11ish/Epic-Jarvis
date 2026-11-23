@@ -1383,6 +1383,14 @@ def match(text, now: Optional[float] = None,
         stripped = _strip_meta_instruction(text)
         if stripped is not None:
             got = _match(stripped, now, conversation)
+    # THE ONE FAMILY-WIDE GATE (2026-11-22, the external review's ruling): a
+    # capability explanation may answer only a QUESTION that names no concrete
+    # target. A command - "merge #1472 ...", "comment on pull request 1471",
+    # "open an issue about the login bug" - is dropped here, at the public
+    # door both families share, so the model and its tools own it. See
+    # `_capability_answer_forbidden` for the rule and its two exemptions.
+    if got is not None and _capability_answer_forbidden(text, got):
+        got = None
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
     if got is not None and got.f.get("about"):
@@ -15643,11 +15651,140 @@ def _github_capability_inventory() -> str:
             "this\" (group \"Jarvis's own tools\").")
 
 
+# --------------------------------------------------------------------------
+#   A COMMAND IS NOT A CAPABILITY QUESTION (2026-11-22, family-wide)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED DEFECT. On the live app, with the local coding lane selected,
+# these three real messages were each answered in 0.1 seconds with the same
+# canned paragraph ("Yes - with ONE approval card per merge, and merge commit
+# only ..."), route header `"lane": "no AI model"`, `"quick": "github_self"`:
+#
+#   1. "Merge pull request 1472 in darknight11ish/Epic-Jarvis with a merge
+#       commit. All seven required checks are green. Use github_merge_pr."
+#   2. "Merge pull request 1472 in darknight11ish/Epic-Jarvis now, with a merge
+#       commit. All seven required checks are green."
+#   3. "Merge #1472 in darknight11ish/Epic-Jarvis with a merge commit."
+#
+# No model ran, no tool was offered and no approval card was raised, so the
+# merge the owner asked for could not happen. (In the same battery "Post this
+# comment on pull request 1471: ..." DID reach the model, called
+# `github_comment` and raised the card he approved.) It is the same class as
+# the reminder-closed bug fixed in #1468: a capability family claiming a
+# command because the command contains a word the family watches for.
+#
+# THE RULE (the external review's ruling of 2026-11-22, 15:45 PT), ONE gate for
+# the whole family rather than a patch inside one shape: a capability-
+# explanation intent may answer only a message that is a QUESTION and names no
+# concrete target.
+#
+#   * QUESTION means the RAW message opens as one - "can/could/would/will/do/
+#     does/did/have/has/are/is/am/was/were/should", or "what/which/how/why/
+#     when/where/who/whose" - after the address/politeness lead is taken off.
+#     It is read from the raw text because `normalise()` strips "can you" and
+#     "please": the question "can you merge a pull request?" and the command
+#     "merge a pull request" both become the same matched string, and only the
+#     raw message can tell them apart.
+#   * NO CONCRETE TARGET means no pull request/issue NUMBER ("#1472", "PR
+#     1471", "pull request 1472", "issue 5"), no "owner/repo" slug, and no
+#     BRANCH (the word, or main/master named after a to/into/onto).
+#   * In the review's own terms: a message that names one of those targets, or
+#     begins with an imperative action verb ("merge", "comment", "post",
+#     "re-run"/"rerun", "open", "create", "fix", "push"), must never match
+#     `github_self` or `feature_capabilities`.
+#
+# A message the gate refuses keeps its old path to the model, where
+# `github_merge_pr`, `github_comment`, `github_rerun_workflow` and
+# `github_issue_state` each raise their own card and the conversation is
+# available to resolve "the pull request".
+#
+# THE TWO FAMILIES. `_CAPABILITY_EXPLANATION_INTENTS` is `github_self` (every
+# "what can you do on GitHub" answer, including the merge/action/never/tools
+# shapes) and `feature_capabilities` (the feature-list answer behind "what can
+# you do with GitHub?"). The gate is applied ONCE, in `match()` - the public
+# door every caller uses - rather than inside either family's matcher, so a new
+# shape (or a new door, like `_feature_capability_question`) inherits it.
+#
+# THREE SHAPES OF `github_self` ARE EXEMPT, and both exemptions are measured
+# behaviour with their own suites, not loopholes:
+#   * `create_repo` raises the owner's switch card IN PLACE. A command that can
+#     be answered by raising the real card is an ACTION path, not an
+#     explanation; the bare "create a repository" form exists only because
+#     `normalise()` strips "can you" (see `_GITHUB_CREATE_REPO`).
+#   * `approve`, `destroy`, `bulk_close` and `close_pr` answer a permanently
+#     impossible action with a "No". Nothing can be read as the action having
+#     been done, there is no tool behind them for the model to reach, and
+#     `test_chat_wrong_answers.py` pins each one from the 2026-11-16 live
+#     measurements - while the gate would otherwise hand "approve PR 12" and
+#     "close pull request 1299" to a model that has no such tool at all.
+# Every other shape, including the merge and action answers that opened this
+# defect, is gated.
+#
+# THE LIMITS, said rather than hidden: a concrete repository or branch named
+# without a number, slug or branch word ("merge the one I showed you"), and a
+# spoken number ("merge pull request one", which `normalise()` does not turn
+# into a digit), cannot be told from a capability question by a regular
+# expression. The gate only takes sentences AWAY: every remaining answer is
+# byte-for-byte what it was.
+_CAPABILITY_EXPLANATION_INTENTS = frozenset({"github_self",
+                                             "feature_capabilities"})
+
+#: Shapes that ACT (raise a card) or REFUSE a permanently impossible action
+#: rather than explain; see the comment above.
+_CAPABILITY_EXEMPT_SHAPES = frozenset({"create_repo", "approve", "destroy",
+                                       "bulk_close", "close_pr"})
+
+#: The review's imperative verbs, read at the start of the RAW message.
+_CAPABILITY_IMPERATIVE_LEAD = re.compile(
+    r"^(?:(?:hey|hi|ok|okay)\s+jarvis\b[\s,]*|jarvis\b[\s,]*|please\s+)*"
+    r"(?:merge|comment|post|re-?run|rerun|open|create|fix|push)\b")
+
+#: A capability question opens as one; read from the RAW message.
+_CAPABILITY_QUESTION_LEAD = re.compile(
+    r"^(?:(?:hey|hi|ok|okay)\s+jarvis\b[\s,]*|jarvis\b[\s,]*|please\s+)*"
+    r"(?:what|which|how|why|when|where|who|whose|"
+    r"can|could|would|will|do|does|did|have|has|are|is|am|was|were|should)\b")
+
+#: A concrete target inside the matched sentence.
+_CAPABILITY_TARGET = re.compile(
+    r"#\s*\d+"
+    r"|\b(?:pull\s*requests?|prs?|issues?)\s*(?:#|no\.?|number)?\s*\d+\b"
+    r"|(?<![\w.-])[\w.-]+/[\w.-]+(?![\w.-])"
+    r"|\bbranch(?:es)?\b"
+    r"|\b(?:to|into|onto)\s+(?:the\s+)?(?:main|master)\b")
+
+
+def _capability_answer_forbidden(text, intent: Intent) -> bool:
+    """THE ONE FAMILY-WIDE GATE: may a capability explanation answer this?
+
+    True means the message is a command, or names the specific thing it would
+    act on, so the intent is dropped and the sentence keeps its path to the
+    model. `text` is the message as typed/spoken; the target is read from the
+    same tidied sentence the matchers ran on.
+    """
+    if intent.name not in _CAPABILITY_EXPLANATION_INTENTS:
+        return False
+    if (intent.name == "github_self"
+            and intent.f.get("shape") in _CAPABILITY_EXEMPT_SHAPES):
+        return False
+    if _CAPABILITY_TARGET.search(normalize_spoken_command(text)):
+        return True
+    raw = str(text or "")
+    if _CAPABILITY_IMPERATIVE_LEAD.match(raw):
+        return True
+    return not _CAPABILITY_QUESTION_LEAD.match(raw)
+
+
 def _self_github(s: str) -> Optional[Intent]:
     """GitHub questions answered from the real surface, never by the model.
 
     Whole-sentence shapes only, in the order a person would be surprised to
     see them interchanged. A sentence this does not claim keeps its old path.
+
+    A sentence that is a COMMAND naming a target - a pull request/issue
+    number, a repository or a branch - never gets an answer from here: the
+    family-wide gate `_capability_answer_forbidden` drops it in `match()` so
+    the model and its tools own it (2026-11-22).
     """
     # FIRST, so the post-save receipt (and the clone/push/pull never-list) wins
     # over the newer store answers below and over the model: this is the
@@ -15726,9 +15863,9 @@ def _self_github(s: str) -> Optional[Intent]:
             and (_GITHUB_THING.search(s) or "merge" in s)
             and not re.search(r"\b(?:token|account|connection|link)\b", s)):
         return Intent("github_self", {"shape": "merge"})
-    if _GITHUB_ACTION_ASK.search(s) and re.match(
+    if (_GITHUB_ACTION_ASK.search(s) and re.match(
             r"^(?:(?:can|could|would|will|do)\s+(?:you|jarvis)\b|"
-            r"(?:please\s+)?(?:comment|open|create|file|re-?run|rerun)\b)", s):
+            r"(?:please\s+)?(?:comment|open|create|file|re-?run|rerun)\b)", s)):
         return Intent("github_self", {"shape": "action"})
     return None
 
