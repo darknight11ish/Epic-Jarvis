@@ -43,6 +43,21 @@ ignore = [
   "RUSTSEC-2026-0370",  # zvariant, unmaintained (Tauri's Linux zbus tree; never in the Windows build)
   "RUSTSEC-2026-0371",  # zbus_names, unmaintained (same Linux-only Tauri tree)
   "RUSTSEC-2026-0372",  # zvariant_derive, unmaintained (same Linux-only Tauri tree)
+  # RUSTSEC-2026-0594 - cookie 0.18.2: a private cookie's AES-GCM nonce can
+  # repeat in a process that fork()s without exec(). Published 2026-11-23, the
+  # day this was written. It cannot apply to this product, and the advisory
+  # says so itself: its [affected] section lists only Unix-like systems
+  # ("linux", "macos", "freebsd", "netbsd", "openbsd", "dragonfly", "solaris",
+  # "illumos", "android", "ios") with no Windows entry, and its "Who is
+  # affected" section says applications that never fork - "including all
+  # applications on Windows" - are not affected. `cookie` arrives transitively
+  # through tauri, tauri-runtime and wry; this app is built and shipped for
+  # Windows 11 only. The fix is cookie 0.18.3, and the bump is the better
+  # answer as soon as it can be had: measured 2026-11-23, this machine's cargo
+  # could not reach crates.io (schannel SEC_E_NO_CREDENTIALS on every retry)
+  # and its local index cache knew only up to 0.18.2. Bump it on the next
+  # dependency refresh that has a working registry, and this line comes out.
+  "RUSTSEC-2026-0594",
 ]
 
 [sources]
