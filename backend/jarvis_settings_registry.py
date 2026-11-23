@@ -357,6 +357,21 @@ SECTIONS: tuple = (
     Section("focus-presets", ("focus presets", "the focus presets", "presets",
                               "the preset selector", "choose a focus preset",
                               "what are you about to work on"), app="desktop"),
+    # "Startup preset" (2026-11-22, the startup-preset settings PR): the preset
+    # Atlas loads by itself when it starts - the ten focus presets plus "No
+    # preset". DESKTOP ONLY: the card is settings.html's id="startup-preset"
+    # and its ONE write is the narrow `set_startup_preset` command in
+    # focus_presets.rs, which posts that ONE route (/api/work/startup-preset)
+    # and returns the PC's own JSON unchanged. The phone has no row for it, and
+    # cannot choose what the PC loads before it is asked anything; section 8 of
+    # docs/ARCHITECTURE.md records that one-sided decision and
+    # tools/check_parity.py classifies the route "deliberate" (PC-only). The row
+    # becomes `app="both"` in the same one-word way the focus-presets row above
+    # says if the phone ever lands its own selector.
+    Section("startup-preset", ("startup preset", "the startup preset",
+                               "the preset jarvis starts with",
+                               "which preset jarvis starts with",
+                               "the start-up preset"), app="desktop"),
     # "Your second graphics card" (corrected 2026-10-10, the parity audit): the
     # phone has SecondCardPlate.kt - all four rows, `MenuPlaces.INSIDE` - under
     # the same menu id `settings.second-card`, which `jarvis_menus.py` already
