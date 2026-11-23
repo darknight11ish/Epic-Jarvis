@@ -6688,13 +6688,25 @@ TOOLS: dict = {
     "github_rerun_workflow": Tool(
         "github_rerun_workflow",
         "Ask GitHub to run an existing workflow run AGAIN, with the same code and "
-        "settings it ran with before. You see which run on an approval card first "
-        "and nothing re-runs without your yes. It changes no code and no setting, "
-        "and it never merges, pushes, commits, closes or deletes anything.",
+        "settings it ran with before. Name it EITHER by its run id, OR by the pull "
+        "request number plus the name of the check on it (\"face-shots\"): the "
+        "check form reads that pull request's head-commit checks and finds the "
+        "run behind the name, so the model never has to know a run id. You see "
+        "which run (and which check) on an approval card first and nothing "
+        "re-runs without your yes. It changes no code and no setting, and it "
+        "never merges, pushes, commits, closes or deletes anything.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
-            "run_id": {"type": "string", "description": "the workflow run's number"}},
-         "required": ["repo", "run_id"]},
+            "run_id": {"type": "string",
+                       "description": "the workflow run's number, when it is known"},
+            "pr": {"type": "string",
+                   "description": "a pull request number, with `check`, when the "
+                                  "check's name is what you know"},
+            "check": {"type": "string",
+                      "description": 'the check to re-run, e.g. "face-shots" - '
+                                     "case-insensitive, and a matrix suffix such as "
+                                     '" (1/2)" is understood'}},
+         "required": ["repo"]},
         _prepare_github_rerun_workflow, _run_github),
     # ONE new, empty repository on the owner's own account (2026-11-09, the
     # owner's "create a repository called Fitness Band"). A card first, always:
