@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-startup-preset"
+description = "Enables the set_startup_preset command without any pre-configured scope."
+commands.allow = ["set_startup_preset"]
+
+[[permission]]
+identifier = "deny-set-startup-preset"
+description = "Denies the set_startup_preset command without any pre-configured scope."
+commands.deny = ["set_startup_preset"]

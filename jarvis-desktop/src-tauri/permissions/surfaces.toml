@@ -2278,6 +2278,27 @@ permissions = [
   "allow-apply-focus-preset",
 ]
 
+# The Settings page's "Startup preset" row (2026-11-22). The owner asked for the
+# General preset to load by itself when Atlas starts, and for the choice to be
+# settable from the app. The setting lives on the PC (`startup-preset.json`, read
+# back beside the presets as `GET /api/work`'s `startup_preset` block); the read
+# half needs no grant of its own because it comes through `allow-get-focus-presets`
+# above, so this set is the ONE write and nothing else.
+#
+# ONE preset id, `POST /api/work/startup-preset`, empty to clear it. The page
+# holds no token (apps security audit M2), so the write is one narrow Rust command
+# that adds it - not a general "post any route" door, and not a grant of any other
+# setting's write. Setting a preset is a standing change to what the PC does on
+# its own every time it starts, so the PC raises its ONE `change_own_config` card
+# and nothing is written before the yes; clearing is a tightening and is instant.
+# Held on a stale link like every other write.
+[[set]]
+identifier = "startup-preset"
+description = "Set or clear the ONE preset Atlas loads by itself when it starts: `POST /api/work/startup-preset`, one preset id, empty to clear. Setting one raises the PC's ONE approval card and nothing is written before the yes; clearing is instant. Held on a stale link; no other setting is reachable."
+permissions = [
+  "allow-set-startup-preset",
+]
+
 # The HUD Reminders tab's writes (2026-10-21, the owner's request for a
 # dedicated Reminders menu in the HUD). Reads do NOT need this set: the tab's
 # own `GET /api/schedule` goes through `hud-link`'s `hud-get`, where the words

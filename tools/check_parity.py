@@ -205,6 +205,15 @@ CLASSIFICATION = {
     # the one change_own_config card; the phone reads `cloud.escalate` from
     # /api/presets and never writes it.
     "/api/work/cloud-escalate": ("deliberate", "The standing cloud-escalation switch is PC-only: turning it ON is a loosening that needs the one change_own_config card, answered on the PC it belongs to. The phone reads `cloud.escalate` from /api/presets and never writes it (ARCHITECTURE section 8, JARVIS-API section 145)."),
+    # The start-up preset (2026-11-22): PC-only. `GET /api/work` carries it
+    # read-only as `startup_preset: {preset, why}`, and the ONE writer is
+    # `POST /api/work/startup-preset`, reached from Settings -> "Startup preset"
+    # through the narrow `set_startup_preset` command (focus_presets.rs). The
+    # phone shows no control: a phone cannot decide what the PC loads before
+    # anyone is using it, and the chat sentence ("load the General preset when
+    # you start") already sets the same file from either app. ARCHITECTURE
+    # section 8 and JARVIS-API section 232 record the decision.
+    "/api/work/startup-preset": ("deliberate", "The start-up preset is a standing choice about what THIS PC loads before anyone uses it, so it is set on the PC only: the desktop's Settings -> Startup preset card reads it from /api/work and writes it through the narrow set_startup_preset command, where setting one keeps the PC's ONE change_own_config card and clearing is instant. The phone shows no control and never calls the route; the same setting can still be changed from either app's chat (ARCHITECTURE section 8, JARVIS-API section 232)."),
     # Backend: jarvis_presets.cloud_escalate() (presets.patch) plus
     # cloud-escalate.patch for the chat half. `/api/work/apply` itself is
     # classified ONCE, below, as ported: the phone posts it for the five

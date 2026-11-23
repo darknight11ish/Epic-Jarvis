@@ -1444,6 +1444,13 @@ pub fn run() {
             // token, so it calls this instead of posting; the PC raises its ONE
             // card for ON and decides, and OFF is instant.
             focus_presets::hud_cloud_escalate,
+            // The Settings page's "Startup preset" row (2026-11-22): ONE preset
+            // id, `POST /api/work/startup-preset`, empty to clear it. Setting one
+            // is a standing change to what this PC does on its own every time it
+            // starts, so the PC raises its ONE card; clearing is instant. Its own
+            // narrow command - no page and no caller gets a general "post any
+            // route" door - and granted to the Settings window only.
+            focus_presets::set_startup_preset,
             tutorials::get_tutorials,
             tutorials::mark_tutorial,
             tutorials::get_faq,

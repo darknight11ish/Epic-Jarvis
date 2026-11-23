@@ -184,6 +184,13 @@ fn main() {
             // token; the PC raises its ONE card for ON, OFF is instant, and the
             // checkbox is drawn from a refetch of the PC's own answer.
             "hud_cloud_escalate",
+            // The Settings page's "Startup preset" row (2026-11-22, the same
+            // feature as `GET /api/work`'s `startup_preset` block): ONE preset
+            // id, `POST /api/work/startup-preset`, the empty string clearing it.
+            // Setting one is a standing change to what the PC does on its own
+            // every time it starts, so the PC raises its ONE card and nothing is
+            // written before the yes; clearing is instant. Settings window only.
+            "set_startup_preset",
             // The HUD's face models icon (2026-10-28, the owner: "add a jarvis
             // model icon to the left column of the jarvis desktop that has all
             // of the jarvis models (face models)"): ONE face id from the
