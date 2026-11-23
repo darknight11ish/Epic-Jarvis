@@ -6687,14 +6687,17 @@ TOOLS: dict = {
         _prepare_github_open_issue, _run_github),
     "github_rerun_workflow": Tool(
         "github_rerun_workflow",
-        "Ask GitHub to run an existing workflow run AGAIN, with the same code and "
-        "settings it ran with before. You see which run on an approval card first "
-        "and nothing re-runs without your yes. It changes no code and no setting, "
-        "and it never merges, pushes, commits, closes or deletes anything.",
+        "Ask GitHub to run an existing workflow run AGAIN. Name it by its run id, "
+        "or by a pull request number plus the check's name (\"face-shots\"). You "
+        "approve it on a card first; it changes no code or setting and never "
+        "merges, pushes, commits, closes or deletes anything.",
         {"type": "object", "properties": {
-            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
-            "run_id": {"type": "string", "description": "the workflow run's number"}},
-         "required": ["repo", "run_id"]},
+            "repo": {"type": "string", "description": "owner/name"},
+            "run_id": {"type": "string", "description": "the run id, when known"},
+            "pr": {"type": "string", "description": "PR number, with `check`"},
+            "check": {"type": "string",
+                      "description": 'the check to re-run, e.g. "face-shots"'}},
+         "required": ["repo"]},
         _prepare_github_rerun_workflow, _run_github),
     # ONE new, empty repository on the owner's own account (2026-11-09, the
     # owner's "create a repository called Fitness Band"). A card first, always:

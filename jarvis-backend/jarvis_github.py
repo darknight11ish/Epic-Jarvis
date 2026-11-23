@@ -31,6 +31,22 @@ main, and the token is still never printed, logged, put in a git argument or
 written to a file. `backend/test_github_tools.py` and
 `backend/test_tool_profiles.py` pin each of the three.
 
+RE-RUNNING A NAMED CHECK (the external review's ruling 5.2, 2026-11-22)
+
+Measured live: the owner asked for "the face-shots check on PR 1471" to be run
+again, and the model looped for about 48 seconds and gave up. It was right to
+give up - `github_rerun_workflow` needed a run id and NO read this model has
+returned one, so a legitimate action was impossible even though the tool
+existed. Two changes fix it and neither adds a gate action, a card or a base
+row:
+
+  * `github_ci_status` carries the workflow run's id, its attempt number and
+    the failing check's own run id, so a reader can act on the answer it was
+    just given.
+  * `github_rerun_workflow` accepts `(pr, check)` as well as `run_id`: it
+    resolves the id from that pull request's head-commit check runs and puts
+    the resolved check name and id on the SAME `github_rerun_workflow` card.
+
 The owner's decision of 2026-11-10 (Gemini ruling Q1, "Everything at once")
 reversed the read/comment-only boundary for two more actions, each behind its
 OWN one-shot card and never auto-approved:
@@ -84,11 +100,16 @@ that same secret and invents no second way to store one.
 THE SHAPE, WHICH IS THE POINT
 
     plan_*(args)  -> Request    works out exactly what would be sent, and sends
-                                nothing. No socket is opened - with one READ
-                                only: `plan_merge_pr` reads the pull request
-                                itself when it has no usable head commit, title
-                                and target branch from the model (2026-11-15),
-                                and that read becomes the merge's pin.
+                                nothing. No socket is opened - with TWO reads
+                                only, both plain GETs that change nothing:
+                                `plan_merge_pr` reads the pull request itself
+                                when it has no usable head commit, title and
+                                target branch from the model (2026-11-15), and
+                                that read becomes the merge's pin; and
+                                `plan_rerun` reads a pull request's head-commit
+                                check runs when it is asked for a `(pr, check)`
+                                re-run (2026-11-22), and that read becomes the
+                                run id on its card.
     describe(r)   -> str        the words on the approval card.
     run(r, ...)                 only ever called after a person said yes.
 
@@ -318,6 +339,11 @@ MAX_DESCRIPTION = 350
 #: bound is never reached by a real title; it stops a long one pushing the rest
 #: of the card off, and the sanitizer marks where it cut.
 MAX_TITLE_CHARS = 300
+
+#: The longest check name `github_rerun_workflow` will resolve and print. GitHub's
+#: check names are job names - real ones are short - and this only stops a wall
+#: of model-written text from reaching the approval card (2026-11-22).
+MAX_CHECK_NAME = 100
 
 #: The gate actions this module works under. These names are also the
 #: `[autonomy.tiers]` keys and the `_RISK` rows in `jarvis_gate.py`
@@ -1189,6 +1215,10 @@ class Request:
       `scope`/`state` `github_list`'s closed scope, and its state filter (`open`
                       by default) when the scope is `pulls` or `issues`. They are
                       kept so the ANSWER can say "closed" instead of "open".
+      `check`         `github_rerun_workflow`'s resolved check name, when the
+                      request was built from a `(pr, check)` pair rather than an
+                      explicit run id (2026-11-22). Kept so the card and the
+                      request name the same check.
       `repo`          The repository this request NAMES, exactly as it is in the
                       addresses. `run()` resolves it with GitHub before anything
                       else is sent (2026-11-17, Q5) and refuses a name that does
@@ -1232,6 +1262,7 @@ class Request:
     old_body: str = ""            # github_edit_pr: the body the card showed as "before"
     scope: str = ""               # github_list: the closed scope it read
     state: str = ""               # github_list: "open" | "closed" | "all"
+    check: str = ""               # github_rerun_workflow: the check it resolved
     ci: bool = False              # github_ci_status: newest run, then its jobs
     runs_list: bool = False       # github_list: the runs LIST, not one CI answer
     refs: tuple = ()              # branch names the card names, checked first
@@ -2906,20 +2937,226 @@ def plan_open_issue(args: Optional[dict] = None) -> Request:
     )
 
 
-def plan_rerun(args: Optional[dict] = None) -> Request:
-    """Re-run ONE workflow run that already exists, exactly as it ran before."""
+def _check_check_name(value) -> str:
+    """The check name the model named, cleaned and bounded - it goes on a card.
+
+    Model-written text, not fetched text: `_refuse_hidden` refuses a character
+    that could make the card draw as something other than what it says, exactly
+    as every other model-written field on a card is refused rather than
+    rewritten (2026-11-22).
+    """
+    name = " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())
+    if not name:
+        raise GitHubError("Jarvis needs the name of the check to re-run - for "
+                          'example "face-shots" - and there was none, so nothing '
+                          "was asked.")
+    name = _refuse_hidden(name, "check name")
+    if len(name) > MAX_CHECK_NAME:
+        raise GitHubError(f"That check name is longer than Jarvis will show on a "
+                          f"card ({MAX_CHECK_NAME} characters), so nothing was "
+                          f"asked. Give the check's name as GitHub shows it.")
+    return name
+
+
+def _rerun_candidate_words(one: dict) -> str:
+    """ONE run a `(pr, check)` re-run matched, for the ambiguous refusal."""
+    name = one.get("run_name") or one.get("check") or "a workflow"
+    said = f"{name} (run {one.get('run_id')}"
+    if one.get("attempt"):
+        said += f", attempt {one['attempt']}"
+    return said + ")"
+
+
+def _resolve_rerun_target(repo: str, number: str, wanted: str, fetch=None) -> dict:
+    """The one workflow run behind a check name on a pull request, or a refusal.
+
+    RULING 5.2 (2026-11-22). Three GETs and nothing changes: the pull request
+    (its head commit), that commit's check runs (the check NAME the owner said,
+    and the run id inside each check's own `details_url`), and that commit's
+    workflow runs (a fallback match by run name, plus the attempt number). A
+    FAILING match is preferred over a passing one, because "re-run the
+    face-shots check" after a red CI answer means the red one.
+
+    Returns `{"run_id", "asked", "check", "run_name", "attempt", "conclusion"}`.
+    Raises `GitHubError` with ONE plain sentence when no check matches, when
+    several runs match and the name is ambiguous, or when GitHub's answer could
+    not be read - every sentence says what was looked for and that nothing was
+    re-run.
+    """
+    try:
+        token = _need_token()
+    except GitHubError as exc:
+        raise GitHubError(str(exc)) from None
+    fetch = fetch or _default_fetch
+    headers = _headers(token)
+    pr_doc, err = _read(fetch, f"{_repo_path(repo)}/pulls/{number}",
+                        headers, token)
+    if err:
+        raise GitHubError(
+            f'Jarvis could not read pull request #{number} in {repo} to find the '
+            f'check named "{wanted}", so nothing was re-run. {err}')
+    head = pr_doc.get("head") if isinstance(pr_doc, dict) else None
+    sha = str((head or {}).get("sha") or "").strip().lower()
+    if not _SHA.match(sha):
+        raise GitHubError(
+            f"GitHub did not name pull request #{number}'s head commit in {repo}, "
+            f'so Jarvis could not look for the check named "{wanted}", and '
+            f"nothing was re-run.")
+    checks, checks_err = _check_runs(fetch, headers, token, repo, sha)
+    runs_doc, runs_err = _read(fetch, f"{_repo_path(repo)}/actions/runs"
+                                      f"?head_sha={urllib.parse.quote(sha, safe='')}"
+                                      f"&per_page={CI_PER_PAGE}", headers, token)
+    runs = []
+    if isinstance(runs_doc, dict):
+        runs = [one for one in (runs_doc.get("workflow_runs") or ())
+                if isinstance(one, dict)]
+    attempts = {str(one.get("id") or "").strip():
+                str(one.get("run_attempt") or "").strip() for one in runs}
+
+    # 1. The check runs themselves: the name the owner said, and the run id in
+    #    the check's own details address. A failing check is preferred.
+    matches = [one for one in checks
+               if _names_this_check(_check_name(one), wanted)]
+    failing = [one for one in matches if _check_verdict(one)[0] == "failed"]
+    candidates = []
+    for one in (failing or matches):
+        run_id = _check_run_id(one)
+        if not run_id:
+            continue
+        candidates.append({"run_id": run_id, "check": _check_name(one),
+                           "run_name": "",
+                           "attempt": attempts.get(run_id, ""),
+                           "conclusion": str(one.get("conclusion") or "")})
+
+    # 2. The commit's workflow runs by their OWN name - the fallback for a check
+    #    GitHub reports without a run address, or a check whose name IS the run.
+    if not candidates:
+        for one in runs:
+            run_id = str(one.get("id") or "").strip()
+            name = _clean_github_text(one.get("name"), wrap=False)
+            if not run_id.isdigit() or not _names_this_check(name, wanted):
+                continue
+            candidates.append({"run_id": run_id, "check": name or wanted,
+                               "run_name": name,
+                               "attempt": str(one.get("run_attempt") or "").strip(),
+                               "conclusion": str(one.get("conclusion") or "")})
+        failed = [one for one in candidates
+                  if one["conclusion"] in ("failure", "timed_out",
+                                           "startup_failure")]
+        candidates = failed or candidates
+
+    # ONE, at most, per run id: a matrix matching on three legs of the SAME run is
+    # not ambiguous - re-running the run re-runs all of them.
+    unique, seen = [], set()
+    for one in candidates:
+        if one["run_id"] in seen:
+            continue
+        seen.add(one["run_id"])
+        unique.append(one)
+
+    if not unique:
+        if checks_err or runs_err:
+            why = checks_err or runs_err
+            raise GitHubError(
+                f"Jarvis could not read the checks or the workflow runs on pull "
+                f"request #{number} in {repo} ({why}), so it could not tell "
+                f'whether a check named "{wanted}" exists, and nothing was '
+                f"re-run.")
+        raise GitHubError(
+            f'Jarvis looked for a check named "{wanted}" on pull request '
+            f"#{number} in {repo}, read that pull request's head-commit checks "
+            f"and the names of its workflow runs, and found none - so nothing "
+            f"was re-run.")
+    if len(unique) > 1:
+        named = "; ".join(_rerun_candidate_words(one)
+                          for one in unique[:MAX_DETAIL_ITEMS])
+        raise GitHubError(
+            f'Jarvis found more than one run for the check named "{wanted}" on '
+            f"pull request #{number} in {repo} - {named} - so it cannot tell "
+            f"which one to re-run, and nothing was re-run; give the workflow run "
+            f"id itself to choose one.")
+    chosen = unique[0]
+    return {"run_id": chosen["run_id"], "asked": wanted,
+            "check": chosen["check"] or wanted,
+            "run_name": chosen["run_name"], "attempt": chosen["attempt"],
+            "conclusion": chosen["conclusion"]}
+
+
+def plan_rerun(args: Optional[dict] = None, *, fetch=None) -> Request:
+    """Re-run ONE workflow run that already exists, by run id or by a check name.
+
+    THE TWO FORMS (2026-11-22, ruling 5.2). They are the same action, the same
+    tier and the same card:
+
+      * `run_id` - exactly as before: one POST to that run's own rerun address;
+      * `pr` + `check` - the model names the pull request and the check it means,
+        and Jarvis reads that pull request's head-commit check runs to find the
+        run behind the name (`_resolve_rerun_target`), then builds the SAME one
+        POST with the id it found. Before this, a model asked to "re-run the
+        face-shots check on PR 1471" had no read that returned a run id, so a
+        legitimate action was impossible even though the tool existed.
+
+    The resolution is a plan-time READ - three GETs that change nothing - the
+    same shape `plan_merge_pr` already uses to pin a merge: the card has to name
+    the run id it will re-run, so that id has to be read before the card exists.
+    """
     args = args or {}
     repo = _check_repo(args.get("repo"))
-    run_id = _check_number(args.get("run_id"), "workflow run")
+    run_id = str(args.get("run_id") or "").strip()
+    pr = str(args.get("pr") or "").strip()
+    check = str(args.get("check") or args.get("check_name") or "").strip()
+    if run_id:
+        run_id = _check_number(run_id, "workflow run")
+        return Request(
+            ACTION_RERUN,
+            f"Jarvis will ask GitHub to run workflow run {run_id} in {repo} again, "
+            f"with the same code and settings it ran with before.",
+            (Step("POST", f"{_repo_path(repo)}/actions/runs/{run_id}/rerun"),),
+            touches=("This starts one CI run that has already run before. It changes "
+                     "no code and no repository setting; it only spends the work of "
+                     "running the checks again."),
+            repo=repo,
+            number=run_id,
+        )
+    if not pr and not check:
+        raise GitHubError(
+            "Jarvis needs to know which workflow run to run again - give the "
+            "workflow run's id, or the pull request number and the name of the "
+            'check on it (for example pr 1471 and check "face-shots"). Nothing '
+            "was sent.")
+    if not pr or not check:
+        raise GitHubError(
+            "Jarvis needs BOTH the pull request number and the check name to "
+            "find the run to re-run, and only one of them was given. Nothing "
+            "was sent.")
+    number = _check_number(pr, "pull request")
+    wanted = _check_check_name(check)
+    found = _resolve_rerun_target(repo, number, wanted, fetch)
+    run_id = found["run_id"]
+    resolved = found["check"] or wanted
+    added = (f' (whose own name on GitHub is "{resolved}")'
+             if resolved.lower() != wanted.lower() else "")
+    attempt = found["attempt"]
     return Request(
         ACTION_RERUN,
         f"Jarvis will ask GitHub to run workflow run {run_id} in {repo} again, "
-        f"with the same code and settings it ran with before.",
+        f"with the same code and settings it ran with before. It is the run "
+        f'behind the check "{wanted}"{added} on pull request #{number}'
+        + (f", which GitHub reports as attempt {attempt}." if attempt else "."),
         (Step("POST", f"{_repo_path(repo)}/actions/runs/{run_id}/rerun"),),
+        shows="\n".join([
+            f"Repository: {repo}",
+            f"Pull request: #{number}",
+            f'Check: "{wanted}"' + (f' (GitHub: "{resolved}")' if added else ""),
+            f"Workflow run: {run_id}"
+            + (f" (attempt {attempt})" if attempt else ""),
+        ]),
         touches=("This starts one CI run that has already run before. It changes "
                  "no code and no repository setting; it only spends the work of "
                  "running the checks again."),
         repo=repo,
+        number=run_id,
+        check=resolved,
     )
 
 
@@ -4763,6 +5000,57 @@ def _check_name(run_doc: dict) -> str:
         return "a check"
     name = (run_doc.get("name") or run_doc.get("conclusion") or "a check")
     return _clean_github_text(name, wrap=False) or "a check"
+
+
+#: The workflow run id inside a check run's `details_url`. GitHub Actions reports
+#: a job's check run with `details_url` =
+#: `https://github.com/{owner}/{repo}/actions/runs/{run_id}/job/{job_id}`, so the
+#: number between `runs/` and `job/` is the run that job belongs to.
+_DETAILS_RUN = re.compile(r"/actions/runs/(\d+)")
+
+
+def _check_run_id(one) -> str:
+    """The workflow run id a check run belongs to, or "" - digits only, always.
+
+    THE READ THAT WAS MISSING (2026-11-22, ruling 5.2). A model asked to re-run
+    "the face-shots check" had no way to learn a run id: the CI answer named the
+    failing checks and never the run they were in. The id is read out of the
+    check's own `details_url` here, and only DIGITS are ever returned - the
+    fetched address is not used as an address, exactly as `_ci_failing_checks`
+    already treats a job id. A value that is not digits is "no id", never a
+    number this module would put in a URL.
+    """
+    if not isinstance(one, dict):
+        return ""
+    found = _DETAILS_RUN.search(str(one.get("details_url") or ""))
+    if not found:
+        return ""
+    run_id = found.group(1)
+    return run_id if run_id.isdigit() else ""
+
+
+def _names_this_check(name: str, wanted: str) -> bool:
+    """True when a check's own name IS the one asked for, matrix suffix aside.
+
+    A GitHub Actions matrix reports one job per leg as `face-shots (1/2)`,
+    `face-shots (2/2)`, and a workflow's run is named `face-shots` - so a name
+    given by a person ("face-shots") has to match both. The tolerance is a
+    SUFFIX after a separator, never a bare prefix: "face" must not match
+    "face-shots" and `backend` must not match `backend-windows`, the same
+    whole-name rule `_names_in` keeps elsewhere in this module. Case is ignored,
+    because GitHub's own check names are matched that way in a person's head.
+    """
+    name = str(name or "").strip().lower()
+    wanted = str(wanted or "").strip().lower()
+    if not name or not wanted:
+        return False
+    if name == wanted:
+        return True
+    separators = (" (", " [", " /", ":", " - ", " \u2013 ")
+    for longer, shorter in ((name, wanted), (wanted, name)):
+        if longer.startswith(shorter) and longer[len(shorter):].startswith(separators):
+            return True
+    return False
 
 
 def _check_verdict(one) -> tuple:
@@ -7046,6 +7334,52 @@ def _newest_run(doc) -> tuple:
     return newest, name, (f" on {branch}" if branch else "")
 
 
+def _ci_run_id_line(newest: dict) -> str:
+    """The newest run's own id and attempt, in words - the fact a re-run needs.
+
+    RULING 5.2 (2026-11-22). `github_ci_status` now names the workflow run, so a
+    reader can pass its id to `github_rerun_workflow` (or give that tool a pull
+    request and a check name, which resolves the same id). Returns "" when
+    GitHub named no run id, so the answer stays exactly what it was before
+    rather than claiming a number it does not have.
+    """
+    run_id = str((newest or {}).get("id") or "").strip()
+    if not run_id.isdigit():
+        return ""
+    attempt = str((newest or {}).get("run_attempt") or "").strip()
+    return (f"\nThe newest run's id is {run_id}"
+            + (f" (attempt {attempt})" if attempt else "") + ".")
+
+
+def _ci_run_ids_line(runs: list) -> str:
+    """The workflow run ids on that commit, each with its name and attempt, or "".
+
+    RULING 5.2 (2026-11-22). A pull request's CI answer is about ONE commit and
+    can hold several workflow runs - that is exactly why it reads the commit's
+    checks instead of one "newest" run - so every run id is named, bounded by
+    `MAX_DETAIL_ITEMS`, with its own name and attempt. That is the fact a reader
+    acts on: it can re-run one by id, or name the check and let
+    `github_rerun_workflow` resolve it.
+    """
+    rows = []
+    for one in runs or ():
+        if not isinstance(one, dict):
+            continue
+        run_id = str(one.get("id") or "").strip()
+        if not run_id.isdigit():
+            continue
+        name = _clean_github_text(one.get("name"), wrap=False) or "a workflow"
+        attempt = str(one.get("run_attempt") or "").strip()
+        rows.append(f"{name} (run {run_id}"
+                    + (f", attempt {attempt}" if attempt else "") + ")")
+    if not rows:
+        return ""
+    shown = rows[:MAX_DETAIL_ITEMS]
+    more = len(rows) - len(shown)
+    return ("\nThe workflow run id(s) on that commit: " + "; ".join(shown)
+            + (f", and {more} more" if more else "") + ".")
+
+
 def _ci_commit_line(newest: dict) -> str:
     """The newest run's own head commit, in words - the read that NAMES a commit.
 
@@ -7074,6 +7408,52 @@ def _ci_commit_line(newest: dict) -> str:
     return f"\nThe newest run's head commit is {sha}."
 
 
+def _check_row_words(item: dict) -> str:
+    """ONE failing check as the CI answer names it: check, result, and its run.
+
+    RULING 5.2 (2026-11-22). The run id and attempt are printed BESIDE the check
+    because that is the fact a re-run needs: before this the answer named the
+    failing check and no id at all, so a model asked to re-run "the face-shots
+    check" had nothing to pass to `github_rerun_workflow` and gave up. A check
+    with no readable run id is printed exactly as it was before - no invented
+    number.
+    """
+    said = (f"{item.get('name') or 'a check'}: "
+            f"{item.get('conclusion') or 'no result'}")
+    run_id = str(item.get("run_id") or "").strip()
+    if run_id.isdigit():
+        attempt = str(item.get("run_attempt") or "").strip()
+        said += (f" (run {run_id}" + (f", attempt {attempt}" if attempt else "")
+                 + ")")
+    return said
+
+
+def _failed_check_rows(failed: list, checks: list, runs: list) -> list:
+    """The failed `(name, conclusion)` pairs as rows, each with its own run id.
+
+    RULING 5.2 (2026-11-22). The run a red check belongs to is printed beside it,
+    read from the check run's own `details_url` (`_check_run_id`), and the
+    attempt number from that run's entry in the commit's run list when GitHub
+    sent one. A check GitHub names no run for keeps exactly the row it had
+    before - this adds the fact, it does not invent one.
+    """
+    attempts = {str(one.get("id") or "").strip():
+                str(one.get("run_attempt") or "").strip()
+                for one in (runs or ()) if isinstance(one, dict)}
+    by_name = {}
+    for one in checks or ():
+        if isinstance(one, dict):
+            by_name.setdefault(_check_name(one).lower(), one)
+    rows = []
+    for name, conclusion in failed or ():
+        doc = by_name.get(str(name or "").lower()) or {}
+        run_id = _check_run_id(doc)
+        rows.append({"name": name, "conclusion": conclusion or "no result",
+                     "run_id": run_id,
+                     "run_attempt": attempts.get(run_id, "")})
+    return rows
+
+
 def _ci_failed_lines(headline: str, evidence: dict) -> list:
     """The failing half of a CI answer: every failed check, ONE bounded log tail.
 
@@ -7095,8 +7475,7 @@ def _ci_failed_lines(headline: str, evidence: dict) -> list:
         return lines
     lines.append(f"{len(checks)} failing check(s):")
     for item in checks[:MAX_DETAIL_ITEMS]:
-        lines.append(f"  {item.get('name') or 'a check'}: "
-                     f"{item.get('conclusion') or 'no result'}")
+        lines.append("  " + _check_row_words(item))
     if len(checks) > MAX_DETAIL_ITEMS:
         lines.append(f"  ... and {len(checks) - MAX_DETAIL_ITEMS} more, not shown")
     excerpt = _clean_github_text(evidence.get("excerpt"), limit=MAX_LOG_CHARS)
@@ -7211,11 +7590,19 @@ def _ci_runs_count(runs: list) -> str:
 
 
 def _ci_run_row(one: dict) -> dict:
-    """ONE FAILED workflow run as the check-shaped row the failing half names."""
+    """ONE FAILED workflow run as the check-shaped row the failing half names.
+
+    It carries the run's OWN id and attempt (ruling 5.2, 2026-11-22), so a red
+    run named in a commit's answer says the id a re-run needs just as a red
+    check run does.
+    """
     conclusion = _clean_github_text(one.get("conclusion"), wrap=False)
+    run_id = str(one.get("id") or "").strip()
     return {"name": (_clean_github_text(one.get("name"), wrap=False)
                      or "a workflow"),
-            "conclusion": conclusion or "no result"}
+            "conclusion": conclusion or "no result",
+            "run_id": run_id if run_id.isdigit() else "",
+            "run_attempt": str(one.get("run_attempt") or "").strip()}
 
 
 def _ci_run_names(runs: list) -> str:
@@ -7345,9 +7732,20 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
     subject - because this read is the one that answers "what is the latest
     commit on main?". The pull request form does not need it: its sentences are
     already about the checks on the commit it names.
+
+    AND THE RUN IDS (ruling 5.2, 2026-11-22). Every answer now names the workflow
+    run it is about: a commit question (`who`) names every run on that commit
+    through `_ci_run_ids_line`, and a failing check names its own run id in
+    `_check_row_words`; a branch question names the newest run's id and attempt
+    through `_ci_run_id_line`. That is the fact a re-run needs, and it was the
+    only thing missing when a model asked to re-run a named check and gave up.
     """
     runs = doc.get("workflow_runs") if isinstance(doc, dict) else None
     runs = [x for x in (runs or ()) if isinstance(x, dict)]
+    # A COMMIT question can name every run ON that commit; a branch read holds
+    # runs over TIME on different commits, so it names only its newest run (the
+    # sentence below), never a list that would read as one commit's runs.
+    commit_runs = _ci_run_ids_line(runs) if who else ""
     if who:
         # ---- The COMMIT question (a pull request): its checks are the authority.
         checks = (checks_doc.get("check_runs")
@@ -7364,15 +7762,14 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
         if failed:
             return _red_lines(
                 f"The checks on {who} are NOT all green.", evidence,
-                [{"name": name, "conclusion": conclusion or "no result"}
-                 for name, conclusion in failed])
+                _failed_check_rows(failed, checks, runs)) + commit_runs
         if running:
             return (f"The checks on {who} have not all finished: "
                     + ", ".join(running[:MAX_DETAIL_ITEMS])
                     + (f", and {len(running) - MAX_DETAIL_ITEMS} more"
                        if len(running) > MAX_DETAIL_ITEMS else "")
                     + ". Nothing is known about them yet - ask again when they "
-                      "finish.")
+                      "finish.") + commit_runs
         if checks:
             if failed_runs:
                 # Green checks and a FAILED run on the SAME commit: both are
@@ -7387,7 +7784,7 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
             else:
                 text = (f"Every check on {who} finished successfully "
                         f"({len(checks)} checks on the head commit).")
-            return text + _ci_pending_runs_clause(pending_runs)
+            return text + _ci_pending_runs_clause(pending_runs) + commit_runs
         # No CHECK RUNS readable (a repository that only uses workflows, a
         # repository whose checks are all commit statuses - now merged into
         # `checks` before this point - or a check-runs answer that did not
@@ -7399,9 +7796,10 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
             text = _red_lines(
                 _ci_red_runs_headline(who, failed_runs, checks_doc), evidence,
                 [_ci_run_row(x) for x in failed_runs])
-            return text + _ci_pending_runs_clause(pending_runs)
+            return text + _ci_pending_runs_clause(pending_runs) + commit_runs
         if pending_runs:
-            return _ci_pending_runs_sentence(who, pending_runs, checks_doc)
+            return (_ci_pending_runs_sentence(who, pending_runs, checks_doc)
+                    + commit_runs)
         # Nothing red, nothing pending and no check runs: the newest-run
         # sentences below are the answer, which is the path a branch read takes
         # too.
@@ -7433,7 +7831,11 @@ def _ci_words(doc, evidence: Optional[dict] = None, *,
     # latest commit on main?" (2026-11-18, the field battery). It is said last so
     # every sentence above keeps its exact words, and it is the ONLY commit this
     # read can honestly name.
-    return said + _ci_commit_line(newest)
+    # AND ITS ID (ruling 5.2, 2026-11-22): the branch form names its newest run's
+    # id and attempt; a pull request that fell through to these sentences already
+    # has the full list of runs ON its commit, which is the more useful fact there.
+    return (said + _ci_commit_line(newest)
+            + (commit_runs or _ci_run_id_line(newest)))
 
 
 def _salvaged_runs(text: str) -> tuple:
@@ -7698,7 +8100,13 @@ def _ci_failing_checks(repo: str, newest: dict, fetch: Callable, token: str,
             continue
         checks.append({"name": _check_name(job),
                        "conclusion": _clean_github_text(conclusion, wrap=False),
-                       "id": str(job.get("id") or "")})
+                       "id": str(job.get("id") or ""),
+                       # THE RUN EACH FAILING JOB BELONGS TO (2026-11-22): every
+                       # job here is a job of `newest`, whose id and attempt are
+                       # the run id a re-run needs. A reader can act on it, and
+                       # `github_ci_status`'s answer prints both.
+                       "run_id": run_id,
+                       "run_attempt": str(newest.get("run_attempt") or "").strip()})
     if not checks:
         return {"checks": [],
                 "why": ("GitHub names no failed job on that run, so there is no "

@@ -591,22 +591,29 @@
   "type": "function",
   "function": {
    "name": "github_rerun_workflow",
-   "description": "Ask GitHub to run an existing workflow run AGAIN, with the same code and settings it ran with before. You see which run on an approval card first and nothing re-runs without your yes. It changes no code and no setting, and it never merges, pushes, commits, closes or deletes anything. \"Epic-Jarvis\" (that is darknight11ish/Epic-Jarvis), or \"my repo\"/\"this repository\", is a valid repository: Jarvis fills in the owner, so call the tool - do not ask who owns it. ",
+   "description": "Ask GitHub to run an existing workflow run AGAIN. Name it by its run id, or by a pull request number plus the check's name (\"face-shots\"). You approve it on a card first; it changes no code or setting and never merges, pushes, commits, closes or deletes anything. \"Epic-Jarvis\" (that is darknight11ish/Epic-Jarvis), or \"my repo\"/\"this repository\", is a valid repository: Jarvis fills in the owner, so call the tool - do not ask who owns it. ",
    "parameters": {
     "type": "object",
     "properties": {
      "repo": {
       "type": "string",
-      "description": "owner/name, e.g. \"owner/repo\""
+      "description": "owner/name"
      },
      "run_id": {
       "type": "string",
-      "description": "the workflow run's number"
+      "description": "the run id, when known"
+     },
+     "pr": {
+      "type": "string",
+      "description": "PR number, with `check`"
+     },
+     "check": {
+      "type": "string",
+      "description": "the check to re-run, e.g. \"face-shots\""
      }
     },
     "required": [
-     "repo",
-     "run_id"
+     "repo"
     ]
    }
   }

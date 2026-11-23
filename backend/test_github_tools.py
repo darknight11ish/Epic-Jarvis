@@ -4448,6 +4448,274 @@ def t_one_renderer_answers_both_ci_questions():
           and "audit: failure" in pr_out.get("text", ""), (branch_out, pr_out))
 
 
+# --------------------------------------------------------------------------
+#   Ruling 5.2 (2026-11-22): the CI answer carries the run id, and a re-run can
+#   be named by (pull request, check)
+# --------------------------------------------------------------------------
+
+#: The workflow run the `face-shots` check belongs to, and the attempt GitHub
+#: reports for it. Distinctive numbers, so "the id is in the answer" cannot pass
+#: on a job id or a check id that happens to be nearby.
+FACE_SHOTS_RUN = "4242"
+FACE_SHOTS_ATTEMPT = 2
+
+
+def _check_row_doc(index, name, conclusion, run_id):
+    """ONE check run as GitHub sends it: a job's check, with its run's address."""
+    return {"id": 9000 + index, "name": name, "status": "completed",
+            "conclusion": conclusion,
+            "details_url": "https://github.com/darknight11ish/Epic-Jarvis/"
+                           f"actions/runs/{run_id}/job/{500 + index}"}
+
+
+def _checks_answer(rows):
+    return json.dumps({"total_count": len(rows), "check_runs": rows})
+
+
+def _run_doc_doc(run_id, name="face-shots", conclusion="failure", attempt=1,
+                 head_branch="fix/face-shots"):
+    """ONE workflow run as GitHub sends it - with its id and attempt."""
+    return {"id": int(run_id), "name": name, "status": "completed",
+            "conclusion": conclusion, "run_attempt": attempt,
+            "head_branch": head_branch, "head_sha": HEAD_SHA}
+
+
+def _runs_answer(*runs):
+    return json.dumps({"total_count": len(runs), "workflow_runs": list(runs)})
+
+
+def _face_shots_fake(*, checks=None, runs=None):
+    """A fake GitHub for pull request #1471 with one face-shots run in it."""
+    return Routed([
+        ("/pulls/1471", (200, _pr_doc(number=1471))),
+        ("/check-runs", (200, checks or _checks_answer(
+            [_check_row_doc(1, "face-shots", "failure", FACE_SHOTS_RUN)]))),
+        (f"/commits/{HEAD_SHA}/status", (200, json.dumps({"statuses": []}))),
+        ("/actions/runs", (200, runs or _runs_answer(
+            _run_doc_doc(FACE_SHOTS_RUN, attempt=FACE_SHOTS_ATTEMPT)))),
+    ])
+
+
+def t_ci_status_carries_the_run_id_and_the_check_name():
+    """Ruling 5.2 (2026-11-22): the CI answer names the run a re-run needs.
+
+    Measured live: the owner asked for the face-shots check on PR 1471 to be run
+    again, and the model had no read that returned a run id, so it looped for
+    about 48 seconds and gave up. `github_ci_status` now prints the workflow
+    run's id and attempt beside the failing check, names every run on a pull
+    request's head commit, and names the newest run's own id on a branch read.
+    The sentences it already had are not touched beyond that.
+    """
+    out = _run_request(GH.plan_ci({"repo": GH.OWN_REPO, "pr": "1471"}),
+                       _face_shots_fake())
+    text = out.get("text", "")
+    check("ci_status(pr): the failing check is still named with its result",
+          "face-shots: failure" in text, text)
+    check("ci_status(pr): ... and the check line now carries its run id and attempt",
+          f"face-shots: failure (run {FACE_SHOTS_RUN}, attempt "
+          f"{FACE_SHOTS_ATTEMPT})" in text, text)
+    check("ci_status(pr): every run id on that commit is named, with its name",
+          f"The workflow run id(s) on that commit: face-shots (run "
+          f"{FACE_SHOTS_RUN}, attempt {FACE_SHOTS_ATTEMPT})." in text, text)
+    check("ci_status(pr): the answer it already gave is still there",
+          "are NOT all green" in text and "1 failing check(s)" in text, text)
+
+    # A commit whose RUN is red and whose check-runs answer is empty: the red run
+    # row names its own id too, so the fact does not depend on check runs.
+    fake = Routed([
+        ("/pulls/1471", (200, _pr_doc(number=1471))),
+        ("/check-runs", (200, json.dumps({"check_runs": []}))),
+        (f"/commits/{HEAD_SHA}/status", (200, json.dumps({"statuses": []}))),
+        (f"/actions/runs/{FACE_SHOTS_RUN}/jobs",
+         (200, json.dumps({"jobs": []}))),
+        ("/actions/runs", (200, _runs_answer(
+            _run_doc_doc(FACE_SHOTS_RUN, attempt=FACE_SHOTS_ATTEMPT)))),
+    ])
+    out = _run_request(GH.plan_ci({"repo": GH.OWN_REPO, "pr": "1471"}), fake)
+    text = out.get("text", "")
+    check("ci_status(pr): a red WORKFLOW RUN names its own id and attempt",
+          f"face-shots: failure (run {FACE_SHOTS_RUN}, attempt "
+          f"{FACE_SHOTS_ATTEMPT})" in text, text)
+
+    # A branch read is about ONE newest run over time, so it names that run's id.
+    fake = Routed([("/actions/runs", (200, _runs_answer(
+        _run_doc_doc(FACE_SHOTS_RUN, conclusion="success", attempt=3,
+                     head_branch="main"))))])
+    out = _run_request(GH.plan_ci({"repo": GH.OWN_REPO, "branch": "main"}), fake)
+    text = out.get("text", "")
+    check("ci_status(branch): the newest run's id and attempt are named",
+          f"The newest run's id is {FACE_SHOTS_RUN} (attempt 3)." in text, text)
+    check("ci_status(branch): the sentence it already gave is untouched",
+          "The newest CI run (face-shots on main) passed." in text, text)
+
+    # A run GitHub gave no id for adds no id line at all - never an invented one.
+    fake = Routed([("/actions/runs", (200, _runs_answer(
+        {"name": "face-shots", "status": "completed", "conclusion": "success",
+         "head_branch": "main"})))])
+    out = _run_request(GH.plan_ci({"repo": GH.OWN_REPO, "branch": "main"}), fake)
+    check("ci_status: no run id from GitHub means no invented id in the answer",
+          "run's id is" not in out.get("text", ""), out.get("text", ""))
+
+
+def t_rerun_resolves_a_check_name_to_the_run_it_belongs_to():
+    """Ruling 5.2 (2026-11-22): `(pr, check)` is a run id, resolved internally.
+
+    The live failure behind it: "Rerun the face-shots check on PR 1471" was
+    impossible for the model - the tool needed a run id and no read returned one.
+    Now the tool accepts the pull request and the check name, reads that pull
+    request's head-commit check runs, and builds the SAME one POST with the id it
+    found. The card has to name both, because that is what a person approves.
+    """
+    fake = _face_shots_fake(
+        checks=_checks_answer([
+            _check_row_doc(1, "face-shots (1/2)", "failure", FACE_SHOTS_RUN),
+            _check_row_doc(2, "face-shots (2/2)", "failure", FACE_SHOTS_RUN)]),
+        runs=_runs_answer(_run_doc_doc(FACE_SHOTS_RUN,
+                                       attempt=FACE_SHOTS_ATTEMPT)))
+    with _Token():
+        r = GH.plan_rerun({"repo": GH.OWN_REPO, "pr": "1471",
+                           "check": "face-shots"}, fetch=fake)
+    card = GH.describe(r)
+    urls = r.urls()
+    check("rerun(pr, check): it is still the github_rerun_workflow action",
+          r.action == GH.ACTION_RERUN and r.action in GH.ACTIONS, r.action)
+    check("rerun(pr, check): ... at the same ask tier, never a new gate action",
+          GH.tier_for_action(r.action) == "ask", GH.tier_for_action(r.action))
+    check("rerun(pr, check): ONE POST, to the resolved run's rerun address",
+          len(r.steps) == 1 and r.steps[0].method == "POST"
+          and urls == (GH.GITHUB_API + f"/repos/{GH.OWN_REPO}/actions/runs/"
+                                      f"{FACE_SHOTS_RUN}/rerun",),
+          (urls, [s.method for s in r.steps]))
+    check("rerun(pr, check): a matrix leg resolves to the RUN, not to a job",
+          FACE_SHOTS_RUN in urls[0] and "/job/" not in urls[0], urls)
+    check("rerun(pr, check): the card names the check it resolved",
+          '"face-shots"' in card, card)
+    check("rerun(pr, check): ... and the run id it will re-run",
+          f"workflow run {FACE_SHOTS_RUN}" in card
+          and f"actions/runs/{FACE_SHOTS_RUN}/rerun" in card, card)
+    check("rerun(pr, check): ... and still says what changes and who decides",
+          "no code" in card and "This asks you first" in card, card[-400:])
+    check("rerun(pr, check): planning sent only GETs - nothing written before "
+          "the card", fake.writes() == [], fake.writes())
+    check("rerun(pr, check): the Request records the resolved check and run",
+          r.check.startswith("face-shots") and r.number == FACE_SHOTS_RUN,
+          (r.check, r.number))
+    check("rerun(pr, check): ... and the card shows BOTH the name asked for and "
+          "GitHub's own name for it",
+          '"face-shots"' in card and f'GitHub: "face-shots (' in card, card)
+
+    # The MODEL can actually reach it: run_id is no longer required, and both new
+    # arguments are in the schema the model is sent.
+    params = AG.TOOLS["github_rerun_workflow"].parameters
+    check("the model can call it with pr + check - run_id is not required",
+          params.get("required") == ["repo"]
+          and {"pr", "check"} <= set(params.get("properties") or {}), params)
+    check("... and the tool's own words say the check form exists",
+          "check" in AG.TOOLS["github_rerun_workflow"].description.lower()
+          and "pull request number" in
+          AG.TOOLS["github_rerun_workflow"].description.lower(),
+          AG.TOOLS["github_rerun_workflow"].description[:400])
+
+    # And the approved run really sends exactly that ONE POST.
+    ran = _run_request(r, fake)
+    posts = [c for c in fake.calls if c["method"] == "POST"]
+    check("rerun(pr, check): approving it sends exactly ONE re-run POST",
+          ran.get("ok") is True and len(posts) == 1
+          and posts[0]["url"].endswith(f"/runs/{FACE_SHOTS_RUN}/rerun"), (ran, posts))
+    check("rerun(pr, check): the answer is the re-run sentence, unchanged",
+          "GitHub accepted the re-run" in ran.get("text", ""), ran)
+
+
+def t_rerun_by_check_refuses_an_unknown_check_in_one_sentence():
+    """No check by that name: ONE plain sentence that says what was looked for."""
+    fake = _face_shots_fake()
+    with _Token():
+        try:
+            GH.plan_rerun({"repo": GH.OWN_REPO, "pr": "1471",
+                           "check": "docs-lint"}, fetch=fake)
+        except GH.GitHubError as exc:
+            said = str(exc)
+        else:
+            said = ""
+    check("rerun(pr, check): an unknown check is refused, not carded", bool(said),
+          said)
+    check("rerun(pr, check): the refusal names the check, the pull request and "
+          "the repository",
+          '"docs-lint"' in said and "#1471" in said and GH.OWN_REPO in said, said)
+    check("rerun(pr, check): ... it says nothing was re-run",
+          "nothing was re-run" in said, said)
+    check("rerun(pr, check): ... and it is ONE sentence",
+          said.count(".") == 1, said)
+    check("rerun(pr, check): no card was built and nothing was written",
+          fake.writes() == [], fake.writes())
+
+
+def t_rerun_by_check_refuses_an_ambiguous_name_and_prefers_the_red_check():
+    """Several runs match: refuse in ONE sentence - unless one of them failed.
+
+    "Prefer the failing check" is the ruling's own rule, and it is what the
+    question means after a red CI answer. When two runs BOTH hold a red check by
+    that name there is no answer Jarvis can pick for the owner, so it refuses and
+    prints the candidates.
+    """
+    rows = [_check_row_doc(1, "face-shots", "failure", "4242"),
+            _check_row_doc(2, "face-shots", "failure", "4243")]
+    runs = _runs_answer(_run_doc_doc("4242", attempt=1),
+                        _run_doc_doc("4243", name="Jarvis client", attempt=2))
+    fake = _face_shots_fake(checks=_checks_answer(rows), runs=runs)
+    with _Token():
+        try:
+            GH.plan_rerun({"repo": GH.OWN_REPO, "pr": "1471",
+                           "check": "face-shots"}, fetch=fake)
+        except GH.GitHubError as exc:
+            said = str(exc)
+        else:
+            said = ""
+    check("rerun(pr, check): two runs with that check are refused, not guessed",
+          bool(said), said)
+    check("rerun(pr, check): the refusal names BOTH run ids it found",
+          "4242" in said and "4243" in said, said)
+    check("rerun(pr, check): ... says it cannot tell which one and that nothing "
+          "was re-run", "cannot tell which one" in said
+          and "nothing was re-run" in said, said)
+    check("rerun(pr, check): ... and offers the way out, the run id itself",
+          "run id" in said, said)
+    check("rerun(pr, check): an ambiguous name sends no write at all",
+          fake.writes() == [], fake.writes())
+
+    # ONE red and one green by the same name is NOT ambiguous: the red one wins.
+    rows = [_check_row_doc(1, "face-shots", "failure", "4242"),
+            _check_row_doc(2, "face-shots", "success", "4243")]
+    fake = _face_shots_fake(checks=_checks_answer(rows), runs=runs)
+    with _Token():
+        r = GH.plan_rerun({"repo": GH.OWN_REPO, "pr": "1471",
+                           "check": "face-shots"}, fetch=fake)
+    check("rerun(pr, check): a red match is preferred over a passing one",
+          r.urls() == (GH.GITHUB_API + f"/repos/{GH.OWN_REPO}/actions/runs/4242"
+                                      f"/rerun",), r.urls())
+
+
+def t_rerun_still_takes_an_explicit_run_id():
+    """The form that already existed is unchanged: same card, same one POST."""
+    r = GH.plan_rerun({"repo": GH.OWN_REPO, "run_id": "123456"})
+    card = GH.describe(r)
+    check("rerun(run_id): exactly ONE POST to that run's rerun address",
+          len(r.steps) == 1 and r.steps[0].method == "POST"
+          and r.urls() == (GH.GITHUB_API + f"/repos/{GH.OWN_REPO}/actions/runs/"
+                                          f"123456/rerun",), r.urls())
+    check("rerun(run_id): the card is the one it always was",
+          "workflow run 123456" in card and "Pull request:" not in card,
+          card)
+    check("rerun(run_id): a request built this way resolves no check at all",
+          r.check == "", r.check)
+    fake = _face_shots_fake()
+    ran = _run_request(r, fake)
+    posts = [c for c in fake.calls if c["method"] == "POST"]
+    check("rerun(run_id): approving it sends the ONE POST and nothing else",
+          ran.get("ok") is True and len(posts) == 1
+          and posts[0]["url"].endswith("/runs/123456/rerun"), (ran, posts))
+
+
 def t_the_six_github_reads_are_card_free_and_every_write_asks():
     """Q3/Q4: six reads out of NEEDS_A_PERSON; all thirteen writes stay in."""
     READS = ("github_list", "github_read_file", "github_ci_status",
@@ -5006,6 +5274,11 @@ if __name__ == "__main__":
                    t_pr_detail_never_reports_zero_files_for_a_cut_page,
                    t_ci_status_names_the_failing_checks_and_one_log_excerpt,
                    t_one_renderer_answers_both_ci_questions,
+                   t_ci_status_carries_the_run_id_and_the_check_name,
+                   t_rerun_resolves_a_check_name_to_the_run_it_belongs_to,
+                   t_rerun_by_check_refuses_an_unknown_check_in_one_sentence,
+                   t_rerun_by_check_refuses_an_ambiguous_name_and_prefers_the_red_check,
+                   t_rerun_still_takes_an_explicit_run_id,
                    t_the_six_github_reads_are_card_free_and_every_write_asks,
                    t_review_tools_are_card_free_and_in_the_master_switch,
                    t_an_invented_target_is_refused_before_anything_else_is_sent,
