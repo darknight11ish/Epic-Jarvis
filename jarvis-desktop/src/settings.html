@@ -209,6 +209,7 @@
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">The model and cards</span>
             <a href="#focus-presets">Focus presets</a>
+            <a href="#startup-preset">Startup preset</a>
             <a href="#hardware">Hardware and models</a>
             <a href="#second-card">Second graphics card</a>
             <a href="#big-model">Big model (slow)</a>
@@ -2431,6 +2432,38 @@
         <p class="note preset-settings-line" id="focus-presets-line" role="status" hidden></p>
       </section>
 
+      <!-- ── Startup preset ────────────────────────────────────────────────
+           The preset Atlas loads by itself when it starts (2026-11-22). The ten
+           presets and the current value come from /api/work's own answer
+           (startup-preset.js); the ONE write is the narrow `set_startup_preset`
+           command in focus_presets.rs, which posts that ONE route and returns
+           the PC's own JSON. Setting a preset raises the PC's ONE
+           change_own_config card and nothing is written before the yes;
+           clearing is instant. The select is never the source of the current
+           value - the "Now:" line is. -->
+      <section class="card" id="startup-preset">
+        <h2>Startup preset</h2>
+        <p class="note">
+          A preset is a ready-made way Atlas can run - everyday chat, coding, and
+          so on. Pick one here and Atlas loads it by itself every time it starts,
+          before you ask it anything.
+        </p>
+        <p class="note">
+          That means waiting about a minute at start-up while the model loads, and
+          the model keeps its place in the graphics card's memory. Pick "No preset"
+          and Atlas starts with nothing loaded.
+        </p>
+        <p class="note" id="sp-preset-card-note"></p>
+        <p class="note" id="sp-preset-current" role="status">Reading the PC's setting…</p>
+        <div class="row">
+          <label for="sp-preset-choice">When Atlas starts, load</label>
+          <select id="sp-preset-choice" disabled></select>
+          <button class="btn" id="sp-preset-save" type="button" disabled>Save</button>
+        </div>
+        <p class="note" id="sp-preset-why" hidden></p>
+        <p class="note" id="sp-preset-line" role="status" hidden></p>
+      </section>
+
       <!-- ── Hardware and models ──────────────────────────────────────────
            Read from GET /api/hardware (hardware-panel.js). The graphics
            cards, what runs on them now, and three setups. Picking one
@@ -4095,6 +4128,7 @@
     <script type="module" src="settings.js"></script>
 <script type="module" src="feature-directory-ui.js"></script>
     <script type="module" src="focus-presets-settings.js"></script>
+    <script type="module" src="startup-preset-settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
     <script type="module" src="briefing-settings.js"></script>

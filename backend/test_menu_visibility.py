@@ -206,9 +206,15 @@ def t_markup_matches():
     # made for "notifications". "phone-backup" (2026-11-13) is the fourth kind
     # for the same safety reason: it is the one place that saves and restores
     # THIS phone's settings, so hiding it could strand the owner, and the row
-    # has been drawn always since PR #1233 added it.
+    # has been drawn always since PR #1233 added it. "startup-preset"
+    # (2026-11-22) is a standalone non-menu for now: it is a real top-level
+    # desktop card (settings.html id="startup-preset", the registry Section
+    # this row was added with), but it is not in the Show-or-hide catalogue
+    # yet - giving it a menu row would also have to regenerate the shared
+    # menu-cases fixtures and add a features.json entry, which is its own
+    # change. Until then the card is always drawn, so it must not fail here.
     inside = {"start-jarvis", "crash-notes", "notifications", "first-run",
-              "phone-backup"}
+              "phone-backup", "startup-preset"}
     for s in R.SECTIONS:
         check(f"registry section {s.id} has a menu", M.menu("settings." + s.id) is not None or s.id in inside)
 

@@ -5582,6 +5582,25 @@ what is missing is only the Settings screen agreeing about who turned it off.
   reason is the ruling's own: concurrent Pixel 9 + OnePlus polling is expected,
   and pruning paired devices is an administrative, destructive-adjacent action
   whose backup lives on the host filesystem.
+- **The start-up preset is chosen on the desktop's Settings and nowhere else,
+  and that is one-sided on purpose** (2026-11-22; the owner asked for the
+  General preset to load by itself when Atlas starts, and for the choice to be
+  settable from the app rather than only in chat; `backend/jarvis_presets.py`,
+  `JARVIS-API.md` section 232). The setting is a standing choice
+  about what THIS PC loads before anybody is using it, so it stays on the PC:
+  `GET /api/work` carries it read-only as `startup_preset: {preset, why}`, and
+  the only writer is `POST /api/work/startup-preset`. The desktop's Settings ->
+  "Startup preset" card reads it through the existing `get_focus_presets`
+  command and writes it through ONE narrow command, `set_startup_preset`
+  (`src-tauri/src/focus_presets.rs`; granted to the Settings window by
+  surfaces.toml's `startup-preset` set), which posts that one route and nothing
+  else. Setting a preset keeps the PC's ONE `change_own_config` card and
+  nothing is written before the yes; clearing is a tightening and is instant.
+  The phone shows no control and never calls the route - a phone cannot decide
+  what the PC loads before anyone is using it, and the chat sentence ("load the
+  General preset when you start") already sets the same file from either app.
+  `tools/check_parity.py` therefore classifies the route `deliberate` with no
+  `PENDING_CLIENTS` entry: the first client is the desktop's, and it has landed.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
