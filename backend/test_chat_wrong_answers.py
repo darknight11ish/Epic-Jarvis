@@ -532,10 +532,16 @@ def t_the_github_controls_keep_their_shapes():
         check(f"github controls: {said!r} is NOT a new refusal",
               _github_shape(got) not in ("destroy", "bulk_close", "close_pr"),
               got)
-    for said in ("merge a pull request", "can you merge a pull request?"):
-        got = Q.match(said)
-        check(f"github controls: {said!r} still gets the merge shape",
-              _github_shape(got) == "merge", got)
+    # 2026-11-22 (the external review's 15:45 PT ruling): a capability family
+    # answers only a QUESTION. The bare "merge a pull request" is a command, so
+    # it now keeps its path to the model, where `github_merge_pr` raises the
+    # real card; the question form still gets the fixed merge answer. The same
+    # suite proves the new rule in `test_github_commands.py`.
+    got = Q.match("can you merge a pull request?")
+    check("github controls: 'can you merge a pull request?' still gets the merge shape",
+          _github_shape(got) == "merge", got)
+    check("github controls: the bare 'merge a pull request' is the model's now",
+          Q.match("merge a pull request") is None, Q.match("merge a pull request"))
     got = Q.match("approve that pull request")
     check("github controls: 'approve that pull request' still gets approve",
           _github_shape(got) == "approve", got)
@@ -548,7 +554,10 @@ def t_the_github_controls_keep_their_shapes():
 
 
 def t_the_merge_and_approve_wording_is_unchanged():
-    res = ask("merge a pull request")
+    # The QUESTION form: since 2026-11-22 a bare "merge a pull request" is a
+    # command and reaches the model (see test_github_commands.py), while the
+    # answer a capability question gets is byte-for-byte the old one.
+    res = ask("can you merge a pull request?")
     merge = str(res.reply if res is not None else "")
     check("kept words: the merge shape still opens 'Yes - with ONE approval "
           "card per merge, and merge commit only.'",
