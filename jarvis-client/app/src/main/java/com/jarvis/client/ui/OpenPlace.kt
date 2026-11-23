@@ -342,6 +342,16 @@ object OpenPlace {
         // rather than opening a screen that does not have it, and
         // docs/ARCHITECTURE.md section 8 records the one-sided slice.
         "voicestudio",
+        // The startup preset (2026-11-22, the startup-preset settings PR;
+        // JARVIS-API section 232; ARCHITECTURE section 8): the PC's own
+        // Settings card, read from /api/work and written through the narrow
+        // set_startup_preset command. A phone cannot decide what the PC loads
+        // before anyone is using it, and this build has no Settings row for
+        // it, so the honest PC-only sentence is the answer rather than a
+        // screen that does not have it. The same file is still settable from
+        // either app's chat (load the General preset when you start), which
+        // is why nothing is missing from the phone's side of the feature.
+        "startup-preset",
     )
 
     /**

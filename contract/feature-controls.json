@@ -11872,6 +11872,20 @@
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": false
+    },
+    {
+      "id": "startup-preset",
+      "names": [
+        "startup preset",
+        "the startup preset",
+        "the preset jarvis starts with",
+        "which preset jarvis starts with",
+        "the start-up preset"
+      ],
+      "app": "desktop",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
     }
   ],
   "known_gaps": [
