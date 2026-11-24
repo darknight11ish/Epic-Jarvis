@@ -1888,6 +1888,26 @@
  {
   "type": "function",
   "function": {
+   "name": "cancel_scheduled",
+   "description": "Cancel ONE of the owner's timers, alarms, reminders or to-do items on this PC. This only removes it from the list, so it needs no approval. Use the id coming_up gave you, or the job's own words; if you are not sure which one, ask instead of guessing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "the id coming_up gave you, when you have it"
+     },
+     "text": {
+      "type": "string",
+      "description": "the job's own words, or enough of them, when you do not"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "goals_list",
    "description": "List the owner's goals on this PC, each with its newest progress lines. Read-only.",
    "parameters": {

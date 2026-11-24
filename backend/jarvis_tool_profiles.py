@@ -2202,6 +2202,37 @@ PROFILES: dict = {
         "sources": [AGENT, SCHEDULE, ASKS_FIRST],
     },
 
+    "cancel_scheduled": {
+        "id": "cancel_scheduled",
+        "title": "Cancel a timer, reminder or to-do item",
+        "what": "Takes ONE of the owner's timers, alarms, reminders or to-do items "
+                "off the list on this PC, picked either by the id \"Coming up\" gave "
+                "back or by the job's own words. Exactly one thing per call, and an "
+                "ambiguous match asks instead of guessing.",
+        "gives": [
+            "Take back a timer or reminder without opening anything",
+            "Clear something set by mistake by naming it",
+            "Cancel by the id already read back, with no second guess",
+        ],
+        "touches": "settings",
+        "limits": [
+            "One job per call: two jobs whose words both match delete nothing, "
+            "and the answer asks which one was meant",
+            "It removes the row from the list; it does not undo a notification "
+            "that has already gone off",
+            "In a turn shaped by outside text it cancels nothing",
+            "Not in the shipped `[tools].enabled` list",
+        ],
+        "combines": {
+            "coming_up": "Read the list, then cancel the one that is no longer wanted.",
+            "set_reminder": "Set it, then take it back by its own words.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn timers and reminders on in Settings, then cancel one "
+                       "by asking. A cancel needs no card.",
+        "sources": [AGENT, SCHEDULE, ASKS_FIRST],
+    },
+
     "goals_list": {
         "id": "goals_list",
         "title": "List your goals",
@@ -3206,6 +3237,7 @@ FAMILIES: dict = {
                 "progress log, and whole projects with milestones, work items, "
                 "typed links and checkpoints.",
         "tools": ["set_timer", "set_reminder", "todo_add", "todo_done", "coming_up",
+                  "cancel_scheduled",
                   "goals_list", "goal_add", "goal_progress", "goal_done",
                   # The plan store's typed tools (2026-11-20, PM2): the same
                   # subject this family already owns - the structures that hold
@@ -3220,13 +3252,14 @@ FAMILIES: dict = {
                   "happening: it remembers the thing at 6pm, keeps the list, and "
                   "keeps a goal's history so progress is visible rather than felt. "
                   "Most of it needs no approval card at all, because it changes "
-                  "nothing Jarvis holds - and none of it can delete what the owner "
-                  "wrote.",
+                  "nothing Jarvis holds - and the one delete here takes a scheduled "
+                  "job off the list, never a goal, a progress line or a project.",
         "limits": ["Everything here runs on this PC's clock, so nothing fires while "
                    "the PC is off",
                    "A turn shaped by outside text sets nothing, so a web page cannot "
                    "set an alarm",
-                   "There is deliberately no tool that deletes a goal or a progress line"],
+                   "There is deliberately no tool that deletes a goal, a progress line "
+                   "or a project; cancelling a scheduled job only makes things quieter"],
     },
 
     "money": {
@@ -3387,6 +3420,8 @@ _ALIASES = (
     ("todo_add", ("add a task", "task list", "to do", "todo")),
     ("todo_done", ("to do done", "mark done", "finish a task")),
     ("coming_up", ("coming up", "what is pending", "my list")),
+    ("cancel_scheduled", ("cancel a reminder", "cancel a timer",
+                          "cancel a scheduled thing", "take back a reminder")),
     ("goals_list", ("my goals", "goal list", "goals")),
     ("goal_add", ("add a goal", "new goal")),
     ("goal_progress", ("goal progress", "progress on a goal")),
