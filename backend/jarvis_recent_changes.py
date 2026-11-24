@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The Rust supply-chain check no longer goes red on an advisory that cannot reach a Windows build',
     "The GitHub re-run tool's description fits the per-tool token ceiling again",
     'The General preset loads by itself when Atlas starts, and you can set which preset that is',
     'The preset Atlas loads when it starts can now be chosen in Settings',
     'A question that says "Jarvis" and then "off" is only a reminder question when it is about a reminder',
-    'The deploy manifest is renamed into place, so a killed write can never leave a truncated record',
 )
 
 
