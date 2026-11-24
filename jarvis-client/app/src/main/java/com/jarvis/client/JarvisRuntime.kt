@@ -7855,7 +7855,7 @@ object JarvisRuntime {
      *
      * Called only with the body of a `GET /api/schedule` that SUCCEEDED. The
      * job ids come from the active jobs, the open to-do items and the ones
-     * that went off in the last hour: a job in none of those lists is gone.
+     * that went off in the last 24 hours: a job in none of those lists is gone.
      * A read that failed never calls this, so "the job is gone" and "I could
      * not ask" can never be confused.
      *

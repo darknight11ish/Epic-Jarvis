@@ -193,7 +193,7 @@ object Today {
     /** The sections' words (`today.js`). */
     const val DUE_TITLE = "Due now"
     const val DUE_DETAIL =
-        "Reminders, alarms and timers whose time has come, or that went off in the last hour."
+        "Reminders, alarms and timers whose time has come, or that went off in the last 24 hours."
     const val NEXT_TITLE = "Next steps"
     const val NEXT_DETAIL =
         "The first step of each goal you are working on, and of each project's work list."
