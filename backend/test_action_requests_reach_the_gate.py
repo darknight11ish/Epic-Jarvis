@@ -802,7 +802,7 @@ def t_the_rules_tell_the_model_to_call_the_tool():
 
 if __name__ == "__main__":
     for fn in (t_1_forget_one_fact_names_the_memory_door,
-               t_2_delete_a_note_is_the_fast_paths_honest_refusal_and_a_claim_is_corrected,
+               t_2_delete_a_note_is_a_real_carded_action_and_a_claim_is_corrected,
                t_3_send_an_email_reaches_the_gate_and_needs_a_person,
                t_4_the_phone_switch_is_answered_in_words_and_raises_nothing,
                t_5_cloud_escalation_reaches_its_card_and_only_a_yes_turns_it_on,
