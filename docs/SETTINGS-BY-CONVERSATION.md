@@ -152,3 +152,45 @@ Nothing in this slice. The one open question is whether the phone should offer
 the same "what can I change?" answer; the phone is another conversation's
 surface, and `CLAUDE.md` says deep config editing stays off the phone, so this
 stays a PC answer until he says otherwise.
+
+## 8. The 2026-11-23 follow-up: "Turn on that setting for me"
+
+**What the owner hit.** He asked for duplicate notes; the answer said the
+notes search tool was off and where to switch it on; he replied *"Turn on that
+setting for me."* and got `_run_settings_unknown`'s refusal - *"I cannot change
+that setting by asking yet"* - from a screenshot pair he sent on 2026-11-23.
+The refusal was **true about the words**: `jarvis_quick.match()` is stateless,
+so "that setting" named no row. The setting it pointed at had been reachable
+by name all along (`turn on the notes search tool` -> `settings_tool`
+`notes_search`; `turn on notes search` without the word "tool" is not matched).
+
+**What now happens.** `match(text, now, conversation, said=None)` takes the
+newest **assistant** sentence from the request's own history - the words the
+owner is looking at - read by `newest_jarvis_words()` and passed by `answer()`.
+A settings sentence that names nothing and uses a deictic form ("turn on that
+setting for me", "switch that off", "turn it on", "enable that setting") goes
+through `_named_setting_in()`: every 1-4 word window of that answer is tested
+with the registry's **own** matchers (`find_bool_setting`, `find_tool_target`,
+`page_only_asked`), the longest name wins at each place, and **exactly one**
+named row is required.
+
+**What it returns is the intent the named sentence returns** - `settings_bool`,
+`settings_tool` or `settings_not_by_asking` - so the same setter runs with the
+same tier and the same approval card. This is a reference resolution, not a new
+write path: no new action, no new gate row, no new consent, nothing that can
+loosen a rule without its card.
+
+**What does not resolve.** No history, a history that names nothing, or a
+history naming two different settings all keep the old intent and the old
+sentence **byte for byte**; a pronoun form with two names falls through to the
+model rather than guessing; an unrelated "turn it on" (about a lamp) still
+returns `None`. `backend/test_settings_followup.py` (24 checks) drives the
+screenshot's exact sentences and each of those refusals.
+
+**Why recency and not a 15-minute store.** The `read a link` follow-up keeps
+state per conversation for 15 minutes; a settings follow-up could copy that.
+This slice does not, because the thing the owner was looking at is the previous
+answer, and a store adds a stale-context failure mode with no evidence any turn
+needs it yet. If a real case appears ("turn it on" two turns later), the store
+is the obvious next step and the resolver's signature already carries the
+conversation id.
