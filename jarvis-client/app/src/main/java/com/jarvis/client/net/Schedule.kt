@@ -125,9 +125,14 @@ object Schedule {
             "is, or each day keeps its own list. Nothing is moved or lost by changing it."
     const val MODE_SAVED_ON_PC = "Saved on your PC, so both apps and anything you say to Jarvis agree."
 
-    /** Nothing on a list. */
+    /**
+     * Nothing on a list. It names only what the surfaces that draw it can do:
+     * a timer or reminder is set by asking Atlas on the PC, and the one box on
+     * the phone's scheduler surfaces adds a to-do item (2026-11-23 review).
+     */
     const val EMPTY_JOBS =
-        "Nothing coming up. Say or type \"set a timer for 10 minutes\" or \"remind me at 6 to call Mum\"."
+        "Nothing coming up. Ask Atlas on the PC to set a timer or remind you. " +
+            "The box on the to-do list adds a to-do item."
     const val EMPTY_TODO = "Nothing on your to-do list."
 
     /** A PC without the scheduler: a 404 or 501 on the read. */
