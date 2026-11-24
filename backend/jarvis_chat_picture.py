@@ -194,6 +194,28 @@ def _picture_slots(messages: list) -> list:
     return slots
 
 
+def raw_pictures(messages) -> list:
+    """Every picture's own bytes in this request, NEWEST first (2026-11-23).
+
+    The chat picture path CLEANS a picture and hands a data URI to the vision
+    lane; this is the other direction, for the one action that SAVES a picture
+    the owner attached ("transfer this screenshot to my PC"). Nothing is
+    decoded, re-encoded or cleaned here - the bytes come back exactly as they
+    arrived, so the file that lands is byte for byte the file the owner sent.
+    A part whose bytes cannot be read is skipped, never guessed at.
+    """
+    out = []
+    msgs = list(messages or [])
+    for mi, pi in _picture_slots(msgs):
+        try:
+            part = msgs[mi]["content"][pi]
+        except Exception:                   # noqa: BLE001 - a shape we do not read
+            continue
+        raw = _bytes_of(part)
+        if raw:
+            out.append(bytes(raw))
+    return out
+
 def has_picture(messages) -> bool:
     return bool(_picture_slots(list(messages or [])))
 
