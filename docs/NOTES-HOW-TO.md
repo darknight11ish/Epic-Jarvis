@@ -37,8 +37,10 @@ bold, one tag - is:
    sentence that changes a word, a line or a heading must match exactly once;
    none or several is refused with the count, never guessed. A whole note is
    never rewritten by one of these edits.
-6. **Never a deletion.** No sentence on this page deletes a line, a note or a
-   tag's words. There is no delete in the notes lane.
+6. **A deletion is a whole note, and it always asks.** No sentence on this page
+   deletes a line or a tag's words. Deleting a WHOLE note is its own action,
+   from chat: one card names every note, and each one moves into the vault's
+   `.trash` rather than away - the row for it is further down this page.
 
 While your lists are hidden, the write doors refuse in the same words before a
 card is raised: "Your lists are hidden on this PC, so I did not open or change
@@ -393,7 +395,7 @@ message names what to change.
 | "X changed while the card waited" | The note was edited between asking and the yes. | Open the note again, check it, ask again. |
 | "Your lists are hidden on this PC, so I did not open or change a note." | Hidden lists or App lock are on - by design no words or titles appear and no card is raised. | Tap Show and confirm it is you, then ask again. |
 | "I change one note at a time, so nothing was written" | You said "all my notes"/"every note". | Name ONE note. |
-| "Deleting a line or a note is not built, so nothing was changed." | There is no delete in this lane. | Add, format, replace, tag, rename a heading, or move a line into a section instead. |
+| "Deleting a line inside a note is not built, so nothing was changed." | You asked to delete a line or a paragraph, not a whole note. | Delete whole notes from chat by name ("delete my Shopping note" or "delete notes Shopping, Workout and Ideas"): one to twenty notes go to the vault's `.trash` on ONE card that names every one. To change a line, add, format, replace, tag, rename a heading or move a line into a section instead. |
 | "I can read one note at a time; tell me which one." | "read my notes" is not a thing. | Name one note. |
 | "Name the notes to organize, for example ..." | A scoped organizer plan had no valid selection. | Name the notes exactly, e.g. "organize these notes: Welcome, Alpha". |
 | "That is not one of my features on this PC. Jarvis does not change your Obsidian theme, styles or templates - only Obsidian does that." | Themes, CSS and template files are Obsidian's own, not Jarvis's. | Change them in Obsidian; Jarvis can create a note from a template, not edit Obsidian's template files. |
@@ -418,9 +420,11 @@ Built and tested on its own branch (not part of #1049, so not in the apps yet):
   Fenced code blocks and inline code are never rewritten.
 - One card covers the whole batch, and ONE Undo restores every original byte
   and path (and removes a folder the move created).
-- Refused: deleting, moving outside the vault, renaming or moving folders,
+- Refused: moving outside the vault, renaming or moving folders,
   renaming onto an existing name, moving several notes at once, updating links
-  inside protected or hidden notes, and remote-URL links.
+  inside protected or hidden notes, and remote-URL links. Deleting a whole note
+  is a separate action with its own card (the deletion row above), not part of
+  this rename/move batch.
 
 ## Where the wording came from
 

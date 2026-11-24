@@ -1365,6 +1365,23 @@ BACKEND_ONLY = {
     # apps, and the report screen it feeds is the named follow-up lane. The
     # chat tool is the door that works today, on the PC.
     "/api/product/check": "The product check's report endpoint (JARVIS-API section 192; jarvis_product_check.py, installed by plugins/ready/product-check). POST one Amazon product address -> ONE PC-only approval card -> the engine's reasons report. It reads the page in the owner's own signed-in browser window on THIS PC, so it is refused from any other device (403 pc_only) by design, not ported: ARCHITECTURE section 8's one-sided table records why. No app screen calls it yet - the report is delivered in the chat answer today, and the desktop/phone report screen is the named follow-up - so when one lands it is DESKTOP-ONLY and must NOT be treated as a parity miss.",
+
+    # Deleting Obsidian notes (2026-11-23, Wave 24; JARVIS-API's notes/delete
+    # section; jarvis_notes_edit.py, installed by the notes plugin). The route
+    # is built and documented, and NEITHER app calls it directly, on purpose:
+    # the owner's door is chat ("delete my notes X and Y"), which both apps
+    # already have because the deterministic lane runs on the PC inside one
+    # /api/chat turn. The card it raises is the existing risk-3 shape - Windows
+    # Hello on the PC, the asking phone's own fingerprint from the phone - and
+    # the batch moves the named notes into the vault's .trash only after that
+    # yes. A dedicated delete screen is deliberately NOT built: a second place
+    # to approve an irreversible batch is a second place to make the same
+    # mistake, and the chat turn already names every note on the card and in
+    # the reply. This is BACKEND_ONLY, not `planned` - no client is being built
+    # against it - and not `deliberate`, which in this file means "the PC calls
+    # it and the phone must not": the phone may approve this one with its own
+    # fingerprint (ARCHITECTURE section 8 records the chat-only decision).
+    "/api/notes/delete": "Deleting Obsidian notes (JARVIS-API section 170.14; jarvis_notes_edit.py, 2026-11-23): POST 1-20 vault-relative note paths, resolve every one with the module's own resolver (refused, never guessed), raise ONE delete_vault_notes card naming every note, verify every file's sha256 after the yes, then move each into the vault's hidden .trash at the same relative path (' (2)' on a collision, put-back if a later move fails). The route takes PATHS, not names: turning a spoken name into a path is the chat lane's job (jarvis_quick's delete grammar answers inside the same /api/chat turn both apps already have), which is why no app calls this route and no dedicated screen is added - a second approval surface for an irreversible batch is the thing to avoid, not a missing half. The phone may approve the card with its own fingerprint; nothing is PC-only.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

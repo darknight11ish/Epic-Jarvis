@@ -352,6 +352,13 @@ TITLES = {
     # "the whole vault, both apps"): one save replaces the WHOLE text of one
     # note in his own vault, so it asks every time.
     "edit_vault_note": "change a note in your Obsidian vault",
+    # Deleting notes (jarvis_notes_edit.py, 2026-11-23; the owner's "delete
+    # obsidian notes, even multiple at a time. but it will always require a card
+    # with fingerprint or windows hello confirmation"). One to twenty notes
+    # leave the vault for its own .trash folder, and the card names every one of
+    # them; this line is what the Windows Hello prompt is titled from, so the
+    # action could not be approved at all without it.
+    "delete_vault_notes": "delete notes from your Obsidian vault",
     # --- picture conversion (jarvis_image_convert.py, 2026-11-18): ONE card per
     # file written - pictures into one PDF, or one picture into another format.
     "convert_images": "make a PDF from pictures, or change a picture's format",
@@ -600,6 +607,9 @@ SUMMARY = {
     "unprotect_item": "stop protecting a folder, file or program",
     # --- the Obsidian notes editor (2026-10-31): one save, one card
     "edit_vault_note": "change a note in your Obsidian vault",
+    # Deleting notes (2026-11-23): one card for the whole batch. The card's own
+    # line names every note; this glance stays short.
+    "delete_vault_notes": "delete notes from your Obsidian vault",
     # Picture conversion (jarvis_image_convert.py, 2026-11-18): ONE new file,
     # one card. The title says which way in the full card; the glance stays at
     # nine words.

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "80536040fe9f8b2c0d9e1e8cb424549f6b077c06",
- "built_at": "2026-11-23T17:06:09-08:00",
+ "ref": "d842081801a9becfe1562eeffbd568a9cd0d9830",
+ "built_at": "2026-11-23T21:54:50-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -1775,6 +1775,7 @@
     "jarvis-client/app/src/test/java/com/jarvis/client/SecondCardContractTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/SecurityRulesTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/SendFileTest.kt",
+    "jarvis-client/app/src/test/java/com/jarvis/client/SendManyTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/SettingsCatalogTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/SettingsJumpTest.kt",
     "jarvis-client/app/src/test/java/com/jarvis/client/SettingsSearchTest.kt",
@@ -1964,7 +1965,7 @@
     "server/jarvis_mobile_ws.py",
     "server/test_jarvis_mobile_ws.py"
    ],
-   "file_count": 1045,
+   "file_count": 1046,
    "key_modules": [
     {
      "path": "backend/jarvis_android_control.py",
@@ -4158,6 +4159,7 @@
     "backend/test_notes.py",
     "backend/test_notes_chat_read.py",
     "backend/test_notes_create_find_append.py",
+    "backend/test_notes_delete.py",
     "backend/test_notes_edit.py",
     "backend/test_notes_read_search.py",
     "backend/test_notes_rename_move.py",
@@ -4489,7 +4491,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 738,
+   "file_count": 739,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4537,8 +4539,12 @@
     "README.md",
     "THIRD-PARTY-NOTICES.txt",
     "changelog.d/2026-11-23-deny-ignores-cookie-advisory.md",
+    "changelog.d/2026-11-23-obsidian-delete-notes.md",
+    "changelog.d/2026-11-23-several-files-from-the-phone.md",
     "changelog.d/README.md",
     "decisions.d/2026-11-23-a-cookie-advisory-that-cannot-reach-windows.md",
+    "decisions.d/2026-11-23-obsidian-delete-notes.md",
+    "decisions.d/2026-11-23-several-files-in-one-pick.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5045,7 +5051,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 515,
+   "file_count": 519,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6191,6 +6197,46 @@
  ],
  "recent_commits": [
   {
+   "sha": "d842081801a9becfe1562eeffbd568a9cd0d9830",
+   "date": "2026-11-23",
+   "subject": "chore(generated): take the recent-changes modules from the record after #1479"
+  },
+  {
+   "sha": "cdc68de8154c16315408b28e8920420ef339f340",
+   "date": "2026-11-23",
+   "subject": "Merge pull request #1479 from darknight11ish/feat/obsidian-delete-notes"
+  },
+  {
+   "sha": "e6b717062773a900efc4194e98ef489a57e18a1e",
+   "date": "2026-11-23",
+   "subject": "fix(notes): the delete action is on the asks-first page, and the suites agree"
+  },
+  {
+   "sha": "29a427ae067c878ee4f05cfd43e02eec772b95c9",
+   "date": "2026-11-23",
+   "subject": "Merge pull request #1480 from darknight11ish/feat/send-many-files-2026-11-23"
+  },
+  {
+   "sha": "010081623f35e84a19ec73b7268cf085450ef7de",
+   "date": "2026-11-23",
+   "subject": "test(gate): call the renamed delete-note check by its new name"
+  },
+  {
+   "sha": "c6fb04535c06883a04201c2c08c2fd85927fc3af",
+   "date": "2026-11-23",
+   "subject": "Merge pull request #1478 from darknight11ish/chore/records-and-generated-refresh-4"
+  },
+  {
+   "sha": "146693f0ec9f804d0c7a51a276da1a6f53ec1914",
+   "date": "2026-11-23",
+   "subject": "feat(phone): one pick can send several files to the PC"
+  },
+  {
+   "sha": "5bc1d7fae756228f39e185bf4975c5affb05a110",
+   "date": "2026-11-23",
+   "subject": "chore(generated): retake the self-code map on the rebased tree"
+  },
+  {
    "sha": "80536040fe9f8b2c0d9e1e8cb424549f6b077c06",
    "date": "2026-11-23",
    "subject": "chore(generated): take the recent-changes modules from the record after #1477"
@@ -6209,6 +6255,11 @@
    "sha": "efd09f747e40aaf021b09e891940b02453e617f1",
    "date": "2026-11-23",
    "subject": "chore(records): roll the changelog and the decision fragments"
+  },
+  {
+   "sha": "cb2595bf8332f3926e9fa890f772280740883099",
+   "date": "2026-11-23",
+   "subject": "feat(notes): delete up to 20 notes from chat, on one card that names them"
   },
   {
    "sha": "b6fb7d9e5192181a95166a2f5863e68ed2327f83",
@@ -6244,58 +6295,13 @@
    "sha": "90223bdf0b91916c198eb2d30ffd991a1c8575ca",
    "date": "2026-11-23",
    "subject": "docs(about): bring the claims totals up to the new row"
-  },
-  {
-   "sha": "752a8c3eb89a8ac4f38238a6e04248310a11c04b",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1475 from darknight11ish/fix/github-commands-are-not-capability-questions-2026-11-22"
-  },
-  {
-   "sha": "f44828ef2d4373a0232b5949a286f13a8b567228",
-   "date": "2026-11-23",
-   "subject": "fix(settings): the startup preset card is a registry Section"
-  },
-  {
-   "sha": "f4100cab6df43e3ad00a8a2e37e133dc68c9d9c3",
-   "date": "2026-11-23",
-   "subject": "fix(github): keep the re-run tool inside the 300-token ceiling"
-  },
-  {
-   "sha": "8dbff00b9ea5934f6a651af00a342ef6a440b567",
-   "date": "2026-11-22",
-   "subject": "feat(github): re-run a named check by PR, and carry the run id in ci_status"
-  },
-  {
-   "sha": "8e9add3c1efc5c76ea559b781c35433f87ef37de",
-   "date": "2026-11-22",
-   "subject": "fix(quick): a command is not a capability question, for the whole family"
-  },
-  {
-   "sha": "1a6c32a2ffdf01c73d70b3c5169b11fba6244e34",
-   "date": "2026-11-22",
-   "subject": "feat(desktop): the startup preset can be chosen in Settings"
-  },
-  {
-   "sha": "57df1eebf502b82893af0504ff007b6e5f4a920b",
-   "date": "2026-11-22",
-   "subject": "Merge pull request #1471 from darknight11ish/fix/cloud-identity-and-self-repo-gate-2026-11-22"
-  },
-  {
-   "sha": "20e9cb0d4381ab53b3aa861ddd23213468d66078",
-   "date": "2026-11-22",
-   "subject": "Merge pull request #1472 from darknight11ish/feat/startup-preset-2026-11-22"
-  },
-  {
-   "sha": "af67684f27687dd9bfbad2429458dce68eb20f25",
-   "date": "2026-11-22",
-   "subject": "test(picture-card): re-measure the hunk pin after the identity block moved the HUD"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1507
+   "files": 1508
   },
   {
    "path": "jarvis-desktop/",
@@ -6305,7 +6311,7 @@
   {
    "path": "jarvis-client/",
    "line": "the Android app that talks to the backend, in Kotlin",
-   "files": 1005
+   "files": 1006
   },
   {
    "path": "docs/",
@@ -6368,19 +6374,19 @@
    "files": 6
   },
   {
-   "path": "server/",
-   "line": "the old Android app's WebSocket server, kept for reference",
-   "files": 3
-  },
-  {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 2
+   "files": 4
   },
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 2
+   "files": 4
+  },
+  {
+   "path": "server/",
+   "line": "the old Android app's WebSocket server, kept for reference",
+   "files": 3
   },
   {
    "path": "docker/",
@@ -6414,8 +6420,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5530,
-  "covered": 5042,
+  "tracked_files": 5536,
+  "covered": 5048,
   "excluded": 488,
   "subsystems": 27
  },

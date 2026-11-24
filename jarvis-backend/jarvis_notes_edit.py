@@ -8,7 +8,7 @@ apps"** - search and browse every note in the Obsidian vault, open and edit
 any, from the desktop program and from the phone. `jarvis_notes.py` could
 already SEARCH the vault (read-only), and `jarvis_note_capture.py` could APPEND
 one entry to today's daily note. Neither could browse the vault or change an
-existing note. This module is those four routes:
+existing note. This module is those routes:
 
     GET  /api/notes/list?q=<text>     every note: path, title, size, mtime
     GET  /api/notes/read?path=<rel>   one note: its text and its sha256
@@ -17,13 +17,22 @@ existing note. This module is those four routes:
     POST /api/notes/create            make ONE new note (no overwrite ever)
     POST /api/notes/append            add words to the END of one note
     POST /api/notes/tag               add or remove ONE tag on one note
-    GET  /api/notes/change?id=<job>   how one of those three ended
+    POST /api/notes/rename            same folder, new title, links updated
+    POST /api/notes/move              into an existing (or created) folder
+    POST /api/notes/delete            move up to twenty notes into the vault's
+                                      own .trash folder, one card naming them all
+    GET  /api/notes/change?id=<job>   how one of those writes ended
 
 The three wave-1 writes (2026-10-31, the owner's flexibility decision) are the
 same single-file shape as the save: one note, one approval card, the File
 Guardian copy first where there are old bytes to keep, and every answer says
-you can undo it. Rename, move, delete and several-notes-at-once are NOT here:
-they belong to the wave-2 slice and are refused in plain words by the routes.
+you can undo it. The wave-2 slice added rename and move (one note each, their
+links updated, an undo receipt either way), and the owner's request of
+2026-11-23 adds delete: one to twenty notes, ONE card that names every one of
+them, no undo receipt, and the notes move into the vault's own `.trash` folder
+rather than being written over. Delete is the one write here that is NOT asked
+under `edit_vault_note` - see `DELETE_ACTION` below, and the block above
+`handle_delete` for why.
 
 `/api/notes/list`'s `count` is the number of rows in THIS answer (never the
 vault's total); `truncated: true` is what says more notes exist beyond the
@@ -165,6 +174,26 @@ from urllib.parse import parse_qs, quote, urlsplit
 #: for an unclassified action even if that line were removed.
 ACTION = "edit_vault_note"
 
+#: The gate action a DELETE is asked under - deliberately NOT `ACTION`. Every
+#: other write in this module is reversible, so `edit_vault_note` is an ordinary
+#: card. The owner's request of 2026-11-23 is that deleting notes always meets a
+#: PERSON, so a delete is its own action with its own row in `jarvis_gate._RISK`
+#: ("no"/"local"): the gate then asks Windows Hello on this PC, and the asking
+#: phone's own fingerprint or PIN, on every yes, however it arrives. The name is
+#: also what the Windows Hello prompt is titled from (`jarvis_card_words`), so
+#: an unnamed action could not be approved at all.
+DELETE_ACTION = "delete_vault_notes"
+
+#: How many notes ONE delete request may name (the owner's choice, 2026-11-23).
+#: The card names every note, so a bigger batch would be a list too long to read
+#: before saying yes. More than this is refused in plain words, before any card.
+MAX_DELETE = 20
+
+#: The vault's own trash folder. A deleted note is MOVED here - every byte and
+#: its relative path kept - which is where Obsidian itself puts a deleted note
+#: when the vault's "Deleted files" setting is the local trash folder.
+TRASH_DIR = ".trash"
+
 #: One note may be at most 2 MiB. Bigger is refused BEFORE any card, for a
 #: read (413) and for a save (413): a card the owner cannot read is not an
 #: approval, and a whole-vault editor is not a file manager.
@@ -207,11 +236,12 @@ CUSTOMIZE_PATH = "/api/notes/customize"
 TEMPLATES_PATH = "/api/notes/templates"
 RENAME_PATH = "/api/notes/rename"
 MOVE_PATH = "/api/notes/move"
+DELETE_PATH = "/api/notes/delete"
 CHANGE_PATH = "/api/notes/change"
 GET_PATHS = (LIST_PATH, READ_PATH, SAVE_PATH, CHANGE_PATH, TEMPLATES_PATH)
 POST_PATHS = (SAVE_PATH, CREATE_PATH, APPEND_PATH, TAG_PATH,
               INSERT_PATH, FORMAT_PATH, REPLACE_PATH, CUSTOMIZE_PATH,
-              RENAME_PATH, MOVE_PATH)
+              RENAME_PATH, MOVE_PATH, DELETE_PATH)
 
 #: A tag is one Obsidian tag name without the `#`: letters, digits, `_`, `-`
 #: and `/` (nested tags), at least one non-digit, never a space. 64 characters
@@ -265,6 +295,11 @@ _REFUSED_WRITE = {
         "denied": "You said no, so the template was not saved.",
         "timed_out": "Nobody answered the approval card in time, so the template was not saved.",
         "refused": "The approval gate refused it, so the template was not saved.",
+    },
+    "delete": {
+        "denied": "You said no, so no note was deleted.",
+        "timed_out": "Nobody answered the approval card in time, so no note was deleted.",
+        "refused": "The approval gate refused it, so no note was deleted.",
     },
 }
 
@@ -3277,6 +3312,7 @@ def _batch_worker(job_id: str, plan: dict, gate_check) -> None:
 
 
 def _start_batch_job(kind: str, plan: dict, gate_check, wait_s: float, by: str) -> tuple:
+    deleting = kind == "delete"
     with _lock:
         waiting = sum(1 for j in _jobs.values() if j.get("state") == "waiting")
         if waiting >= MAX_WAITING:
@@ -3285,14 +3321,18 @@ def _start_batch_job(kind: str, plan: dict, gate_check, wait_s: float, by: str) 
                           state="refused")
         job_id = "notebatch_" + kind + "_" + secrets.token_hex(8)
         _jobs[job_id] = {"id": job_id, "kind": kind, "state": "waiting",
-                         "path": plan["source"], "target": plan["target"],
-                         "updates": plan["updates"], "notes": plan["notes"],
+                         "path": plan["rows"][0]["rel"] if deleting else plan["source"],
+                         "target": TRASH_DIR if deleting else plan["target"],
+                         "updates": 0 if deleting else plan["updates"],
+                         "notes": 0 if deleting else plan["notes"],
+                         "count": plan["n"] if deleting else None,
                          "message": plan["preview"], "created": time.time(),
                          "updated": time.time(), "by": by}
         while len(_jobs) > MAX_JOBS:
             oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
             _jobs.pop(oldest, None)
-    thread = threading.Thread(target=_batch_worker,
+    worker = _delete_worker if deleting else _batch_worker
+    thread = threading.Thread(target=worker,
                               args=(job_id, plan, gate_check or _gate_check),
                               name="jarvis-note-" + kind, daemon=True)
     thread.start()
@@ -3323,6 +3363,270 @@ def handle_move(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     if err is not None:
         return err
     return _start_batch_job("move", plan, gate_check, wait_s, by)
+
+
+# ---------------------------------------------------------------------------
+#   Deleting notes, one or many, into the vault's own .trash (2026-11-23)
+# ---------------------------------------------------------------------------
+#
+# THE OWNER'S REQUEST, in their words: "i want Jarvis to be able to delete
+# obsidian notes , even multiple at a time. but it will always require a card
+# with fingerprint or windows hello confirmation", and "it will list the names
+# of the notes it wants to delete (from my request) in the card and the
+# conversation as well". Asked which shape a delete takes, they chose the
+# vault's trash over "gone for good", and twenty notes as the most in one go.
+#
+# WHY ITS OWN GATE ACTION. `edit_vault_note` (everything else here) is
+# reversible and local, so its card is ordinary and its approval is one tap on
+# the phone. A delete is raised under `delete_vault_notes` instead, whose own
+# `_RISK` row in jarvis_gate.py says "no"/"local": the gate then needs a PERSON
+# on every yes - Windows Hello on this PC, or the asking phone's own fingerprint
+# or PIN - and refuses a phone with no approval key with the sentence that
+# offers to set one up. That is the whole of the owner's requirement, and it is
+# the gate's existing machinery rather than a second permission path.
+#
+# WHY "cannot be undone" IS TRUE OF AN APP, THOUGH THE BYTES SURVIVE. The note
+# is MOVED, never written over: `os.replace` into `<vault>/.trash/<same path>`,
+# created when it is not there yet, and a name already in the trash gets
+# " (2)". Obsidian does not show or restore that folder, this editor cannot
+# read a hidden path (`note_parts` refuses any dot-prefixed component), and no
+# Undo receipt is recorded for a delete - so neither app can put one back. The
+# owner can, from Explorer: the reply names the folder and the notes, which is
+# why the honest card says "moved out of your vault", never "destroyed".
+#
+# WHAT IS REFUSED BEFORE ANY CARD: no paths at all, more than MAX_DELETE, the
+# same note named twice, a path that is not a vault-relative .md/.txt
+# (`note_parts`), a hidden folder, a link or junction anywhere in the path, a
+# Protected path, a note that is not there, and a note whose bytes cannot be
+# read. Nothing is moved until every one of those has passed for EVERY path, and
+# the whole batch is verified again after the card is approved.
+
+
+def _delete_target(vault: Path, rel: str, taken=None) -> str:
+    """Where one note's bytes go inside `.trash`, never over another file.
+
+    `taken` carries the targets this SAME batch has already chosen. The disk
+    check alone is not enough: delete ["Foo.md", "Foo (2).md"] while
+    `.trash/Foo.md` already exists, and both rows would be handed
+    `.trash/Foo (2).md`, because neither move has happened yet when the second
+    target is chosen - the second `os.replace` would then overwrite the first
+    note while the reply said both moved.
+    """
+    claimed = taken if taken is not None else set()
+    stem, suffix = os.path.splitext(rel)
+    for n in range(1, 100):
+        cand = rel if n == 1 else f"{stem} ({n}){suffix}"
+        if cand.casefold() in claimed:
+            continue
+        if not vault.joinpath(TRASH_DIR, *cand.split("/")).exists():
+            return cand
+    raise OSError("the trash folder already holds too many notes with that name")
+
+
+def _delete_preview(plan: dict) -> str:
+    """The sentence the conversation and the card both start from."""
+    n = plan["n"]
+    one = "note" if n == 1 else "notes"
+    if plan["hidden"]:
+        return (f"This moves {n} {one} out of your Obsidian vault and into its "
+                ".trash folder.")
+    if n == 1:
+        return (f'This moves the note "{plan["names"][0]}" out of your Obsidian '
+                "vault and into its .trash folder.")
+    return (f"These {n} notes move out of your Obsidian vault and into its .trash "
+            "folder: " + ", ".join(f'"{p}"' for p in plan["names"]) + ".")
+
+
+def _delete_prompt_detail(plan: dict) -> tuple:
+    """The card's own line and detail - every note named, unless lists are hidden."""
+    n = plan["n"]
+    one = "note" if n == 1 else "notes"
+    if plan["hidden"]:
+        prompt = f"delete {n} {one} from your Obsidian vault"
+        detail = {"action": "delete notes", "count": n, "trash": True,
+                  "undo": False, "deletes": True, "hidden_lists": True}
+        return prompt, detail
+    names = ", ".join(f'"{p}"' for p in plan["names"])
+    prompt = f'delete {names} from your Obsidian vault' if n == 1 \
+        else f"delete {n} notes from your Obsidian vault: {names}"
+    detail = {"action": "delete notes", "count": n, "paths": plan["names"],
+              "trash": True, "undo": False, "deletes": True}
+    return prompt, detail
+
+
+def _plan_delete(body: dict) -> tuple:
+    """`(plan dict, error tuple)`; every refusal happens before any card."""
+    if not isinstance(body, dict):
+        return None, _error(400, "Need a JSON object with a list of note paths.",
+                            state="refused")
+    raw = body.get("paths")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list) or not raw:
+        return None, _error(400, ("Say which notes to delete: send a list of note "
+                                  "paths inside your Obsidian vault."),
+                            state="refused")
+    if len(raw) > MAX_DELETE:
+        return None, _error(400, (f"I delete up to {MAX_DELETE} notes at a time, and "
+                                  f"{len(raw)} were named, so nothing was deleted."),
+                            state="refused")
+    vault, why = _vault()
+    if vault is None:
+        return None, _error(503, "Nothing was deleted: " + why + ".", state="refused")
+    _P = _protection()
+    rows, seen, taken = [], set(), set()
+    for one in raw:
+        full, rel, why = _resolve_note(one)
+        if why:
+            return None, _error(400, "Nothing was deleted: " + why + ".", state="refused")
+        key = rel.casefold()
+        if key in seen:
+            return None, _error(400, (f"{rel} was named twice, so nothing was "
+                                     "deleted."), state="refused")
+        seen.add(key)
+        if not full.is_file():
+            return None, _error(404, (f"There is no note at {rel} in your Obsidian "
+                                      "vault, so nothing was deleted."),
+                                state="refused")
+        if _P is not None:
+            said = _P.path_refusal(str(full), write=True)
+            if said:
+                return None, _error(403, said, state="refused")
+        try:
+            data = _read_bytes(full)
+        except OSError:
+            return None, _error(503, (f"{rel} could not be read, so nothing was "
+                                      "deleted."), state="refused")
+        try:
+            target_rel = _delete_target(vault, rel, taken)
+        except OSError:
+            return None, _error(409, (f"The trash folder already holds too many notes "
+                                      f"called {rel}, so nothing was deleted."),
+                                state="refused")
+        taken.add(target_rel.casefold())
+        rows.append({"rel": rel, "full": str(full), "sha256": _sha256(data),
+                     "bytes": len(data), "target": target_rel})
+    plan = {"kind": "delete", "vault": str(vault), "rows": rows, "n": len(rows),
+            "names": [r["rel"] for r in rows], "hidden": _hidden_lists()}
+    plan["preview"] = _delete_preview(plan)
+    return plan, None
+
+
+def _delete_verify(plan: dict) -> str:
+    """Empty when every note is still the one the card named; else plain words."""
+    for row in plan["rows"]:
+        full = Path(row["full"])
+        if not full.is_file() or _is_link_or_reparse(full):
+            return (f"{row['rel']} is no longer in your Obsidian vault, so nothing "
+                    "was deleted.")
+        try:
+            if _sha256(_read_bytes(full)) != row["sha256"]:
+                return (f"{row['rel']} changed while the card waited, so nothing was "
+                        "deleted.")
+        except OSError:
+            return f"{row['rel']} could not be re-read, so nothing was deleted."
+    return ""
+
+
+def _deleted_words(plan: dict) -> str:
+    """What the conversation says once the notes have moved."""
+    n = plan["n"]
+    one = "note" if n == 1 else "notes"
+    if plan["hidden"]:
+        return (f"Moved {n} {one} out of your Obsidian vault and into its .trash "
+                "folder.")
+    if n == 1:
+        return (f'Moved "{plan["names"][0]}" into the vault\'s .trash folder. You can '
+                "put it back from Windows Explorer.")
+    return (f'Moved {n} notes into the vault\'s .trash folder: '
+            + ", ".join(f'"{p}"' for p in plan["names"])
+            + ". You can put one back from Windows Explorer.")
+
+
+def _delete_worker(job_id: str, plan: dict, gate_check) -> None:
+    """Ask the gate, then (and only then) move the notes into `.trash`."""
+    try:
+        prompt, detail = _delete_prompt_detail(plan)
+        verdict = gate_check(DELETE_ACTION, detail, prompt)
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            state = "denied" if outcome in ("denied", "timed_out") else "failed"
+            _finish(job_id, state=state, outcome=outcome,
+                    message=_REFUSED_WRITE["delete"].get(
+                        outcome, "The approval gate refused it, so no note was deleted."))
+            _audit("delete_refused", {"job": job_id, "outcome": outcome,
+                                      "count": plan["n"]})
+            return
+        # The card was read from a plan; the disk is what counts now.
+        why = _delete_verify(plan)
+        if why:
+            _finish(job_id, state="failed", message=why)
+            _audit("delete_failed", {"job": job_id, "why": "changed"})
+            return
+        vault = Path(plan["vault"])
+        trash = vault / TRASH_DIR
+        # A free name was chosen when the card was raised; os.replace() would
+        # silently overwrite a file that took that exact name while the card
+        # waited, so the whole batch refuses instead, before anything moves.
+        taken_now = [row["rel"] for row in plan["rows"]
+                     if trash.joinpath(*row["target"].split("/")).exists()]
+        if taken_now:
+            _finish(job_id, state="failed",
+                    message=("A file named like the trash copy appeared while the "
+                             "card waited, so nothing was deleted: "
+                             + ", ".join(taken_now) + "."))
+            _audit("delete_failed", {"job": job_id, "why": "trash-name-taken"})
+            return
+        moved = []
+        try:
+            for row in plan["rows"]:
+                target = trash.joinpath(*row["target"].split("/"))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(row["full"], str(target))
+                moved.append(row)
+            _finish(job_id, state="saved", target=TRASH_DIR, count=plan["n"],
+                    paths=[] if plan["hidden"] else list(plan["names"]),
+                    message=_deleted_words(plan))
+            _audit("deleted", {"job": job_id, "count": plan["n"]})
+        except Exception as exc:                            # noqa: BLE001
+            put_back, stuck = [], []
+            for row in moved:
+                try:
+                    os.replace(str(trash.joinpath(*row["target"].split("/"))),
+                               row["full"])
+                    put_back.append(row["rel"])
+                except Exception:                        # noqa: BLE001
+                    stuck.append(row["rel"])
+            if stuck:
+                said = (f"The delete failed ({type(exc).__name__}). {len(put_back)} of "
+                        f"{plan['n']} were put back; {', '.join(stuck)} could not be, "
+                        "and are in the vault's .trash folder.")
+            else:
+                said = (f"The delete failed ({type(exc).__name__}), so the notes that "
+                        "had moved were put back.")
+            _finish(job_id, state="failed", message=said)
+            _audit("delete_failed", {"job": job_id, "why": "write",
+                                     "stuck": len(stuck)})
+    except Exception as exc:                                # noqa: BLE001
+        _finish(job_id, state="failed",
+                message=(f"The delete failed ({type(exc).__name__}), so no note was "
+                         "deleted."))
+        _audit("delete_failed", {"job": job_id, "why": "exception"})
+
+
+def handle_delete(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/delete: move one or more notes into the vault's trash.
+
+    One card for the whole batch, under `DELETE_ACTION`, and the card names every
+    note. Nothing is moved until that card is approved. The answer is the
+    module's ordinary change shape: 202 while the card waits, 200 once it has
+    been answered, `GET /api/notes/change?id=` for the rest.
+    """
+    plan, err = _plan_delete(body)
+    if err is not None:
+        return err
+    return _start_batch_job("delete", plan, gate_check, wait_s, by)
 
 
 try:
@@ -3358,7 +3662,7 @@ def change_status(job_id: str) -> tuple:
         out["receipt"] = job["receipt"]
     if job.get("snapshot"):
         out["snapshot"] = job["snapshot"]
-    for key in ("target", "updates", "notes"):
+    for key in ("target", "updates", "notes", "count", "paths"):
         if job.get(key) is not None:
             out[key] = job[key]
     return 200, out
@@ -3716,6 +4020,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 code, out = handle_rename(body)
             elif route == MOVE_PATH:
                 code, out = handle_move(body)
+            elif route == DELETE_PATH:
+                code, out = handle_delete(body)
             else:
                 code, out = handle_save(body)
         except Exception as exc:                            # noqa: BLE001
@@ -3728,7 +4034,9 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     handler_cls.do_POST = do_POST
     return ("  notes-edit  browse and read any Obsidian note; save, create, "
             "append, tag, rename and move ONE note per request (one approval "
-            "card each, undo receipt); a rename/move also updates the links to it")
+            "card each, undo receipt); a rename/move also updates the links to it; "
+            "delete up to twenty notes per request (one card naming all of them, "
+            "and that card needs Windows Hello or the asking phone's fingerprint)")
 
 
 def _reset_for_tests() -> None:

@@ -1428,6 +1428,28 @@ def match(text, now: Optional[float] = None,
     return got
 
 
+#: "Transfer this screenshot to my PC" (2026-11-23). The picture itself rides
+#: in the request, so this grammar only decides that the owner wants it SAVED
+#: rather than read; the handler refuses in plain words when the turn carries
+#: no picture, or more than one. A sentence that names no picture at all is not
+#: claimed here ("send this to my PC" stays the model's, and every other
+#: grammar's, exactly as before).
+_CHAT_PICTURE_SAVE = re.compile(
+    r"(?:transfer|save|send|put|copy|move)\s+(?:this|these|that|the|my)?\s*"
+    r"(?:pictures?|photos?|screenshots?|images?)\s+"
+    r"(?:to|onto|on|into|in)\s+(?:my\s+|the\s+)?(?:pc|computer|desktop|laptop)"
+    r"|(?:transfer|put|copy|move)\s+(?:this|these|that)\s+(?:to|onto)\s+"
+    r"(?:my\s+|the\s+)?(?:pc|computer|desktop|laptop)"
+    r"|save\s+(?:this|these|that)\s+(?:on|to)\s+(?:my\s+|the\s+)?"
+    r"(?:pc|computer|desktop|laptop)")
+
+
+def _chat_picture_save(s):
+    """The intent for "transfer this screenshot to my PC", or None."""
+    if _CHAT_PICTURE_SAVE.fullmatch(s):
+        return Intent("chat_picture_save")
+    return None
+
 def _match(text, now: float, conversation: Optional[str] = None,
            said: Optional[str] = None) -> Optional[Intent]:
     s = normalize_spoken_command(text)
@@ -2210,6 +2232,12 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if got is not None:
         return got
     got = _heritage(s)
+    if got is not None:
+        return got
+    # A picture the owner wants SAVED (2026-11-23): "transfer this screenshot
+    # to my PC". It is claimed before the settings grammar, because the words
+    # name a file and a destination, not a setting.
+    got = _chat_picture_save(s)
     if got is not None:
         return got
     got = _settings_adjust(s, said)
@@ -18928,6 +18956,66 @@ _NOTE_RENAME_REFUSED = re.compile(
     r"(?:\w+\s+)?note\b")
 _NOTE_DELETE_REFUSED = re.compile(
     r"(?:delete|remove|erase|trash)\s+(?:my\s+|the\s+|a\s+)?(?:\w+\s+)?note\b")
+#: "delete my note Shopping" / "delete notes Shopping, Workout and Ideas"
+#: (2026-11-23, the owner's request: "delete obsidian notes, even multiple at a
+#: time ... it will always require a card with fingerprint or windows hello",
+#: and "list the names ... in the card and the conversation"). The verb set is
+#: the refusal's own, so the shapes chat used to refuse in words are exactly the
+#: ones that now reach the card. A sentence with no note word is claimed only
+#: when the name it carries IS an existing note, so "delete my 5pm reminder"
+#: stays the scheduler's; "delete this line" is taken by _NOTE_DELETE_LINE above
+#: and never reaches here.
+_NOTE_DELETE_VERB = re.compile(
+    r"^(?:please\s+|can\s+you\s+|could\s+you\s+)?"
+    r"(?:delete|remove|erase|trash)\s+(?P<rest>.+?)[.!?]?$", re.I)
+#: The article either side of a note's name, and the word "note" itself:
+#: "my note Shopping", "the Shopping note", "note called Shopping". `all`/`every`
+#: are here so "delete all notes about the trip" is read as the TOPIC it is
+#: (and answered with a question) rather than as a note with that name.
+_DELETE_ARTICLE = re.compile(
+    r"^(?:the|my|a|an|those|these|both|all|every|each|any|some)\s+", re.I)
+_DELETE_NOTE_LEAD = re.compile(
+    r"^notes?(?:\s+(?:called|named|titled))?\s*", re.I)
+_DELETE_NOTE_TAIL = re.compile(r"\s+notes?$", re.I)
+_DELETE_VAULT_TAIL = re.compile(
+    r"\s+(?:from|in|out\s+of)\s+(?:my|the)\s+(?:obsidian\s+)?vault$", re.I)
+#: One list, four ways to write it.
+_DELETE_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
+#: A phrase that names a TOPIC rather than a note ("delete all notes about the
+#: trip"): answered by asking for names, never by guessing which notes match.
+_DELETE_TOPIC = re.compile(r"^(?:about|mentioning|containing|with|of)\b", re.I)
+#: The scheduler's own nouns. A sentence naming one of these is never claimed by
+#: the note delete unless it also says "note", so "delete my 5pm reminder" and
+#: "delete the timer" stay the scheduler's even when a note happens to be called
+#: Reminder.md (2026-11-23).
+_DELETE_SCHEDULE = re.compile(
+    r"\b(?:reminders?|timers?|alarms?|todos?|to-dos?|tasks?)\b", re.I)
+
+
+def _delete_phrases(rest: str) -> list:
+    """Every way one sentence could name notes, the most literal first.
+
+    The whole phrase is tried first, so a name that itself holds "and" or a
+    comma still resolves ("delete my Salt and Pepper note"); the split list is
+    the fallback that turns "delete notes Shopping, Workout and Ideas" into
+    three names. Every phrase is only ever RESOLVED (jarvis_notes_edit's one
+    resolver), never guessed at, so an ambiguous or missing one refuses in
+    words and nothing is deleted.
+    """
+    text = str(rest or "").strip().rstrip(".!?").strip()
+    text = _DELETE_VAULT_TAIL.sub("", text).strip()
+    text = _DELETE_ARTICLE.sub("", text).strip()
+    text = _DELETE_NOTE_LEAD.sub("", text).strip()
+    text = _DELETE_NOTE_TAIL.sub("", text).strip()
+    text = text.strip().strip('"').strip("'").strip()
+    if not text:
+        return []
+    whole = [_DELETE_ARTICLE.sub("", text).strip().strip('"').strip("'")]
+    parts = [p.strip().strip('"').strip("'") for p in _DELETE_SPLIT.split(text)]
+    parts = [_DELETE_ARTICLE.sub("", p).strip() for p in parts if p.strip()]
+    if len(parts) > 1 and all(parts):
+        return [whole, parts]
+    return [whole]
 #: Asking chat to READ or SEARCH a note: chat does not read note text today.
 #: The audit measured the model claiming "I have located your notes" with no
 #: tool run. These shapes get the true door in plain words instead - the Notes
@@ -19663,10 +19751,16 @@ _NOTE_MOVE = re.compile(
 NOTE_WRITE_BATCH_SAID = (
     "I change one note at a time, so nothing was written: name ONE note, like "
     "\"add milk to my Shopping note\".")
+#: A LINE inside a note is still not deletable (2026-11-23): only a WHOLE note
+#: is, so "delete this line" and a delete that named nothing get two different
+#: true sentences, and neither may borrow the other's words.
+NOTE_LINE_DELETE_SAID = (
+    "Deleting a line inside a note is not built, so nothing was changed. I can "
+    "add, format, replace, tag, rename a heading or move a line into a section - "
+    "say one of those.")
 NOTE_DELETE_SAID = (
-    "Deleting a line or a note is not built, so nothing was changed. I can add, "
-    "format, replace, tag, rename a heading or move a line into a section - say "
-    "one of those.")
+    'Nothing was deleted. Name the notes you want deleted, like "delete my '
+    'Shopping note", and I will list every one of them on one card first.')
 _NOTE_DELETE_LINE = re.compile(
     r"(?:delete|remove|erase|trash)\s+(?:this|that|the|my)\s+"
     r"(?:line|lines|sentence|paragraph)\b.*")
@@ -20291,6 +20385,100 @@ def _wave3_note(name: str):
     return (path, sha, "") if not why else (None, "", why)
 
 
+#: The one question when a delete sentence named nothing, or named a topic.
+NOTE_DELETE_ASK_SAID = (
+    'Name the notes you want deleted - like "delete my Shopping note" or "delete '
+    'notes Shopping, Workout and Ideas" - and I will list every one of them on '
+    "one card first. I delete up to {most} notes at a time, and nothing was "
+    "deleted yet.")
+#: A name the resolver could not find. `_find_note` answers "not_found" as a
+#: code, so this is where a DELETE says it in words - with the delete's own verb,
+#: because "nothing was written" would be the wrong promise here.
+NOTE_DELETE_NO_NOTE = (
+    'I could not find a note called "{name}" in your Obsidian vault, so nothing '
+    "was deleted.")
+#: What the conversation says while the card waits. The card is confirmed with a
+#: PERSON - the owner's request of 2026-11-23.
+NOTE_DELETE_WAITING_SAID = (
+    "Waiting for your yes on the approval card: it is confirmed with Windows "
+    "Hello, or with your phone's own fingerprint. {said}")
+
+
+def _notes_delete_max() -> int:
+    """How many notes ONE delete may name, from the module that enforces it."""
+    try:
+        import jarvis_notes_edit as E
+        return int(getattr(E, "MAX_DELETE", 20))
+    except Exception:                       # noqa: BLE001 - module absent
+        return 20
+
+
+def _run_note_delete(f: dict) -> Result:
+    """Delete one note, or several, from the owner's own words (2026-11-23).
+
+    Every phrase is resolved by `_find_note` (jarvis_notes_edit's ONE resolver)
+    BEFORE anything else happens: one ambiguous name, or one that is not there,
+    answers in words and nothing is deleted. Up to `MAX_DELETE` notes then go to
+    `jarvis_notes_edit.handle_delete`, which raises ONE card naming all of them
+    and moves them into the vault's .trash only after that card is approved -
+    with Windows Hello on this PC, or the asking phone's own fingerprint.
+    """
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    most = _notes_delete_max()
+    tries = [t for t in (f.get("tries") or []) if isinstance(t, list) and t]
+    if not tries:
+        return Result(NOTE_DELETE_ASK_SAID.format(most=most), "note_delete_ask")
+    first_why = ""
+    for names in tries:
+        paths, why = [], ""
+        for name in names:
+            path, bad, _title = _find_note(str(name or ""))
+            if path is None:
+                if bad == "not_found":
+                    why = NOTE_DELETE_NO_NOTE.format(name=name)
+                else:
+                    # _find_note's own sentences end "so nothing was changed";
+                    # for a delete the honest verb is a different one.
+                    why = str(bad or "").replace("so nothing was changed",
+                                                 "so nothing was deleted")
+                    if "nothing was deleted" not in why:
+                        why = (why.strip() + " Nothing was deleted.").strip()
+                break
+            if path not in paths:
+                paths.append(path)
+        if why:
+            first_why = first_why or why
+            continue
+        if not paths:
+            continue
+        if len(paths) > most:
+            return Result(NOTE_DELETE_ASK_SAID.format(most=most), "note_delete_ask")
+        try:
+            import jarvis_notes_edit as E
+            code, out = E.handle_delete({"paths": paths}, by="chat", wait_s=1.5)
+        except Exception as exc:            # noqa: BLE001 - module absent
+            return Result(f"The notes could not be deleted ({type(exc).__name__}), so "
+                          "nothing was deleted.", "note_delete_refused")
+        out = out if isinstance(out, dict) else {}
+        if code not in (200, 202):
+            return Result(str(out.get("error") or "Nothing was deleted."),
+                          "note_delete_refused")
+        said = str(out.get("message") or "").strip()
+        state = str(out.get("state") or "")
+        if state in ("saved", "unchanged", "created"):
+            return Result(said or "Deleted.", "note_deleted")
+        if state == "waiting":
+            return Result(NOTE_DELETE_WAITING_SAID.format(said=said),
+                          "note_delete_waiting")
+        return Result(said or "Nothing was deleted.", "note_delete_refused")
+    topic = " ".join(str(t[0]) for t in tries if t).strip()
+    if _DELETE_TOPIC.match(topic):
+        return Result(NOTE_DELETE_ASK_SAID.format(most=most), "note_delete_ask")
+    return Result(first_why or NOTE_DELETE_ASK_SAID.format(most=most),
+                  "note_delete_refused")
+
+
 def _run_note_customize(f: dict, action: str, card: str) -> Result:
     if _notes_write_hidden():
         return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
@@ -20675,7 +20863,7 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
-        return Intent("note_delete_refused")
+        return Intent("note_line_delete_refused")
     m = _NOTE_RENAME.fullmatch(s)
     if m:
         name = (m.group("name") or m.group("name2") or "").strip()
@@ -20962,6 +21150,23 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     # never becomes a file name, a daily note, or the stale "not built" refusal.
     if _NOTE_CREATE_SHAPE.match(s):
         return Intent("note_create_ask")
+    # A DELETE of one note or many (2026-11-23, the owner's request: "delete
+    # obsidian notes , even multiple at a time ... it will always require a card
+    # with fingerprint or windows hello", and "it will list the names ... in the
+    # card and the conversation"). `_delete_phrases` reads the names; the
+    # resolver behind the card decides, so an ambiguous or a missing name answers
+    # in words with nothing deleted, and the card names every note it would take.
+    # A sentence with no note word is claimed only when the phrase IS a note's
+    # name, and never when it names a scheduler noun instead.
+    m = _NOTE_DELETE_VERB.match(s)
+    if m and (_says_note or not _DELETE_SCHEDULE.search(s)):
+        tries = _delete_phrases(m.group("rest"))
+        if tries and _DELETE_TOPIC.match(tries[0][0]):
+            return Intent("note_delete_ask")
+        if tries and (_says_note or _named_note_exists(tries[0][0])):
+            return Intent("note_delete", {"tries": tries})
+        if _says_note:
+            return Intent("note_delete_ask")
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
@@ -21040,12 +21245,17 @@ def _run_devices_list(f: Optional[dict] = None) -> Result:
     return Result(_devices_list_words(state), "devices_list")
 
 
-#: One plain refusal for the three note changes the notes editor deliberately
-#: does not have (its catalogue limit says the same in its own words).
+#: One plain refusal for a note-change sentence this lane could not read a name
+#: out of. Its old "the notes editor does not create, rename or delete notes"
+#: claim was true when it was written (2026-10-31) and is not any more: creating,
+#: renaming, moving and - since 2026-11-23 - deleting a whole note all exist, so
+#: the sentence now asks for the name and names the doors. The one thing that is
+#: always true of this answer stays first: nothing changed.
 NOTE_CHANGE_REFUSAL = (
-    "The notes editor does not create, rename or delete notes. It can browse, "
-    "search and open any note, and save a change to an existing one. Nothing "
-    "was changed.")
+    'Nothing was changed. Say which note, by name, and what to do with it - like '
+    '"rename my Workout note to Training" or "delete my Shopping note" - and I '
+    "will ask before anything changes. I can also browse, search and open any "
+    "note, and save a change to an existing one.")
 #: Obsidian's own theme, style sheets, templates and plugins belong to Obsidian.
 #: The hard sentence is the same one the catalogue answers use, so the two paths
 #: cannot say different things.
@@ -27401,7 +27611,33 @@ def _read_web_link(url: str, *, gate, tier_of,
     # Kept for this chat only, for 15 minutes, so a follow-up needs no second
     # card and no second fetch. Memory only; the reader wrote nothing.
     _read_link_remember(conversation, page.url, title, text)
-    return Result(said, "read_link", read=["read_web_page"])
+    # "Where this came from" (I42; DEF-032, 2026-11-24). The page this
+    # fast-path answer read is a reading tool's own result too, so it belongs
+    # in the Sources list and can be cited afterwards. The model path records
+    # one under the turn_id feedback.patch already put in X-Jarvis-Route; a
+    # quick answer is produced BEFORE the HUD mints any id (jarvis_hud.py's
+    # quick branch returns before its own record_turn call), so the id is
+    # minted HERE with that same call, the page's canonical address and title
+    # are recorded under it - never a word of the page, see
+    # jarvis_sources.page_source - and the id is carried on the answer so
+    # route_fields can put it in X-Jarvis-Route for both apps to read.
+    # Only for a real chat turn: a caller with no conversation id has no
+    # answer to cite and records nothing, exactly as before. Off a try, like
+    # every other piece of bookkeeping here - a source must never be the
+    # reason the read fails.
+    turn_id = ""
+    if conversation:
+        try:
+            import jarvis_sources
+            import jarvis_feedback
+            src = jarvis_sources.page_source(page.url, title)
+            tid = jarvis_feedback.record_turn([])
+            jarvis_sources.record(tid, [src])
+            turn_id = tid if src else ""
+        except Exception:
+            turn_id = ""
+    return Result(said, "read_link", read=["read_web_page"],
+                  turn_id=turn_id or None)
 
 
 def _read_link_needle(words: str) -> str:
@@ -28488,6 +28724,13 @@ class Result:
     # of the turn as `tools_ran`, so the conversation counts as having read
     # outside text - exactly as when the calendar tool runs.
     read: list = field(default_factory=list)
+    # "Where this came from" (I42; DEF-032, 2026-11-24): the turn id this
+    # answer's own reading was recorded under, when the FAST PATH itself read
+    # something - a page `_read_web_link` fetched. route_fields publishes it
+    # in X-Jarvis-Route as `turn_id`, the same id both apps already use to
+    # fetch an answer's sources, so the page can be listed and cited later.
+    # None for every answer that read nothing: those headers are unchanged.
+    turn_id: Optional[str] = None
     # What "cancel that" may take back (2026-09-25): the jobs this answer
     # MADE (never one that was already there), in words, and the nouns
     # "cancel that <noun>" may use for it.
@@ -31140,6 +31383,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     here is a carded setting change, which says one calm line instead of the
     setter's own sentence, because Live speaks the answer aloud."""
     n, f = intent.name, intent.f
+    # A picture the owner attached and asked to save (2026-11-23). The bytes
+    # ride in the request's own messages; nothing is read from disk.
+    if n == "chat_picture_save":
+        return _run_chat_picture_save(messages)
     # Stop everything (2026-11-16): the same action the tray's row and
     # Alt+Shift+X reach through POST /api/stop_all, called in process. No card
     # and no gate, because a stop only ever makes Jarvis do less; it is
@@ -31382,6 +31629,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result(NOTE_WRITE_BATCH_SAID, "notes_batch_refused")
     if n == "note_write_hidden":
         return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    if n == "note_delete":
+        return _run_note_delete(f)
+    if n == "note_delete_ask":
+        return Result(NOTE_DELETE_ASK_SAID.format(most=_notes_delete_max()),
+                      "note_delete_ask")
+    if n == "note_line_delete_refused":
+        return Result(NOTE_LINE_DELETE_SAID, "note_line_delete_refused")
     if n == "note_delete_refused":
         return Result(NOTE_DELETE_SAID, "note_delete_refused")
     if n in ("note_change_refused", "obsidian_style_refused"):
@@ -32584,6 +32838,10 @@ READ_ONLY_INTENTS = frozenset({
     # here: the daily note may have changed, so the old record goes; a note that
     # was refused wrote nothing, so `note_make_refused` is read-only.
     "vault_organizer_plan", "vault_organizer_scoped", "note_change_refused",
+    # Deleting notes (2026-11-23): the two refusals and the "name them" question
+    # write nothing at all, so none may clear what "cancel that" would undo. The
+    # delete's own WAITING and DONE results are deliberately NOT here.
+    "note_delete_ask", "note_delete_refused", "note_line_delete_refused",
     "obsidian_style_refused", "note_make_refused", "note_list", "note_read_about",
     # The card-free create's capability answer and the where-is-my-vault answer
     # (2026-10-31): both only read the vault setting and change nothing.
@@ -33919,6 +34177,14 @@ def route_fields(res: Result) -> dict:
     out = {"quick": res.intent, "where": "local", "lane": LANE,
            "inject_memory": False, "injected_facts": 0, "injected_ids": [],
            "injected_sensitive": 0}
+    if res.turn_id:
+        # "Where this came from" (I42; DEF-032, 2026-11-24): the id the fast
+        # path recorded its own reading under - X-Jarvis-Route's own
+        # `turn_id`, which both apps ALREADY read to fetch an answer's
+        # sources and its mark. Only a reading answer that really recorded a
+        # source carries it (a page read, today); every other quick answer's
+        # header is byte for byte what it was.
+        out["turn_id"] = res.turn_id
     if res.project_id:
         # A chat that belongs to a project (2026-11-19): which project this
         # answer was scoped to, so the apps can say so plainly. Only a turn
@@ -35630,3 +35896,34 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         if area:
             return Intent("area_overview", {"area": area})
     return None
+
+
+def _run_chat_picture_save(messages) -> Result:
+    """Save the ONE picture this turn carries (2026-11-23). One card, one file.
+
+    The bytes come from the request itself (`jarvis_chat_picture.raw_pictures`),
+    so nothing is read from disk and nothing is fetched. `jarvis_upload` raises
+    the same card the phone's folder door raises and lands the file in
+    `From my phone` once a person says yes; this handler only says what is true
+    before that yes (a card is up) or why there is nothing to save.
+    """
+    try:
+        import jarvis_chat_picture as CP
+        import jarvis_upload as U
+    except Exception:                       # noqa: BLE001 - half-deployed install
+        return Result("Saving a picture to your PC is not available on this PC yet.",
+                      "chat_picture_save")
+    try:
+        pics = CP.raw_pictures(messages or [])
+    except Exception:                       # noqa: BLE001 - a shape we do not read
+        pics = []
+    if not pics:
+        return Result(U.CHAT_NO_PICTURE, "chat_picture_save")
+    if len(pics) > 1:
+        return Result(U.CHAT_TOO_MANY, "chat_picture_save")
+    name = U.chat_picture_name(pics[0])
+    if not name:
+        return Result(U.CHAT_NOT_A_PICTURE, "chat_picture_save")
+    _code, out = U.save_chat_picture(name, pics[0])
+    return Result(str(out.get("said") or U.CHAT_NOT_A_PICTURE), "chat_picture_save")
+

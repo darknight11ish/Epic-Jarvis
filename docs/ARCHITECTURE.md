@@ -3531,6 +3531,27 @@ backend routes, in both directions; the rest are listed here only.
   half-built one on either. No new route is desktop- or phone-only and
   `tools/check_parity.py` classifies both routes as available to both.
 
+- **Deleting Obsidian notes is chat-only on both apps, and that is the finished
+  shape rather than a screen still owed** (2026-11-23; the owner's request for
+  batch deletes behind a fingerprint / Windows Hello card; JARVIS-API section
+  170.14). `POST /api/notes/delete` is built and documented: it takes one to
+  twenty vault-relative paths and moves them into the vault's own `.trash`
+  behind ONE `delete_vault_notes` card that names every note, and nothing moves
+  until that card is approved by a person - Windows Hello on the PC, or the
+  asking phone's own signed approval. **No client calls it and neither app draws
+  a delete screen.**
+  The desktop's HUD and the phone's chat both ask the same deterministic
+  sentences ("delete my Shopping note", "delete notes Shopping, Workout and
+  Ideas"), and the chat lane calls the route's own `handle_delete` in process,
+  so the ability works from both apps today. The reason is not work left for
+  later: the chat lane already works from both apps and already names every
+  note on the card and in the conversation, so a dedicated delete screen would
+  be a second place to approve a batch neither app can undo - the one door this
+  feature deliberately keeps. `tools/check_parity.py` is where that
+  one-sidedness is registered: the route belongs in `BACKEND_ONLY` (documented,
+  no app caller), not in a `todo` queue for a phone or desktop half; no such
+  half is owed.
+
 - **Routing a typed "was this answer right?" is the HUD page's and the phone's
   alone, not the desktop's main chat window** (2026-11-01; the field-test gap:
   the words were being sent to the model and answered conversationally instead
