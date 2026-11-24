@@ -102,7 +102,7 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // Tier A (13)
   "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
   "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
-  "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+  "coming_up", "cancel_scheduled", "protect_from_jarvis", "github_search", "send_file_to_phone",
   // Tier B (8)
   "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
   "home_control", "my_spending", "retirement_whatif",

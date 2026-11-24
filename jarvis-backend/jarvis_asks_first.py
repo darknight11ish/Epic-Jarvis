@@ -2246,6 +2246,11 @@ TEMPLATE_TOOLS = (
     "project_create", "project_seed_plan", "project_decompose_plan",
         "work_item_add", "work_item_update_status", "work_item_link_dependency",
         "project_checkpoint_reflect", "project_export_obsidian_hub",
+    # The five scheduler tools (2026-11-24, the scheduling review's first
+    # fix), in the order the shipped template names them. A fresh install used
+    # to offer the model none of them, so a reminder the fast lane missed was
+    # answered "set" with no row written.
+    "set_timer", "set_reminder", "todo_add", "todo_done", "coming_up",
 )
 #: The tools this build added on top of what the owner's live file named on
 #: 2026-11-05/06. A name here that is NOT in the live list is offered with the
