@@ -553,6 +553,16 @@ unprotect_item            = "ask"
 # the tier; THIS line does. Keep it "ask" - that is the one card per save, and
 # it is a deliberate decision rather than a fallback.
 edit_vault_note           = "ask"
+# Deleting notes (jarvis_notes_edit.py, 2026-11-23, Wave 24: the owner's
+# "i want Jarvis to be able to delete obsidian notes ... but it will always
+# require a card with fingerprint or windows hello confirmation"). Its `_RISK`
+# row is ("no", "local") - the vault's `.trash` keeps every byte, but neither
+# app can put one back - so the card is a risky approval: Windows Hello here,
+# the asking phone's own fingerprint there. THIS line is what keeps the tier at
+# "ask"; it is a deliberate decision rather than a fallback, and
+# `jarvis_gate.py`'s own unclassified net skips a classified action, so a
+# missing line would leave the tier to `[autonomy] unknown_action_tier`.
+delete_vault_notes        = "ask"
 # Picture conversion (jarvis_image_convert.py, 2026-11-18; the owner's "to pdf
 # from an image"): ONE new file per conversion - pictures into one PDF, or one
 # picture into another format. The module's prepare() refuses any tier but

@@ -848,6 +848,57 @@ NOTE_EDIT_RISK = Repair(
         "never approve them",
 )
 
+#: Wave 24 (2026-11-23): the owner asked for Obsidian notes to be deletable in
+#: batches, up to twenty, "always require a card with fingerprint or windows
+#: hello confirmation", with the notes named on the card and in the
+#: conversation. The published base carries the action's `_RISK` row
+#: ("no"/"local": the vault's `.trash` keeps every byte, but neither app can
+#: put one back, so a delete keeps the biometric every time) and its
+#: `_NO_RULE_FROM_DENIAL` entry in the end-of-file update blocks - the region
+#: no patch's hunk claims. The live install predates both, so without these two
+#: repairs `risk_for("delete_vault_notes")` answers the `_UNKNOWN_RISK`
+#: fallback ("no"/"outbound", classified False): a local delete warned as
+#: leaving the PC, and a denial offering a standing rule that would stop the
+#: feature ever being offered again. The row text is copied from the published
+#: base byte for byte, and the tier ("ask") ships as its own line in both
+#: settings copies.
+#:
+#: WHY THE ROWS SIT INSIDE THE LITERALS HERE. This is the LIVE file and no patch
+#: is applied after this write, so the base's end-of-file rule does not bind -
+#: `note-edit` above uses the same shape for the same reason.
+NOTE_DELETE_RISK = Repair(
+    name="note-delete",
+    filename="jarvis_gate.py",
+    probes=('"delete_vault_notes": ("no", "local",',),
+    anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+    replace_with=(
+        "_RISK: dict[str, tuple[str, str, str]] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-23, Wave 24): deleting\n"
+        "    # notes. The published base has this row in an end-of-file\n"
+        "    # `_RISK.update` block; this install predates it, so the gate fell\n"
+        "    # back to _UNKNOWN_RISK ('no'/'outbound', classified False). Copied\n"
+        "    # from jarvis-backend/jarvis_gate.py byte for byte.\n"
+        '    "delete_vault_notes": ("no", "local", "moves the notes named on the card out of your own Obsidian vault and into its hidden .trash folder - every byte is kept and you can put one back from Windows Explorer, but neither app can, so nothing here can undo it"),\n'
+    ),
+    why="without this row a local delete into the vault's own .trash is recorded "
+        "as an unclassified action that leaves the PC",
+)
+
+NOTE_DELETE_NO_RULE = Repair(
+    name="note-delete-no-rule",
+    filename="jarvis_gate.py",
+    probes=('"delete_vault_notes",  # jarvis_notes_edit.py acts only on this card',),
+    anchor="_NO_RULE_FROM_DENIAL = frozenset({\n",
+    replace_with=(
+        "_NO_RULE_FROM_DENIAL = frozenset({\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-23, Wave 24): a denied\n"
+        "    # delete answers that ONE batch of notes, never a standing rule.\n"
+        '    "delete_vault_notes",  # jarvis_notes_edit.py acts only on this card: a denial answers that one batch of notes (2026-11-23)\n'
+    ),
+    why="without this entry a denial would offer to remember 'no' as a standing "
+        "rule that stops Jarvis ever offering a delete again",
+)
+
 #: DEF-068's second half (2026-11-14). The `_RISK` rows above make both cards
 #: approvable, but `jarvis_gate.action_for_tool()` still answers
 #: "unclassified_tool" for the two tools, because `_TOOL_ACTIONS` on this
@@ -1355,7 +1406,9 @@ DEVICES_CLEANUP_GATE_ROWS = Repair(
 )
 
 
-REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK, PROJECT_GATE_ROWS,
+REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
+                              NOTE_DELETE_RISK, NOTE_DELETE_NO_RULE,
+                              PROJECT_GATE_ROWS,
                               DEVICES_CLEANUP_GATE_ROWS,
                               GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
                               UNKNOWN_RISK)}

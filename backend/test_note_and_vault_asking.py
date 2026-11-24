@@ -766,8 +766,11 @@ def t_rename_and_delete_are_refused_in_plain_words():
     before = tree(VAULT)
     # Wave 4 (2026-10-31) made rename/move a real capability: on an empty vault
     # it is the real "could not find that note" refusal, not the old
-    # "the editor does not rename" sentence (which is still true of create and
-    # delete). Nothing is written either way.
+    # "the editor does not rename" sentence. Wave 24 (2026-11-23) did the same
+    # for delete: a named note that does not exist is answered by delete's own
+    # "could not find a note ... nothing was deleted", not by the old
+    # "the editor does not create, rename or delete notes" sentence. Nothing is
+    # written either way, and no card is raised.
     got = ask("rename my note Welcome to Home")
     check("'rename my note Welcome to Home' is the real note-rename refusal",
           got is not None and got.intent == "note_rename_refused",
@@ -778,13 +781,13 @@ def t_rename_and_delete_are_refused_in_plain_words():
           reply[:300])
     for text in ("delete my note Welcome", "remove the shopping note"):
         got = ask(text)
-        check(f"{text!r} is the notes-editor refusal",
-              got is not None and got.intent == "note_change_refused",
+        check(f"{text!r} is the real note-delete refusal",
+              got is not None and got.intent == "note_delete_refused",
               got.intent if got else "the model")
         reply = got.reply if got else ""
-        check("... saying what the notes editor does not do",
-              "does not create, rename or delete notes" in reply, reply[:300])
-        check("... and that nothing was changed", "Nothing was changed." in reply,
+        check("... saying no note by that name was found",
+              "could not find a note" in reply, reply[:300])
+        check("... and that nothing was deleted", "nothing was deleted" in reply,
               reply[:300])
     check("no card was raised and nothing was written",
           GATE["calls"] == [] and tree(VAULT) == before,

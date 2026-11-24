@@ -3556,3 +3556,51 @@ _NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
 _RISK.update({
     "devices_cleanup": ("yes", "local", "removes the device-list rows of duplicate or inactive devices - nothing leaves this PC, a copy of the device list is written beside it before anything changes, every device used in the last 30 days and the newest device are never removed, and a removed device pairs again with the QR code"),
 })
+# --------------------------------------------------------------------------
+#   Deleting notes into the vault's trash (jarvis_notes_edit.py, 2026-11-23)
+# --------------------------------------------------------------------------
+# THE ROWS ARE HERE, AT THE END OF THE FILE, for the reason every block above
+# gives: nearly every line inside `_RISK`, `_TOOL_ACTIONS` and
+# `_NO_RULE_FROM_DENIAL` is an earlier patch's hunk context, and the end of this
+# file is the one region no patch's hunk claims.
+#
+# THE OWNER'S REQUEST, 2026-11-23, in their words: "i want Jarvis to be able to
+# delete obsidian notes , even multiple at a time. but it will always require a
+# card with fingerprint or windows hello confirmation", and "it will list the
+# names of the notes it wants to delete (from my request) in the card and the
+# conversation as well". Asked which shape a delete takes, they chose the
+# vault's own trash over "gone for good", and twenty notes as the most in one go.
+#
+# WHY THIS IS ITS OWN ACTION. Every other note write is decided under
+# `edit_vault_note` ("yes"/"local"): a reversible change, an ordinary card, and
+# one tap on the phone. The owner wants a PERSON on a delete every time, and the
+# gate's one mechanism for that is a row that says the change cannot be undone -
+# `is_risky` then sends the PC to Windows Hello and the phone to its own signed
+# approval (a fingerprint or PIN), and refuses a phone with no approval key with
+# the sentence that offers to set one up. So a delete is raised under its own
+# action, and the class comes from this row rather than from a second list.
+#
+# WHY "no" IS TRUE OF AN APP, THOUGH THE BYTES SURVIVE. The module MOVES each
+# note into `<vault>/.trash/<same path>`: every byte is kept, and the owner can
+# put one back from Explorer. What cannot put one back is either app - no Undo
+# receipt is recorded for a delete, Obsidian does not show or restore that
+# folder, and `note_parts` refuses to open any dot-prefixed path, so this editor
+# cannot even read the file it just moved. That is what "reversible: no" means
+# here, and the row`s own words say exactly that rather than claiming the file
+# was destroyed.
+#
+# WHY NOT PC_ONLY_ACTIONS. The owner asked for "fingerprint or windows hello",
+# which is both halves: Windows Hello on the PC and the phone`s own fingerprint.
+# A `[autonomy.windows_hello]` line or a PC_ONLY row would refuse the phone
+# outright (jarvis_owner_check.apply, "PC only"), so the risky class is the
+# shape that gives both.
+#
+# WHY `_NO_RULE_FROM_DENIAL`. A denial answers the one card it was shown for -
+# "not these notes, not now" - and must not write a standing rule that stops
+# Jarvis ever offering a delete again. The owner may say yes to the next one.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "delete_vault_notes",  # jarvis_notes_edit.py acts only on this card: a denial answers that one batch of notes (2026-11-23)
+}
+_RISK.update({
+    "delete_vault_notes": ("no", "local", "moves the notes named on the card out of your own Obsidian vault and into its hidden .trash folder - every byte is kept and you can put one back from Windows Explorer, but neither app can, so nothing here can undo it"),
+})

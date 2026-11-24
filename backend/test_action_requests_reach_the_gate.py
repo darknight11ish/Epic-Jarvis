@@ -9,7 +9,7 @@ stayed `[]` after every one of them, nothing changed, and every answer either
 refused or pointed at Windows settings:
 
     card-forget-fact      "Forget this fact: ..."                  []   refused in words
-    card-delete-note      "Delete my note called Welcome."         []   "does not ... delete notes"
+    card-delete-note      "Delete my note called Welcome."         []   "could not find a note ... nothing was deleted"
     card-email-draft      "Write an email ... and send it."        []   "I cannot actually send it"
     card-phone-aloud      "Turn on reading remembered-fact answers []   sent to TalkBack
                            aloud on my phone."
@@ -24,11 +24,14 @@ card:
     docstring says so ("the model has no tool that forgets anything"), and the
     owner's decision of 2026-09-24 puts a Forget on every saved fact in the
     Memory screen, with an "are you sure?" first. So the answer names that door.
-  * DELETE / RENAME A NOTE has NO tool either: the notes editor's own catalogue
-    limit says it "does not create, rename or delete notes", and the fast path
-    answers that sentence before the model is reached
-    (`jarvis_quick.NOTE_CHANGE_REFUSAL`). Pinned here as the live answer, and
-    the agent-side half - a model that CLAIMS the delete - is corrected.
+  * DELETE A NOTE has NO model tool, but since 2026-11-23 it is a REAL action on
+    the fast path: the names are resolved by the one resolver, ONE card names
+    every note, and that card is confirmed with Windows Hello on the PC or the
+    asking phone's own fingerprint (`jarvis_notes_edit.DELETE_ACTION`, whose risk
+    row says it cannot be undone by an app and stays local). A name that is not
+    in the vault answers in words with nothing deleted - which is what this
+    suite's probe sees - and the agent-side half - a model that CLAIMS the
+    delete - is still corrected.
   * THE PHONE'S READ-ALOUD SWITCH is phone-local (`jarvis-client`'s
     `MemoryAloud`, "Read out answers that use what Jarvis remembers"). The PC
     cannot change it, `docs/ARCHITECTURE.md` section 8 records that the desktop
@@ -274,14 +277,17 @@ def t_1_forget_one_fact_names_the_memory_door():
           AG._memory_forget_line("Forget this fact: I like tea."))
 
 
-def t_2_delete_a_note_is_the_fast_paths_honest_refusal_and_a_claim_is_corrected():
-    """card-delete-note. The live answer came from the fast path's own fixed
-    sentence (pinned below). The agent half is the OTHER direction: a model that
-    says it deleted the note must be corrected - no tool ran."""
-    text = QUICK.NOTE_CHANGE_REFUSAL
-    check("delete-note: the fast path's sentence says the editor cannot delete "
-          "a note", "does not create, rename or delete notes" in text, text)
-    check("delete-note: ...and that nothing was changed", "Nothing was changed" in text,
+def t_2_delete_a_note_is_a_real_carded_action_and_a_claim_is_corrected():
+    """card-delete-note. Since 2026-11-23 a note delete is a REAL action: the
+    fast path resolves the names, raises ONE card naming every note, and that
+    card is confirmed with Windows Hello or the asking phone's fingerprint
+    (`jarvis_notes_edit.DELETE_ACTION`, whose own risk row is not reversible and
+    stays local). The model still has no delete tool, so a model that SAYS it
+    deleted the note must be corrected - no tool ran."""
+    text = QUICK.NOTE_DELETE_SAID
+    check("delete-note: a delete with no resolved name changes nothing",
+          "Nothing was deleted" in text, text)
+    check("delete-note: ...and asks for the notes by name", "Name the notes" in text,
           text)
     gate = Gate(DENY)
     result, _, seen = turn("Delete my note called Welcome. One sentence.",
