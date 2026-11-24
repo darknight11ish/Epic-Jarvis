@@ -3759,6 +3759,10 @@ object JarvisRuntime {
         val waiting: Boolean,
         /** Bytes read by the one measuring pass so far - keeps a big file's chip moving. */
         val read: Long = 0L,
+        /** 1-based place in a batch of [count] picks, or 0 for a single file. */
+        val index: Int = 0,
+        /** How many files the owner picked at once, or 0 for a single file. */
+        val count: Int = 0,
     )
 
     private val _uploadNow = MutableStateFlow<UploadNow?>(null)
@@ -3892,8 +3896,34 @@ object JarvisRuntime {
      * over.
      */
     fun startSendDocument(into: String, name: String, mime: String?, open: () -> InputStream?) {
+        startSendDocuments(into, listOf(Upload.Queued(name, mime, open)))
+    }
+
+    /**
+     * Send SEVERAL picked files into [into], one after another (2026-11-23, the
+     * owner's "I should be able to send as many files of different kinds as I
+     * want to my PC"). Each file is a whole transfer of its own - its own
+     * `begin`, its own card on the PC - so nothing about the single-file
+     * promise changes; [Upload.sendMany] only decides the order and when to
+     * stop. [skipped] counts picks the picker returned but this app refused
+     * before a byte was read (the size cap), whose first reason is [firstSkip].
+     */
+    fun startSendDocuments(
+        into: String,
+        files: List<Upload.Queued>,
+        skipped: Int = 0,
+        firstSkip: String? = null,
+    ) {
         if (_uploadNow.value != null) {
             _uploadSaid.value = "Another upload is still going - let it finish first."
+            return
+        }
+        if (files.isEmpty()) {
+            _uploadSaid.value = if (skipped > 0) {
+                Upload.batchSaid(Upload.Batch(emptyList(), 0, null, 0), skipped, firstSkip)
+            } else {
+                Upload.EMPTY
+            }
             return
         }
         actionBlocker()?.let {
@@ -3901,41 +3931,76 @@ object JarvisRuntime {
             return
         }
         _uploadSaid.value = null
-        _uploadNow.value = UploadNow(name, 0, 0, false)
+        _uploadNow.value = UploadNow(files[0].name, 0, 0, false, index = 1, count = files.size)
         scope.launch {
             try {
-                val meta = measured(
-                    name, mime, Upload.Purpose.DOCUMENT, open,
-                    onRead = { bytes ->
-                        // The chip keeps moving while a 2 GiB file is measured.
-                        _uploadNow.value = UploadNow(name, 0, 0, false, bytes)
+                val batch = Upload.sendMany(
+                    files = files,
+                    onEach = { i, f ->
+                        _uploadNow.value = UploadNow(
+                            f.name, 0, 0, false, index = i + 1, count = files.size,
+                        )
                     },
-                ) { why ->
-                    _uploadSaid.value = why
-                } ?: return@launch
-                val outcome = Upload.send(
-                    meta = meta,
-                    into = into,
-                    open = open,
-                    begin = { body -> uploadReply(api.uploadBegin(body)) },
-                    chunk = { body -> uploadReply(api.uploadChunk(body)) },
-                    finish = { body -> uploadReply(api.uploadFinish(body)) },
-                    onProgress = { sent, total ->
-                        _uploadNow.value = UploadNow(name, sent, total, false)
-                    },
-                    onWaiting = { _uploadNow.value = UploadNow(name, 0, 0, true) },
-                    pause = uploadPause(),
+                    upload = { f -> uploadOne(into, f, files.size) },
                 )
-                _uploadSaid.value = Upload.outcomeText(outcome)
-            } catch (e: UploadStopped) {
-                _uploadSaid.value = e.why
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uploadSaid.value = Upload.STOPPED
+                _uploadSaid.value = Upload.batchSaid(batch, skipped, firstSkip)
             } finally {
                 _uploadNow.value = null
             }
+        }
+    }
+
+    /**
+     * One file of a batch: measure it once, ask the PC, send the chunks, finish.
+     * Every sentence a single send used to write straight to [uploadSaid] comes
+     * back as the [Upload.Outcome] instead, so [Upload.sendMany] can count it
+     * and decide whether the next file may go.
+     */
+    private suspend fun uploadOne(
+        into: String,
+        file: Upload.Queued,
+        count: Int,
+    ): Upload.Outcome {
+        val place = _uploadNow.value
+        var refused: String? = null
+        val meta = measured(
+            file.name, file.mime, Upload.Purpose.DOCUMENT, file.open,
+            onRead = { bytes ->
+                // The chip keeps moving while a 2 GiB file is measured.
+                _uploadNow.value = UploadNow(
+                    file.name, 0, 0, false, bytes,
+                    index = _uploadNow.value?.index ?: 1, count = count,
+                )
+            },
+        ) { why -> refused = why } ?: return Upload.Outcome.Refused(refused ?: Upload.UNREADABLE)
+        return try {
+            Upload.send(
+                meta = meta,
+                into = into,
+                open = file.open,
+                begin = { body -> uploadReply(api.uploadBegin(body)) },
+                chunk = { body -> uploadReply(api.uploadChunk(body)) },
+                finish = { body -> uploadReply(api.uploadFinish(body)) },
+                onProgress = { sent, total ->
+                    _uploadNow.value = UploadNow(
+                        file.name, sent, total, false,
+                        index = _uploadNow.value?.index ?: place?.index ?: 1, count = count,
+                    )
+                },
+                onWaiting = {
+                    _uploadNow.value = UploadNow(
+                        file.name, 0, 0, true,
+                        index = _uploadNow.value?.index ?: place?.index ?: 1, count = count,
+                    )
+                },
+                pause = uploadPause(),
+            )
+        } catch (e: UploadStopped) {
+            Upload.Outcome.Refused(e.why)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Upload.Outcome.Refused(Upload.STOPPED)
         }
     }
 

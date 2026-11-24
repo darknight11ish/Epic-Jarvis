@@ -203,10 +203,13 @@ internal fun FoldersSection(
                     val now = uploadNow
                     if (now != null) {
                         Gap(4)
+                        // "name (file 2 of 5)" for a batch; the bare name for one
+                        // file, exactly as before (2026-11-23).
+                        val label = Upload.batchName(now.index, now.count, now.name)
                         Text(
-                            if (now.waiting) Upload.waitingLine(now.name)
-                            else if (now.total <= 0) Upload.preparing(now.name, now.read)
-                            else Upload.progress(now.name, now.sent, now.total),
+                            if (now.waiting) Upload.waitingLine(label)
+                            else if (now.total <= 0) Upload.preparing(label, now.read)
+                            else Upload.progress(label, now.sent, now.total),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (now.waiting) chrome.warnInk else chrome.textMid,
                         )
