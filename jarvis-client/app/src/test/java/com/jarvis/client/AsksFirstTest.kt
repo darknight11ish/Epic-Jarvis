@@ -169,7 +169,7 @@ class AsksFirstTest {
         // 65th, and wave 16E's local review packet and record check are the
         // 66th and 67th; the plan store's eight typed tools (2026-11-20, PM2)
         // are the 76th to the 83rd. The phone still shows them read-only.
-        assertEquals("83 one-tool switches", 83, rawIds.size)
+        assertEquals("84 one-tool switches", 84, rawIds.size)
         for (id in listOf("shell_exec", "control_computer", "browser_control",
                 "read_web_page", "connect_account", "rea_investigate", "android_app",
                 "calculator", "propose_plan", "web_search",

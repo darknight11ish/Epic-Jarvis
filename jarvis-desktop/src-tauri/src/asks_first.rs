@@ -93,7 +93,8 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 
 /// The tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 83 at
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 84 at
+/// 2026-11-24 (`cancel_scheduled` is the 84th; 83 at
 /// 2026-11-20 (75 at 2026-11-14 - the plan store's eight typed tools are the
 /// 76th to the 83rd; 74 at 2026-11-11, 67 at 2026-11-10: 62 at 2026-11-09;
 /// Wave 13 added the carded
@@ -109,7 +110,7 @@ pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 83] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 84] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -121,6 +122,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 83] = [
     "todo_add",
     "todo_done",
     "coming_up",
+    "cancel_scheduled",
     "protect_from_jarvis",
     "github_search",
     "send_file_to_phone",
