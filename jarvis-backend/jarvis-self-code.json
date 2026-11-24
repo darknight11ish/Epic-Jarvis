@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "dcbbc5826de39c467dc78e396f401c0a43173764",
- "built_at": "2026-11-23T12:18:49-08:00",
+ "ref": "80536040fe9f8b2c0d9e1e8cb424549f6b077c06",
+ "built_at": "2026-11-23T17:06:09-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4536,7 +4536,9 @@
     "LICENSE",
     "README.md",
     "THIRD-PARTY-NOTICES.txt",
+    "changelog.d/2026-11-23-deny-ignores-cookie-advisory.md",
     "changelog.d/README.md",
+    "decisions.d/2026-11-23-a-cookie-advisory-that-cannot-reach-windows.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5043,7 +5045,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 513,
+   "file_count": 515,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6189,19 +6191,39 @@
  ],
  "recent_commits": [
   {
-   "sha": "dcbbc5826de39c467dc78e396f401c0a43173764",
+   "sha": "80536040fe9f8b2c0d9e1e8cb424549f6b077c06",
+   "date": "2026-11-23",
+   "subject": "chore(generated): take the recent-changes modules from the record after #1477"
+  },
+  {
+   "sha": "123a2f91fca4376bc1b4ef76cf65bfd94c8fac0f",
+   "date": "2026-11-23",
+   "subject": "chore(generated): refresh the self-code map and the docs map"
+  },
+  {
+   "sha": "733cbcc692d18c320fa01e570dccc5aab31b5f2b",
    "date": "2026-11-23",
    "subject": "chore(generated): take the recent-changes modules from the rolled record"
   },
   {
-   "sha": "59cedb8c88b10e49195df369c16343ed89295d4f",
+   "sha": "efd09f747e40aaf021b09e891940b02453e617f1",
    "date": "2026-11-23",
    "subject": "chore(records): roll the changelog and the decision fragments"
+  },
+  {
+   "sha": "b6fb7d9e5192181a95166a2f5863e68ed2327f83",
+   "date": "2026-11-23",
+   "subject": "Merge pull request #1477 from darknight11ish/fix/rustsec-2026-0594-cookie-2026-11-23"
   },
   {
    "sha": "18513ad72291b6d071f31850e4ec4ea1c20b672e",
    "date": "2026-11-23",
    "subject": "Merge pull request #1474 from darknight11ish/feat/startup-preset-settings-row-2026-11-22"
+  },
+  {
+   "sha": "a9f15c2f8de25dc701883c0d8d6832b10882c10e",
+   "date": "2026-11-23",
+   "subject": "deps(desktop): waive RUSTSEC-2026-0594, which no Windows build can reach"
   },
   {
    "sha": "cff90a155916f53849e6052db20625a9fb1ef9d1",
@@ -6267,26 +6289,6 @@
    "sha": "af67684f27687dd9bfbad2429458dce68eb20f25",
    "date": "2026-11-22",
    "subject": "test(picture-card): re-measure the hunk pin after the identity block moved the HUD"
-  },
-  {
-   "sha": "c516f80234ef477ab484327f9b302b291f90bc45",
-   "date": "2026-11-22",
-   "subject": "Merge pull request #1469 from darknight11ish/chore/deny-toml-stale-advisories-2026-11-22"
-  },
-  {
-   "sha": "fe3aa29738a3f2117de1cca06615b40c97e57f3c",
-   "date": "2026-11-22",
-   "subject": "Merge pull request #1470 from darknight11ish/fix/fix-and-push-private-auth-2026-11-22"
-  },
-  {
-   "sha": "72ab9300874a4dddc1788bf72cb8cb31740a52bc",
-   "date": "2026-11-22",
-   "subject": "test(startup-preset): prove the route through the patch stack, not the module"
-  },
-  {
-   "sha": "663a58454e0f0278418aff262b4355847eaaa9ab",
-   "date": "2026-11-22",
-   "subject": "deploy: carry the cloud-turn identity sentence to the live HUD as two literal deltas"
   }
  ],
  "top_level": [
@@ -6371,6 +6373,16 @@
    "files": 3
   },
   {
+   "path": "changelog.d/",
+   "line": "one bullet per pull request, rolled into CHANGELOG.md",
+   "files": 2
+  },
+  {
+   "path": "decisions.d/",
+   "line": "one dated decision per pull request, rolled into DECISIONS.md",
+   "files": 2
+  },
+  {
    "path": "docker/",
    "line": "the one container Jarvis may run (a private search engine)",
    "files": 2
@@ -6379,16 +6391,6 @@
    "path": "skills/",
    "line": "skill packs a person can add",
    "files": 2
-  },
-  {
-   "path": "changelog.d/",
-   "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 1
-  },
-  {
-   "path": "decisions.d/",
-   "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 1
   },
   {
    "path": "features/",
@@ -6412,8 +6414,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5528,
-  "covered": 5040,
+  "tracked_files": 5530,
+  "covered": 5042,
   "excluded": 488,
   "subsystems": 27
  },
