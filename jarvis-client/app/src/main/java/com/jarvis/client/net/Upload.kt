@@ -110,10 +110,10 @@ object Upload {
     const val TITLE = "Send a file from your phone"
 
     /** The sentence under the action, and the promise behind it. */
-    val DETAIL: String = "Pick any file and it goes into a folder Jarvis may look in, into a " +
-        "new folder called From my phone. It is saved as a plain file: never run, never " +
+    val DETAIL: String = "Pick one or more files and they go into a folder Jarvis may look in, into " +
+        "a new folder called From my phone. Each is saved as a plain file: never run, never " +
         "opened, never added to the search index, and never shown to a model on this path. " +
-        "Files up to ${capWords(Purpose.DOCUMENT)} can be sent, and your PC asks you once " +
+        "Files up to ${capWords(Purpose.DOCUMENT)} can be sent, and your PC asks you once per file " +
         "before anything lands."
 
     /** A PC without the upload routes: its own state, in its own words. */
@@ -230,6 +230,114 @@ object Upload {
         is Outcome.Refused -> outcome.why
         Outcome.NotHere -> NOT_HERE
         is Outcome.Uploaded -> outcome.said.ifBlank { "Your PC has the file." }
+    }
+
+    // ---------------------------------------------- several files at once ---
+
+    /**
+     * One picked file waiting its turn in a batch - the owner's ask of
+     * 2026-11-23 ("I should be able to send as many files of different kinds as
+     * I want to my PC"): the name and type the PC is told, and the way to read
+     * the bytes when its turn comes. No bytes are held here.
+     */
+    class Queued(val name: String, val mime: String?, val open: () -> InputStream?)
+
+    /** What a batch did, file by file, in the order the owner picked them. */
+    data class Batch(
+        val outcomes: List<Outcome>,
+        /** How many the PC saved (or staged, for a Notion export). */
+        val saved: Int,
+        /** The sentence that stopped the batch early, or null when every file was tried. */
+        val stopped: String?,
+        /** How many files the owner picked for this batch. */
+        val picked: Int,
+    ) {
+        /** Every file the batch was asked to send. */
+        val total: Int get() = picked
+    }
+
+    /**
+     * Send [files] one after another, each with its own `begin`/`chunk`/`finish`
+     * and its own card on the PC. The batch never multiplexes two transfers, so
+     * every file keeps the single-file promise: the PC is asked first, and a
+     * file whose `begin` was refused is never opened.
+     *
+     * [onEach] runs before a file starts, so the screen can say "file 2 of 5".
+     * A file the PC saved does not stop the batch; a card nobody answered
+     * ([Outcome.Waiting]) or a PC without the routes ([Outcome.NotHere]) does -
+     * see [stopReason].
+     */
+    suspend fun sendMany(
+        files: List<Queued>,
+        upload: suspend (Queued) -> Outcome,
+        onEach: (index: Int, file: Queued) -> Unit = { _, _ -> },
+    ): Batch {
+        val outcomes = ArrayList<Outcome>(files.size)
+        var saved = 0
+        var stopped: String? = null
+        for ((i, file) in files.withIndex()) {
+            onEach(i, file)
+            val outcome = upload(file)
+            outcomes.add(outcome)
+            if (outcome is Outcome.Saved || outcome is Outcome.Uploaded) saved += 1
+            val why = stopReason(outcome)
+            if (why != null) {
+                stopped = why
+                break
+            }
+        }
+        return Batch(outcomes, saved, stopped, files.size)
+    }
+
+    /**
+     * Why the batch must stop after [outcome], or null when the next file may
+     * go. A refusal is that ONE file's own ("you said no", "too big", "that
+     * file changed"): the rest are separate files, each with its own card. A
+     * card nobody answered, or a PC without the upload routes, stops the batch
+     * instead of raising card after card (or failing the same way every time).
+     */
+    fun stopReason(outcome: Outcome): String? = when (outcome) {
+        is Outcome.Saved, is Outcome.Uploaded, is Outcome.Refused -> null
+        is Outcome.Waiting -> outcome.said.ifBlank { SENT_WAITING }
+        Outcome.NotHere -> NOT_HERE
+    }
+
+    /** "name (file 2 of 5)" for the progress chip, or just the name for one file. */
+    fun batchName(index: Int, count: Int, name: String): String =
+        if (count <= 1) name else "$name (file $index of $count)"
+
+    /**
+     * What the screen says after a batch. ONE file keeps the single-file
+     * sentence it always had ([outcomeText]). Several say how many arrived
+     * first, then - when some did not - the one reason that explains the rest:
+     * the card still waiting, the first pick refused before a byte was read
+     * ([skipped] files, [firstSkip] the first reason, the same cap refusal a
+     * single pick gives), or the first file the PC itself refused.
+     */
+    fun batchSaid(batch: Batch, skipped: Int = 0, firstSkip: String? = null): String {
+        val total = batch.picked + skipped
+        if (total == 1 && batch.picked == 1) return outcomeText(batch.outcomes[0])
+        val waiting = batch.outcomes.lastOrNull() as? Outcome.Waiting
+        if (batch.saved == total) return "Sent $total files to your PC."
+        if (waiting != null) {
+            // The bytes crossed; only the PC's yes is missing, so "nothing was
+            // sent" would be false (that file IS waiting on the PC).
+            val said = waiting.said.ifBlank { SENT_WAITING }
+            return if (batch.saved == 0) {
+                "Nothing is saved yet. $said The rest stay on your phone."
+            } else {
+                "Sent ${batch.saved} of $total files to your PC. $said The rest stay on your phone."
+            }
+        }
+        val reason = batch.stopped
+            ?: firstSkip
+            ?: batch.outcomes.filterIsInstance<Outcome.Refused>().firstOrNull()?.why
+        return if (batch.saved == 0) {
+            "Nothing was sent. ${reason ?: NOT_HERE}"
+        } else {
+            "Sent ${batch.saved} of $total files to your PC. ${reason ?: ""} " +
+                "The rest stay on your phone."
+        }
     }
 
     /** Whether an error means "this PC has no upload routes at all". */

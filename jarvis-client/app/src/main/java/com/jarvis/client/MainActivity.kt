@@ -770,41 +770,50 @@ class MainActivity : FragmentActivity() {
     private val notionVaultId = mutableStateOf<String?>(null)
 
     /**
-     * "Send a file from your phone": ANY file, offered with the wildcard MIME
-     * filter ([AttachFile.SEND_FILE_MIME_TYPES] - never the chat picture path).
-     * The folder was chosen one tap earlier, from the PC's own list.
+     * "Send a file from your phone": ANY files, offered with the wildcard MIME
+     * filter ([AttachFile.SEND_FILE_MIME_TYPES] - never the chat picture path),
+     * and SEVERAL at once since 2026-11-23 (the owner's "I should be able to
+     * send as many files of different kinds as I want to my PC"). The folder
+     * was chosen one tap earlier, from the PC's own list, and every file of the
+     * pick goes into that one folder - one whole transfer after another, each
+     * with its own card on the PC.
      *
-     * The PC stores the bytes as a plain file under the name the pick has and
+     * The PC stores the bytes as plain files under the names the picks have and
      * never opens, runs, parses, indexes or shows them to a model on this path,
      * so there is no client-side type list and no Pictures feature needed. A
      * photo picked here is NOT routed to [AttachFile.goesToPicture] or
      * [ChatPicture]: it is a file copy on this door (2026-11-13).
      *
-     * The provider's name, size and type are read first, and the pick is
-     * refused in plain words BEFORE a byte leaves the phone ([Upload.refusal]);
-     * a file past the 2 GiB cap is then refused by the measure pass without
-     * being read in full. The server's own sentence is shown verbatim when the
-     * PC refuses at `begin` or `finish`.
+     * The provider's name, size and type are read first for EVERY pick, and a
+     * pick is refused in plain words BEFORE a byte leaves the phone
+     * ([Upload.refusal]); the rest of the batch still goes. A file past the
+     * 2 GiB cap is refused by the measure pass without being read in full. The
+     * server's own sentence is shown verbatim when the PC refuses at `begin` or
+     * `finish`.
      */
-    private val pickSendDocument = registerForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
+    private val pickSendDocuments = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
         val into = sendDocumentInto.value ?: return@registerForActivityResult
         sendDocumentInto.value = null
-        if (uri == null) return@registerForActivityResult
+        if (uris.isEmpty()) return@registerForActivityResult
         lifecycleScope.launch {
-            val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
-            val refusal = Upload.refusal(info.name, info.mime, info.stated, Upload.Purpose.DOCUMENT)
-            if (refusal != null) {
-                JarvisRuntime.setNotice(refusal)
-                return@launch
+            val queue = ArrayList<Upload.Queued>(uris.size)
+            var skipped = 0
+            var firstSkip: String? = null
+            for (uri in uris) {
+                val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
+                val refusal = Upload.refusal(info.name, info.mime, info.stated, Upload.Purpose.DOCUMENT)
+                if (refusal != null) {
+                    skipped += 1
+                    if (firstSkip == null) firstSkip = refusal
+                    continue
+                }
+                queue.add(
+                    Upload.Queued(AttachFile.shownName(info.name), info.mime) { openPicked(uri) },
+                )
             }
-            JarvisRuntime.startSendDocument(
-                into = into,
-                name = AttachFile.shownName(info.name),
-                mime = info.mime,
-                open = { openPicked(uri) },
-            )
+            JarvisRuntime.startSendDocuments(into, queue, skipped, firstSkip)
         }
     }
 
@@ -4175,15 +4184,16 @@ class MainActivity : FragmentActivity() {
                         // "Send a file from your phone" and "Bring in a Notion
                         // export", on the Folders row (the owner's ask of
                         // 2026-11-05; any file type joined the first door on
-                        // 2026-11-13, and photos joined it as plain file
-                        // copies). The folder, or the vault, was chosen on that
-                        // row one tap earlier from the PC's own lists; these
-                        // only open the system picker and hand the URI's stream
-                        // to the runtime. Nothing is copied, and a pick that is
-                        // too big is refused before a byte is read.
+                        // 2026-11-13, photos joined it as plain file copies,
+                        // and SEVERAL files at once joined it on 2026-11-23).
+                        // The folder, or the vault, was chosen on that row one
+                        // tap earlier from the PC's own lists; these only open
+                        // the system picker and hand each URI's stream to the
+                        // runtime. Nothing is copied, and a pick that is too
+                        // big is refused before a byte is read.
                         onSendDocument = { path ->
                             sendDocumentInto.value = path
-                            pickSendDocument.launch(AttachFile.SEND_FILE_MIME_TYPES)
+                            pickSendDocuments.launch(AttachFile.SEND_FILE_MIME_TYPES)
                         },
                         onPickNotionZip = { vault ->
                             notionVaultId.value = vault
