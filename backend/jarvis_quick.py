@@ -1421,6 +1421,28 @@ def match(text, now: Optional[float] = None,
     return got
 
 
+#: "Transfer this screenshot to my PC" (2026-11-23). The picture itself rides
+#: in the request, so this grammar only decides that the owner wants it SAVED
+#: rather than read; the handler refuses in plain words when the turn carries
+#: no picture, or more than one. A sentence that names no picture at all is not
+#: claimed here ("send this to my PC" stays the model's, and every other
+#: grammar's, exactly as before).
+_CHAT_PICTURE_SAVE = re.compile(
+    r"(?:transfer|save|send|put|copy|move)\s+(?:this|these|that|the|my)?\s*"
+    r"(?:pictures?|photos?|screenshots?|images?)\s+"
+    r"(?:to|onto|on|into|in)\s+(?:my\s+|the\s+)?(?:pc|computer|desktop|laptop)"
+    r"|(?:transfer|put|copy|move)\s+(?:this|these|that)\s+(?:to|onto)\s+"
+    r"(?:my\s+|the\s+)?(?:pc|computer|desktop|laptop)"
+    r"|save\s+(?:this|these|that)\s+(?:on|to)\s+(?:my\s+|the\s+)?"
+    r"(?:pc|computer|desktop|laptop)")
+
+
+def _chat_picture_save(s):
+    """The intent for "transfer this screenshot to my PC", or None."""
+    if _CHAT_PICTURE_SAVE.fullmatch(s):
+        return Intent("chat_picture_save")
+    return None
+
 def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Intent]:
     s = normalize_spoken_command(text)
     if not s or len(s) > 400 or "\n" in s:
@@ -2202,6 +2224,12 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
     got = _heritage(s)
+    if got is not None:
+        return got
+    # A picture the owner wants SAVED (2026-11-23): "transfer this screenshot
+    # to my PC". It is claimed before the settings grammar, because the words
+    # name a file and a destination, not a setting.
+    got = _chat_picture_save(s)
     if got is not None:
         return got
     got = _settings_adjust(s)
@@ -31200,6 +31228,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     here is a carded setting change, which says one calm line instead of the
     setter's own sentence, because Live speaks the answer aloud."""
     n, f = intent.name, intent.f
+    # A picture the owner attached and asked to save (2026-11-23). The bytes
+    # ride in the request's own messages; nothing is read from disk.
+    if n == "chat_picture_save":
+        return _run_chat_picture_save(messages)
     # Stop everything (2026-11-16): the same action the tray's row and
     # Alt+Shift+X reach through POST /api/stop_all, called in process. No card
     # and no gate, because a stop only ever makes Jarvis do less; it is
@@ -35673,3 +35705,34 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         if area:
             return Intent("area_overview", {"area": area})
     return None
+
+
+def _run_chat_picture_save(messages) -> Result:
+    """Save the ONE picture this turn carries (2026-11-23). One card, one file.
+
+    The bytes come from the request itself (`jarvis_chat_picture.raw_pictures`),
+    so nothing is read from disk and nothing is fetched. `jarvis_upload` raises
+    the same card the phone's folder door raises and lands the file in
+    `From my phone` once a person says yes; this handler only says what is true
+    before that yes (a card is up) or why there is nothing to save.
+    """
+    try:
+        import jarvis_chat_picture as CP
+        import jarvis_upload as U
+    except Exception:                       # noqa: BLE001 - half-deployed install
+        return Result("Saving a picture to your PC is not available on this PC yet.",
+                      "chat_picture_save")
+    try:
+        pics = CP.raw_pictures(messages or [])
+    except Exception:                       # noqa: BLE001 - a shape we do not read
+        pics = []
+    if not pics:
+        return Result(U.CHAT_NO_PICTURE, "chat_picture_save")
+    if len(pics) > 1:
+        return Result(U.CHAT_TOO_MANY, "chat_picture_save")
+    name = U.chat_picture_name(pics[0])
+    if not name:
+        return Result(U.CHAT_NOT_A_PICTURE, "chat_picture_save")
+    _code, out = U.save_chat_picture(name, pics[0])
+    return Result(str(out.get("said") or U.CHAT_NOT_A_PICTURE), "chat_picture_save")
+

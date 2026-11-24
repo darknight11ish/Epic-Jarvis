@@ -1443,6 +1443,166 @@ def _send(self, code: int, payload: dict):
         pass
 
 
+# --------------------------------------------------------------------------
+#   A picture the owner attached in CHAT, saved to a folder (2026-11-23)
+#
+#   THE OWNER'S REPORT, with a screenshot: he attached a screenshot in chat and
+#   typed "transfer these to my PC"; the model answered "I can't transfer this
+#   screenshot to your PC myself". There was no path at all: the chat picture
+#   path DECODES a picture for the vision lane and writes nothing, and the
+#   upload path lands files but only for bytes a phone sent in chunks.
+#
+#   This is that missing half, and it reuses the upload's own machinery rather
+#   than inventing a second one: ONE `receive_uploaded_document` card raised
+#   BEFORE the bytes are staged, the upload's own staging folder, and its own
+#   `finish` - which measures what arrived, refuses a short file, checks the
+#   picture's header and does ONE `os.replace`. A denial or a timeout removes
+#   the staging (via `_settle`), so nothing half-written is left behind.
+#
+#   The caller is answered BEFORE the person decides: a chat turn must not hang
+#   for the card's 15 minutes, so the approval and the landing run on the
+#   module's own thread (`_spawn`) and the answer says the card is up.
+# --------------------------------------------------------------------------
+
+#: The chat answer when the turn carries no picture at all.
+CHAT_NO_PICTURE = ("There is no picture in this message to save. Attach one to the "
+                   "question first - or send the file from Settings, Folders, Send a "
+                   "file from your phone.")
+
+#: The chat answer when a single message carries more than one picture.
+CHAT_TOO_MANY = ("One picture at a time, please - saving every picture in this message "
+                 "would raise several cards at once.")
+
+#: The chat answer for a file that is not one of the picture kinds this door stores.
+CHAT_NOT_A_PICTURE = "That attachment is not a picture this door saves."
+
+#: What the chat says once the card is up. `{name}` never carries a path.
+CHAT_SAVE_ASKED = ('Asked your PC to save {name}. Approve the card on the PC and it '
+                   'lands in From my phone, inside "{folder}".')
+
+
+def chat_picture_name(raw, now: Optional[float] = None) -> Optional[str]:
+    """A safe file name for a picture whose bytes we hold, from its own header.
+
+    Never from the phone, which sends no name on this path: the extension must
+    match the bytes, or `finish`'s header check would refuse the file it just
+    wrote. None when the header is not one of the picture kinds this door
+    stores (`.png`, `.jpg`, `.webp`, `.gif`, `.bmp`)."""
+    raw = bytes(raw or b"")
+    ext = ""
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        ext = "png"
+    elif raw[:3] == b"\xff\xd8\xff":
+        ext = "jpg"
+    elif raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        ext = "webp"
+    elif raw[:6] in (b"GIF87a", b"GIF89a"):
+        ext = "gif"
+    elif raw[:2] == b"BM":
+        ext = "bmp"
+    if not ext:
+        return None
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(_now() if now is None else now))
+    return f"Screenshot-{stamp}.{ext}"
+
+
+def save_chat_picture(name, data, *, into=None, gate: Optional[Callable] = None,
+                      spawn: Optional[Callable] = None,
+                      tier_of: Optional[Callable] = None) -> tuple:
+    """Save ONE picture the owner attached in chat. (code, body).
+
+    `into`: a listed folder's path, exactly as `GET /api/folders` returns it,
+    or None for the FIRST one on that list. The file lands in
+    `<that folder>\\From my phone`, the same destination the phone's folder door
+    uses, and the answer names the folder but never a path."""
+    gate = gate or _gate
+    spawn = spawn or _spawn
+    tier_of = tier_of or _tier
+    if docs is None or attached is None:
+        return 503, {"ok": False, "said": MISSING, "reason": MISSING}
+    if not isinstance(data, (bytes, bytearray)) or not data:
+        return 400, {"ok": False, "said": NO_BYTES, "reason": "empty"}
+    data = bytes(data)
+    try:
+        name = safe_name(name)
+    except ValueError as exc:
+        return 400, {"ok": False, "said": _sentence(exc), "reason": str(exc)}
+    if not _is_photo(name):
+        return 400, {"ok": False, "said": CHAT_NOT_A_PICTURE, "reason": "not a photo"}
+    cap = _cap_for("document")
+    if len(data) > cap:
+        return 413, {"ok": False, "said": TOO_BIG_DOC.format(
+            size=_said_size(len(data)), cap=_cap_words("document")), "reason": "too big"}
+    if into in (None, ""):
+        st = docs.load()
+        if st.get("why"):
+            return 409, {"ok": False, "said": _sentence(st["why"]), "reason": st["why"]}
+        listed = [f["path"] for f in st.get("folders") or []]
+        if not listed:
+            return 409, {"ok": False, "said": docs.PHONE_ADD, "reason": "no folders"}
+        into = listed[0]
+    folder, why = _listed_folder(into)
+    if not folder:
+        code = 400 if why == FOLDER_NOT_LISTED else 409
+        return code, {"ok": False, "said": _sentence(why), "reason": why}
+    _sweep()
+    if len(_active()) >= MAX_ACTIVE:
+        return 409, {"ok": False, "said": BUSY, "reason": "busy"}
+    if _staged_bytes() + len(data) > STAGING_MAX:
+        return 409, {"ok": False, "said": FULL, "reason": "staging full"}
+
+    uid = uuid.uuid4().hex
+    entry = {
+        "id": uid, "name": name, "size": len(data), "purpose": "document",
+        "mime": "", "into": folder, "folder": _folder_name(folder),
+        "sha256": "", "created": _now(), "seen": _now(), "received": 0,
+        "index": 0, "state": "waiting", "staging": None, "complete": False,
+        "why": "", "digest": None,
+    }
+    with _LOCK:
+        _UP[uid] = entry
+    staging, why = _ensure_staging(entry)
+    if not staging:
+        _forget(uid, remove=False)
+        code = 507 if why == COULD_NOT_SAVE else 403
+        return code, {"ok": False, "said": why, "reason": why}
+    try:
+        with open(_part_of(entry), "wb") as fh:
+            fh.write(data)
+    except OSError:
+        _forget(uid, why="disk")
+        return 507, {"ok": False, "said": COULD_NOT_SAVE, "reason": "disk"}
+    with _LOCK:
+        again = _UP.get(uid)
+        if again is not None:
+            again["received"] = len(data)
+            again["seen"] = _now()
+    try:
+        spawn(lambda: _ask_then_land(uid, name, len(data), folder,
+                                     gate=gate, tier_of=tier_of))
+    except Exception:
+        _forget(uid, why="no card")
+        return 503, {"ok": False,
+                     "said": "The approval card could not be raised, so nothing was saved.",
+                     "reason": "no card"}
+    _audit("upload.chat_picture", {"purpose": "document"})
+    folder_name = _folder_name(folder) or "the listed folder"
+    return 202, {"ok": True, "id": uid, "waiting": True,
+                 "said": CHAT_SAVE_ASKED.format(name=name, folder=folder_name)}
+
+
+def _ask_then_land(uid: str, name: str, size: int, folder: str, *,
+                   gate: Callable, tier_of: Callable[[str], str]) -> None:
+    """The ONE card, then - only on a person's yes - the upload's own `finish`."""
+    _ask(uid, name, size, folder, gate=gate, tier_of=tier_of)
+    entry = _UP.get(uid)
+    if entry is None or entry.get("state") != "approved":
+        return
+    try:
+        request_finish({"id": uid})
+    except Exception:
+        _forget(uid, why="land")
+
 if __name__ == "__main__":
     print(f"  {TITLE}: {len(ROUTES)} routes, any file up to {_cap_words('document')}, "
           f"a Notion export up to {_cap_words('notion')}")
