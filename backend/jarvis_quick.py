@@ -27489,7 +27489,33 @@ def _read_web_link(url: str, *, gate, tier_of,
     # Kept for this chat only, for 15 minutes, so a follow-up needs no second
     # card and no second fetch. Memory only; the reader wrote nothing.
     _read_link_remember(conversation, page.url, title, text)
-    return Result(said, "read_link", read=["read_web_page"])
+    # "Where this came from" (I42; DEF-032, 2026-11-24). The page this
+    # fast-path answer read is a reading tool's own result too, so it belongs
+    # in the Sources list and can be cited afterwards. The model path records
+    # one under the turn_id feedback.patch already put in X-Jarvis-Route; a
+    # quick answer is produced BEFORE the HUD mints any id (jarvis_hud.py's
+    # quick branch returns before its own record_turn call), so the id is
+    # minted HERE with that same call, the page's canonical address and title
+    # are recorded under it - never a word of the page, see
+    # jarvis_sources.page_source - and the id is carried on the answer so
+    # route_fields can put it in X-Jarvis-Route for both apps to read.
+    # Only for a real chat turn: a caller with no conversation id has no
+    # answer to cite and records nothing, exactly as before. Off a try, like
+    # every other piece of bookkeeping here - a source must never be the
+    # reason the read fails.
+    turn_id = ""
+    if conversation:
+        try:
+            import jarvis_sources
+            import jarvis_feedback
+            src = jarvis_sources.page_source(page.url, title)
+            tid = jarvis_feedback.record_turn([])
+            jarvis_sources.record(tid, [src])
+            turn_id = tid if src else ""
+        except Exception:
+            turn_id = ""
+    return Result(said, "read_link", read=["read_web_page"],
+                  turn_id=turn_id or None)
 
 
 def _read_link_needle(words: str) -> str:
@@ -28576,6 +28602,13 @@ class Result:
     # of the turn as `tools_ran`, so the conversation counts as having read
     # outside text - exactly as when the calendar tool runs.
     read: list = field(default_factory=list)
+    # "Where this came from" (I42; DEF-032, 2026-11-24): the turn id this
+    # answer's own reading was recorded under, when the FAST PATH itself read
+    # something - a page `_read_web_link` fetched. route_fields publishes it
+    # in X-Jarvis-Route as `turn_id`, the same id both apps already use to
+    # fetch an answer's sources, so the page can be listed and cited later.
+    # None for every answer that read nothing: those headers are unchanged.
+    turn_id: Optional[str] = None
     # What "cancel that" may take back (2026-09-25): the jobs this answer
     # MADE (never one that was already there), in words, and the nouns
     # "cancel that <noun>" may use for it.
@@ -33994,6 +34027,14 @@ def route_fields(res: Result) -> dict:
     out = {"quick": res.intent, "where": "local", "lane": LANE,
            "inject_memory": False, "injected_facts": 0, "injected_ids": [],
            "injected_sensitive": 0}
+    if res.turn_id:
+        # "Where this came from" (I42; DEF-032, 2026-11-24): the id the fast
+        # path recorded its own reading under - X-Jarvis-Route's own
+        # `turn_id`, which both apps ALREADY read to fetch an answer's
+        # sources and its mark. Only a reading answer that really recorded a
+        # source carries it (a page read, today); every other quick answer's
+        # header is byte for byte what it was.
+        out["turn_id"] = res.turn_id
     if res.project_id:
         # A chat that belongs to a project (2026-11-19): which project this
         # answer was scoped to, so the apps can say so plainly. Only a turn

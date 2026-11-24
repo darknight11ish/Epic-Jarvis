@@ -38,13 +38,18 @@ import json
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
-require_shipped("jarvis_agent.py", "jarvis_sources.py", "jarvis_notes.py")
+require_shipped("jarvis_agent.py", "jarvis_sources.py", "jarvis_notes.py",
+                "jarvis_quick.py", "jarvis_readpage.py")
 import jarvis_agent as AG  # noqa: E402
+import jarvis_local_http as LH  # noqa: E402
+import jarvis_quick as Q  # noqa: E402
+import jarvis_readpage as RP  # noqa: E402
 import jarvis_sources as SRC  # noqa: E402
 import _ollama_wire as W  # noqa: E402
 
@@ -308,6 +313,134 @@ def t_took_in_collects_sources():
 
 
 # --------------------------------------------------------------------------
+#   DEF-032: a page the FAST PATH read is a source too, and can be cited
+# --------------------------------------------------------------------------
+#
+# The model path records a reading tool's own result under the turn id the
+# HUD put in X-Jarvis-Route (t_took_in_collects_sources / the end-to-end
+# cases above). A pasted address read by jarvis_quick._read_web_link never
+# enters the model's tool loop, so before DEF-032 it left no source at all -
+# nothing under "Where this came from", nothing to cite. This drives the
+# REAL matcher and the REAL read-link runner, with `jarvis_readpage`'s own
+# two injection points faked so no card and no network are real.
+
+#: The page the fast path reads: a recognisable title, and body words that
+#: must never reach the source row. None of the four is in the address, so a
+#: match would mean the page's own words really were kept.
+FAST_PAGE_WORDS = ("The kettle holds one and a half litres and pours without "
+                   "dripping. Its limescale filter lifts out with one hand, and "
+                   "the handle stays cool even when the water is boiling.")
+FAST_PAGE_SECRETS = ("litres", "dripping", "limescale", "boiling")
+
+#: A real chat turn's conversation id. The row is found through the id the
+#: answer's own X-Jarvis-Route carries, never through this one - that is what
+#: makes it citable by an app that only has the header.
+FAST_CONVERSATION = "aa11bb22cc33dd44ee55ff6677889900"
+
+
+class _FastPage:
+    """`jarvis_readpage`'s own two injection points: a private-fetch check
+    that always passes (no DNS lookup) and a fetch that answers from memory
+    (no GET). The same two replacements test_read_link.py makes, for the same
+    reason - no card and no network are ever real in a suite."""
+
+    def __init__(self, words: str):
+        self.body = (b"<html><head><title>The Kettle</title></head><body><main><p>"
+                     + words.encode("utf-8") + b"</p></main></body></html>")
+        self.fetches = []
+
+    def fetch(self, url):
+        self.fetches.append(url)
+        return self.body, "text/html; charset=utf-8"
+
+    def __enter__(self):
+        self._real_problem = LH.private_fetch_problem
+        self._real_deps = RP.DEPS
+        LH.private_fetch_problem = lambda url: ""
+        RP.DEPS = RP.Deps(fetch=self.fetch)
+        return self
+
+    def __exit__(self, *exc):
+        LH.private_fetch_problem = self._real_problem
+        RP.DEPS = self._real_deps
+        return False
+
+
+class _OneCard:
+    """The gate's stand-in: a person who says yes once. Never the real
+    `jarvis_gate.check`, which BLOCKS on the "ask" tier."""
+
+    def __init__(self):
+        self.actions = []
+
+    def __call__(self, action, detail, prompt):
+        self.actions.append(action)
+        return types.SimpleNamespace(allowed=True, outcome="approved",
+                                     tier="ask", reason="", action=action)
+
+
+def _fast_page_read(conversation):
+    """One turn through the REAL matcher and the REAL read-link runner."""
+    got = Q.match("https://example.com/kettle")
+    if got is None or got.name != "read_link":
+        return None
+    with _FastPage(FAST_PAGE_WORDS):
+        return Q._run_read_link(got.f, gate=_OneCard(),
+                                tier_of=lambda action: "ask",
+                                conversation=conversation)
+
+
+def t_a_fast_path_page_read_is_a_source_that_can_be_cited():
+    import os
+    SRC._reset_for_tests()
+    Q._READ_LINK_KEPT.clear()
+    with tempfile.TemporaryDirectory(prefix="jarvis-src-fast-") as d:
+        old_db = os.environ.get("JARVIS_FEEDBACK_DB")
+        os.environ["JARVIS_FEEDBACK_DB"] = str(Path(d) / "feedback.db")
+        try:
+            res = _fast_page_read(FAST_CONVERSATION)
+        finally:
+            if old_db is None:
+                os.environ.pop("JARVIS_FEEDBACK_DB", None)
+            else:
+                os.environ["JARVIS_FEEDBACK_DB"] = old_db
+            Q._READ_LINK_KEPT.clear()
+    route = Q.route_fields(res) if res is not None else {}
+    turn_id = route.get("turn_id")
+    check("a fast-path page read answers with its turn id in X-Jarvis-Route",
+          res is not None and isinstance(turn_id, str) and len(turn_id) == 32, route)
+    rows = SRC.sources_of(turn_id)["sources"] if turn_id else []
+    check("...and the page is in Sources, exactly one row", len(rows) == 1, rows)
+    check("...as a web source at the canonical address the card showed",
+          bool(rows) and rows[0].get("kind") == "web"
+          and rows[0].get("url") == "https://example.com/kettle", rows)
+    check("...with the page's own title", bool(rows)
+          and rows[0].get("title") == "The Kettle", rows)
+    check("...and not one word of the page in it",
+          all(word not in json.dumps(rows) for word in FAST_PAGE_SECRETS), rows)
+    code, out = SRC.handle_get(f"turn_id={turn_id}") if turn_id else (None, {})
+    check("...and the id it carries is how GET /api/chat/sources cites it",
+          code == 200 and out.get("sources") == rows, (code, out))
+    # A caller with no conversation id (a script, a test) has no chat answer to
+    # cite, and writes nothing - exactly what it did before this change.
+    SRC._reset_for_tests()
+    Q._READ_LINK_KEPT.clear()
+    try:
+        bare = _fast_page_read(None)
+    finally:
+        Q._READ_LINK_KEPT.clear()
+    check("a read with no conversation id carries no turn id",
+          bare is not None and "turn_id" not in Q.route_fields(bare),
+          Q.route_fields(bare) if bare is not None else None)
+    check("...and records nothing", SRC._TURNS == {}, SRC._TURNS)
+    check("page_source never keeps a page's words, even when handed them",
+          SRC.page_source("https://example.com/kettle", "The Kettle",
+                          FAST_PAGE_WORDS) == {"kind": "web",
+                                               "url": "https://example.com/kettle",
+                                               "title": "The Kettle"})
+
+
+# --------------------------------------------------------------------------
 #   End to end: run_local_turn, a real temporary vault
 # --------------------------------------------------------------------------
 
@@ -412,6 +545,7 @@ if __name__ == "__main__":
                t_install_wraps_do_get_only,
                t_unverified_quotes,
                t_took_in_collects_sources,
+               t_a_fast_path_page_read_is_a_source_that_can_be_cited,
                t_end_to_end_a_real_note_becomes_a_source,
                t_end_to_end_a_fabricated_quote_is_flagged,
                t_end_to_end_nothing_read_means_no_quote_check_at_all):
