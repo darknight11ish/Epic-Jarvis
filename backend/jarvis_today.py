@@ -66,7 +66,7 @@ already wraps): `/api/today/cockpit`. No new module, no patch, no
 registration.
 
   * `due_reminders` - active reminders, alarms and timers that are due or
-    that went off in the last hour, read from the ONE scheduler
+    that went off in the last 24 hours, read from the ONE scheduler
     (jarvis_schedule.py: `listed()` and `went_off()`). It is deliberately
     NOT read from jarvis_tasks.py: that module is the job list (work that
     outlives one chat turn), not the reminder store.
@@ -657,7 +657,7 @@ def _due_row(job: dict, now: float, *, went_off: bool) -> dict:
 
 def due_reminders(sched, now: float) -> list:
     """Due and overdue reminders for the board, most useful first: what went
-    off in the last hour (oldest scheduler read `went_off()`), then anything
+    off in the last 24 hours (oldest scheduler read `went_off()`), then anything
     still active whose time has passed. Read-only - nothing is changed,
     fired or snoozed here."""
     out, seen = [], set()

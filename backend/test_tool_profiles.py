@@ -94,13 +94,27 @@ def shipped_tools() -> set:
     return {str(n) for n in shipped_config()["tools"]["enabled"]}
 
 
+#: 2026-11-24 (the scheduling review's first fix): FIVE tools are named in the
+#: shipped `[tools].enabled` AND still have a Tools-page switch. A reminder the
+#: fast lane misses must be writable on a FRESH install, which is what this
+#: exception buys; each of the five keeps its switch and starts on, so an owner
+#: who wants them off turns them off in one tap. Every other shipped tool stays
+#: always-available with no switch.
+ON_WITH_A_SWITCH = frozenset({
+    "coming_up", "set_reminder", "set_timer", "todo_add", "todo_done",
+})
+
+
 def expected_tier(name: str, shipped: set) -> str:
     """The tier the SHIPPED config path really puts this tool in.
 
     The order is the decision order: a tool that is already in the shipped list
-    needs no action, a tool with its own module switch is governed by that
-    switch before anything else, then the in-app switches, then the rest."""
-    if name in shipped or name in A.GRANT_ASK_TOOLS or name in A.RIDES_WITH_SETTINGS:
+    needs no action (except the five scheduler tools above, which keep their
+    switch), a tool with its own module switch is governed by that switch before
+    anything else, then the in-app switches, then the rest."""
+    if name in A.GRANT_ASK_TOOLS or name in A.RIDES_WITH_SETTINGS:
+        return "always-available"
+    if name in shipped and name not in ON_WITH_A_SWITCH:
         return "always-available"
     if name in OWN_SWITCH_TOOLS:
         return "off-by-default"
@@ -415,8 +429,11 @@ def t_switchable_matches_the_in_app_switches():
           set(AF.TOOLS_SWITCHABLE) <= (switchable | already_on | own_switch),
           f"neither, and so claimed to have no switch: "
           f"{sorted(set(AF.TOOLS_SWITCHABLE) - (switchable | already_on | own_switch))}")
-    check("no switchable tool is already on in the shipped list",
-          not (switchable & shipped), str(sorted(switchable & shipped)))
+    check("no switchable tool is already on in the shipped list, except the five "
+          "scheduler tools (2026-11-24 - a fresh install must be able to set a "
+          "reminder; each of the five still has a switch and starts on)",
+          not (switchable & shipped - ON_WITH_A_SWITCH),
+          str(sorted(switchable & shipped - ON_WITH_A_SWITCH)))
 
 
 def t_settings_file_really_is():

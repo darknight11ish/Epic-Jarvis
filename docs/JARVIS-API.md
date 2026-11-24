@@ -6522,7 +6522,13 @@ and, as for any temporary chat, the chat is not kept and nothing is learned.
 **The model's own tools** (`jarvis_agent.py`, offered only when
 `[tools].enabled` names them, like every tool): `set_timer`, `set_reminder`
 (once or repeating; `when` in plain English or `2026-10-02 17:30`),
-`todo_add`, `todo_done`, `coming_up`. They are not put to the gate for a
+`todo_add`, `todo_done`, `coming_up`. **All five ship ON (2026-11-24).**
+Until then a FRESH install's shipped list named none of them, so a reminder
+the fast lane missed could be answered "set" with no row written - the
+owner's live PC only worked because its older settings file named all five.
+They are the one set of tools that are both in the shipped list and on the
+Tools page with a switch that starts on, so an owner who wants them off turns
+them off in one tap. They are not put to the gate for a
 one-off (the owner's decision); a repeat raises the scheduler's own card
 above. In a turn shaped by outside text (the same test as a note write -
 section 4) they set and change nothing, so a web page or an email cannot
@@ -6625,12 +6631,16 @@ card for a one-off.
 
 **Snooze.** A timer, alarm or reminder that WENT OFF can be snoozed:
 `POST /api/schedule/act {"id", "do": "snooze", "seconds"?}` (10
-minutes when not said; 1 minute to 24 hours). **The route reaches back a day**
+minutes when not said; 1 minute to 24 hours). **The routes reach back a day**
 - a job that has gone off is kept for `FIRED_KEEP` (24 hours) so an app that
-was out of reach can still act on it - while **the "Just went off" list and
-the spoken phrase reach back one hour** (`WENT_OFF_SHOWN`, 3600, and
-`jarvis_quick.py`'s own words are "Nothing went off in the last hour, so there
-is nothing to snooze."). **`delete` uses that same day-long reach-back** (the
+was out of reach can still act on it - and **the "Just went off" list shows
+that same day** (`WENT_OFF_SHOWN` is `FIRED_KEEP`; it was one hour until
+2026-11-24, and a reminder that fired while the phone's link was down then
+vanished from the phone an hour later, which is the "I set a reminder and the
+phone shows nothing" report). **The spoken phrase keeps its own hour**
+(`SNOOZE_SHOWN`, 3600, and `jarvis_quick.py`'s own words are "Nothing went off
+in the last hour, so there is nothing to snooze."): "snooze" means the one
+that just went off, not anything from today. **`delete` uses that same day-long reach-back** (the
 owner's decision of 2026-10-14, DEF-008): a job that has gone off is one the
 "Just went off" list SHOWS, so it must be one the apps can clear, and `delete`
 is routed before the scheduler's own state gate exactly as `snooze` is. It is
@@ -6646,16 +6656,16 @@ until 07:10."); when a repeat goes off again, it can be snoozed afresh. A to-do
 item, a briefing and the standby schedule cannot be snoozed (409).
 
 - **Both apps**, "Just went off" at the top of Coming up, in the same words
-  ("In the last hour. Snooze sets it to go off again in 10 minutes - a
+  ("In the last 24 hours. Snooze sets it to go off again in 10 minutes - a
   repeating one keeps its usual times."): each thing that went off in the
-  last hour and is not snoozed, "Went off at 07:00", and two buttons -
+  last 24 hours and is not snoozed, "Went off at 07:00", and two buttons -
   **Snooze 10 minutes** and **Delete** (the same word and the same `delete`
   every other row offers) - ONE job per tap, no question, held on a stale
   link. A snoozed copy's tag reads "alarm, snoozed". Delete works on an
   entry that has ALREADY gone off since 2026-10-14 (DEF-008, the owner's
   decision: `delete` is routed before the scheduler's state gate, the same
   way `snooze` is - see the `/api/schedule/act` row above). Nothing else
-  about the row moved: it still ages out of "Just went off" after an hour on
+  about the row moved: it still ages out of "Just went off" after 24 hours on
   its own. **This button reaches the route only once the `delete`-before-the-gate
   half has reached the PC**: on a PC whose `jarvis_schedule.py` predates
   it, tapping Delete answers 404 "That is not on the list any more.", exactly
@@ -11523,7 +11533,8 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
 - **Timers, lists and plans:** `set_timer`, `set_reminder`, `todo_add`,
-  `todo_done`, `coming_up`.
+  `todo_done`, `coming_up` - all five SHIPPED ON since 2026-11-24, the only
+  switches that start on (section 21.5 says why).
 - **Connected accounts & home:** `email_check`, `send_email`, `draft_email`,
   `tidy_inbox`, `home_read`, `home_control`, `my_spending`,
   `retirement_whatif`.
@@ -17332,7 +17343,7 @@ unchanged; the board only adds sections, and never edits an older reply.
 What each section carries:
 
 - `due_reminders` - at most 8 (`MAX_DUE_REMINDERS`), the most useful first:
-  what went off in the last hour, then anything still active whose time has
+  what went off in the last 24 hours, then anything still active whose time has
   passed. Each row is `{"id", "kind", "text", "due", "when", "went_off",
   "overdue"}`, plus `fired_at` and the optional GTD-1 fields (`context_bundle`,
   `suggested_prompt`, `snooze_count`, `stuck_hint`) only when the scheduler

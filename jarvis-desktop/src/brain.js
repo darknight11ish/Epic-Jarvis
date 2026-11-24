@@ -10327,7 +10327,7 @@ async function clearList(l) {
 }
 
 /**
- * Something that went off in the last hour: its words, when, Snooze, and
+ * Something that went off in the last 24 hours: its words, when, Snooze, and
  * Delete - the same delete every other row offers, which reaches a fired job
  * since 2026-10-13 (DEF-008; coming-up.js WENT_OFF_ACTIONS says why it is
  * worded "Delete" and not "Clear this"). `danger` marks it like the other

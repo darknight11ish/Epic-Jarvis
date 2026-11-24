@@ -49,7 +49,8 @@ SNOOZE, "CANCEL THAT", NAMED LISTS AND "WHAT DID I MISS?" (2026-09-25, the
 creativity audit's everyday quick wins - docs/CREATIVITY-AUDIT-2026-09-25.md
 items 6 and 7):
   * "snooze", "snooze 10 minutes", "remind me again in 5 minutes": the
-    timer, alarm or reminder that went off most recently (in the last hour)
+    timer, alarm or reminder that went off most recently (the LIST shows a
+    day, but this verb keeps its own hour - SNOOZE_SHOWN, 2026-11-24)
     goes off again after that long (10 minutes when not said). A one-off
     copy (jarvis_schedule.Scheduler.snooze): a repeating one keeps its
     usual times. No card.
@@ -32332,12 +32333,19 @@ def _run_snooze(f: dict, sched, now: float) -> Result:
         went = []
     if f.get("kind"):
         went = [j for j in went if j.get("kind") == f["kind"]]
+    if went:
+        # The LIST now shows a whole day (2026-11-24), but this verb means the
+        # one that JUST went off: keep the hour, so "snooze" never revives
+        # something from this morning as if it had only just rung. The hour is
+        # SNOOZE_SHOWN, deliberately separate from the list's window.
+        went = [j for j in went
+                if now - float(j.get("fired_at") or 0.0) <= S.SNOOZE_SHOWN]
     if not went:
         # Already snoozed in the last hour: say until when, change nothing.
         try:
             copies = [j for j in sched.listed() if j.get("snoozed") and j.get("state") == "active"
                       and j.get("due") is not None and now - float(j.get("created") or 0)
-                      <= S.WENT_OFF_SHOWN and (not f.get("kind") or j.get("kind") == f["kind"])]
+                      <= S.SNOOZE_SHOWN and (not f.get("kind") or j.get("kind") == f["kind"])]
         except Exception:
             copies = []
         if copies:

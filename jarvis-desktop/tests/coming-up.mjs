@@ -320,11 +320,19 @@ await check("\"tell me when\": its words in both apps, its row, and ringing", as
     job.note]);
   assert.deepEqual(actionsOf(v.jobs[0]), ["pause", "delete"]);
   assert.equal(tagOf(readSchedule({ jobs: JOBS, todo: [] }).jobs[2]), "reminder, repeats");
-  // Said aloud: a timer going off, only while listening hands-free.
-  const fired = { kind: "schedule", data: { id: "s0000000001", kind: "timer", state: "fired" } };
+  // Said aloud: a timer going off, only while listening hands-free. The frame
+  // now carries the firing's own absolute time (`fired_at`) - an `age_s` on
+  // the event would always read 0, and this test used to inject it by hand,
+  // so it never exercised a real frame (2026-11-24).
+  const nowS = Math.floor(Date.now() / 1000);
+  const fired = { kind: "schedule",
+    data: { id: "s0000000001", kind: "timer", state: "fired", fired_at: nowS } };
   assert.equal(aloudFor(fired, true), TIMER_ALOUD);
-  assert.equal(aloudFor({ ...fired, data: { ...fired.data, age_s: 601 } }, true), null);
-  assert.equal(aloudFor({ ...fired, data: { ...fired.data, age_s: 60 } }, true), TIMER_ALOUD);
+  assert.equal(aloudFor({ ...fired, data: { ...fired.data, fired_at: nowS - 601 } }, true), null);
+  assert.equal(aloudFor({ ...fired, data: { ...fired.data, fired_at: nowS - 60 } }, true), TIMER_ALOUD);
+  // A frame with no time at all is an older backend's event: still spoken.
+  assert.equal(aloudFor({ kind: "schedule",
+    data: { id: "s0000000001", kind: "timer", state: "fired" } }, true), TIMER_ALOUD);
   assert.equal(aloudFor(fired, false), null);
   assert.equal(aloudFor({ ...fired, data: { ...fired.data, kind: "reminder" } }, true), null);
   assert.equal(aloudFor({ ...fired, data: { ...fired.data, state: "changed" } }, true), null);

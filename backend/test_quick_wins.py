@@ -10,7 +10,7 @@ a temporary folder, and every socket made to fail:
   - SNOOZE: only a timer, alarm or reminder that WENT OFF can be snoozed; it
     makes a one-off copy (no card); a repeating job's own next time does not
     move; snoozing twice while the copy waits changes nothing; the copy goes
-    off; "Just went off" lists the last hour and leaves out one already
+    off; "Just went off" lists the last 24 hours and leaves out one already
     snoozed; the events carry ids and kinds only; the limits say why;
   - DELETE on a job that has gone off (DEF-008, the owner's decision of
     2026-10-13): an entry the apps SHOW under "Just went off" is one they can
@@ -279,8 +279,9 @@ def t_snooze_is_a_one_off_copy_of_what_went_off():
     check("... and can be snoozed in turn", code == 200 and "12:25" in out3["said"], out3)
     blob = json.dumps(w.events) + json.dumps(_AUDIT)
     check("no event and no audit line carries the words", "get up" not in blob)
-    check("the events are ids, kinds, states and the notify flag only",
-          all(set(d) <= {"id", "kind", "state", "late", "notify"} for _, d in w.events),
+    check("the events are ids, kinds, states, the notify flag and the fire time only",
+          all(set(d) <= {"id", "kind", "state", "late", "notify", "fired_at"}
+              for _, d in w.events),
           w.events[-3:])
     for secs, why in ((0, "no length"), (59, "under a minute"), (86401, "over a day")):
         code, out = w.s.act(copy["id"], "snooze", secs)

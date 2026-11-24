@@ -336,20 +336,25 @@ def t_a_plain_repeat_really_needs_no_card():
 # ------------------------------------------------------- the snooze windows
 
 def t_the_two_snooze_windows_are_the_two_constants():
-    """section 21.9: the route's day against the list's and the phrase's hour."""
+    """section 21.9: the routes' and the list's day against the phrase's hour."""
     block = section(text(), "### 21.9 Snooze", "**\"Cancel that\".**", "section 21.9")
 
     check("section 21.9 no longer says a snooze reaches back 'in the last day'",
           "(in the last day)" not in block)
-    check("section 21.9 names the route's own window, FIRED_KEEP, as a day",
+    check("section 21.9 names the routes' own window, FIRED_KEEP, as a day",
           "FIRED_KEEP" in block and "24 hours" in block)
-    check("section 21.9 names the list's and the phrase's window, WENT_OFF_SHOWN, as one hour",
-          "WENT_OFF_SHOWN" in block and "one hour" in block)
+    check("section 21.9 names the list's window, WENT_OFF_SHOWN, as that same day",
+          "WENT_OFF_SHOWN" in block and "same day" in block)
+    check("section 21.9 names the phrase's own window, SNOOZE_SHOWN, as one hour",
+          "SNOOZE_SHOWN" in block and "own hour" in block)
 
     check("FIRED_KEEP really is a day", SCHED.FIRED_KEEP == 24 * 3600.0,
           f"jarvis_schedule says {SCHED.FIRED_KEEP}")
-    check("WENT_OFF_SHOWN really is one hour", SCHED.WENT_OFF_SHOWN == 3600.0,
+    check("WENT_OFF_SHOWN really is the day a fired job is kept",
+          SCHED.WENT_OFF_SHOWN == SCHED.FIRED_KEEP,
           f"jarvis_schedule says {SCHED.WENT_OFF_SHOWN}")
+    check("SNOOZE_SHOWN really is one hour", SCHED.SNOOZE_SHOWN == 3600.0,
+          f"jarvis_schedule says {SCHED.SNOOZE_SHOWN}")
 
     src = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
     check("... and the phrase path says 'the last hour' in its own words",

@@ -66,7 +66,7 @@ export const WAITING = "Waiting for your yes on the approval card.";
 /** "Just went off" and Snooze (jarvis_schedule.Scheduler.snooze). */
 export const WENT_OFF_TITLE = "Just went off";
 export const WENT_OFF_DETAIL =
-  "In the last hour. Snooze sets it to go off again in 10 minutes - a repeating one keeps its " +
+  "In the last 24 hours. Snooze sets it to go off again in 10 minutes - a repeating one keeps its " +
   "usual times.";
 export const SNOOZE_LABEL = "Snooze 10 minutes";
 /** How long Snooze sets (jarvis_schedule.SNOOZE_DEFAULT). */
@@ -224,7 +224,13 @@ export function aloudFor(frame, listening) {
   if (!listening || !frame || frame.kind !== "schedule") return null;
   const d = frame.data || {};
   if (d.state !== "fired" || d.kind !== "timer" || d.notify === false) return null;
-  if (typeof d.age_s === "number" && d.age_s > 600) return null;
+  // A frame can arrive LATE (a reconnect, an event replayed after the link
+  // came back), so the guard needs the firing's own time: `fired_at`, an
+  // absolute epoch on the event (2026-11-24). It used to test `age_s`, a key
+  // the event never carried, so a timer that rang hours ago was spoken as if
+  // it had just gone. A frame with no time at all is treated as fresh, which
+  // is what an older backend's event means.
+  if (typeof d.fired_at === "number" && Date.now() / 1000 - d.fired_at > 600) return null;
   return TIMER_ALOUD;
 }
 

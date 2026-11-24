@@ -8006,7 +8006,13 @@ def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
     import jarvis_quick as Q
     import jarvis_schedule as S
     if name == "coming_up":
-        jobs = [{"kind": j["kind"], "text": j.get("text", ""), "state": j["state"],
+        # `id` and `missed` (2026-11-24, the scheduling review's fourth fix):
+        # the job view has carried both for a while and this mapping dropped
+        # them, so the model could not say a job had been missed and had no id
+        # to name one. `cancel_scheduled` takes that id.
+        jobs = [{"id": j.get("id") or "", "kind": j["kind"], "text": j.get("text", ""),
+                 "state": j["state"],
+                 "missed": j.get("missed") or "",
                  "when": j.get("when") or j.get("repeat") or "",
                  "left": S.length_words(j["left"]) if j["kind"] == "timer" and j.get("left")
                  is not None else ""} for j in sched.listed()]

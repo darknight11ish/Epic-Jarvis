@@ -271,13 +271,14 @@ def t_a_timer_goes_off_once_and_the_event_has_no_words():
     check("it goes off on time", w.s.tick() == [j["id"]])
     check("... once", w.s.tick() == [] and w.s.tick(w.clock.t + 3600) == [])
     fired = [d for k, d in w.events if d.get("state") == "fired"]
-    check("the event is kind `schedule`, with the id, the kind, late=false and notify=true",
+    check("the event is kind `schedule`, with the id, the kind, late=false, notify=true and "
+          "the fire time",
           fired == [{"id": j["id"], "kind": "timer", "state": "fired", "late": False,
-                     "notify": True}], fired)
+                     "notify": True, "fired_at": w.clock.t}], fired)
     blob = json.dumps(w.events)
     check("no event carries the words", "pasta" not in blob)
-    check("every event has only id, kind, state, late and notify",
-          all(set(d) <= {"id", "kind", "state", "late", "notify"} and k == "schedule"
+    check("every event has only id, kind, state, late, notify and fired_at",
+          all(set(d) <= {"id", "kind", "state", "late", "notify", "fired_at"} and k == "schedule"
               for k, d in w.events))
     v = w.s.job(j["id"])
     check("after it went off it is still readable by id, words and all",
@@ -1335,6 +1336,41 @@ def _rehearse():
             shutil.rmtree(d, ignore_errors=True)
         befores[target], afters[target] = text, after
     return True, "", befores, afters
+
+
+def t_coming_up_carries_the_id_and_what_was_missed():
+    """The mapping the model reads (2026-11-24, the scheduling review's fourth
+    fix). The job view has carried `id` and `missed` all along and the
+    `coming_up` mapping dropped both: the model could not say a job had been
+    missed, and had no id to name one - which is also what `cancel_scheduled`
+    takes. A repeating job that fires late is still `active`, so it stays on
+    the list and its own view says "missed at ..."."""
+    import jarvis_agent as AG
+    use_tz("Europe/London")
+    w = World(time.time(), name="coming-up-fields")
+    S._SCHED = w.s
+    try:
+        w.s.add_timer(600, "tea")
+        # A repeating reminder whose first run is an hour away, then missed by
+        # more than LATE_AFTER: it goes off late, stays active, and carries the
+        # missed line the list already shows.
+        w.s.add_repeat("reminder", {"every": "hours", "hours": 1}, "pills")
+        w.clock.t += 3600.0 + S.LATE_AFTER + 30.0
+        w.s.tick()
+        listed = w.s.listed()
+        out = AG._schedule_run("coming_up", {}, w.s, w.clock.t)
+        jobs = out.get("coming_up") or []
+        check("coming_up gives every job its own id",
+              bool(jobs) and [j.get("id") for j in jobs] == [j["id"] for j in listed],
+              (jobs, listed))
+        check("... and carries the job view's missed line, empty when it was not missed",
+              all("missed" in j for j in jobs)
+              and any((j.get("missed") or "").startswith("missed at") for j in jobs),
+              jobs)
+        check("... so the model can name the job that was missed",
+              any(j.get("missed") and j.get("id") for j in jobs), jobs)
+    finally:
+        S._SCHED = None
 
 
 def t_the_patch():
