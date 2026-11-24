@@ -147,6 +147,28 @@ def _web_source(url, title) -> Optional[dict]:
     return out
 
 
+def page_source(url, title="", text="") -> Optional[dict]:
+    """The source row for ONE web page the owner asked Jarvis to read: its
+    canonical address and its title, in exactly the shape `record()` takes -
+    the same row `from_tool_result` builds for a `web_search` result.
+
+    This is the PUBLIC door for a reader that did not go through the model's
+    tool loop. `jarvis_quick._read_web_link` fetches a pasted address itself
+    (the "read this link" fast path), so its page never reaches
+    `from_tool_result`; DEF-032 (2026-11-24) is exactly that gap. It records
+    what the reader itself returned - `page.url`, and the page's own title -
+    and nothing else, so "Where this came from" can list the page later.
+
+    `text` is accepted ONLY so a caller that already holds the read result
+    can hand the page over in one call, and it is deliberately never read:
+    this module keeps a web source as an address and a title, never a page's
+    words (see the module docstring: "never a web page's body"). A blank
+    address gives None, exactly as `_web_source` does, and every field goes
+    through the same `_cap` bound.
+    """
+    return _web_source(url, title)
+
+
 def _file_source(path, title, seconds=None) -> Optional[dict]:
     path = _cap(path)
     if not path:
