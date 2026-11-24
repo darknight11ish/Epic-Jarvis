@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The phone can send several files to your PC in one go',
+    "Deleting Obsidian notes from chat, one to twenty at a time, into the vault's own trash folder",
     'The Rust supply-chain check no longer goes red on an advisory that cannot reach a Windows build',
     "The GitHub re-run tool's description fits the per-tool token ceiling again",
     'The General preset loads by itself when Atlas starts, and you can set which preset that is',
-    'The preset Atlas loads when it starts can now be chosen in Settings',
-    'A question that says "Jarvis" and then "off" is only a reminder question when it is about a reminder',
 )
 
 
