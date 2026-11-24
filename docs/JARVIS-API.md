@@ -13190,6 +13190,18 @@ already was. When nothing was read this turn, no quote is ever checked -
 an ordinary quote in an ordinary conversation ("she said 'no way'") means
 nothing to check it against, so it is left alone.
 
+**The fast path records its own reading too (DEF-032, fixed 2026-11-24).** A
+pasted address answered by `jarvis_quick._read_web_link` never enters the
+model's tool loop, so until now the page it fetched left no row here even
+though the answer itself said "Read from <url>". Such an answer now mints a
+turn id with the same `jarvis_feedback.record_turn` call the model path uses,
+records the page with `jarvis_sources.page_source(url, title)` - the canonical
+address and the page's own title, never a word of its body - and carries that
+id in `X-Jarvis-Route` as `turn_id`, which is the id both apps already read to
+fetch an answer's sources. A read outside a chat turn (no conversation id)
+records nothing, exactly as before, and a failure to record a source can never
+fail the read.
+
 **Why a separate route, and why the SAME `turn_id`.** `X-Jarvis-Route`
 already carries `turn_id` (§4, `feedback.patch`) - but that header is sent
 to the app BEFORE `run_local_turn` even starts, because streaming means the
