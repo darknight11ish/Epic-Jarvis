@@ -133,6 +133,7 @@ sys.modules["jarvis_gate"] = GATE_MODULE
 import jarvis_card_words as CW  # noqa: E402
 import jarvis_notes as N  # noqa: E402
 import jarvis_notes_edit as E  # noqa: E402
+import jarvis_owner_check as OC  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
 
 FAILED, PASSED = [], []
@@ -233,10 +234,8 @@ def t_the_action_is_its_own_and_the_gate_knows_it():
           ".trash" in row["why"] and "Explorer" in row["why"], row["why"])
     check("... a denial answers that one batch, not a standing rule",
           E.DELETE_ACTION in REAL_GATE._NO_RULE_FROM_DENIAL)
-    owner = (HERE / "jarvis_owner_check.py").read_text(encoding="utf-8")
-    block = owner.split("PC_ONLY_ACTIONS = frozenset(", 1)[-1].split("})", 1)[0]
     check("... and the phone may still approve it: it is not PC-only",
-          E.DELETE_ACTION not in block)
+          E.DELETE_ACTION not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
     check("... the card has written words a Windows Hello prompt can name",
           CW.has_written_title(E.DELETE_ACTION) is True)
     title = CW.title_for(E.DELETE_ACTION)
@@ -604,22 +603,69 @@ def t_the_route_is_registered():
     check("the delete route is in POST_PATHS",
           E.DELETE_PATH == "/api/notes/delete" and E.DELETE_PATH in E.POST_PATHS,
           E.POST_PATHS)
-    source = (HERE / "jarvis_notes_edit.py").read_text(encoding="utf-8")
-    check("... and install() dispatches it",
-          "route == DELETE_PATH" in source and "handle_delete(body)" in source)
+
+    class Handler:
+        """The server's Handler as `install()` sees it: two routes and `_send`.
+
+        Calling the REAL `install()` (rather than reading the source) is what
+        makes this a runtime seam: if the dispatch were missing, the request
+        would fall through to `do_POST` below and the test would fail on the
+        server's own answer, not on a changed spelling.
+        """
+        headers = {}
+
+        def __init__(self):
+            self.path = ""
+            self.sent = []
+
+        def do_GET(self):
+            raise AssertionError("the GET fell through to the server's own routes")
+
+        def do_POST(self):
+            raise AssertionError("the POST fell through to the server's own routes")
+
+        def _send(self, code, out):
+            self.sent.append((code, out))
+            return code, out
+
+    line = E.install(Handler, origin_ok=lambda h: True,
+                     token_ok=lambda h: True, read_body=lambda h: b"{}")
     check("... the install line the plugin prints mentions delete",
-          "delete up to twenty notes" in source)
-    check("the change-status answer can carry the names and the count",
-          '"count", "paths"' in source)
+          isinstance(line, str) and "delete up to twenty notes" in line,
+          line[-300:])
+
+    handler = Handler()
+    handler.path = E.DELETE_PATH
+    handler.do_POST()                      # an empty body: handle_delete refuses it
+    code, out = handler.sent[-1]
+    check("... install() dispatches the delete route into handle_delete",
+          code >= 400 and out.get("ok") is False, (code, out))
+
+    # The job the conversation polls: its answer must carry the names and the
+    # count back, because the card's own list is the only place they appear.
+    jid = "delete-change-status"
+    with E._lock:
+        E._jobs[jid] = {"state": "waiting", "kind": "delete", "count": 2,
+                        "paths": ["Shopping.md", "Workout.md"]}
+    try:
+        code, out = E.change_status(jid)
+    finally:
+        with E._lock:
+            E._jobs.pop(jid, None)
+    check("the change-status answer carries the names and the count",
+          code == 200 and out.get("count") == 2
+          and out.get("paths") == ["Shopping.md", "Workout.md"], out)
 
 
 def t_the_lane_lists_its_new_answers():
-    source = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
     for name in ("note_delete_ask", "note_delete_refused",
                  "note_line_delete_refused"):
-        check(f"{name} is in the read-only intent list", f'"{name}"' in source)
+        check(f"{name} is in the read-only intent list",
+              name in Q.READ_ONLY_INTENTS, name)
     check("the delete's own answers are NOT listed as read-only",
-          '"note_delete_waiting",' not in source and '"note_deleted",' not in source)
+          "note_delete_waiting" not in Q.READ_ONLY_INTENTS
+          and "note_deleted" not in Q.READ_ONLY_INTENTS,
+          sorted(Q.READ_ONLY_INTENTS & {"note_delete_waiting", "note_deleted"}))
 
 
 def main() -> int:

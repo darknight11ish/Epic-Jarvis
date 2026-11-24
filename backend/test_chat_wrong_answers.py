@@ -516,10 +516,16 @@ def t_the_destruction_controls_keep_their_own_path():
         check(f"destroy controls: {said!r} is NOT a destruction refusal",
               _github_shape(got) not in ("destroy", "bulk_close", "close_pr"),
               got)
-    # The two deletions that already have a deterministic answer keep it.
-    check("destroy controls: deleting a named note keeps its own refusal",
+    # 2026-11-23: a named note delete is a REAL action now, not a fixed refusal
+    # (`delete_vault_notes`: the chat lane resolves the names, raises ONE card
+    # naming every note, and that card needs Windows Hello or the asking phone's
+    # fingerprint), so the matcher answers with its own delete intent. What this
+    # check still proves is the shape this suite is about: it is NOT one of
+    # GitHub's destruction refusals.
+    check("destroy controls: deleting a named note is its own delete intent, "
+          "not a GitHub refusal",
           getattr(Q.match("delete my note called Groceries"), "name", None)
-          == "note_change_refused",
+          == "note_delete",
           Q.match("delete my note called Groceries"))
     check("destroy controls: 'delete that' keeps the undo path",
           getattr(Q.match("delete that"), "name", None) == "undo",

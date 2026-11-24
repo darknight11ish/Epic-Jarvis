@@ -973,7 +973,25 @@ GROUPS = (
                             "import_notion_export", "organize_obsidian_vault",
                             "send_file_to_phone",
                             "protect_item", "unprotect_item",
-                            "edit_vault_note"]),
+                            "edit_vault_note",
+                            # Deleting notes (jarvis_notes_edit.py, 2026-11-23;
+                            # the owner's "i want Jarvis to be able to delete
+                            # obsidian notes, even multiple at a time. but it
+                            # will always require a card with fingerprint or
+                            # windows hello confirmation"): up to twenty notes
+                            # leave the vault on ONE card that names every one.
+                            # Its own risk row says neither app can put one back
+                            # (the bytes survive in the vault's .trash, which
+                            # Obsidian hides), so the card needs Windows Hello or
+                            # the asking phone's fingerprint - the owner asked for
+                            # both. Its tier is the shipped "ask" line, and it is
+                            # NOT in MUST_ASK for the same reason as the row above:
+                            # the module raises its card through jarvis_gate.check
+                            # and does not refuse a looser tier itself. There is no
+                            # app switch (it is not on LOOSE), so the honest note is
+                            # NOTE_FILE - loosening this one is a hand edit, not an
+                            # app setting.
+                            "delete_vault_notes"]),
     ("Timers and reminders", ["fixed:timers", "todo_add", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",
                               # reminder-actions.patch (2026-10-27): a reminder
