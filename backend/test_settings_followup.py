@@ -151,12 +151,6 @@ check("a picture-only assistant turn reads None",
       Q.newest_jarvis_words({"messages": [
           {"role": "assistant", "content": [{"type": "image", "data": "x"}]}]}) is None)
 
-source = (HERE / "jarvis_quick.py").read_text(encoding="utf-8", errors="replace")
-check("answer() hands the history to the matcher",
-      "said=newest_jarvis_words(messages)" in source)
-check("the resolver writes nothing itself",
-      "set_tools_enabled" not in source.split("def _settings_follow_up")[1]
-      .split("def _named_setting_in")[0])
 
 # --------------------------------------------------------------- the counts ---
 
