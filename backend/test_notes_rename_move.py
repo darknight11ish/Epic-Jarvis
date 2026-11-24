@@ -366,7 +366,12 @@ def t_chat_shapes_preview_and_refuse():
     check("the move chat shape is note_move", got is not None and got.name == "note_move",
           got.name if got else "the model")
     got = Q.match("delete my note Welcome")
-    check("delete is still refused", got is not None and got.name in ("note_change_refused", "note_delete_refused"),
+    # A DELETE is its own action since 2026-11-23 (`delete_vault_notes`, its own
+    # card, Windows Hello or the phone's fingerprint), so the chat no longer
+    # answers a delete request with the note-change refusal. Matching only: this
+    # suite must not delete the note the rest of it renames.
+    check("a delete is its own action now, not the note-change refusal",
+          got is not None and got.name == "note_delete",
           got.name if got else "the model")
     # Two notes with the same title: the chat refuses with the count, no card.
     write("Dup.md", "# Dup one\n")

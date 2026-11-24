@@ -147,6 +147,10 @@
       "title": "Jarvis wants to delete a page in Logseq"
     },
     {
+      "action": "delete_vault_notes",
+      "title": "Jarvis wants to delete notes from your Obsidian vault"
+    },
+    {
       "action": "desktop_update",
       "title": "Jarvis wants to update Jarvis itself - the backend first, then this app"
     },
@@ -1009,6 +1013,18 @@
       "notice": {
         "title": "Jarvis wants to delete a page in Logseq",
         "summary": "Jarvis wants to delete a Logseq page.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_vault_notes",
+      "notice": {
+        "title": "Jarvis wants to delete notes from your Obsidian vault",
+        "summary": "Jarvis wants to delete notes from your Obsidian vault.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

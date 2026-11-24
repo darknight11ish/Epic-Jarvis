@@ -32716,9 +32716,10 @@ Guardian copy first, an atomic write, one Undo, no deletions.
   `<vault>/Templates/`; an existing template is a 409, never overwritten.
   "List my templates" reads names only; while the hidden lists hide words the
   chat refuses with no names and no card.
-- **Not built, said plainly:** deleting a line/note, moving a line under
-  another heading, bulk/`these lines` edits (the exact-match rule cannot be
-  kept), reciprocal links (one link per request), highlighting (non-standard).
+- **Not built, said plainly:** deleting a LINE, moving a line under another
+  heading, bulk/`these lines` edits (the exact-match rule cannot be kept),
+  reciprocal links (one link per request), highlighting (non-standard). Deleting
+  a whole NOTE is built - `POST /api/notes/delete`, section 170.14.
 
 ### 170.10 Rename and move ONE note, keeping its links working (wave 4, added 2026-10-31)
 
@@ -32727,8 +32728,10 @@ preservation"*. A rename or move is one note's PATH change plus only the link
 text that named it, so the plan is read-only, the card names the file and the
 counts, and ONE approval writes the move and those link bytes. The module is
 still `jarvis_notes_edit.py`; the existing `edit_vault_note` action, one
-ordinary card, the File Guardian copy and one Undo are used. No route deletes a
-note or changes any byte outside the link target.
+ordinary card, the File Guardian copy and one Undo are used. Neither route
+changes any byte outside the link text it rewrites. Deleting a whole note is
+its own route and its own card now - `POST /api/notes/delete`, section 170.14,
+into the vault's `.trash` - so it is not part of this rename/move contract.
 
 | route | body | answer |
 |---|---|---|
@@ -32780,11 +32783,12 @@ note or changes any byte outside the link target.
   card follows; a denied/expired card writes nothing. A name matching more than
   one note is refused with the count and no card. A hidden-lists state refuses
   with no title and no card.
-- **Not built, said plainly:** deleting a note, moving outside the vault,
-  renaming or moving folders, renaming a note onto an existing name, cloud sync,
-  moving several notes at once, updating links inside protected or hidden notes,
-  and following links to remote URLs. The chat says these are not built instead
-  of pretending.
+- **Not built, said plainly:** moving outside the vault, renaming or moving
+  folders, renaming a note onto an existing name, cloud sync, moving several
+  notes at once, updating links inside protected or hidden notes, and following
+  links to remote URLs. The chat says these are not built instead of pretending.
+  Deleting a whole note is its own action, not part of this rename/move
+  contract - section 170.14.
 
 - **The desktop plate's two controls (2026-10-31).** The Brain -> Notes editor's
   chrome has **Rename…** and **Move…** beside Save, calling these same two
@@ -33113,6 +33117,166 @@ adds the chat-level no-fallback assertion (102 checks).
 
 The module's twin `jarvis-backend/jarvis_notes.py` is byte-identical, and so are
 `jarvis_notes_edit.py` and `jarvis_note_capture.py`.
+
+### 170.14 Deleting one to twenty notes, into the vault's own .trash folder (added 2026-11-23)
+
+The owner's request, in their own words: *"i want Jarvis to be able to delete
+obsidian notes , even multiple at a time. but it will always require a card
+with fingerprint or windows hello confirmation"*, and *"it will list the names
+of the notes it wants to delete (from my request) in the card and the
+conversation as well"*. Asked which shape a delete takes, they chose the
+vault's own trash folder over "gone for good", and twenty notes as the most in
+one go. The logic is `jarvis_notes_edit.py`'s (`handle_delete`, `_plan_delete`,
+`_delete_verify`, `_delete_worker`); the route is served by the same
+`install()` wrapper as the rest of this section, after the core's origin (403)
+and token (401) checks.
+
+    POST /api/notes/delete
+
+**Who calls it.** Any client holding the pairing token, behind the same origin
+and `X-Jarvis-Token` checks as every notes route, and every request sends
+`X-Jarvis-Client: hud`. In practice it is the CHAT lane's door: the desktop's
+and the phone's chat both ask `/api/chat`, `jarvis_quick._run_note_delete`
+resolves the names and calls `handle_delete` in process, and **neither app has
+a delete screen or calls this route today** (`docs/ARCHITECTURE.md` section 8
+records that one-sidedness as a decision). The route is still built and
+documented, so the contract has one HTTP face and a future screen has a door
+that already behaves.
+
+Request body:
+
+    {"paths": ["Shopping.md", "Workout/Log.md"]}
+
+`paths` is required: ONE to **20** vault-relative `.md`/`.txt` paths (a single
+string is accepted as a one-note list). Every path is checked BEFORE any card:
+a path that is absolute, climbs out with `..`, names a hidden component, goes
+through a symlink or junction, points outside the vault, or is not `.md`/`.txt`
+is refused; so is a note on the "Protected from Jarvis" list, a note that is
+not there, a note whose bytes cannot be read, and the same note named twice
+(compared case-insensitively, as Windows treats one file). **Nothing moves
+until every one of those has passed for EVERY path**, and the whole batch is
+verified again after the card.
+
+| Status | Body | When |
+|---|---|---|
+| **202** | `{"ok": true, "state": "waiting", "kind": "delete", "id": "<job id>", "path": "<first note>", "target": ".trash", "count": 3, "message": "<the preview sentence naming the notes>"}` | the ONE card is up; nothing has moved |
+| **200** | `{"ok": true, "state": "saved", "kind": "delete", "path": "<first note>", "target": ".trash", "count": 3, "paths": ["Shopping.md", "Workout/Log.md", "Ideas.md"], "message": "Moved 3 notes into the vault's .trash folder: ..."}` | after Approve, the notes have moved |
+| **200** | `{"ok": false, "state": "denied", "message": "You said no, so no note was deleted."}` | Deny, or an expired card ("Nobody answered ..."); nothing moved |
+| **200** | `{"ok": false, "state": "failed", "message": "<a plain sentence>"}` | after the yes, a note changed, could not be re-read, or a move failed; the notes that had moved were put back, and any that could not be are named as still in `.trash` |
+| **400** | `{"ok": false, "state": "refused", "error": "<a sentence>"}` | no `paths` or an empty list (it asks which notes), a body that is not an object, more than **20** (the sentence names the number), a bad/hidden/link/absolute/outside/non-text path, or the same note named twice |
+| **403** | same shape | a path the protection list blocks; the protection module's own sentence |
+| **404** | same shape | there is no note at that path in the vault |
+| **409** | same shape | the trash already holds 99 notes under that name (`Note.md`, `Note (2).md`, ... `Note (99).md`) |
+| **429** | same shape | **4** note changes are already waiting for approval - the sentence names the limit |
+| **503** | same shape | no Obsidian vault is configured or readable (the sentence names `[notes.obsidian] vault_directory` and `JARVIS_OBSIDIAN_VAULT`), or a named note could not be read |
+
+The POST waits a short moment (1.5 s) for a fast answer; a batch still waiting
+answers **202** with its `id`, and `GET /api/notes/change?id=<job id>` reports
+how it ended, in the same waiting / saved / denied / failed shape as the save
+above, plus `kind: "delete"`, `count` and `paths`. `ok` is true only while
+waiting or after a save that moved something. `path` is the batch's FIRST note
+(the job record's own field); `paths` is the full list, and after a save with
+the lists hidden it is `[]` rather than absent. The errors carry a sentence in
+`error` and `state: "refused"`; they carry **no machine `code` field** -
+`not_found` and `ambiguous_section` below are the resolver's codes, said in
+words.
+
+**The destination is the vault's own `.trash`.** Each note is MOVED, never
+edited: `os.replace` into `<vault>/.trash/<the same relative path>`, the folder
+(and any folder inside it) created when it is not there, every byte kept. A
+destination name already in the trash is not reused: it gets `" (2)"`
+(`Note (2).md`), then `" (3)"`, and so on, so the older copy keeps its name.
+The free name is chosen when the request is planned, before the card; a failure
+past that point puts the notes that had already moved back where they were.
+
+**The card names every note, and only a person decides it.** The gate action is
+**`delete_vault_notes`**, deliberately NOT `edit_vault_note`: every other note
+write here is reversible and takes an ordinary card, while a delete cannot be
+undone in either app. Its `_RISK` row, at the end of the published
+`jarvis-backend/jarvis_gate.py`, carries the `("no", "local")` pair (the third
+element is the card's own sentence) - no app can put the note back, and nothing
+leaves this PC - so the gate treats every delete card as risky: **on this PC
+the yes runs Windows Hello**, and **a phone's yes must carry that phone's own
+signed approval** (its fingerprint or PIN), with a phone that has no approval
+key refused with the sentence that offers to set one up. A phone still on the
+legacy shared pairing key is accepted without that signature, exactly as it is
+for every other risky card; the signature is the device-key path, not a second
+rule invented here. It is **not** in `jarvis_owner_check.PC_ONLY_ACTIONS`,
+because the owner asked for the phone's fingerprint too. While the card waits,
+its detail is
+
+    {"action": "delete notes", "count": 3, "paths": ["Shopping.md", ...],
+     "trash": true, "undo": false, "deletes": true}
+
+and the prompt is `delete 3 notes from your Obsidian vault: "Shopping.md",
+"Workout/Log.md", "Ideas.md"` (one note: `delete "Shopping.md" from your
+Obsidian vault`). The card's title and summary are `delete notes from your
+Obsidian vault` (`jarvis_card_words`; a Windows Hello prompt cannot name an
+action with no written words). A denial answers THIS batch and writes no
+standing rule (`_NO_RULE_FROM_DENIAL`), so the next delete is offered again.
+
+**While the owner's lists are hidden, no title appears anywhere.** The detail
+then carries `count` and `hidden_lists: true` and no `paths`; the prompt,
+preview and finished message say only how many notes moved, and the saved
+answer's `paths` is `[]`. The chat door is stricter still: while the lists are
+hidden it refuses a delete sentence before this route is reached ("Your lists
+are hidden on this PC, so I did not open or change a note. Tap Show and confirm
+it is you, then ask again.") and raises no card at all.
+
+**The conversation says what moved.** After a save the module's own message is
+`Moved "Shopping.md" into the vault's .trash folder. You can put it back from
+Windows Explorer.` (one note) or `Moved 3 notes into the vault's .trash folder:
+"Shopping.md", "Workout/Log.md", "Ideas.md". You can put one back from Windows
+Explorer.` - the paths are quoted, and the sentence never claims the bytes are
+gone. While the card waits, the chat's line is "Waiting for your yes on the
+approval card: it is confirmed with Windows Hello, or with your phone's own
+fingerprint.", followed by the module's own sentence.
+
+**The chat door (deterministic, no model).** "delete my Shopping note",
+"delete notes Shopping, Workout and Ideas" and "delete my Salt and Pepper note"
+are read by `jarvis_quick._note_asking`: the whole phrase is tried first (a
+note whose own name holds "and" resolves whole), then a split on comma,
+semicolon, `&` and "and". Every name is resolved through
+`jarvis_notes.resolve_note()` (by `jarvis_notes_edit.find_name`), never
+guessed:
+
+- a name that matches **no** note answers `I could not find a note called
+  "<name>" in your Obsidian vault, so nothing was deleted.`;
+- a name that matches **two or more** notes answers `That name matches 2 notes
+  (A/Note.md; B/Note.md), so nothing was deleted - say the note's folder and
+  name, ...`;
+- a phrase that names a TOPIC ("delete all notes about the trip") is answered
+  by asking for the notes by name, and nothing is guessed from the vault's
+  contents;
+- a sentence with no name at all ("delete my notes") asks which notes;
+- a sentence that does not say "note" is claimed only when the phrase IS an
+  existing note's name, and one that names a scheduler word ("delete my 5pm
+  reminder", "delete the timer") stays the scheduler's even when a note happens
+  to share that name.
+
+The one question says the cap too: "I delete up to 20 notes at a time, and
+nothing was deleted yet." Every refusal happens in words BEFORE any card, so an
+ambiguous or missing name never reaches `POST /api/notes/delete` and no card is
+raised.
+
+**Not built, said plainly.** Deleting a LINE, sentence or paragraph inside a
+note is a separate refusal ("Deleting a line inside a note is not built, so
+nothing was changed. ...") and is NOT part of this route; a free-form topic is
+answered by asking for names. There is no Undo receipt, because no app can undo
+the move: Obsidian does not show or restore `.trash`, and this editor refuses
+any dot-prefixed path, so it cannot even read a file it just moved. The bytes
+do survive in `<vault>/.trash/`, and Windows Explorer can put one back.
+
+**Proven.** `backend/test_notes_delete.py` pins it on a temporary vault with a
+fake gate: the action's own risk row and card words, a denied card moving
+nothing (and no `.trash` created at all), the card naming every note and the
+hidden shape naming none, the moved bytes at the same relative paths, `" (2)"`
+on a collision, the put-back after a failure halfway, the sha256 re-check after
+the card, the empty / non-list / hidden / outside / non-text / missing /
+duplicate refusals and the over-20 cap before any card, and the chat shapes
+(one note, many, "and" in a name, a missing name, an ambiguous name, a topic, a
+line delete, scheduler words). It is not driven on the live PC here: this is a
+repository change, and the deploy is its own pass.
 
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 

@@ -330,6 +330,17 @@
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -3217,6 +3228,17 @@
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -6099,6 +6121,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
       }
      ],
@@ -8993,6 +9026,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
       }
      ],
@@ -11890,6 +11934,17 @@
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -14783,6 +14838,17 @@
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -17668,6 +17734,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
       }
      ],
@@ -20559,6 +20636,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
       }
      ],
@@ -23462,6 +23550,17 @@
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -26353,6 +26452,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
       }
      ],
@@ -29252,6 +29362,17 @@
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -32144,6 +32265,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "delete_vault_notes",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "delete_vault_notes",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
       }
      ],
