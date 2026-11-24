@@ -34,6 +34,9 @@ a temporary folder:
   - the learner skips a command; the model's tools act without the gate for
     a one-off and through the scheduler's card for a repeat, and do nothing
     after outside text;
+  - the model can cancel ONE scheduled thing - by the id `coming_up` gave it
+    or by the job's own words - and a match that hits nothing, or more than
+    one, deletes nothing and says so (2026-11-24);
   - schedule.patch applies to what the earlier patches wrote, and reverses.
 
 Every check fails on the code before this change: jarvis_schedule.py,
@@ -1301,6 +1304,126 @@ def t_the_models_tools():
             Q.run = real_run
     finally:
         S._SCHED = None
+
+# --------------------------------------------------------------------------
+#   cancel_scheduled: the model can take something back (2026-11-24)
+# --------------------------------------------------------------------------
+
+
+class _Out:
+    """The little status object `_one_call` writes to (see t_the_models_tools)."""
+
+    def set_status(self, *_):
+        pass
+
+
+def _cancel_tool(name, args, watch=None):
+    """One model tool call through the REAL dispatch in jarvis_agent._one_call.
+
+    The scheduler has to be the World's (`S._SCHED = w.s` in each test): the
+    tool reaches it through `jarvis_schedule.get()`, exactly as a live turn
+    does - this suite never stubs the scheduler out."""
+    import jarvis_agent as AG
+    watch = watch or AG._TurnWatch(
+        [{"role": "user", "content": "cancel it", "provenance": "typed"}],
+        tainted=False)
+    convo = [{"role": "user", "content": "please cancel it"}]
+    steps = []
+    AG._one_call({"id": "c-cancel", "function": {"name": name,
+                                                 "arguments": json.dumps(args)}},
+                 list(AG.SCHEDULE_TOOLS), convo, steps,
+                 lambda action, detail, prompt: Verdict(True, "ask", "approved"),
+                 None, _Out(), lambda *a, **k: None, watch=watch)
+    return json.loads(convo[-1]["content"]), steps
+
+
+def _reminder(w, text, when="tomorrow at 6pm"):
+    """Set one reminder through the model's own tool and return its id."""
+    before = {j["id"] for j in w.s.listed()}
+    res, _steps = _cancel_tool("set_reminder", {"text": text, "when": when})
+    assert res.get("ok") is True, res
+    new = [j for j in w.s.listed() if j["id"] not in before]
+    assert len(new) == 1, new
+    return new[0]["id"]
+
+
+def t_the_model_can_cancel_a_scheduled_thing_by_id():
+    """2026-11-24, the scheduling review's fifth fix: before this tool the
+    model could set a timer, an alarm, a reminder and a to-do and could never
+    take one back.
+
+    By id - the value `coming_up` hands it - ONE call removes exactly that
+    row, says the scheduler's own words, and raises no card: a delete only
+    makes things quieter."""
+    w = World(time.time(), name="cancel-by-id")
+    try:
+        S._SCHED = w.s
+        keep = _reminder(w, "water the plants")
+        gone = _reminder(w, "call the plumber")
+        res, steps = _cancel_tool("cancel_scheduled", {"id": gone})
+        check("cancel by id answers ok, with the scheduler's own words",
+              res.get("ok") is True and res.get("said") == "Deleted.", res)
+        check("... the row really is gone", w.s.job(gone) is None, w.s.job(gone))
+        check("... and the other reminder is untouched", w.s.job(keep) is not None,
+              w.s.job(keep))
+        check("... with no approval card (a delete only makes things quieter)",
+              w.cards == [] and steps[-1]["ok"] is True, (w.cards, steps[-1:]))
+        res, _steps = _cancel_tool("cancel_scheduled", {"id": gone})
+        check("cancelling the same id twice says it is not on the list any more",
+              res.get("ok") is False and "not on the list" in str(res.get("error")),
+              res)
+    finally:
+        S._SCHED = None
+
+
+def t_the_model_can_cancel_by_its_own_words_and_only_that_one_goes():
+    """The words path: the job's own words, case-insensitively, over the same
+    list `coming_up` offers - and only the named job may go."""
+    w = World(time.time(), name="cancel-words")
+    try:
+        S._SCHED = w.s
+        dentist = _reminder(w, "dentist appointment")
+        vets = _reminder(w, "vet for the cat")
+        res, _steps = _cancel_tool("cancel_scheduled", {"text": "VET"})
+        check("a words match is case-insensitive and cancels the job it names",
+              res.get("ok") is True, res)
+        check("... only the named reminder went", w.s.job(vets) is None,
+              w.s.job(vets))
+        check("... and the other reminder is still on the list",
+              w.s.job(dentist) is not None, w.s.job(dentist))
+        check("... one cancel, one row: the list holds exactly one job now",
+              [j["id"] for j in w.s.listed()] == [dentist], w.s.listed())
+    finally:
+        S._SCHED = None
+
+
+def t_an_ambiguous_cancel_deletes_nothing_and_asks_which_one():
+    """Two matches is a question, never a guess: exactly one job per call."""
+    w = World(time.time(), name="cancel-ambiguous")
+    try:
+        S._SCHED = w.s
+        pills = _reminder(w, "take the pills")
+        bins = _reminder(w, "take the bins out")
+        res, _steps = _cancel_tool("cancel_scheduled", {"text": "take the"})
+        check("two jobs match the words: the tool refuses in plain words",
+              res.get("ok") is False and "More than one" in str(res.get("error")),
+              res)
+        check("... and NOTHING was deleted",
+              w.s.job(pills) is not None and w.s.job(bins) is not None
+              and len(w.s.listed()) == 2)
+        res, _steps = _cancel_tool("cancel_scheduled", {"text": "no such reminder"})
+        check("words that match nothing delete nothing and say so",
+              res.get("ok") is False and "could not find" in str(res.get("error"))
+              and len(w.s.listed()) == 2, res)
+        res, _steps = _cancel_tool("cancel_scheduled", {})
+        check("neither an id nor words: it asks which one, and deletes nothing",
+              res.get("ok") is False and "which one" in str(res.get("error")).lower()
+              and len(w.s.listed()) == 2, res)
+        check("... so both reminders are still there",
+              w.s.job(pills) is not None and w.s.job(bins) is not None)
+    finally:
+        S._SCHED = None
+
 
 # --------------------------------------------------------------------------
 #   schedule.patch

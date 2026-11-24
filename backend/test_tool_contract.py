@@ -139,9 +139,10 @@ OFFERED_FRESH = [
 #: ask rides with `web_search` - it is not a capability, and its card is the
 #: permission.
 CATALOGUE = [
-    # Every tool that exists, sorted, pinned in full (80 at the Android app
-    # builder's entry point, DEF-068, 2026-11-14; 79 at the GitHub union of
-    # 2026-11-11). A future tool must be added here, which forces the
+    # Every tool that exists, sorted, pinned in full (81 at the scheduling
+    # review's cancel tool, 2026-11-24; 80 at the Android app builder's entry
+    # point, DEF-068, 2026-11-14; 79 at the GitHub union of 2026-11-11). A
+    # future tool must be added here, which forces the
     # three lists above to be looked at in the same edit; the per-tool
     # commentary this block used to carry lives in the profiles and docs.
     "android_app",
@@ -152,6 +153,7 @@ CATALOGUE = [
     "browser_control",
     "calculator",
     "calendar_read",
+    "cancel_scheduled",
     "change_setting",
     "check_records",
     "cloud_escalation",

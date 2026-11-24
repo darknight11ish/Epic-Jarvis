@@ -491,7 +491,8 @@ LOOSEN_ACTION = "loosen_what_asks_first"
 TIER_A = (
     "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
     "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
-    "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+    "coming_up", "cancel_scheduled", "protect_from_jarvis", "github_search",
+    "send_file_to_phone",
 )
 
 #: The conversation web-search approval and its instant stop are NOT rows here
@@ -680,7 +681,8 @@ TOOL_GROUPS = (
      ("calendar_read", "notes_search", "append_obsidian_daily",
       "create_joplin_note", "append_logseq_journal")),
     ("Timers, lists and plans",
-     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
+     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up",
+      "cancel_scheduled")),
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),

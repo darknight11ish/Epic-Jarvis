@@ -7472,6 +7472,27 @@ TOOLS: dict = {
         "coming_up", "List the owner's timers, alarms, reminders and to-do list on this PC.",
         {"type": "object", "properties": {}},
         _plain_prepare("Coming up"), lambda args, state, **_: {"ok": False}),
+    # Taking one back (2026-11-24, the scheduling review's fifth fix). Until
+    # this the model could set a timer, an alarm, a reminder or a to-do and
+    # could never cancel one - the owner had to open the app. It calls the
+    # scheduler's EXISTING delete path (jarvis_schedule.Scheduler.act(...,
+    # "delete")), so there is no new route and no new card: deleting only
+    # makes things quieter, which is why it is cardless like `todo_done`.
+    # `id` is what `coming_up` handed back; `text` is for when the model has
+    # only the job's own words. Exactly ONE job is ever deleted, and an
+    # ambiguous match deletes nothing and asks which one.
+    "cancel_scheduled": Tool(
+        "cancel_scheduled",
+        "Cancel ONE of the owner's timers, alarms, reminders or to-do items on this PC. "
+        "This only removes it from the list, so it needs no approval. Use the id "
+        "coming_up gave you, or the job's own words; if you are not sure which one, "
+        "ask instead of guessing.",
+        {"type": "object", "properties": {
+            "id": {"type": "string",
+                   "description": "the id coming_up gave you, when you have it"},
+            "text": {"type": "string",
+                     "description": "the job's own words, or enough of them, when you do not"}}},
+        _plain_prepare("Cancel"), lambda args, state, **_: {"ok": False}),
     # Goals and their progress (jarvis_goals.py, 2026-11-02; the owner's ask:
     # "a goals section in the reminder area and a way for me to record
     # progress there along with talking to jarvis"). Cardless, like the to-do
@@ -7907,13 +7928,19 @@ TOOLS: dict = {
 #: newest message was not typed or said by the owner, or the app sent text
 #: of its own) they set and change nothing, so a web page or an email cannot
 #: set Jarvis's alarms. The owner can type or say it instead.
-SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done", "coming_up"})
+SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done",
+                            "coming_up", "cancel_scheduled"})
 
 #: The scheduler tools that CHANGE something, as opposed to `coming_up`, which
 #: only reads. A failed write is what `run_local_turn` holds the answering
 #: round's words for (2026-11-09), so a claim like "I've updated it" cannot be
 #: said over a tool result that says it was not.
-SCHEDULE_WRITE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done"})
+#:
+#: `cancel_scheduled` is here too (2026-11-24): a cancel removes a row, so a
+#: model saying "I've cancelled it" when the delete found nothing must be held
+#: to the same receipt rule as a write.
+SCHEDULE_WRITE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add",
+                                  "todo_done", "cancel_scheduled"})
 
 #: What a failed scheduler write says in the answer, in place of the model's
 #: own "done" claim. One noun per tool, so the owner reads which thing was not
@@ -7923,6 +7950,7 @@ SCHEDULE_NOT_DONE = {
     "set_timer": "That timer was not started: {why}",
     "todo_add": "That was not added to your list: {why}",
     "todo_done": "That was not marked done: {why}",
+    "cancel_scheduled": "That was not cancelled: {why}",
 }
 #: The last line, always: nothing changed, whatever the reason was.
 SCHEDULE_NOT_DONE_END = " Nothing was changed."
@@ -8001,6 +8029,54 @@ def _newest_user_text(convo: list) -> str:
     return ""
 
 
+def _cancel_scheduled(args: dict, sched) -> dict:
+    """`cancel_scheduled`: ONE job, by the id `coming_up` gave back or by its
+    own words. Returns {"ok", "said"} or {"ok": False, "error"}.
+
+    WHY ONE AT MOST (2026-11-24). The scheduler's delete path takes one id at
+    a time and this tool is deliberately the same: a model that is unsure
+    which of two reminders the owner meant must ask, never delete both. So a
+    words match is allowed through only when it picks out EXACTLY one job -
+    none and "more than one" both delete nothing and say so in plain words.
+    `sched.listed()` is the same list `coming_up` offers (timers, alarms and
+    reminders that are still live), so the words the model is matching are
+    the words the owner was shown.
+
+    ONE HONEST LIMIT OF THE WORDS PATH: a to-do row is not in `listed()` (the
+    scheduler keeps it in `todos()`), and `coming_up` hands to-do items back as
+    plain text with no id - so a to-do can be cancelled by an id the model
+    already holds, but not yet by its words. Nothing is guessed either way.
+    """
+    args = args or {}
+    jid = str(args.get("id") or "").strip()
+    words = " ".join(str(args.get("text") or "").split())
+    if not jid:
+        if not words:
+            return {"ok": False,
+                    "error": "Say which one to cancel: give me its id, or the words "
+                             "it was set with."}
+        needle = words.lower()
+        hits = [j for j in sched.listed()
+                if needle in " ".join(str(j.get("text") or "").split()).lower()]
+        if not hits:
+            return {"ok": False,
+                    "error": f'I could not find a scheduled thing called "{words}".'}
+        if len(hits) > 1:
+            return {"ok": False,
+                    "error": f'More than one matches "{words}" — say which one.'}
+        jid = str(hits[0]["id"])
+    job = sched.job(jid) or {}
+    text = " ".join(str(job.get("text") or "").split())
+    _code, out = sched.act(jid, "delete")
+    if out.get("ok") is not True:
+        return {"ok": False,
+                "error": str(out.get("error") or "That is not on the list any more.")}
+    said = str(out.get("said") or "").strip()
+    if not said:
+        said = f"Cancelled: {text}." if text else "Cancelled."
+    return {"ok": True, "said": said}
+
+
 def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
     """One scheduler tool call. {"ok", "said"} for the model to pass on."""
     import jarvis_quick as Q
@@ -8018,6 +8094,8 @@ def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
                  is not None else ""} for j in sched.listed()]
         return {"ok": True, "coming_up": jobs,
                 "todo": [t["text"] for t in sched.todos()]}
+    if name == "cancel_scheduled":
+        return _cancel_scheduled(args, sched)
     if name == "set_timer":
         minutes = args.get("minutes")
         if isinstance(minutes, bool) or not isinstance(minutes, (int, float)):
@@ -9658,6 +9736,7 @@ _NUDGE_TOOL_WORDS = {
     "calculator": ("calculate", "percent", "math"),
     "memory_search": ("remember", "memory", "what i said"),
     "coming_up": ("timers", "reminders", "coming up"),
+    "cancel_scheduled": ("cancel", "delete", "remove", "stop"),
     "goals_list": ("goals", "goal", "progress"),
     "goal_add": ("goal", "aim", "target"),
     "goal_progress": ("progress", "so far", "how i am doing"),
@@ -12399,7 +12478,7 @@ MORE_TOOLS = "more_tools"
 #: nor exactly one group, so a new tool cannot land nowhere.
 TOOL_GROUPS = (
     ("timers", "a timer, the to-do list, what is coming up",
-     ("set_timer", "todo_add", "todo_done", "coming_up")),
+     ("set_timer", "todo_add", "todo_done", "coming_up", "cancel_scheduled")),
     # The owner's goals and their progress (2026-11-02). Its own group, not
     # the timers group: "what are my goals" must not also put the alarm tool
     # in front of the model, and the goal tools are offered only when the
@@ -12863,6 +12942,16 @@ TOOL_HINTS = {
     "todo_done": (r"mark done", r"\bcomplete", r"\bfinished\b", r"tick off", r"marked done"),
     "coming_up": (r"coming up", r"what'?s next", r"my timers", r"my alarms", r"my reminders",
                   r"to-?do list"),
+    # Cancelling a scheduled thing (2026-11-24). Narrow on purpose, like every
+    # hint here: "cancel" itself, "never mind" (the way this is said out loud
+    # and typed), and the shapes that name a scheduled thing AND an ending.
+    # A bare "delete"/"remove" is not here - those belong to a note or a file,
+    # and a hint only decides what the model is SHOWN.
+    "cancel_scheduled": (r"\bcancel\b", r"\bnever mind\b", r"\bforget (?:it|that)\b",
+                         r"\b(?:delete|remove|stop|clear)\b[^.!?\n]{0,40}?"
+                         r"\b(?:timer|alarm|reminder|to-?do)\b",
+                         r"\b(?:timer|alarm|reminder|to-?do)\b[^.!?\n]{0,40}?"
+                         r"\b(?:cancel|delete|remove|stop|clear)\b"),
     # The goals tools (2026-11-02). "my goals" / "how am I doing on ..." /
     # "log 5 km" - the owner's own words, never a "what is a goal" question.
     "goals_list": (r"\bmy goals?\b", r"\bgoals?\b.*\bprogress\b", r"how am i doing"),

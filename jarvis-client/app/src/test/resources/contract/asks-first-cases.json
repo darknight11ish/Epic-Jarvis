@@ -1979,7 +1979,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -2161,6 +2162,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -4877,7 +4886,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -5059,6 +5069,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -7771,7 +7789,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -7953,6 +7972,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -10678,7 +10705,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -10860,6 +10888,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -13585,7 +13621,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -13767,6 +13804,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -16487,7 +16532,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -16669,6 +16715,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -19384,7 +19438,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -19566,6 +19621,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -22301,7 +22364,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -22483,6 +22547,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -25209,7 +25281,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -25391,6 +25464,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -28102,7 +28183,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -28284,6 +28366,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -31013,7 +31103,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -31195,6 +31286,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -33915,7 +34014,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -34097,6 +34197,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -34880,6 +34988,7 @@
   "todo_add",
   "todo_done",
   "coming_up",
+  "cancel_scheduled",
   "protect_from_jarvis",
   "github_search",
   "send_file_to_phone",

@@ -167,6 +167,7 @@ TOOL_NAMES = {
     "todo_add": "Adding to the to-do list",
     "todo_done": "Ticking off the to-do list",
     "coming_up": "Coming up (timers, alarms, reminders)",
+    "cancel_scheduled": "Cancelling a timer, an alarm, a reminder or a to-do item",
     "propose_plan": "Running a short plan of its own tools (one card, several steps)",
     # "What asks" for this one is decided per setting, by the setting's own
     # rule - the row says so in words rather than claiming the tool's own
