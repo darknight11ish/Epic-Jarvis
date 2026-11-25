@@ -4486,4 +4486,29 @@ mod tests {
             "lib.rs no longer reconciles the desktop update record at startup"
         );
     }
+
+    /// DEF-036: the startup line is the ONE place the app says what it is, and
+    /// the update answer reads it to compare the desktop with the backend.
+    /// `Cargo.toml` and the committed `tauri.conf.json` say `0.2.0` for ever
+    /// while the release build stamps `0.2.<run number>`, so reading the CRATE
+    /// version wrote "Jarvis Desktop 0.2.0 starting" into every log while the
+    /// About card said 0.2.503 - and the answer could then never match it
+    /// against the installed version, so it said "I cannot tell" on the
+    /// owner's own PC (measured 2026-11-25).
+    #[test]
+    fn the_startup_line_names_the_installed_version_not_the_crate_version() {
+        let src = include_str!("lib.rs");
+        // Built at compile time so this test does not contain the very string
+        // it forbids: the needle would otherwise match its own assertion.
+        let crate_version = concat!("env!(\"CARGO_PKG", "_VERSION\")");
+        assert!(
+            !src.contains(crate_version),
+            "the startup line prints the crate version (0.2.0) instead of the \
+             installed app's version, so the update answer can never match it"
+        );
+        assert!(
+            src.contains(".package_info().version,"),
+            "the startup line does not name the running app's own version"
+        );
+    }
 }
