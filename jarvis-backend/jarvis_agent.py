@@ -3545,13 +3545,19 @@ CONNECT_TOOL = "connect_account"
 def _connect_tool_text() -> str:
     """The connect_account description. Kept under 300 tokens like every tool
     text (backend/test_tool_text.py), and it says the one thing that keeps rule
-    3: never take the value here."""
-    return ("Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the "
-            "owner asks to connect, set up or link one. The OWNER types the token, "
-            "private link or username and password into that card on this PC; it is "
-            "saved into Windows Credential Manager and tested for real. NEVER take a "
-            "password, token or private link in the chat and never pass one here: this "
-            "tool has no field for a value. For any other account say Settings-only.")
+    3: never take the value here.
+
+    2026-11-25 (DEF-096): a mailbox joined the table, so the description names
+    it - otherwise the model would tell the owner email is Settings-only while
+    the card can test a Gmail address. The `service` argument was always the
+    module's own closed vocabulary; the words here only have to point at it."""
+    return ("Raise ONE card that connects a calendar, GitHub or a mail mailbox "
+            "(Gmail) to Jarvis. Use when the owner asks to connect, set up or link "
+            "one. The OWNER types the token, private link or username and password "
+            "into that card on this PC; it is saved into Windows Credential Manager "
+            "and tested for real. NEVER take a password, token or private link in "
+            "the chat and never pass one here: this tool has no field for a value. "
+            "For any other account say Settings-only.")
 
 
 def _run_connect_tool(args: dict) -> dict:
@@ -12655,7 +12661,7 @@ TOOL_GROUPS = (
     # Connecting an account by talking (2026-10-28): its own group, one member,
     # because raising the card is a single deliberate act and nothing else in
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
-    ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
+    ("connect", "connect a calendar, GitHub or Gmail", (CONNECT_TOOL,)),
     # GitHub: searching it for a library, and (2026-11-03) reading the owner's
     # own and taking the small actions; the cockpit, merge and fix-and-push of
     # 2026-11-10 joined the same group, and the 22:30 ruling's Step 2 added the
@@ -13136,10 +13142,12 @@ TOOL_HINTS = {
     # CONNECT_TOOL (2026-10-28): "connect my calendar", "set up GitHub", "link
     # my calendar". Deliberately narrow: asking what is ON the calendar, or
     # what a token is, must not pull the connect tool in - each pattern needs
-    # the connecting verb AND an account word.
-    "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
+    # the connecting verb AND an account word. `gmail` joined on 2026-11-25
+    # (DEF-096) for the sentences the quick path's grammar does not claim; bare
+    # "email"/"mail" is NOT here, or "send an email" would pull it in.
+    "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|gmail|account)\b",
                         r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
-                        r"github|account)\b"),
+                        r"github|gmail|account)\b"),
     # PHONE_APPS (2026-11-02): the [phone_apps] allow-list itself - "add YouTube
     # Music to my phone apps", "which apps can you open", "remove it from that
     # list", "what is on the allow-list". Deliberately narrow: "open YouTube on

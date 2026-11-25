@@ -3680,3 +3680,37 @@ _TOOL_ACTIONS.update({
     # action above, so its card is the mode's own and never `unclassified_tool`.
     "github_mode": "github_mode",
 })
+
+# --------------------------------------------------------------------------
+#   Connecting a mailbox (jarvis_connect_account.py's Gmail row, DEF-096,
+#   2026-11-25)
+# --------------------------------------------------------------------------
+# HERE, AT THE END OF THE FILE, for the reason every block above gives: almost
+# every line inside `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL` is some
+# earlier patch's hunk context, and the very end of this file is the one region
+# no patch's hunk claims. The update runs at import, before any `check()` or
+# `risk_for()` call, so the gate sees the row exactly as if it sat inside the
+# literal (the owner's ruling of 2026-11-14: base + tools/repair_live_backend_gaps.py,
+# never a new patch).
+#
+# WHY THIS ACTION EXISTS AT ALL. The owner said "i would like to connect you to
+# my gmail" and the connect card had no mail service. The card that fixes it
+# takes an address and an App Password (Google's rule, with 2-Step Verification
+# on - NOT Google OAuth, which for a local non-commercial app means a 7-day
+# expiry in "Testing" or an external CASA Tier 2 audit in "Production"), saves
+# them in Windows Credential Manager and then runs ONE read-only IMAP count.
+# `connect_mail` is that card's own ask, so it may only exist at tier "ask" -
+# jarvis_connect_account.tier_problem() refuses to raise the card at any other
+# tier - and the Shipped [autonomy.tiers] carries the line.
+#
+# WHY "yes" AND "local". Reversible: deleting the two entries removes it, and
+# the module's `disconnect()` names exactly those two (it also says, honestly,
+# that deleting an app password here does not revoke it at Google). Local: the
+# only thing that leaves this PC is the IMAP login to the owner's own mail
+# server, and reading mail is `email_read`, which has been "auto"/"local"
+# since 2026-09-26; nothing is sent and no other host is contacted. Not
+# `send_email`'s tier or words: sending one email keeps its own per-email card,
+# which this action does not touch.
+_RISK.update({
+    "connect_mail": ("yes", "local", "saves your mail address and an app password in Windows Credential Manager on this PC and then reads ONLY how many messages the inbox holds, to prove the login works - no sender, no subject, no date and no message body is read, nothing is marked as read, nothing is sent anywhere, and deleting the saved entries is instant"),
+})

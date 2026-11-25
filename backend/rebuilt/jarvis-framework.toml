@@ -426,6 +426,15 @@ run_shell_on_host         = "ask"
 spend_money               = "ask"
 control_computer          = "ask"
 change_own_config         = "ask"
+# Connecting a MAILBOX (jarvis_connect_account.py's Gmail row; DEF-096,
+# 2026-11-25). ONE card takes the address and an app password, saves them in
+# Windows Credential Manager and then runs ONE read-only IMAP count so the
+# owner is told what it proved. Must stay "ask": the card IS the ask, and
+# "auto"/"notify" would store a mail password with nobody asked (the module
+# refuses to raise the card at any tier but this one), while "never" switches
+# it off. Nothing is ever sent from this action - an email is
+# send_email's card above.
+connect_mail              = "ask"
 # FOUR ACTIONS THAT USED TO RESOLVE BY ACCIDENT (2026-10-06). Each of these
 # had NO line here, so each took `unknown_action_tier` - "ask" today, which is
 # the tier each was meant to have, but only because the default happens to

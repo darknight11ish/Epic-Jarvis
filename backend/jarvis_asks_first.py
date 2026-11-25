@@ -1523,7 +1523,19 @@ GROUPS = (
                             # each. Added at the 2026-10-28 integration merge -
                             # test_asks_first.py requires every action a card can
                             # name to have a row on this page.
-                            "google_calendar_write"]),
+                            "google_calendar_write",
+                            # Connecting a MAILBOX (jarvis_connect_account.py's
+                            # Gmail row, DEF-096, 2026-11-25). A GATE ACTION
+                            # rather than a tool, and a card can name it
+                            # (`_RISK["connect_mail"]`), so the page promises it
+                            # a row - the other half of what test_card_words.py
+                            # requires. It sits beside the mail tools it
+                            # configures: the switch on this row writes the very
+                            # `[autonomy.tiers] connect_mail` line that
+                            # `jarvis_connect_account.tier_problem()` reads, and
+                            # that module refuses to raise the card at any tier
+                            # but "ask".
+                            "connect_mail"]),
     ("The internet", ["search_the_web",
                       # The conversation-scoped web-search approval and its
                       # instant stop (jarvis_agent.py, the owner's ask of
