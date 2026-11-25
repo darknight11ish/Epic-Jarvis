@@ -702,7 +702,14 @@ await check("CONTROL: the order is one command in Rust, backend before executabl
   // off a comment: `stopAt` is the `if !backend_ok` block.
   assert.ok(stopAt >= 0 && stopAt < installAt,
     "the desktop half is not guarded by the backend half's result");
-  assert.match(fn.slice(stopAt, installAt), /return Ok\(BothOutcome/,
+  // The guard must RETURN an outcome before the desktop half is attempted.
+  // The shape changed on 2026-11-25, when the update window was given the
+  // ending to draw: the block builds `let outcome = BothOutcome { … }`, tells
+  // the window with `update_window::ended(&app, &outcome)` and then returns
+  // that outcome, so the old inline `return Ok(BothOutcome` no longer appears.
+  // What this holds is the rule - a return of a BothOutcome happens inside the
+  // guard - and it accepts either shape rather than pinning the punctuation.
+  assert.match(fn.slice(stopAt, installAt), /return Ok\((outcome|BothOutcome)/,
     "the guard does not return before the desktop half");
 });
 
