@@ -690,12 +690,12 @@ const withHandsFree = (st, value, where = "settings") => {
   return c;
 };
 
-await check("hands-free (\"Hey Jarvis\"): same as the talk button by default, the agreed words, and only when the PC has it", async () => {
+await check("hands-free (\"Hey Atlas\"): same as the talk button by default, the agreed words, and only when the PC has it", async () => {
   assert.deepEqual(VT.HANDS_FREE.map(VT.choiceText), ["Same as the talk button (default)", "Only trust the talk button"]);
   assert.equal(VT.HANDS_FREE[0].detail,
-    "A question started with \"Hey Jarvis\" is trusted like one where you press the button.");
+    "A question started with \"Hey Atlas\" is trusted like one where you press the button.");
   assert.equal(VT.HANDS_FREE[1].detail,
-    "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.");
+    "Hey Atlas still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.");
   assert.equal(VT.loosens("hands_free", "same_as_button"), true);
   assert.equal(VT.loosens("hands_free", "button_only"), false);
   // The REAL status (the backend's own, regenerated) carries it.
@@ -714,7 +714,7 @@ await check("hands-free (\"Hey Jarvis\"): same as the talk button by default, th
   const note = await text(page, "vt-handsfree-note");
   await page.close();
   assert.equal(got.shown, true, "not offered by a PC that reports it");
-  assert.equal(got.title, "Hands-free (\"Hey Jarvis\")");
+  assert.equal(got.title, "Hands-free (\"Hey Atlas\")");
   assert.deepEqual(got.labels, ["Same as the talk button (default)", "Only trust the talk button"]);
   assert.equal(got.pressed, "same_as_button");
   assert.equal(note, VT.HANDS_FREE[0].detail);
@@ -754,7 +754,7 @@ await check("hands-free: \"only trust the talk button\" is at once; going back a
   assert.deepEqual(sent, [{ setting: "hands_free", value: "same_as_button" }]);
   // The waiting line and the last-card lines name it, in the same shape.
   assert.match(VT.settingWaitingLine({ setting: "hands_free", value: "same_as_button" }, WHERE),
-    /^Waiting for your approval to change how far "Hey Jarvis" is trusted to "Same as the talk button"\./);
+    /^Waiting for your approval to change how far "Hey Atlas" is trusted to "Same as the talk button"\./);
   const card = { ...S.balanced.gate.training.last, setting: "hands_free", value: "same_as_button" };
   assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, strict),
     "Approved: \"Same as the talk button\" is on now.");
@@ -765,7 +765,7 @@ await check("hands-free: \"only trust the talk button\" is at once; going back a
   assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, strict),
     "You made it stricter while the card waited, so approving it changed nothing.");
   assert.equal(W.lastTrainingLine({ ...card, outcome: "refused", reason: "no" }, strict),
-    "Your PC refused the change to how far \"Hey Jarvis\" is trusted: no.");
+    "Your PC refused the change to how far \"Hey Atlas\" is trusted: no.");
   // CONTROL: the Rust knows the setting, and holds only its loosening.
   const rust = read("src-tauri/src/voice_training.rs");
   assert.match(rust, /\("hands_free", "same_as_button"\) => \{?\s*Ok\(\("hands_free", "same_as_button", true\)\)/);
@@ -784,10 +784,10 @@ const withScreen = (st, value, where = "settings") => {
   return c;
 };
 
-await check("answers about your screen or the camera after \"Hey Jarvis\": on screen by default, the agreed words, and only when the PC has it", async () => {
+await check("answers about your screen or the camera after \"Hey Atlas\": on screen by default, the agreed words, and only when the PC has it", async () => {
   assert.deepEqual(VT.HANDS_FREE_SCREEN.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(VT.HANDS_FREE_SCREEN[0].detail,
-    "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.");
+    "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Atlas\" gets a written answer only.");
   assert.equal(VT.HANDS_FREE_SCREEN[1].detail,
     "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.");
   assert.equal(VT.SCREEN_ONLY_WHEN_STRICT_NOTE,
@@ -814,7 +814,7 @@ await check("answers about your screen or the camera after \"Hey Jarvis\": on sc
   const note = await text(page, "vt-screen-note");
   await page.close();
   assert.equal(got.shown, true, "not offered by a PC that reports it");
-  assert.equal(got.title, "Answers about your screen or the camera after \"Hey Jarvis\"");
+  assert.equal(got.title, "Answers about your screen or the camera after \"Hey Atlas\"");
   assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(got.pressed, "screen_on_screen");
   assert.deepEqual(got.disabled, [false, false]);
@@ -860,12 +860,12 @@ await check("answers about your screen: keeping them on screen is at once; Read 
   assert.deepEqual(sent, [{ setting: "hands_free_screen", value: "screen_aloud" }]);
   // The waiting line and the last-card lines name it, in the same shape.
   assert.match(VT.settingWaitingLine({ setting: "hands_free_screen", value: "screen_aloud" }, WHERE),
-    /^Waiting for your approval to change answers about your screen or the camera after "Hey Jarvis" to "Read aloud"\./);
+    /^Waiting for your approval to change answers about your screen or the camera after "Hey Atlas" to "Read aloud"\./);
   const card = { ...S.balanced.gate.training.last, setting: "hands_free_screen", value: "screen_aloud" };
   assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, strict), "Approved: \"Read aloud\" is on now.");
   assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, strict), "You said no, so \"Keep on screen\" stays.");
   assert.equal(W.lastTrainingLine({ ...card, outcome: "refused", reason: "no" }, strict),
-    "Your PC refused the change to answers about your screen or the camera after \"Hey Jarvis\": no.");
+    "Your PC refused the change to answers about your screen or the camera after \"Hey Atlas\": no.");
   // CONTROL: the Rust knows the setting, and holds only its loosening.
   const rust = read("src-tauri/src/voice_training.rs");
   assert.match(rust, /\("hands_free_screen", "screen_aloud"\) => \{?\s*Ok\(\("hands_free_screen", "screen_aloud", true\)\)/);
@@ -988,7 +988,7 @@ await check("better voice: two detectors at once, back to one is a card; the new
     oneOn: document.querySelector('#vt-wakeconfirm button[data-value="one"]').getAttribute("aria-pressed"),
   }));
   assert.equal(got.shown, true);
-  assert.deepEqual(got.titles, ["Second \"hey Jarvis\" check", "Voice-ID model"]);
+  assert.deepEqual(got.titles, ["Second \"hey Atlas\" check", "Voice-ID model"]);
   assert.equal(got.bothOff, true);
   assert.equal(got.resnetOff, true);
   assert.equal(got.oneOn, "true");
@@ -1023,7 +1023,7 @@ await check("better voice: two detectors at once, back to one is a card; the new
   await live.close();
 
   assert.match(VT.settingWaitingLine({ setting: "wake_confirm", value: "one" }, WHERE),
-    /^Waiting for your approval to change the second "hey Jarvis" check to "One detector"\./);
+    /^Waiting for your approval to change the second "hey Atlas" check to "One detector"\./);
   const card = { ...S.balanced.gate.training.last, setting: "voice_id_model", value: "resnet221" };
   assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, S.strong_ready),
     "You chose the measured model again while the card waited, so approving it changed nothing.");
@@ -1452,7 +1452,7 @@ await check("CONTROL: only the settings window holds the new commands", async ()
   assert.ok(lib.includes(".manage(voice_training::SampleState::default())"));
 });
 
-await check("CONTROL: push-to-talk and \"hey Jarvis\" listening refuse while Settings records", async () => {
+await check("CONTROL: push-to-talk and \"hey Atlas\" listening refuse while Settings records", async () => {
   const voice = read("src-tauri/src/voice.rs");
   assert.match(fnBody(voice, "pub fn start_voice_capture("), /if training\.recording\(\) \{\s+return Err\(crate::voice_training::MIC_IN_SETTINGS/);
   assert.match(fnBody(voice, "pub async fn start_automatic_listening("), /if training\.recording\(\) \{/);

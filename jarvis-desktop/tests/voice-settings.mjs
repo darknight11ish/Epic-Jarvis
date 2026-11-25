@@ -172,13 +172,13 @@ await check("a card to turn the wake word on is waiting: said, with where to app
 
 await check("the wake phrase is stated as a fact, and nothing promises an unshipped model", async () => {
   // The owner's ruling of 2026-11-21 (decisions.d/2026-11-21-wake-copy-hey-jarvis.md):
-  // the copy is simple and factual - "Wake phrase: Hey Jarvis." - and the
+  // the copy is simple and factual - "Wake phrase: Hey Atlas." - and the
   // unshipped model is not named to the owner. wake-copy.mjs is the tree-wide
   // guard; this one pins the sentence on the page the owner actually reads.
   const page = await open({ status: C.ready_wake_on });
   const s = await section(page);
   await page.close();
-  assert.equal(s.wakeTitle, "Wake phrase: Hey Jarvis.");
+  assert.equal(s.wakeTitle, "Wake phrase: Hey Atlas.");
   assert.doesNotMatch(s.all, /Hey Atlas/i, "Settings names an unshipped wake phrase");
   assert.doesNotMatch(s.all, /\bin training\b|\bbeing trained\b/i,
     "Settings promises a wake phrase that is still being trained");

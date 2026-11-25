@@ -92,7 +92,7 @@ export const FREE_SPEECH = Object.freeze([
 ]);
 
 /** The fixed wake words: the detector's own words, never training material. */
-export const WAKE_PHRASES = Object.freeze(["hey Atlas"]);
+export const WAKE_PHRASES = Object.freeze(["hey Jarvis"]);
 
 /** The twelve texts only, for a caller that does not need the focus labels. */
 export const SENTENCES = Object.freeze(READ_PHRASES.map((p) => p.text));
