@@ -298,9 +298,10 @@ await check("Full GitHub mode: the PC's words, ON only when can_enable, OFF alwa
   // Hand-made, NOT the generated fixture: the backend lane owns that file and
   // its `github_mode` object has not landed in it yet. The whole contract is
   // the object's own name plus four keys - on, can_enable, effect, where.
-  const EFFECT = "Offers all twenty GitHub tools, and stops the fix loop asking once per file " +
-    "in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, " +
-    "edit and review each keep their own card.";
+  const EFFECT = "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud " +
+    "without asking again. Asked in chat, turning it on also makes the fix loop ask " +
+    "once for that chat, not once per file. Merge, push, open PR, comment, re-run, " +
+    "create a repo, labels, edit and review each keep their own card.";
   const WHERE = "Settings, What asks first, on this PC - turning it on needs Windows Hello. " +
     "Either app can turn it off.";
   assert.equal(GITHUB_MODE, "github_mode");

@@ -119,9 +119,10 @@ object AsksFirst {
     const val GITHUB_MODE = "github_mode"
     const val GITHUB_MODE_TITLE = "GitHub mode"
     const val GITHUB_MODE_EFFECT =
-        "Offers all twenty GitHub tools, and stops the fix loop asking once per file in " +
-            "this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, " +
-            "edit and review each keep their own card."
+        "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud " +
+            "without asking again. Asked in chat, turning it on also makes the fix loop ask " +
+            "once for that chat, not once per file. Merge, push, open PR, comment, re-run, " +
+            "create a repo, labels, edit and review each keep their own card."
     const val GITHUB_MODE_WHERE =
         "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either " +
             "app can turn it off."

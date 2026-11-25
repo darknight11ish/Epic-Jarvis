@@ -94,8 +94,10 @@ pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 
 /// FULL GITHUB MODE (2026-11-25, the owner's ask for "a full github mode ...
 /// full parity with less restrictions and less cards"): ONE PC setting that
-/// offers all twenty GitHub tools and stops the fix loop asking once per file
-/// in this conversation. It is NOT a model tool and NOT an entry in
+/// offers all twenty GitHub tools, lets a GitHub question reach the cloud, and -
+/// asked in chat, where there is a conversation to scope it to - stops the fix
+/// loop asking once per file in that conversation. It is NOT a model tool and
+/// NOT an entry in
 /// [`TOOLS_SWITCHABLE`]: the PC's `tools.github_mode` object carries its row
 /// (`on`, `can_enable`, `effect`, `where`), and it rides the SAME
 /// `set_tool_enabled` command and `POST /api/asks_first/tools` body as a tool,

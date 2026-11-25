@@ -1975,7 +1975,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -4921,7 +4921,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -7863,7 +7863,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -10818,7 +10818,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -13773,7 +13773,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -16723,7 +16723,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -19668,7 +19668,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -22633,7 +22633,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -25589,7 +25589,7 @@
     },
     "github_mode": {
      "can_enable": true,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -28530,7 +28530,7 @@
     },
     "github_mode": {
      "can_enable": false,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -31489,7 +31489,7 @@
     },
     "github_mode": {
      "can_enable": false,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
@@ -34439,7 +34439,7 @@
     },
     "github_mode": {
      "can_enable": false,
-     "effect": "Offers all twenty GitHub tools, and stops the fix loop asking once per file in this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
      "on": false,
      "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },

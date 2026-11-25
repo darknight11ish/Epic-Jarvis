@@ -832,13 +832,16 @@ GITHUB_MODE_TITLE = "Full GitHub mode"
 #: The one-line effect, in the same words the payload carries to both apps. THE
 #: WORDS ARE THE LEAD'S CONTRACT (2026-11-25), not this module's own draft: the
 #: desktop row, the phone row and the API page are built against this sentence,
-#: so it is adopted verbatim and a change to it is a cross-lane change. The
-#: per-file half it names is given only by the chat door - the Settings card
-#: says so in its own words - and the report that landed this change flags it.
+#: so it is adopted verbatim and a change to it is a cross-lane change. **The
+#: per-file half is stated as CHAT-ONLY ON PURPOSE:** only the chat door can give
+#: that grant (it needs a conversation id to scope it to), the Settings door's
+#: card says so in its own words, and a row sentence that promised it on the
+#: Settings page would be a promise that page cannot keep.
 GITHUB_MODE_EFFECT = (
-    "Offers all twenty GitHub tools, and stops the fix loop asking once per file in "
-    "this conversation. Merge, push, open PR, comment, re-run, create a repo, "
-    "labels, edit and review each keep their own card.")
+    "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud "
+    "without asking again. Asked in chat, turning it on also makes the fix loop ask "
+    "once for that chat, not once per file. Merge, push, open PR, comment, re-run, "
+    "create a repo, labels, edit and review each keep their own card.")
 #: Where the owner changes it, in plain words - also the lead's contract.
 GITHUB_MODE_WHERE = ("Settings, What asks first, on this PC - turning it on needs "
                      "Windows Hello. Either app can turn it off.")
