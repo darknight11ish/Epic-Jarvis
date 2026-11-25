@@ -214,7 +214,10 @@ pub(crate) fn require_base_allowed(app: &AppHandle) -> Result<(), String> {
 
 /// The address the owner configured - Settings, else `JARVIS_HUD_BASE` -
 /// not yet checked. `None` when neither is set.
-fn configured_base(app: &AppHandle) -> Option<String> {
+///
+/// Shared with `browser_qr.rs`, which reads the configured PORT out of it (the
+/// bind address is a bare host, so this is the only place the port is kept).
+pub(crate) fn configured_base(app: &AppHandle) -> Option<String> {
     use tauri_plugin_store::StoreExt;
 
     app.store(SETTINGS_STORE)

@@ -625,6 +625,12 @@ permissions = [
   # page, on a click, so the owner can type it into the phone. Here and
   # nowhere else - the other windows never need to see it.
   "allow-reveal-pairing-token",
+  # "Show a QR code for my phone's browser" (2026-11-25): the picture is drawn
+  # in Rust and the page gets the SVG plus the address WITHOUT the sign-in
+  # part; the token and the one-time key never reach it, because no route mints
+  # a browser credential by design (docs/JARVIS-API.md section 90). Settings is
+  # the only window that holds this command.
+  "allow-browser-qr",
   # "Second graphics card": what was found, and one switch at a time. Turning
   # a switch ON starts a second copy of Ollama once its approval card is
   # approved, so it sits with the other settings-only powers. It approves
