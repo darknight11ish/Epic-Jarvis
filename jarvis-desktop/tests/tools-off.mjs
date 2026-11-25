@@ -6,8 +6,9 @@
  *
  * What must hold:
  * - every tool the model can be offered is drawn with an ON switch, the raw
- *   Tier C set and the everyday helpers included (83 at 2026-11-20, the eight
- *   plan-store tools PM2 added; 75 at 2026-11-14, 74 at
+ *   Tier C set and the everyday helpers included (84 at 2026-11-24,
+ *   cancel_scheduled, the scheduling batch's one new switchable tool; 83 at
+ *   2026-11-20, the eight plan-store tools PM2 added; 75 at 2026-11-14, 74 at
  *   2026-11-11, 62 at 2026-11-09, 60 at 2026-11-05, 48 before);
  * - a name this PC does not know, or one of the five whose own switch decides
  *   it, is still listed when it is ON, with its real state and the PC's own
@@ -58,8 +59,8 @@ check("every formerly locked tool is a switch row with an ON switch", () => {
       `${id} can be switched on from the PC: ${JSON.stringify(tv)}`);
     assert.ok(TOOLS_SWITCHABLE.includes(id), `${id} is in the switchable list`);
   }
-  assert.equal(view.tools.items.length, 83,
-    "83 switches, every tool the model can be offered (seven GitHub tools - the carded repository create added 2026-11-09 - the cardless project_read added the same day, wave 16's read-only PR cockpit, carded merge and carded fix-and-push, and wave 16E's local review packet and record check - send_text_message, the approval-policy row and four pack tools since 2026-11-05, plus wave 20's android_app builder)");
+  assert.equal(view.tools.items.length, 84,
+    "84 switches, every tool the model can be offered (cancel_scheduled, the scheduling batch's carded cancellation, is the 84th; seven GitHub tools - the carded repository create added 2026-11-09 - the cardless project_read added the same day, wave 16's read-only PR cockpit, carded merge and carded fix-and-push, and wave 16E's local review packet and record check - send_text_message, the approval-policy row and four pack tools since 2026-11-05, plus wave 20's android_app builder)");
 });
 
 check("the fixture really carries the name this PC does not know", () => {
@@ -72,7 +73,7 @@ check("the fixture really carries the name this PC does not know", () => {
   assert.ok(rows.every((r) => r.why.length > 20), "it carries the PC's plain reason");
   assert.ok(rows.every((r) => r.title && r.title !== r.id),
     "it is drawn with its human label, never the raw id");
-  assert.equal(view.tools.items.length, 83, "the switch rows are unchanged");
+  assert.equal(view.tools.items.length, 84, "the switch rows are unchanged");
   assert.ok(TOOLS_SWITCHABLE.includes("web_search"));
   assert.ok(!TOOLS_SWITCHABLE.includes("plugin_scan"));
 });
@@ -104,7 +105,7 @@ check("a PC with nothing else ON sends no extra and draws no extra rows", () => 
   const view = readAsksFirst(C.pc_shipped);
   assert.deepEqual(view.tools.extra, [], "no extra rows");
   assert.deepEqual(extraToolsView(view.tools), [], "nothing is drawn for them");
-  assert.equal(view.tools.items.length, 83);
+  assert.equal(view.tools.items.length, 84);
 });
 
 check("the page draws the extra rows and sends OFF through the same verb", () => {
