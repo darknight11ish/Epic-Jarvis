@@ -199,6 +199,93 @@ def t_the_capability_answer_names_the_connected_surface():
 
 
 # --------------------------------------------------------------------------
+#   2b. DEF-097 (2026-11-25): the SHORT answer, and the long form it offers
+# --------------------------------------------------------------------------
+def t_the_github_tool_answer_is_short_and_offers_the_detail():
+    """The owner's "this response is way too long", pinned in both directions.
+
+    The answer to "what GitHub tools do you have?" is one line per tool plus a
+    tail that offers the detail. The SHORT form is bounded in the module itself
+    (`CAPABILITIES_SHORT_MAX_CHARS/MAX_LINES`); the whole chat reply is bounded
+    here; every tool is listed exactly once; and the long form is still one
+    follow-up away, both by tool name and by asking for more.
+    """
+    short = GH.capabilities_short()
+    check("the short inventory is inside the module's own character bound",
+          len(short) <= GH.CAPABILITIES_SHORT_MAX_CHARS,
+          (len(short), GH.CAPABILITIES_SHORT_MAX_CHARS))
+    check("... and inside its own line bound",
+          len(short.splitlines()) <= GH.CAPABILITIES_SHORT_MAX_LINES,
+          (len(short.splitlines()), GH.CAPABILITIES_SHORT_MAX_LINES))
+
+    intent, name, reply = _reply("what GitHub tools do you have?")
+    check("the tools question is the deterministic github_self answer",
+          name == "github_self" and intent is not None
+          and intent.f.get("shape") == "tools", (name, intent.f if intent else None))
+    check("... so it never reaches the model (the family is read-only)",
+          "github_self" in Q.READ_ONLY_INTENTS)
+    check("... the whole reply stays short",
+          len(reply) <= 2800 and len(reply.splitlines()) <= 30,
+          (len(reply), len(reply.splitlines())))
+    check("... and is less than half the long form it replaced",
+          len(reply) < len(GH.capabilities_text()) // 2,
+          (len(reply), len(GH.capabilities_text())))
+    check("... the short inventory is what the reply carries", short in reply,
+          reply[:200])
+
+    lines = [ln for ln in reply.splitlines() if ln.startswith("  - ")]
+    named = [ln.split(":", 1)[0][4:] for ln in lines]
+    check("every tool is listed exactly once, one line each",
+          named == [c["tool"] for c in GH.CAPABILITIES],
+          (named, [c["tool"] for c in GH.CAPABILITIES]))
+    check("... and each line says what the tool does",
+          all(len(ln.split(":", 1)[1].strip()) > 10 for ln in lines),
+          lines[:2])
+    check("... and no tool's name is typed twice by the list",
+          all(short.count(c["tool"]) == 1 for c in GH.CAPABILITIES),
+          [c["tool"] for c in GH.CAPABILITIES
+           if short.count(c["tool"]) != 1])
+    check("... the tail offers the detail by name",
+          GH.CAPABILITIES_SHORT_TAIL in reply
+          and "name for the detail" in reply, reply[-300:])
+
+    # THE LONG FORM IS STILL THERE: by tool name, and by asking for more.
+    _intent, name, one = _reply("github_merge_pr")
+    check("naming a tool answers with that ONE tool's detail",
+          name == "github_self" and "github_merge_pr (write)" in one,
+          (name, one[:120]))
+    check("... including its card and its limit",
+          "What it shows on its own card" in one and "Limit:" in one, one[:300])
+    _intent, name, more = _reply("more GitHub tool detail")
+    check("asking for more returns the whole long inventory",
+          name == "github_self" and "With GitHub connected" in more,
+          (name, more[:120]))
+    check("... which still names every card's fields and every limit",
+          all(GH._card_shows(c) in more for c in GH.CAPABILITIES)
+          and "Limit:" in more, more[:300])
+    check("... and is several times the short answer",
+          len(more) > 3 * len(short), (len(more), len(short)))
+
+    # THE BOUNDED SCAN, ANSWERED HONESTLY (DEF-097's second half).
+    _intent, name, scan = _reply("can atlas do a full scan of a repo?")
+    check("'can atlas do a full scan of a repo?' is answered deterministically",
+          name == "github_self" and "bounded" in scan, (name, scan[:200]))
+    check("... with the real caps, not a promise of a full read",
+          str(GH.SCAN_MAX_FILES) in scan and str(GH.SCAN_MAX_FOLDERS) in scan,
+          scan[:400])
+    check("... and it says it will report what it did NOT read",
+          "not read" in scan.lower(), scan[:400])
+    check("... and that a public repository needs no token",
+          "public repository" in scan, scan[:500])
+    check("a scan that NAMES a repository stays a command for the model's tool",
+          Q.match("scan darknight11ish/Epic-Jarvis") is None,
+          Q.match("scan darknight11ish/Epic-Jarvis"))
+    check("the read tool carries the scan shape for the model",
+          "scan" in AG.TOOLS["github_read_file"].description.lower()
+          and "scan" in AG.TOOLS["github_read_file"].parameters["properties"])
+
+
+# --------------------------------------------------------------------------
 #   3. /api/accounts's GitHub row is the real surface
 # --------------------------------------------------------------------------
 def t_the_accounts_row_is_the_real_surface():
@@ -530,6 +617,7 @@ def main() -> int:
     try:
         t_the_catalogue_has_the_connected_github_row()
         t_the_capability_answer_names_the_connected_surface()
+        t_the_github_tool_answer_is_short_and_offers_the_detail()
         t_the_accounts_row_is_the_real_surface()
         t_the_accounts_answers_are_reachable()
         t_the_eight_recorded_questions_route_deterministically()

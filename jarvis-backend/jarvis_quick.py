@@ -15636,6 +15636,79 @@ _GITHUB_TOOLS_STATE_QUESTION = re.compile(
     r"|how\s+many\s+(?:of\s+the\s+)?github\s+tools\s+(?:are|r)\s+"
     r"(?:on|enabled|switched\s+on)\b.*")
 
+#: THE FOLLOW-UPS THE SHORT LIST INVITES (DEF-097, 2026-11-25). The answer to
+#: "what GitHub tools do you have?" is now one line per tool plus "say a tool's
+#: name for the detail, or 'more GitHub tool detail' for the whole list", so
+#: these two shapes are what that tail can actually reach:
+#:
+#:   * a tool's own name (optionally with "tell me about" / "what does ... do"),
+#:     answered with that ONE capability row - its card, its limit and its bans;
+#:   * a request for MORE, which returns the whole long `capabilities_text()` -
+#:     the exact text the short answer replaced, so the long form is kept and
+#:     reachable and nothing that was true stopped being answerable.
+#:
+#: NEITHER can act: both read the module's own inventory and send nothing. They
+#: are in `_CAPABILITY_EXEMPT_SHAPES` below because their messages do not open
+#: as questions ("github_list" alone is not one) and the alternative would be
+#: the model, which is the one thing the owner's rule forbids for a question
+#: about Atlas's own abilities.
+_GITHUB_TOOL_MORE = re.compile(
+    r"(?:tell\s+me\s+)?more\s+(?:about\s+|on\s+|of\s+)?(?:the\s+)?github\s+"
+    r"(?:tools?|abilities|reads?|writes?)(?:\s+(?:detail|details|please|then|now))*"
+    r"|(?:the\s+)?(?:full|whole|long)\s+github\s+(?:tools?\s+)?(?:list|detail|details)"
+    r"|all\s+(?:the\s+)?github\s+tools?\s+(?:in\s+)?(?:detail|details)"
+    r"|(?:explain|list)\s+(?:all\s+)?(?:the\s+)?github\s+tools?\s+"
+    r"(?:in\s+)?(?:detail|details)")
+
+#: "Can you scan a repository?" (DEF-097). The QUESTION form only, plus the bare
+#: "scan a/one/the repository" that `normalise()` leaves of "can you scan a
+#: repository": a message that names a CONCRETE repository ("scan my repo",
+#: "scan owner/name") is a command and keeps its path to the model, whose
+#: `github_read_file(scan=true)` is the only thing that can act on the name.
+_GITHUB_SCAN_ASK = re.compile(
+    r"(?:can|could|would|will|do|does|is|are)\s+(?:atlas|jarvis)\s+"
+    r"(?:do\s+|run\s+|perform\s+)?(?:a\s+)?(?:full\s+|whole\s+|complete\s+)?"
+    r"scan\s+(?:of\s+)?(?:a|an|one|the|any)\s+(?:whole\s+|entire\s+|full\s+)?"
+    r"(?:repo|repository|codebase)\b.*"
+    r"|is\s+there\s+(?:a\s+)?(?:way|tool|ability)\s+to\s+scan\s+"
+    r"(?:a|an|one|the|any)\s+(?:repo|repository|codebase)\b.*"
+    r"|(?:how|what)\s+(?:can|could|do|would)\s+(?:i|you|atlas|jarvis)\s+"
+    r"(?:go\s+about\s+)?scan\s+(?:a|an|one|the|any)\s+"
+    r"(?:whole\s+|entire\s+)?(?:repo|repository|codebase)\b.*"
+    r"|do\s+(?:you|atlas|jarvis)\s+have\s+(?:a\s+|any\s+)?scan\s+tool\b.*"
+    r"|scan\s+(?:a|an|one|the|any)\s+(?:whole\s+|entire\s+|full\s+)?"
+    r"(?:repo|repository|codebase)\b.*")
+
+#: Every GitHub tool's own name, read from `CAPABILITIES` at match time, so a
+#: tool that is added to the inventory is answerable by name with no second list.
+def _github_tool_names() -> tuple:
+    GH = _github_module()
+    if GH is None:
+        return ()
+    try:
+        return tuple(str(c.get("tool") or "") for c in GH.CAPABILITIES
+                     if c.get("tool"))
+    except Exception:                       # noqa: BLE001 - older PC
+        return ()
+
+
+def _github_tool_detail_name(s: str) -> Optional[str]:
+    """The ONE tool `s` names, or None. An exact name, never a substring.
+
+    A FULL match on the tool's own name (with an optional "tell me about" /
+    "what does ... do" / "detail on" lead) is what makes this safe: a sentence
+    that merely CONTAINS a tool name - "comment on PR 5 with github_comment" -
+    is a command and keeps its path to the model.
+    """
+    text = str(s or "").strip()
+    for name in _github_tool_names():
+        if re.fullmatch(
+                r"(?:tell\s+me\s+(?:about\s+|what\s+)?|what\s+(?:does|is)\s+|"
+                r"detail\s+(?:on|for|about)\s+|about\s+)?"
+                + re.escape(name) + r"\s*\??", text):
+            return name
+    return None
+
 _GITHUB_OWN_CI = re.compile(
     r"what(?:'s|\s+is|\s+are)\s+(?:your|jarvis'?s?)\s+ci"
     r"(?:\s+(?:status|doing|like))?\s*\??$"
@@ -15891,18 +15964,23 @@ def _github_never_words() -> str:
 
 
 def _github_capability_inventory() -> str:
-    """The GitHub inventory from its ONE home, `jarvis_github.capabilities_text`.
+    """The GitHub inventory from its ONE home, now in its SHORT form.
 
-    The owner's directive of 2026-11-10: Jarvis knows its GitHub abilities and
-    the small details around them. The full text lives in that module's
-    `CAPABILITIES`; this answer renders it rather than keeping a second copy.
+    DEF-097 (2026-11-25). This used to return
+    `jarvis_github.capabilities_text()`: the fixed sentence, then seventeen
+    paragraphs, each with a card's fields and its limit. The owner's words were
+    "this response is way too long". What he asked for is one line per tool and
+    the detail left one sentence away, and that is `capabilities_short()` now.
+    The long form is NOT gone: `_github_capability_detail()` returns it when the
+    owner says "more", and naming one tool returns that tool's own row.
+
     The fixed fallback is the last one written by hand, used only on a PC whose
-    backend predates the list.
+    backend predates `capabilities_short`.
     """
     GH = _github_module()
     if GH is not None:
         try:
-            text = str(GH.capabilities_text() or "").strip()
+            text = str(GH.capabilities_short() or "").strip()
             if text:
                 return (text + " Plus github_search, which researches a library "
                         "on GitHub, and the scheduled watch_github job behind "
@@ -15912,6 +15990,46 @@ def _github_capability_inventory() -> str:
     return (_github_tools_words() + " All of them are off by default: each has its "
             "own switch in Settings, What asks first, under \"Let the AI use "
             "this\" (group \"Jarvis's own tools\").")
+
+
+def _github_capability_detail(tool: str = "") -> str:
+    """The LONG GitHub detail (DEF-097): one tool by name, or the whole list.
+
+    This is the door behind the short answer's tail. A tool name that is not in
+    the inventory falls back to the short list, never to a guess at what was
+    meant; saying "more" (or nothing) returns the whole long text.
+    """
+    GH = _github_module()
+    if GH is not None:
+        try:
+            said = str(GH.capabilities_detail(str(tool or "")) or "").strip()
+            if said:
+                return said
+        except Exception:                   # noqa: BLE001 - older PC, next shape
+            pass
+    return _github_capability_inventory()
+
+
+def _github_scan_words() -> str:
+    """What the bounded repository scan really does, from jarvis_github.
+
+    DEF-097 (2026-11-25): the owner asked "can atlas do a full scan of a repo?".
+    The answer is yes-with-a-cap, and every number comes from the module that
+    enforces it (`jarvis_github.scan_words`), never from this sentence.
+    """
+    GH = _github_module()
+    if GH is not None:
+        try:
+            said = str(GH.scan_words() or "").strip()
+            if said:
+                return said
+        except Exception:                   # noqa: BLE001 - older PC
+            pass
+    return ("Yes - I can scan ONE repository you name, in a bounded way, and I say "
+            "what I did not read: I list at most 12 folders, walk at most 400 "
+            "entries, and read the first 1,500 characters of at most 10 text files. "
+            "It is a scan, never a copy. A public repository scans with no GitHub "
+            "token; a private one needs \"connect my GitHub\" first.")
 
 
 # --------------------------------------------------------------------------
@@ -15993,9 +16111,13 @@ _CAPABILITY_EXPLANATION_INTENTS = frozenset({"github_self",
                                              "feature_capabilities"})
 
 #: Shapes that ACT (raise a card) or REFUSE a permanently impossible action
-#: rather than explain; see the comment above.
+#: rather than explain; see the comment above. The three DEF-097 shapes of
+#: 2026-11-25 join them for a different reason: a tool's bare name and "more
+#: GitHub tool detail" do not open as questions, and they are the two follow-ups
+#: the short list itself invites - they read the inventory and act on nothing.
 _CAPABILITY_EXEMPT_SHAPES = frozenset({"create_repo", "approve", "destroy",
-                                       "bulk_close", "close_pr"})
+                                       "bulk_close", "close_pr", "tools_detail",
+                                       "tools_more", "scan"})
 
 #: The review's imperative verbs, read at the start of the RAW message.
 _CAPABILITY_IMPERATIVE_LEAD = re.compile(
@@ -16072,6 +16194,19 @@ def _self_github(s: str) -> Optional[Intent]:
         return Intent("github_self", {"shape": "tools_state"})
     if _GITHUB_TOOLS_QUESTION.fullmatch(s):
         return Intent("github_self", {"shape": "tools"})
+    # THE SHORT LIST'S OWN FOLLOW-UPS (DEF-097, 2026-11-25), before every
+    # action shape: naming a tool asks what it does, and "more" asks for the
+    # long inventory. Both answer from `CAPABILITIES` and send nothing.
+    if _GITHUB_TOOL_MORE.fullmatch(s):
+        return Intent("github_self", {"shape": "tools_more"})
+    detail = _github_tool_detail_name(s)
+    if detail:
+        return Intent("github_self", {"shape": "tools_detail", "tool": detail})
+    # "Can Atlas do a full scan of a repo?" - the owner's own 2026-11-25
+    # question. A CONCRETE repository keeps its path to the model, whose
+    # `github_read_file(scan=true)` is the tool that can act on the name.
+    if _GITHUB_SCAN_ASK.fullmatch(s):
+        return Intent("github_self", {"shape": "scan"})
     # "Are you able to create a repository?" (2026-11-09): the real carded action,
     # not the denial the model gave to "create a repository called Fitness Band".
     if _GITHUB_CREATE_REPO.fullmatch(s):
@@ -26689,7 +26824,8 @@ def _github_tools_words() -> str:
     return (
         f"{how_many} for your own GitHub, including github_list (your "
         "repositories, a repository's pull requests, issues or workflow runs), "
-        "github_read_file (one file), github_ci_status (the newest workflow run), "
+        "github_read_file (one file, or a bounded whole-repository scan that says "
+        "what it skipped), github_ci_status (the newest workflow run), "
         "github_pr_scan (the pull request cockpit: which open pull requests can be "
         "merged, and which check is holding them), github_comment (one comment), "
         "github_open_issue (one new issue), github_rerun_workflow (run an existing "
@@ -27309,8 +27445,8 @@ def _github_tools_group_state_words() -> str:
     else:
         said = f"Right now {on} of the {total} are switched on."
     if got["waiting"]:
-        said += (" One card offering all twenty to the AI model is waiting for your "
-                 "approval right now, and nothing has been switched on yet.")
+        said += (f" One card offering all {total} to the AI model is waiting for "
+                 f"your approval right now, and nothing has been switched on yet.")
     return said
 
 
@@ -27327,10 +27463,11 @@ def _github_tools_how_words() -> str:
     got = _github_tools_group_state()
     stop = 'Say "turn off the GitHub tools" to stop at once, with no card.'
     if got is not None and got["on"] >= got["total"]:
-        return ("All twenty are already on, so there is nothing here to switch on. "
-                + stop)
+        return (f"All {got['total']} are already on, so there is nothing here to "
+                "switch on. " + stop)
+    total = got["total"] if got is not None else "all the"
     start = ('Say "turn on the GitHub tools" and one card appears; approving it asks '
-             'Windows Hello, and all twenty are offered to the AI model at once.')
+             f'Windows Hello, and all {total} are offered to the AI model at once.')
     return start + " " + stop
 
 
@@ -27409,18 +27546,37 @@ def _run_github_self(f: dict, peer=None, local=None) -> Result:
         # switch on what is already on.
         return Result((_github_tools_group_state_words() + " "
                        + _github_tools_how_words() + " "
-                       + 'Say "what GitHub tools do you have" for the full list of '
-                         'all twenty, one by one.').strip(), "github_self")
+                       + 'Say "what GitHub tools do you have" for the short list, '
+                         'one line per tool.').strip(), "github_self")
     if shape == "tools":
-        # THE INVENTORY, THEN THE LIVE STATE, THEN HOW TO CHANGE IT (2026-11-15).
-        # The owner asked to be able to talk about what GitHub tools Jarvis has,
-        # what is enabled, and how to activate them. The inventory's own words
-        # are untouched; the two sentences after them are read at answer time
-        # (the group's on_count and waiting flag) and are the switch's own rules.
+        # THE SHORT LIST, THEN THE LIVE STATE, THEN HOW TO CHANGE IT
+        # (DEF-097, 2026-11-25). The inventory's own words are now ONE line per
+        # tool and a tail offering the detail - the owner's "this response is way
+        # too long" is why. The two sentences after it are still read at answer
+        # time (the group's on_count and waiting flag) and are the switch's own
+        # rules; the long inventory is one follow-up away (`tools_more`).
         return Result(_github_capability_inventory() + " " + state + " "
                       + _github_tools_group_state_words() + " "
                       + _github_tools_how_words(),
                       "github_self")
+    if shape == "tools_more":
+        # THE LONG FORM, kept and reachable (DEF-097): the whole
+        # `capabilities_text()` the short answer replaced, then the same live
+        # state and switch words. Read-only: no model, no card, no network.
+        return Result(_github_capability_detail("") + " " + state + " "
+                      + _github_tools_group_state_words() + " "
+                      + _github_tools_how_words(),
+                      "github_self")
+    if shape == "tools_detail":
+        # ONE tool's row: what it does, what its card shows, its limit and its
+        # bans. Unknown names fall back to the short list in the helper.
+        return Result(_github_capability_detail(str(f.get("tool") or "")) + " "
+                      + state, "github_self")
+    if shape == "scan":
+        # "Can atlas do a full scan of a repo?" (DEF-097, 2026-11-25): the honest
+        # yes-with-a-cap, with every number read from the module that enforces
+        # it. Read-only: no model, no card, no network.
+        return Result(_github_scan_words() + " " + state, "github_self")
     if shape == "create_repo":
         return Result((_github_create_repo_words(peer=peer, local=local) + " "
                        + state).strip(), "github_self")

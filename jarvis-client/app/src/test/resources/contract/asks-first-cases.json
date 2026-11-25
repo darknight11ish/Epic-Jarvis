@@ -2578,7 +2578,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -5524,7 +5524,7 @@
       "id": "github_read_file",
       "last": null,
       "on": true,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -8466,7 +8466,7 @@
       "id": "github_read_file",
       "last": null,
       "on": true,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -11421,7 +11421,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -14376,7 +14376,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -17326,7 +17326,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -20271,7 +20271,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -23236,7 +23236,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -26192,7 +26192,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -29133,7 +29133,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -32092,7 +32092,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -35042,7 +35042,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
