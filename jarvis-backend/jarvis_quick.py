@@ -10036,9 +10036,12 @@ def _plugins_question(raw) -> Optional[Intent]:
 # skills" and the live model answered that it cannot install skills and then
 # described only the plug-in script. That is false: the PC ships a real Skills
 # menu (jarvis_skill_menu.py, 2026-11-02) that installs a SKILL.md from a folder
-# or a .zip, imports from %USERPROFILE%\.hermes\skills, turns one off/on and
-# edits one - each behind ONE modify_own_code card, with a scanner that
-# quarantines a risky skill before any card. The plug-in system is separate.
+# or a .zip, imports from %USERPROFILE%\.hermes\skills, turns one on and edits
+# one - each behind ONE modify_own_code card, with a scanner that quarantines a
+# risky skill before any card. Turning one off, and removing one, are immediate
+# (the module's own menu() note, 2026-11-25: this comment used to say "off/on
+# ... each behind ONE card", which was the over-claim the digest carried).
+# The plug-in system is separate.
 #
 # Shapes only, not keywords: a skills question has to sound like install /
 # import / menu / what-skills. Anything with plug-in words keeps its own
