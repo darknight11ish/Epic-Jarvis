@@ -2429,6 +2429,45 @@ PROFILES: dict = {
         "sources": [AGENT, PRESETS],
     },
 
+    "github_mode": {
+        "id": "github_mode",
+        "title": "Turn full GitHub mode on or off",
+        "what": "ONE mode switch (2026-11-25): the AI model is offered the twenty "
+                "GitHub and review tools, a hard GitHub-shaped question may go to "
+                "the cloud service chosen in the Presets menu, and in the chat it "
+                "was turned on from the fix loop stops asking per file. The switch "
+                "itself lives in `jarvis_asks_first.set_github_mode` and this tool "
+                "decides nothing about it - the module owns the card, the words and "
+                "the file it writes.",
+        "gives": [
+            "Turn full GitHub mode on, or off, by talking",
+            "Raise the same ONE card the Settings row raises, without opening Settings",
+            "Give the per-file approval for the fix loop in the chat it is turned on from",
+        ],
+        "touches": "settings, network service",
+        "limits": [
+            "Turning it ON is ONE `github_mode` card that can only be approved on "
+            "this PC, with Windows Hello; nothing is written before that yes, and "
+            "turning it OFF is instant from either app with no card",
+            "Merge, push, open a pull request, comment, re-run, create-repo, "
+            "workflow, labels, edit-PR and review each keep their OWN card - the "
+            "mode removes only the per-file fix card, in one chat, for 8 hours; "
+            "email, files, credentials and stored memory still never leave the PC",
+            "A turn shaped by outside text changes nothing here, and it rides along "
+            "with \"Change one of Jarvis's own settings\" rather than being a "
+            "switch of its own (see jarvis_agent.RIDES_WITH_SETTINGS)",
+        ],
+        "combines": {
+            "change_setting": "Change another setting, then this one - one card each.",
+            "cloud_escalation": "The Presets switch covers every hard question; this "
+                                "one covers GitHub-shaped work and the fix loop.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available wherever the setting tool is - it rides "
+                       "with \"Change one of Jarvis's own settings\".",
+        "sources": [AGENT, ASKS_FIRST, PRESETS, REBUILT_FRAMEWORK],
+    },
+
     "feature_guide": {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
@@ -3335,7 +3374,7 @@ FAMILIES: dict = {
                 "switching plugins, adding and removing skill packs, changing one "
                 "of its own settings, and the \"Protected from Jarvis\" list.",
         "tools": ["plugin_list", "plugin_switch", "change_setting",
-                  "cloud_escalation", "feature_guide",
+                  "cloud_escalation", "github_mode", "feature_guide",
                   "setup_quiz", "refresh_abilities", "self_portrait",
                   "conversation_find", "conversation_open", "protect_from_jarvis",
                   "pack_list", "pack_inspect", "pack_install", "pack_remove", "approval_policy"],

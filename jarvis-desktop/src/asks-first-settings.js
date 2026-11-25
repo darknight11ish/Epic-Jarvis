@@ -22,6 +22,8 @@
 
 import { announce, currentLink, linkWords, onEvent, onLink, onQueue } from "./jarvis-link.js";
 import {
+  GITHUB_MODE,
+  GITHUB_MODE_TITLE,
   LIGHTS_DETAIL,
   LIGHTS_LABEL,
   LOCKDOWN_ACTION,
@@ -41,6 +43,8 @@ import {
   extraToolsView,
   githubGroupRow,
   githubGroupSwitchView,
+  githubModeRow,
+  githubModeSwitchView,
   notSwitchableView,
   toolGroupsView,
   toolSwitchView,
@@ -180,7 +184,17 @@ function paintTools() {
       tools.newOff.items.map((i) => i.title || i.id).join(", ")));
     parts.push(line);
   }
-  for (const group of toolGroupsView(tools)) {
+  // FULL GITHUB MODE (2026-11-25): ONE row, drawn right under the master group
+  // switch it sits beside, in the same group. A PC older than it sends no
+  // `github_mode` object and the row is simply not drawn - no default, no
+  // invented "off". A PC that sends the mode but no group object still gets its
+  // row, at the top of the first group, so it is never silently lost.
+  const scenes = toolGroupsView(tools);
+  const groupSwitch = githubGroupRow(tools);
+  const modeSwitch = githubModeRow(tools);
+  const firstTitle = (scenes[0] || {}).title || "";
+  let modeDrawn = false;
+  for (const group of scenes) {
     const box = node("div", "af-group");
     box.append(node("h4", "subhead", group.title));
     const ul = node("ul", "sc-cards");
@@ -188,7 +202,7 @@ function paintTools() {
     // the ten GitHub tools together, drawn at the TOP of its own group. It is
     // not a tool item - the PC sends it as a separate object - so the per-tool
     // rows below it are untouched.
-    const gg = githubGroupRow(tools);
+    const gg = groupSwitch;
     if (gg && (!gg.group || gg.group === group.title)) {
       const li = node("li", "sc-gpu");
       li.dataset.tool = gg.id;
@@ -200,6 +214,22 @@ function paintTools() {
         for (const line of gv.lines) li.append(node("span", "sc-gpu-role", line));
       }
       ul.append(li);
+    }
+    const modeHere = modeSwitch && !modeDrawn &&
+      (groupSwitch ? (!groupSwitch.group || groupSwitch.group === group.title)
+        : group.title === firstTitle);
+    if (modeHere) {
+      const li = node("li", "sc-gpu");
+      li.dataset.tool = GITHUB_MODE;
+      li.append(node("span", "sc-gpu-name", GITHUB_MODE_TITLE));
+      const mv = githubModeSwitchView(modeSwitch, tools, live());
+      if (mv) {
+        li.append(toggle("af-github-mode", TOOLS_LABEL, "", mv.checked,
+          busy || mv.disabled, (want, box2) => changeTool(GITHUB_MODE, want, box2)));
+        for (const line of mv.lines) li.append(node("span", "sc-gpu-role", line));
+      }
+      ul.append(li);
+      modeDrawn = true;
     }
     for (const item of group.items) {
       const li = node("li", "sc-gpu");

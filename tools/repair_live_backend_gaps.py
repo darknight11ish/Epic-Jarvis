@@ -1444,10 +1444,76 @@ CANCEL_SCHEDULED_TOOL_ACTION = Repair(
 )
 
 
+#: Full GitHub mode (slice 1, 2026-11-25): the mode's OWN card, its risk row and
+#: its tool mapping.
+#:
+#: WHY A LIVE INSTALL NEEDS THEM. The activation card is raised at tier "ask"
+#: whatever the table says, so the card itself appears without these rows. With
+#: NO `_RISK` row, though, `risk_for("github_mode")` answers the unclassified
+#: fallback - permanent and outbound - and `check()` treats the action as risky,
+#: so approving the mode's own card would demand Windows Hello as an
+#: unclassified prompt (the same failure `note-edit` and `devices-cleanup`
+#: record). The row says what is true: reversible (OFF is instant, from either
+#: app) and outbound (a GitHub-shaped question may reach the cloud). That class
+#: is what sends the card to Windows Hello on the PC and to the phone's signed
+#: approval, while `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the phone's
+#: approval outright. The `_TOOL_ACTIONS` row keeps
+#: `action_for_tool("github_mode")` answering the mode's own action instead of
+#: "unclassified_tool" on the Reach page.
+#:
+#: WHY THE ROWS SIT INSIDE THE LITERALS HERE. This is the LIVE file, which no
+#: patch is applied to afterwards, so the owner's 2026-11-14 rule (a base file
+#: gets a `<table>.update` block at its end) does not bind - the same shape
+#: `note-edit`, `project-tools`, `devices-cleanup` and `cancel-scheduled` above
+#: use. The published base carries both rows in one `_RISK.update` /
+#: `_TOOL_ACTIONS.update` block at the end of the file; the row text is copied
+#: from it byte for byte.
+GITHUB_MODE_GATE_ROWS = Repair(
+    name="github-mode",
+    filename="jarvis_gate.py",
+    probes=('"github_mode": ("yes", "outbound"',
+            '"github_mode": "github_mode"'),
+    pieces=(
+        Piece(
+            anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+            replace_with=(
+                "_RISK: dict[str, tuple[str, str, str]] = {\n"
+                "    # tools/repair_live_backend_gaps.py (2026-11-25): full\n"
+                "    # GitHub mode's own activation card. Reversible (OFF is\n"
+                "    # instant, from either app) and outbound (a GitHub-shaped\n"
+                "    # turn may reach the cloud with no per-turn yes), so the\n"
+                "    # honest worst case - which is what sends it to Windows\n"
+                "    # Hello on the PC. Copied from jarvis-backend/jarvis_gate.py\n"
+                "    # byte for byte (the base carries it in a `_RISK.update`\n"
+                "    # block at its end).\n"
+                '    "github_mode": ("yes", "outbound", "turns GitHub mode on for this PC: the AI model is offered all twenty GitHub and review tools, a hard GitHub-shaped question may go to the cloud service you chose without asking for that turn, and in the chat where you turned it on the fix loop\'s per-file card is replaced by this one approval - its words may leave this PC; turning it off is instant, from either app, with no card, and merge, push, open a pull request, comment, re-run, create-repo, workflow, labels, edit-PR and review each keep their own card"),\n'
+            ),
+        ),
+        Piece(
+            anchor="_TOOL_ACTIONS: dict[str, str] = {\n",
+            replace_with=(
+                "_TOOL_ACTIONS: dict[str, str] = {\n"
+                "    # tools/repair_live_backend_gaps.py (2026-11-25): the\n"
+                "    # model-facing `github_mode` tool resolves to the mode's own\n"
+                "    # action, so its card is never `unclassified_tool` and the\n"
+                "    # Reach page names it. Copied from\n"
+                "    # jarvis-backend/jarvis_gate.py byte for byte.\n"
+                '    "github_mode": "github_mode",\n'
+            ),
+        ),
+    ),
+    why="without the risk row the mode's own card takes the unclassified "
+        "fallback (permanent and outbound) and its approval demands Windows "
+        "Hello as an unlabelled prompt; without the tool row the Reach page "
+        "calls the mode's chat tool unclassified",
+)
+
+
 REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               NOTE_DELETE_RISK, NOTE_DELETE_NO_RULE,
                               PROJECT_GATE_ROWS,
                               DEVICES_CLEANUP_GATE_ROWS,
+                              GITHUB_MODE_GATE_ROWS,
                               CANCEL_SCHEDULED_TOOL_ACTION,
                               GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
                               UNKNOWN_RISK)}

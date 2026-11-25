@@ -208,7 +208,20 @@ PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "restore_backup",
                              # Hello check, so only this PC can approve it, and
                              # always with Windows Hello - the same shape as
                              # loosening "What asks first" above.
-                             "change_approval_policy"})
+                             "change_approval_policy",
+                             # 2026-11-25: full GitHub mode's activation card
+                             # (jarvis_asks_first.set_github_mode). This is the
+                             # ONE card the owner said needs a card, and it is a
+                             # loosening in the same shape as the two rows above:
+                             # it offers twenty tools, lets a GitHub-shaped turn
+                             # reach the cloud with no per-turn yes, and removes
+                             # the per-file fix card in one chat. The owner's
+                             # instruction is that it is PC-only ("activating
+                             # github mode needs a card"), and the mode's own
+                             # request path refuses ON from any other device with
+                             # the same 403 that this set produces on approval.
+                             # Turning it OFF is still instant, from either app.
+                             "github_mode"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 

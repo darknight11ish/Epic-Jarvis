@@ -394,7 +394,7 @@ def t_always_available_really_is():
           and not (set(A.GRANT_ASK_TOOLS) & set(AF.TOOLS_SWITCHABLE)),
           str(A.GRANT_ASK_TOOLS))
     check("the cloud escalation switch rides with change_setting, not a switch",
-          A.RIDES_WITH_SETTINGS == ("cloud_escalation",)
+          A.RIDES_WITH_SETTINGS == ("cloud_escalation", "github_mode")
           and not (set(A.RIDES_WITH_SETTINGS) & set(AF.TOOLS_SWITCHABLE)),
           str(A.RIDES_WITH_SETTINGS))
 

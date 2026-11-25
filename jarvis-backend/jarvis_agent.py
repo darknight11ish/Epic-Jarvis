@@ -2834,6 +2834,15 @@ _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "pr
                                   # for the same reason: ESCALATION_TOOL is
                                   # defined further down this file.
                                   "cloud_escalation",
+                                  # "github_mode" (2026-11-25): full GitHub
+                                  # mode's ONE card, raised inside
+                                  # jarvis_asks_first.set_github_mode with its own
+                                  # words and its own write after the verdict - a
+                                  # plan step would wrap it in a second mechanism,
+                                  # and the card's per-file promise is scoped to
+                                  # the chat the owner is in, which a plan step
+                                  # does not carry. Literal, like the two above.
+                                  "github_mode",
                                   # "phone_apps" (2026-11-02): the management of the phone's
                                   # [phone_apps] allow-list. Its own gate is the card this tool
                                   # raises (one change_own_config per app), and its list half
@@ -3374,7 +3383,90 @@ ESCALATION_TOOL = "cloud_escalation"
 #: `web_search` (2026-11-02), and for the same reason: a tool that is the only
 #: way to do the thing is useless off. It changes nothing about what asks; the
 #: card still decides.
-RIDES_WITH_SETTINGS = (ESCALATION_TOOL,)
+# --------------------------------------------------------------------------
+#   Full GitHub mode, asked for in chat (slice 1, 2026-11-25)
+# --------------------------------------------------------------------------
+# THE OWNER'S ASK, verbatim: "also add a full github mode that gives full parity
+# with less restrictions and less cards, full parity with deepseek harness. it
+# can be enabled in chat or settings and forwards anything necessary to the
+# cloud api"; "activating github mode needs a card"; "in github mode i still
+# want the local ai model to do as much work as possible though".
+#
+# WHAT THIS TOOL IS. The chat door to the ONE mode switch.
+# `jarvis_asks_first.set_github_mode` owns the card, its words, the
+# `<settings>/github-mode.json` file and the twenty-name write; this tool only
+# carries the turn's own half - the outside-text refusal, the card limit, the
+# conversation id the per-file approval is scoped to, and the module's own
+# answer handed back to the model. The Settings row calls the same function
+# through `POST /api/asks_first/tools`, so the two doors cannot disagree about
+# what the mode is or what it writes.
+#
+# WHY IT IS NOT PUT TO THE GENERIC GATE. The card IS the ask, and it is raised
+# inside `set_github_mode` with the mode's own risk words and the write after it -
+# the same arrangement `change_setting` and `cloud_escalation` already document.
+# A second generic card would ask the same question twice under the same action.
+#
+# THE ONE CARD IT REMOVES. In the chat it was turned on from, it covers
+# `github_fix_write` - the fix loop's per-file card - through a conversation
+# grant held HERE (the same store shape as the web-search grant above): keyed on
+# the request's own `conversation_id`, capped at 8 hours, in memory only, and
+# outranked by Lockdown. Nothing else. `github_fix_and_push` (the push),
+# `github_merge_pr` and the other seven writes are in NEEDS_A_PERSON and keep
+# their own cards, and the tier of `github_fix_write` stays "ask" in
+# jarvis-framework.toml - the grant replaces the card, never the tier.
+GITHUB_MODE_TOOL = "github_mode"
+#: The one gate action the grant covers. Written as a literal so this module
+#: reads the same string the gate's own table does.
+GITHUB_MODE_GRANT_ACTION = "github_fix_write"
+#: A refusal that raises NO card: a chat turn with no conversation id cannot be
+#: given the per-file approval the mode's card promises for "this chat", and a
+#: promise that cannot be limited to one chat is not the one the owner approved.
+GITHUB_MODE_NO_CHAT = (
+    "refused: this request carries no conversation id, so the per-file approval "
+    "that full GitHub mode's card promises in a chat could not be limited to one "
+    "chat. Nothing was changed. Turn it on from the app's chat (where the id is "
+    "sent), or from Settings - whose card says the per-file approval is not part "
+    "of it.")
+RIDES_WITH_SETTINGS = (ESCALATION_TOOL, GITHUB_MODE_TOOL)
+
+
+def _github_mode_tool_text() -> str:
+    """The `github_mode` description - the same shape `_cloud_tool_text` uses:
+    say WHEN to call it, and never promise a result the card has not given.
+
+    HELD TO 300 TOKENS by `test_tool_text.py`, the same budget every tool pays;
+    the first sentence is the measured trigger shape (the 2026-11-06 run: a
+    model answers this class of request in words unless the text says to call).
+    """
+    return (
+        "Turn full GitHub mode on or off. Call this tool when the owner asks for "
+        "full GitHub mode or to stop it - \"turn on github mode\", \"turn it "
+        "off\" - do not ask first, just call it. \"on\" raises ONE PC-only "
+        "approval card; nothing is offered and nothing goes to the cloud before "
+        "that yes. \"off\" is instant, needs no card, and gives every card back. "
+        "The card says twenty GitHub and review tools are offered, a GitHub "
+        "question may go to the cloud, and the fix loop asks once per file here. "
+        "Merge, push, open a PR, comment, re-run and review still raise their own "
+        "card. Never say the mode is on before a tool result says so.")
+
+
+def _prepare_github_mode(args: dict):
+    """Present because every Tool needs a prepare; NEVER REACHED by a real turn.
+
+    `_one_call` hands GITHUB_MODE_TOOL to `_github_mode_call` before the generic
+    prepare()/gate/execute() path, exactly like SETTINGS_TOOL and
+    ESCALATION_TOOL, and `_PLAN_EXCLUDED_STEPS` keeps a plan step from naming it.
+    """
+    return None, "Turn full GitHub mode on or off."
+
+
+def _execute_github_mode(args: dict, state):
+    """NEVER REACHED - see _prepare_github_mode. Refuses rather than writes, so
+    no path that skips `_github_mode_call` can turn the mode on."""
+    return {"ok": False, "changed": False,
+            "error": "refused: full GitHub mode is changed through its own carded "
+                     "path (the same one the Settings row uses), not this one, so "
+                     "nothing was changed."}
 
 
 def _cloud_tool_text() -> str:
@@ -7703,6 +7795,20 @@ TOOLS: dict = {
         # `jarvis_gate._TOOL_ACTIONS` to learn (test_gate_tool_actions.py
         # requires every offered tool's lookup name to be a real key there).
         gate_lookup_name=lambda args: SETTINGS_TOOL),
+    # Full GitHub mode (2026-11-25): the chat door to the mode switch. Its ONE
+    # card is raised by jarvis_asks_first.set_github_mode(); the chat half (the
+    # per-file approval for THIS conversation) is recorded here after that yes.
+    # Its own action name, because the card is the mode's own and there is no
+    # existing action whose words would be true of it.
+    GITHUB_MODE_TOOL: Tool(
+        GITHUB_MODE_TOOL, _github_mode_tool_text(),
+        {"type": "object", "properties": {
+            "action": {"type": "string",
+                       "enum": ["on", "off"],
+                       "description": "on raises ONE approval card; off is instant"}},
+         "required": ["action"]},
+        _prepare_github_mode,
+        lambda args, state, **_: _execute_github_mode(args, state)),
     # Explaining one of Jarvis's own features - read-only, so no card (see
     # FEATURE_GUIDE_TOOL above). Decided under the gate's own `skill_list`
     # action ("listing what Jarvis can do", tier "auto"): the arguments are one
@@ -9305,9 +9411,21 @@ def _a_person_said_yes(verdict) -> bool:
     Read off `outcome` (gate-outcome.patch) when the gate sets one: only
     "approved" is a person. A gate from before that patch has no `outcome`,
     and then the same rule jarvis_voice_enroll uses applies: allowed AND tier
-    "ask" is the only reading that means somebody was asked."""
+    "ask" is the only reading that means somebody was asked.
+
+    ONE OTHER SHAPE IS A PERSON'S YES (2026-11-25): `standing_grant`, which only
+    `_GrantedByStanding` sets. That verdict is built in exactly one place -
+    `_one_call`'s grant branch - after `_github_fix_write_grant` read a live
+    per-file approval out of a store that only an approved `github_mode` card
+    writes. So it is a yes a person gave earlier, for this one chat and this one
+    action, not a loosened tier approving itself: the settings line still says
+    "ask", the action is still in NEEDS_A_PERSON, and with no grant the belt
+    bites exactly as before.
+    """
     if getattr(verdict, "allowed", False) is not True:
         return False
+    if getattr(verdict, "standing_grant", False) is True:
+        return True
     outcome = getattr(verdict, "outcome", None)
     if outcome is not None:
         return outcome == "approved"
@@ -11173,6 +11291,14 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # about a grant. It would also be untrue: nothing outside was
                 # read.
                 GRANT_TOOL, REVOKE_TOOL,
+                # FULL GITHUB MODE's tool (2026-11-25): turning the mode on or
+                # off reads nothing from outside - no page, no file, no mail -
+                # and its answer is this file's and jarvis_asks_first's own
+                # sentences. Recorded as a read, the very turn that turned the
+                # mode on would mark the conversation as having read outside
+                # text and make every later card in it say "what shaped this
+                # request" about a switch. It would also be untrue.
+                GITHUB_MODE_TOOL,
                 # The two plugin tools (2026-11-02): they read the plugin
                 # FOLDER on this PC - the names, states and paths of modules
                 # Jarvis is already running - and their answers are this file's
@@ -12619,6 +12745,12 @@ TOOL_GROUPS = (
       # Cloud row's standing switch), and a group's members cost nothing extra
       # in more_tools' own enum, so test_short_tool_list.py's pin does not move.
       ESCALATION_TOOL,
+      # Full GitHub mode (2026-11-25) is the same subject again: one of Jarvis's
+      # own switches, whose ON is ONE PC-only card and whose OFF is instant. A
+      # group's members cost nothing extra in more_tools' own enum, so the short
+      # list's token pin does not move - and test_short_tool_list.py's rule that
+      # every tool is in exactly one group is satisfied here.
+      GITHUB_MODE_TOOL,
       # The owner's own old conversations (2026-11-03: "pull up any old
       # conversation"). They ride in this group rather than a new one, and that
       # is a MEASURED choice: the short list's budget
@@ -12968,6 +13100,12 @@ TOOL_HINTS = {
     # hints only decide what the model is SHOWN, and ON still raises ONE
     # change_own_config card - nothing is sent before that yes.
     "cloud_escalation": (r"\bescalat", r"\bcloud\b"),
+    # Full GitHub mode's chat tool (2026-11-25). Narrow on purpose, like every
+    # hint here: the words "github mode" (in either order of the two ideas) and
+    # "full github", which is how the owner asked for it. A bare "github" must
+    # not pull it in - that word belongs to the twenty tools' own hints.
+    "github_mode": (r"\bgithub mode\b", r"\bfull github\b",
+                    r"\bmode\b[^.!?\n]{0,20}\bgithub\b"),
     # FEATURE_GUIDE_TOOL (2026-10-20): "what is the prompt coach", "is it on",
     # "how do I turn it on". Deliberately narrower than change_setting's own
     # hints: a plain "what is ..." must not pull a tool in for every question,
@@ -13528,6 +13666,162 @@ def _grant_prompt_line(conversation_id) -> str:
     except Exception:                                        # noqa: BLE001
         return ""
     return WEB_SEARCH_GRANT_IN_FORCE
+
+
+# --------------------------------------------------------------------------
+#   Full GitHub mode's per-file approval (2026-11-25)
+# --------------------------------------------------------------------------
+# THE ONE CARD THE MODE REMOVES, and the only one. `github_fix_write` is the
+# fix loop's local, reversible step: it writes ONE file inside an isolated
+# scratch copy of one pull request on this PC and makes ONE commit there, sends
+# nothing and uses no token (jarvis_gate.py's own row). The owner's ask was
+# "less cards"; a per-file card for a local scratch write is exactly the noise
+# "one approval per job instead of per action" names, and the mode's own
+# PC-approved card says, in words, that this is the card it replaces.
+#
+# THE SAME SHAPE AS THE WEB-SEARCH GRANT ABOVE, on purpose:
+#   * keyed on the request's own `conversation_id` - so one chat's approval
+#     cannot reach another, and a request with no id can neither give nor use
+#     one;
+#   * capped at `GRANT_TTL_SECONDS` (8 hours), in memory only - nothing is
+#     written to disk, so a restart ends it and there is no setting to keep;
+#   * written only after a verdict: `remember_github_mode_grant` is called from
+#     `jarvis_asks_first.set_github_mode` after the `github_mode` card was
+#     approved, and from nowhere else;
+#   * ended instantly by turning the mode off (`forget_github_mode_grants`) and
+#     outranked by Lockdown (`_github_fix_write_grant` reads it);
+#   * logged through the gate's own `grant_made` / `granted` / `grant_ended`
+#     writers, never the conversation id.
+#
+# WHAT IT DOES NOT TOUCH: the tier of `github_fix_write` (still "ask" in
+# jarvis-framework.toml), its `NEEDS_A_PERSON` entry (still the belt), and every
+# other action. The grant replaces the CARD for one write in one chat; it does
+# not loosen the action.
+_GITHUB_MODE_GRANTS: "dict[str, dict]" = {}
+_GITHUB_MODE_GRANTS_MAX = 200
+_GITHUB_MODE_GRANTS_LOCK = threading.Lock()
+
+
+class _GrantedByStanding:
+    """The verdict-like answer a live conversation grant gives one file write.
+
+    Deliberately NOT `jarvis_gate.Verdict`: the gate's own class forces
+    allowed=False for any outcome it does not know, and this outcome is
+    "granted" - a person said yes earlier, on the `github_mode` card, and the
+    write is covered by that yes rather than by a card of its own. `outcome`
+    therefore says "granted" (the word `_web_search_call` already uses for
+    exactly this), and `standing_grant` is the marker `_a_person_said_yes` reads
+    so the NEEDS_A_PERSON belt can tell a person's earlier yes from a loosened
+    tier. Only `_github_fix_write_grant` builds one.
+    """
+
+    allowed = True
+    tier = "ask"
+    action = GITHUB_MODE_GRANT_ACTION
+    reason = ("covered by the per-file approval a person gave, in this chat, when "
+              "they turned full GitHub mode on")
+    request_id = None
+    outcome = "granted"
+    standing_grant = True
+
+
+def github_mode_grant(conversation_id) -> "dict | None":
+    """The LIVE per-file approval for this conversation, or None.
+
+    An expired one is dropped here rather than by a timer (the same discipline
+    `web_search_grant` above follows) and logged as `expired`. The copy returned
+    is a plain dict, so a caller cannot edit the stored grant by accident.
+    """
+    if not _usable_conversation_id(conversation_id):
+        return None
+    with _GITHUB_MODE_GRANTS_LOCK:
+        grant = _GITHUB_MODE_GRANTS.get(conversation_id)
+        if not isinstance(grant, dict):
+            return None
+        if float(grant.get("expires_at") or 0) <= time.time():
+            _GITHUB_MODE_GRANTS.pop(conversation_id, None)
+            dropped = grant
+        else:
+            return dict(grant)
+    _grant_audit("grant_ended", grant_id=str(dropped.get("grant_id") or ""),
+                 state="expired")
+    return None
+
+
+def remember_github_mode_grant(conversation_id) -> "dict | None":
+    """Store the per-file approval for this conversation and return it.
+
+    PUBLIC because `jarvis_asks_first.set_github_mode` is its only caller: it
+    runs after the `github_mode` card's approved verdict, which is the ONE yes
+    this grant stands on. Called anywhere else it would be a grant with no card
+    behind it, which is exactly what the web-search grant's docstring forbids.
+    None when there is no usable conversation id to key it on.
+    """
+    if not _usable_conversation_id(conversation_id):
+        return None
+    now = time.time()
+    grant = {"grant_id": os.urandom(6).hex(), "issued_at": now,
+             "expires_at": now + GRANT_TTL_SECONDS}
+    with _GITHUB_MODE_GRANTS_LOCK:
+        _GITHUB_MODE_GRANTS.pop(conversation_id, None)
+        _GITHUB_MODE_GRANTS[conversation_id] = grant
+        while len(_GITHUB_MODE_GRANTS) > _GITHUB_MODE_GRANTS_MAX:
+            _GITHUB_MODE_GRANTS.pop(next(iter(_GITHUB_MODE_GRANTS)))
+    _grant_audit("grant_made", grant_id=grant["grant_id"],
+                 seconds=float(GRANT_TTL_SECONDS))
+    return dict(grant)
+
+
+def forget_github_mode_grants() -> list:
+    """Drop EVERY live per-file approval; the grants it dropped, in order.
+
+    Called when full GitHub mode is turned off, from either app: OFF is instant
+    and cardless, and a standing approval it created must not outlive it. Each
+    dropped grant gets a `grant_ended` line with state "revoked". Idempotent,
+    and the only thing it can do is take permission away.
+    """
+    with _GITHUB_MODE_GRANTS_LOCK:
+        dropped = list(_GITHUB_MODE_GRANTS.values())
+        _GITHUB_MODE_GRANTS.clear()
+    for grant in dropped:
+        _grant_audit("grant_ended", grant_id=str(grant.get("grant_id") or ""),
+                     state="revoked")
+    return dropped
+
+
+def _reset_github_mode_grants() -> None:
+    """Forget every per-file approval without logging (tests, and a restart)."""
+    with _GITHUB_MODE_GRANTS_LOCK:
+        _GITHUB_MODE_GRANTS.clear()
+
+
+def _github_fix_write_grant(watch, name: str, action: str):
+    """The live per-file approval covering THIS call, or None.
+
+    Reads, in order: the tool and the action it resolved to (only the fix tool's
+    `write` stage, which resolves to `github_fix_write`), Lockdown (which
+    outranks every standing approval - the mode's card says so), the mode file
+    (a grant cannot outlive an off: OFF clears the store, and this second read
+    means a store that somehow still held one could not be used), and finally
+    the grant itself, keyed on the turn's own conversation id.
+
+    A file or module that cannot be read answers None: a grant fails closed,
+    exactly like every other standing permission in this project.
+    """
+    if name != "github_fix_and_push" or action != GITHUB_MODE_GRANT_ACTION:
+        return None
+    if _lockdown_on():
+        return None
+    cid = getattr(watch, "conversation_id", "") if watch is not None else ""
+    if not _usable_conversation_id(cid):
+        return None
+    try:
+        import jarvis_presets
+        if not jarvis_presets.github_mode_on():
+            return None
+    except Exception:                                        # noqa: BLE001
+        return None
+    return github_mode_grant(cid)
 
 
 # --------------------------------------------------------------------------
@@ -20615,6 +20909,110 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
                                                "changed.")})
 
 
+def _github_mode_call(args: dict, call: dict, convo: list, steps: list, say_step,
+                      *, watch: "_TurnWatch", checker, out: "_Out") -> None:
+    """One `github_mode` call: full GitHub mode on or off, from chat.
+
+    See GITHUB_MODE_TOOL for why this is not put to the generic gate. This
+    function decides nothing about the mode itself: `jarvis_asks_first` owns the
+    tier, the risk words, the ONE card, the mode file and the twenty-name write.
+    What is here is the turn's own half:
+
+      1. a turn shaped by outside text changes nothing (SETTINGS_AFTER_OUTSIDE) -
+         the same STRICTER rule the settings and cloud tools apply: a page or an
+         email must not be able to turn on a standing grant;
+      2. the card limit is honoured BEFORE the ONE card that asks (ON while the
+         mode is off); OFF, and an ON that is already on, are never refused by a
+         limit about cards;
+      3. a chat with no conversation id cannot be given the per-file approval, so
+         ON refuses BEFORE the card rather than showing a card whose per-file
+         sentence it could not keep - the same rule the web-search grant keeps;
+      4. the module's own result goes back to the model, so the answer can only
+         repeat what really happened - `changed` is False while a card is still
+         waiting, and the model is told the mode is NOT on yet.
+    """
+    name = GITHUB_MODE_TOOL
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+
+    def stop(why: str, outcome: str = "refused") -> None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": outcome})
+        say_step("tool_refused", name)
+        reply({"ok": False, "changed": False, "on": None, "card": False,
+               "error": why})
+
+    if _settings_turn_is_shaped(watch):
+        return stop(SETTINGS_AFTER_OUTSIDE)
+    want = str(args.get("action") or "").strip().lower()
+    if want not in ("on", "off"):
+        return stop("refused: the action has to be \"on\" or \"off\". Nothing was "
+                    "changed. Say which of those the owner asked for.")
+    try:
+        import jarvis_asks_first as AF
+    except Exception as exc:                                # noqa: BLE001
+        return stop(f"the GitHub mode switch is not available here "
+                    f"({type(exc).__name__}), so nothing was changed.", "unknown")
+    try:
+        already = bool(AF._github_mode_on())
+    except Exception:                                       # noqa: BLE001
+        already = False
+    cid = getattr(watch, "conversation_id", "") if watch is not None else ""
+    if want == "on" and not already:
+        limit = _card_limit(watch, name)
+        if watch.cards >= limit:
+            return stop(CARD_LIMIT_ERROR.format(n=limit))
+        if not _usable_conversation_id(cid):
+            return stop(GITHUB_MODE_NO_CHAT)
+    if want == "on" and not already:
+        out.set_status("approval")
+    try:
+        status, body = AF.set_github_mode(want == "on", gate_check=checker,
+                                          conversation_id=cid or "")
+    except Exception as exc:                                # noqa: BLE001
+        out.set_status("thinking")
+        return stop(f"{name} could not change full GitHub mode "
+                    f"({type(exc).__name__}), so nothing was changed.", "unknown")
+    out.set_status("thinking")
+    body = body if isinstance(body, dict) else {}
+    carded = bool(body.get("card"))
+    if carded:
+        # The card really was raised (the module says so). It counts against
+        # CARDS_PER_TURN like any other card this answer asked for.
+        watch.cards += 1
+    changed = bool(body.get("changed"))
+    ok_body = bool(body.get("ok"))
+    ok = ok_body and changed
+    said = str(body.get("message") or body.get("error") or "")
+    outcome = str(body.get("outcome") or "")
+    if ok and want == "on":
+        steps.append({"tool": name, "ran": True, "ok": True, "outcome": "approved"})
+        say_step("tool_finished", name, ok=True)
+    elif ok:
+        # OFF is instant and needs no card: "auto" is exactly what the gate
+        # reports for a change that needed no card (see _settings_call).
+        steps.append({"tool": name, "ran": True, "ok": True, "outcome": "auto"})
+        say_step("tool_finished", name, ok=True)
+    elif ok_body and not carded and not changed:
+        # The mode was ALREADY in the asked state: nothing changed, and there was
+        # no card to answer. A finished call, not a refusal (see _cloud_call's
+        # own note on the same shape).
+        steps.append({"tool": name, "ran": True, "ok": True, "outcome": "auto"})
+        say_step("tool_finished", name, ok=True)
+    elif carded:
+        steps.append({"tool": name, "ran": False, "ok": False,
+                      "outcome": outcome or "denied"})
+        say_step("tool_refused", name)
+    else:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+    reply({"ok": ok_body, "changed": changed, "on": body.get("on"),
+           "card": carded, "granted": bool(body.get("granted")),
+           "outcome": outcome, "said": said, "http": status,
+           "error": "" if ok_body else (said or "full GitHub mode was not changed.")})
+
+
 #: Tools whose args are a pure READ: a read-only protected path may be named.
 _PROTECTION_READ_ONLY_TOOLS = frozenset({
     "file_read", "my_files", "notes_search", "memory_search", "read_media",
@@ -20826,6 +21224,15 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # well would ask one question twice. See ESCALATION_TOOL.
         _cloud_call(args, call, convo, steps, say_step, watch=watch,
                     checker=checker, out=out)
+        return
+    if name == GITHUB_MODE_TOOL and not outside_program:
+        # Full GitHub mode (2026-11-25) - not put to the generic gate here, for
+        # the same reason ESCALATION_TOOL is not: the ONE `github_mode` card is
+        # raised INSIDE jarvis_asks_first.set_github_mode(), which is also what
+        # writes the mode file and the twenty names after the yes. See
+        # GITHUB_MODE_TOOL.
+        _github_mode_call(args, call, convo, steps, say_step, watch=watch,
+                          checker=checker, out=out)
         return
     if name == CONNECT_TOOL and not outside_program:
         # Raising the connect card (2026-10-28) - not put to the gate here, for
@@ -21500,7 +21907,15 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         plan_text = f"{plan_text}\n\n{sandbox_why}"
     if shaped:
         plan_text = f"{plan_text}\n\nWhat shaped this request:\n{shaped}"
-    if pre_approved is None and _card_would_be_cut(name, action_name, plan_text):
+    # THE CONVERSATION GRANT FOR THE FIX LOOP'S FILE WRITE (2026-11-25). Read
+    # BEFORE the two card checks below on purpose: a covered write raises no
+    # card, so neither a card-shaped length limit nor the per-answer card limit
+    # may refuse it. None for every other tool, for every other stage of this
+    # one, when Lockdown is on, when the mode is off, and when this chat has no
+    # live approval - see _github_fix_write_grant.
+    github_fix_grant = _github_fix_write_grant(watch, name, action_name)
+    if (pre_approved is None and github_fix_grant is None
+            and _card_would_be_cut(name, action_name, plan_text)):
         # Refused BEFORE a card is raised - see _card_would_be_cut.
         convo.append({"role": "tool",
                       "tool_call_id": call.get("id", ""),
@@ -21518,7 +21933,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         say_step("tool_refused", name)
         return
     if (pre_approved is None and watch.cards >= _card_limit(watch, name)
-            and not lights_ok and _would_ask(name, action_name)):
+            and not lights_ok and github_fix_grant is None
+            and _would_ask(name, action_name)):
         # Refused BEFORE a card is raised - see CARDS_PER_TURN.
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content(
@@ -21535,6 +21951,18 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # the gate and not an approval - nobody is asked, and the audit log
         # says so.
         verdict = _LightsNoCard()
+    elif github_fix_grant is not None:
+        # COVERED BY THE MODE'S OWN CARD: a person approved full GitHub mode in
+        # this chat, and that card's words said the fix loop's file writes would
+        # ask once instead of per file, for 8 hours or until the chat or the mode
+        # ends. So no card is raised and the gate is not called - and the write
+        # is logged as `granted`, with the grant's id, exactly like a
+        # web-search-grant-covered search. The NEEDS_A_PERSON belt still applies
+        # below: `_a_person_said_yes` reads `standing_grant` as the person's
+        # earlier yes, and only a live grant can produce that shape.
+        verdict = _GrantedByStanding()
+        _grant_audit("granted", action=GITHUB_MODE_GRANT_ACTION,
+                     grant_id=str(github_fix_grant.get("grant_id") or ""))
     elif pre_approved is not None:
         # A carried step ("An approved step the answer never delivered",
         # 2026-11-01): a person's yes on this very card, given a moment ago

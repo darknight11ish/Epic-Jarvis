@@ -108,6 +108,10 @@ POSITION_PIN_CEILING: dict[str, int] = {
     "backend/test_tasks.py": 1,
     "backend/test_tellme.py": 1,
     "backend/test_wiki.py": 2,
+    # Full GitHub mode's own suite (2026-11-25): two position pins, measured on
+    # landing with `--measure` and recorded as debt, not approval. The ratchet
+    # only turns down.
+    "backend/test_github_mode.py": 2,
 }
 
 #: git args that read history or a tree rather than the working directory.

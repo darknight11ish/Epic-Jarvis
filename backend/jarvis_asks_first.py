@@ -607,10 +607,15 @@ TIER_EXTRA = (
 #: chat to the Presets menu's Cloud row, and `offered_tools` adds it wherever
 #: `change_setting` is offered - so a switch whose state the turn ignored would
 #: be a lie, exactly like the two web-search grant tools above.
+#: Full GitHub mode's chat tool (2026-11-25) rides with the same door for the
+#: same reason: it is the chat half of a mode whose Settings half is the group
+#: switch's neighbour, and `jarvis_agent.RIDES_WITH_SETTINGS` lists both. Written
+#: as the literal because GITHUB_MODE_ID's own block is further down this file,
+#: and this constant must be built here beside the grant tools.
 #: `jarvis_agent.RIDES_WITH_SETTINGS` is the authority for the same list; it is
 #: repeated here as a literal because this file must not import jarvis_agent at
 #: import time (the same reason GRANT_ASK_TOOLS is a literal).
-CLOUD_RIDES_WITH_SETTINGS = ("cloud_escalation",)
+CLOUD_RIDES_WITH_SETTINGS = ("cloud_escalation", "github_mode")
 
 #: Known tools that are deliberately NOT switches of their own on this page.
 #: Each one is here for the same measured reason: the turn IGNORES the tool's
@@ -624,6 +629,10 @@ CLOUD_RIDES_WITH_SETTINGS = ("cloud_escalation",)
 #: by default: `offered_tools` drops it unless that line is on, so a
 #: `[tools].enabled` line alone would change nothing, exactly as for the
 #: sandbox. `cloud_escalation` rides with `change_setting` (2026-11-06).
+#: Full GitHub mode's tool rides with it too (2026-11-25), and it belongs in
+#: this tuple for the same reason: the TOOLS page has no switch of its own for
+#: it. Its real switch is the mode's own row on "What asks first"
+#: (`set_github_mode`), which `test_asks_first.py` proves beside this.
 NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
@@ -773,6 +782,492 @@ GITHUB_TOOLS_GROUP_WHAT = (
 GITHUB_TOOLS_GROUP_CARD_TITLE = "Offer ALL TWENTY GitHub and review tools to the AI model?"
 
 
+# ---------------------------------------------------------------------------
+# Full GitHub mode (slice 1, 2026-11-25)
+# ---------------------------------------------------------------------------
+# THE OWNER'S ASK: "also add a full github mode that gives full parity with less
+# restrictions and less cards, full parity with deepseek harness. it can be
+# enabled in chat or settings and forwards anything necessary to the cloud api";
+# "activating github mode needs a card"; "in github mode i still want the local
+# ai model to do as much work as possible though".
+#
+# ONE MODE, ONE FILE, TWO DOORS. The state is `<settings>/github-mode.json`
+# (jarvis_presets.github_mode_on / write_github_mode), and it is BOTH the mode
+# and the second standing yes `jarvis_router.choose()` reads at gate 6. The
+# design first wrote the mode as a setting and the standing yes as a second
+# file; two facts one switch has to keep in step disagree on the day "off" is
+# on, so there is one file. This module is the ONE writer of both halves of the
+# mode - the file and the twenty names in `[tools].enabled` - and it writes them
+# only after the `github_mode` card's verdict. The chat tool
+# (`jarvis_agent._github_mode_call`) calls `set_github_mode`, so both doors run
+# the same code and raise the same card; the Settings route spawns it in a
+# thread so the HTTP request does not wait for a person, exactly as the group
+# switch's own card does.
+#
+# WHY THE CARD IS A NEW ACTION. Reusing `enable_reading_tool` would put a card
+# whose words say "offer ONE ability" in front of a change that also forwards
+# GitHub questions to the cloud and removes a per-file card. A card that says
+# something false is the failure jarvis_gate.py records around its notes editor
+# block. `github_mode` is its own action, at tier "ask", with its own risk row
+# at the end of jarvis_gate.py ("yes","outbound": reversible because OFF is
+# instant, outbound because the words may leave), and in
+# `jarvis_owner_check.PC_ONLY_ACTIONS`: the owner's instruction is that
+# ACTIVATING it needs a card, and this project's shape for "a loosening only
+# the PC may confirm" is that set plus Windows Hello.
+#
+# WHAT IT DOES NOT DO. It does not touch the tier of any GitHub tool, does not
+# remove `github_fix_write` from NEEDS_A_PERSON, and does not lower
+# `[routing] complexity_threshold`. The only card it removes is the per-file fix
+# card, in ONE chat, capped at eight hours and dead on a new chat, a stop or a
+# restart. Every irreversible GitHub write keeps its own card - that is the
+# owner's "merge keeps its own card" and the reason this is a mode and not a
+# blanket yes.
+GITHUB_MODE_ID = "github_mode"
+#: The gate action the activation card is raised under. It is also the model
+#: tool's name (`jarvis_agent.GITHUB_MODE_TOOL`), so `_TOOL_ACTIONS` maps the
+#: tool to it and the Reach page shows the mode's own action, not
+#: `unclassified_tool`.
+GITHUB_MODE_ACTION = "github_mode"
+GITHUB_MODE_TITLE = "Full GitHub mode"
+#: The one-line effect, in the same words the payload carries to both apps. THE
+#: WORDS ARE THE LEAD'S CONTRACT (2026-11-25), not this module's own draft: the
+#: desktop row, the phone row and the API page are built against this sentence,
+#: so it is adopted verbatim and a change to it is a cross-lane change. **The
+#: per-file half is stated as CHAT-ONLY ON PURPOSE:** only the chat door can give
+#: that grant (it needs a conversation id to scope it to), the Settings door's
+#: card says so in its own words, and a row sentence that promised it on the
+#: Settings page would be a promise that page cannot keep.
+GITHUB_MODE_EFFECT = (
+    "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud "
+    "without asking again. Asked in chat, turning it on also makes the fix loop ask "
+    "once for that chat, not once per file. Merge, push, open PR, comment, re-run, "
+    "create a repo, labels, edit and review each keep their own card.")
+#: Where the owner changes it, in plain words - also the lead's contract.
+GITHUB_MODE_WHERE = ("Settings, What asks first, on this PC - turning it on needs "
+                     "Windows Hello. Either app can turn it off.")
+#: The payload's own paragraph, drawn under the row.
+GITHUB_MODE_WHAT = (
+    "On: the AI model is offered all twenty GitHub and review tools, a hard GitHub "
+    "question may go to the cloud service you chose without asking for that one "
+    "question, and in the chat you turned it on from the fix loop stops asking per "
+    "file it changes in a pull request's scratch copy. Merge, push, open a pull "
+    "request, comment, re-run a workflow, create a repository, use a workflow, "
+    "change labels, edit a pull request and post a review each keep their own card; "
+    "email, your files, credentials and stored memory still never leave this PC. "
+    "Off: instantly, from either app, with no card - every card comes back at once "
+    "and a GitHub question stays here until you say yes for it.")
+#: The card's title line (the row the two apps draw).
+GITHUB_MODE_CARD_TITLE = "Turn on full GitHub mode?"
+#: What the owner reads after an approved card, and after the instant off. The
+#: per-file sentence differs by door: only the chat door can give the grant,
+#: because only a chat has a conversation id to scope it to.
+GITHUB_MODE_ON = (
+    "Full GitHub mode is on: the AI model is offered all twenty GitHub and review "
+    "tools, and a hard GitHub question may go to the cloud without asking for that "
+    "question.")
+GITHUB_MODE_ON_CHAT = (
+    " In THIS chat, the fix loop's file writes now ask once - this approval - "
+    "instead of per file. It ends when you turn full GitHub mode off, when this "
+    "chat ends, after 8 hours, or when Jarvis restarts.")
+GITHUB_MODE_ON_NO_CHAT = (
+    " The per-file approval was NOT given: turning the mode on from Settings offers "
+    "the tools and the cloud forwarding only, and the fix loop still asks you for "
+    "each file. Turn it on from a chat to give that per-file approval there.")
+GITHUB_MODE_ON_NO_GRANT = (
+    " The per-file approval could NOT be recorded by this backend, so the fix loop "
+    "still asks you for each file; the mode itself is on.")
+GITHUB_MODE_OFF_WORDS = (
+    "Full GitHub mode is off: the standing cloud yes is gone, the per-file approval "
+    "is gone, and a GitHub question stays on this PC until you say yes for it. The "
+    "twenty tools may still be offered by the group's own switch - switch that off "
+    "too if you want them hidden - and every card is back either way.")
+GITHUB_MODE_PC_ONLY = (
+    "Turning full GitHub mode on can only be done from the PC: its one card is "
+    "approved here, with Windows Hello. Turning it off is instant from either app.")
+#: The last-answer line, keyed on the card's outcome (the group switch's own shape).
+GITHUB_MODE_LAST_WORDS = {
+    "enabled": "Turned on. The AI model is offered the twenty GitHub and review tools, the "
+               "cloud may answer a hard GitHub question, and in that chat the fix loop asks "
+               "once instead of per file.",
+    "disabled": "Turned off at once, with no card. Every card is back and a GitHub question "
+                "stays on this PC until you say yes for it.",
+    "denied": "You said no, so nothing changed: the twenty tools stay off, a GitHub question "
+              "stays here, and every file still asks.",
+    "timed_out": "Nobody answered the card, so nothing changed and full GitHub mode is still "
+                 "off.",
+    "withdrawn": "The card was withdrawn before it was answered, so nothing changed.",
+    "refused": "The card could not be approved, so nothing changed.",
+    "failed": "The mode could not be saved on this PC, so nothing changed.",
+}
+
+
+def _github_mode_card(with_chat: bool) -> str:
+    """The ONE card's words for turning full GitHub mode on.
+
+    Every sentence is one of the things the owner must be able to read before
+    approving: what is offered, what the cloud may now do, what stops asking
+    and for how long, exactly which cards stay, what still never leaves, that
+    off is instant, and what a no costs. The per-file paragraph is the one
+    difference between the two doors: only a chat has a conversation to scope
+    that approval to, and a card that promised it from Settings would be a card
+    that says something false.
+    """
+    if with_chat:
+        per_file = (
+            "In THIS chat, the fix loop stops asking you for each file it changes in a "
+            "pull request's scratch copy: this one approval covers those file writes "
+            "until you say stop (turn full GitHub mode off), this chat ends, 8 hours "
+            "pass, or Jarvis restarts. It covers nothing but those file writes.")
+    else:
+        per_file = (
+            "The per-file approval is NOT part of this: turned on from Settings, the fix "
+            "loop still asks you for each file. Turn full GitHub mode on from a chat to "
+            "give that per-file approval in that chat.")
+    return "\n\n".join([
+        "Turn on full GitHub mode?",
+        "This card can only be approved on this PC, with Windows Hello.",
+        "If you approve, the AI model is offered all twenty GitHub and review tools - "
+        "the eighteen GitHub tools and both local review gates. Every use is still "
+        "decided by its own card, as each row of \"What asks first\" says.",
+        "A hard GitHub question may then go to the cloud service you chose in the "
+        "Presets menu without asking you for that question. Only a GitHub-shaped one: "
+        "anything else still asks first, and every privacy rule still answers here.",
+        per_file,
+        "Merge, push, open a pull request, comment, re-run a workflow, create a "
+        "repository, use a workflow, change labels, edit a pull request and post a "
+        "review each keep their own card, and so does every other action.",
+        "Email, your files, credentials and stored memory still never leave this PC.",
+        "Turning full GitHub mode off is instant, from either app, with no card - "
+        "every card comes back at once.",
+        "If you say no: nothing changes - the twenty tools stay off, a GitHub question "
+        "stays on this PC, and every file still asks.",
+    ])
+
+
+def _github_mode_on_words(with_chat: bool, granted: bool = False) -> str:
+    """What the owner reads after an approved card, in the words that are true
+    of THAT door: the chat door gave the per-file approval only when the grant
+    really was recorded; the Settings door never had a chat to scope one to."""
+    if with_chat and granted:
+        return GITHUB_MODE_ON + GITHUB_MODE_ON_CHAT
+    if with_chat:
+        return GITHUB_MODE_ON + GITHUB_MODE_ON_NO_GRANT
+    return GITHUB_MODE_ON + GITHUB_MODE_ON_NO_CHAT
+
+
+def _github_mode_presets():
+    """`jarvis_presets` when it is here, else None - a state, not a crash."""
+    try:
+        import jarvis_presets
+        return jarvis_presets
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+def _github_mode_on() -> bool:
+    """The mode's own state, read from the file (and from nowhere else)."""
+    P = _github_mode_presets()
+    if P is None:
+        return False
+    try:
+        return bool(P.github_mode_on())
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
+class _GithubModeWriteError(Exception):
+    """The mode's own state could not be written; nothing (more) changed."""
+
+
+def _write_mode_state(on: bool, write: Callable) -> None:
+    """Write BOTH halves of the mode - the twenty names and the file - in ONE
+    order that cannot leave a half-mode standing.
+
+    ON: the tools first (they can fail on a hand-edited settings file, and a
+    mode that says on while the tools are still off would lie), then the file;
+    if the file cannot be written the group is put back off and the caller
+    reports that nothing changed. OFF: the file first, because that is the
+    permission half and it must not depend on the settings file being writable;
+    then the tools, and a settings file that refuses to lose them is reported
+    to the owner in plain words rather than hidden.
+
+    Called ONLY from `set_github_mode`, after the `github_mode` card's verdict.
+    """
+    P = _github_mode_presets()
+    if on:
+        if P is None:
+            raise _GithubModeWriteError(
+                "this backend cannot save full GitHub mode (jarvis_presets.py is "
+                "missing), so nothing was changed")
+        write(GITHUB_TOOLS_GROUP, True)
+        if not P.write_github_mode(True):
+            try:
+                write(GITHUB_TOOLS_GROUP, False)
+            except Exception:                                # noqa: BLE001 - best effort
+                pass
+            raise _GithubModeWriteError(
+                "the mode could not be saved on this PC, so the twenty tools were put "
+                "back off and nothing changed")
+        return
+    if P is not None:
+        P.write_github_mode(False)
+    write(GITHUB_TOOLS_GROUP, False)
+
+
+def _record_github_mode_grant(conversation_id) -> bool:
+    """Store the per-file approval for ONE chat, in the agent's own store.
+
+    THE STORE IS THE AGENT'S (jarvis_agent._GITHUB_MODE_GRANTS), because the
+    agent is where the per-file card is raised and where the grant is read. This
+    is called only from `set_github_mode`, after a person approved the card -
+    the same rule the web-search grant's `_remember_web_search_grant` follows.
+    A backend without that module answers False and the mode still turns on
+    (the per-file approval simply was not given).
+    """
+    if not conversation_id:
+        return False
+    try:
+        import jarvis_agent
+        return bool(jarvis_agent.remember_github_mode_grant(conversation_id))
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
+def _clear_github_mode_grants() -> None:
+    """Drop every live per-file approval. Best effort: the agent reads the mode
+    file on every use as well, so an off is never outlived by a stale grant."""
+    try:
+        import jarvis_agent
+        jarvis_agent.forget_github_mode_grants()
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def github_mode_view(*, here: bool = False) -> dict:
+    """The `github_mode` object the desktop and the phone read.
+
+    THE SHAPE IS THE LEAD'S CONTRACT (2026-11-25) - exactly `on`,
+    `can_enable`, `effect` and `where`, in that order, beside `github_group` -
+    because the desktop row, the phone row and the API page are built against
+    it. `on` is the mode file's own answer (never a guess); `can_enable` is the
+    route's PC-only rule (ON is requested from the PC; OFF is instant from
+    either app); `effect` and `where` are the one-line sentence and the place it
+    changes, in the words the card uses. `github_group` carries the extra
+    `id`/`waiting`/`last` keys because its row predates the mode; this one
+    deliberately does not, so a reader cannot come to depend on a key the two
+    apps were not written against.
+    """
+    return {"on": _github_mode_on(),
+            "can_enable": bool(here),
+            "effect": GITHUB_MODE_EFFECT,
+            "where": GITHUB_MODE_WHERE}
+
+
+def _github_mode_finish(pid: str, outcome: str, why: str = "") -> None:
+    """Record how the mode's card ended, for the payload's last line."""
+    with _T_LOCK:
+        if pid and _T_STATE["pending"].get("id") == pid:
+            _T_STATE["pending"].clear()
+        if pid:
+            _T_STATE["withdrawn"].discard(pid)
+        if pid and _T_STATE["latest"].get("id") not in (None, pid):
+            return
+        _T_STATE["last"].clear()
+        _T_STATE["last"].update(outcome=outcome, tool=GITHUB_MODE_ID, why=why,
+                                at=time.time(),
+                                message=GITHUB_MODE_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.github_mode.card", {"outcome": outcome})
+
+
+def set_github_mode(on, *, gate_check=None, tier_of=None, conversation_id: str = "",
+                    write: Optional[Callable] = None,
+                    guard: Optional[Callable[[], bool]] = None) -> tuple:
+    """Turn full GitHub mode ON (ONE card) or OFF (at once). -> (status, body).
+
+    THE ONE WRITER of the mode, shared by the two doors the owner asked for:
+    the Settings row (`POST /api/asks_first/tools` with
+    `{"tool": "github_mode"}`) and the chat tool (`jarvis_agent.github_mode`,
+    which is the chat door). Neither door can loosen anything else.
+
+    ON is a loosening - it offers twenty tools, lets a GitHub-shaped question
+    reach the cloud with no per-turn yes, and removes the per-file fix card in
+    one chat - so it raises ONE `github_mode` card and writes NOTHING before a
+    person approves it. The tier must be "ask": a looser line switches the
+    feature off rather than remove the card (the same rule every MUST_ASK
+    action keeps), and the card is PC-only at approval time
+    (`jarvis_owner_check.PC_ONLY_ACTIONS`).
+
+    OFF is a tightening and is instant, from either app, with no card: the file
+    goes off first, every live per-file approval is dropped, and the twenty
+    tools are removed by the group's own writer. A settings file that refuses
+    the last step says so in the answer instead of pretending.
+
+    `conversation_id`, when the door has one (every chat turn does), is what the
+    per-file approval is scoped to. Without one - the Settings row - the mode
+    still turns on, and the card says plainly that the per-file approval was
+    NOT given. `guard`, when given, is asked after an approved verdict and
+    before the writes; True means the request was withdrawn meanwhile (OFF was
+    pressed while the card waited) and nothing is written.
+    """
+    want = bool(on)
+    write = write or (lambda t, on: set_tools_enabled(t, on))
+    tier_of = tier_of or _tier
+    now = _github_mode_on()
+    if want == now:
+        return 200, {"ok": True, "on": now, "changed": False, "card": False,
+                     "message": ("Full GitHub mode is already on." if want else
+                                 "Full GitHub mode is already off."),
+                     "github_mode": github_mode_view()}
+    if want:
+        t = tier_of(GITHUB_MODE_ACTION)
+        if t != "ask":
+            return 503, {"ok": False, "on": False, "changed": False, "card": False,
+                         "error": (f"{GITHUB_MODE_ACTION} is tier {t!r} in "
+                                   f"jarvis-framework.toml; turning full GitHub mode on "
+                                   f"needs a person to say yes, so it must be 'ask'")}
+        with_chat = bool(conversation_id)
+        words = _github_mode_card(with_chat)
+        detail = {"text": words, "what": "turn on full GitHub mode",
+                  "setting": GITHUB_MODE_ID, "to": True, "leaves_this_pc": True}
+        try:
+            v = (gate_check or _gate)(GITHUB_MODE_ACTION, detail, words)
+        except Exception as exc:                             # noqa: BLE001
+            return 503, {"ok": False, "on": False, "changed": False, "card": False,
+                         "error": (f"the approval gate failed "
+                                   f"({type(exc).__name__}), so nothing was changed")}
+        vtier = getattr(v, "tier", "unknown")
+        if vtier != "ask" or not _person_said_yes(v):
+            return 200, {"ok": False, "on": False, "changed": False, "card": True,
+                         "outcome": str(getattr(v, "outcome", None) or "refused"),
+                         "message": ("Not turned on - full GitHub mode stays off, a "
+                                     "GitHub question stays on this PC, and every file "
+                                     "still asks."),
+                         "github_mode": github_mode_view()}
+        if guard is not None and guard():
+            return 200, {"ok": False, "on": False, "changed": False, "card": True,
+                         "outcome": "withdrawn",
+                         "message": "The card was withdrawn before it was answered, so "
+                                    "nothing changed.",
+                         "github_mode": github_mode_view()}
+        try:
+            _write_mode_state(True, write)
+        except TierFileError as exc:
+            return 409, {"ok": False, "on": False, "changed": False, "card": True,
+                         "error": str(exc) + ".",
+                         "github_mode": github_mode_view()}
+        except _GithubModeWriteError as exc:
+            return 503, {"ok": False, "on": False, "changed": False, "card": True,
+                         "error": str(exc) + ".",
+                         "github_mode": github_mode_view()}
+        except Exception as exc:                             # noqa: BLE001
+            return 500, {"ok": False, "on": False, "changed": False, "card": True,
+                         "error": f"could not turn it on ({type(exc).__name__})",
+                         "github_mode": github_mode_view()}
+        granted = _record_github_mode_grant(conversation_id) if conversation_id else False
+        _audit("asks_first.github_mode.enabled",
+               {"granted": bool(granted), "chat": bool(conversation_id)})
+        return 200, {"ok": True, "on": True, "changed": True, "card": True,
+                     "granted": bool(granted), "chat": bool(conversation_id),
+                     "message": _github_mode_on_words(bool(conversation_id), bool(granted)),
+                     "github_mode": github_mode_view()}
+    # OFF: instant, cardless, from either app.
+    note = ""
+    try:
+        _write_mode_state(False, write)
+    except TierFileError as exc:
+        note = (" The standing yes is gone and every card is back, but the twenty tools "
+                "could not be removed from your settings file: " + str(exc).lower()
+                + ". Switch the group off on this page to hide them.")
+    except Exception as exc:                                 # noqa: BLE001
+        note = (f" The standing yes is gone and every card is back, but the twenty tools "
+                f"could not be removed from your settings file "
+                f"({type(exc).__name__}). Switch the group off on this page to hide them.")
+    _clear_github_mode_grants()
+    _audit("asks_first.github_mode.disabled", {})
+    return 200, {"ok": True, "on": False, "changed": True, "card": False,
+                 "message": GITHUB_MODE_OFF_WORDS + note,
+                 "github_mode": github_mode_view()}
+
+
+def _github_mode_decide(pid: str, conversation_id: str, gate: Callable,
+                        tier_of: Callable, write: Callable) -> None:
+    """The Settings door's card, waited on in its own thread (the shape
+    `_tools_decide` uses: the HTTP request answers "waiting", the person
+    answers the card, and the mode is written only then)."""
+    def withdrawn() -> bool:
+        with _T_LOCK:
+            return pid in _T_STATE["withdrawn"]
+
+    code, body = set_github_mode(True, gate_check=gate, tier_of=tier_of,
+                                 conversation_id=conversation_id, write=write,
+                                 guard=withdrawn)
+    body = body if isinstance(body, dict) else {}
+    outcome = str(body.get("outcome") or "")
+    if body.get("changed"):
+        outcome = "enabled"
+    elif not outcome:
+        outcome = "failed" if not body.get("ok") else "refused"
+    _github_mode_finish(pid, outcome, str(body.get("error") or "")[:200])
+
+
+def request_github_mode(body, *, peer=None, local=None, gate: Callable,
+                        tier_of: Callable, spawn: Callable, write: Callable,
+                        armed: Callable[[], bool],
+                        here: Optional[bool] = None) -> tuple:
+    """`POST /api/asks_first/tools {"tool": "github_mode", "enabled": ...}`.
+
+    ON is REQUESTED from this PC only (403 `pc_only` otherwise, the same shape
+    `github_tools_group` keeps), and raises ONE `github_mode` card. OFF is
+    instant and cardless from either app. `conversation_id` in the body is
+    optional and only the apps that have one send it; without it the per-file
+    approval is not given and the card says so.
+    """
+    enabled = bool(body.get("enabled")) if isinstance(body, dict) else False
+    cid = str((body or {}).get("conversation_id") or "") if isinstance(body, dict) else ""
+    if not enabled:
+        # OFF: withdraw a waiting card first, then turn it off. Instant, no card.
+        with _T_SWITCH:
+            with _T_LOCK:
+                p = _T_STATE["pending"]
+                if p and real_tool(str(p.get("tool") or "")) == GITHUB_MODE_ID:
+                    _T_STATE["withdrawn"].add(p["id"])
+                    p.clear()
+            code, out = set_github_mode(False, write=write)
+        if code == 200:
+            _github_mode_finish("", "disabled")
+        return code, out
+    if not _here(here, peer, local):
+        return 403, {"ok": False, "error": GITHUB_MODE_PC_ONLY, "pc_only": True}
+    if _github_mode_on():
+        return 200, {"ok": True, "changed": False,
+                     "message": "Full GitHub mode is already on.",
+                     "github_mode": github_mode_view(here=True)}
+    if not armed():
+        return 503, {"ok": False, "error": TOOLS_NO_OWNER_CHECK}
+    t = tier_of(GITHUB_MODE_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{GITHUB_MODE_ACTION} is tier {t!r} in jarvis-framework.toml; turning full "
+            f"GitHub mode on needs a person to say yes, so it must be 'ask'")}
+    with _T_LOCK:
+        if _T_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to offer a tool is already "
+                                               "waiting - answer it first."}
+        pid = uuid.uuid4().hex
+        _T_STATE["pending"].update(id=pid, tool=GITHUB_MODE_ID, since=time.time())
+        _T_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _github_mode_decide(pid, cid, gate, tier_of, write))
+    except Exception:                                        # noqa: BLE001
+        with _T_LOCK:
+            _T_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True,
+                 "github_mode": github_mode_view(here=True),
+                 "message": ("Waiting for your approval. Approve the card on this PC - it "
+                             "asks Windows Hello - and full GitHub mode is on.")}
+
+
 
 
 def normalise_enabled(names) -> set:
@@ -860,6 +1355,11 @@ HARD_LIMITS = frozenset({
     # file on this PC per conversion, and its prepare() refuses any tier but
     # "ask" - a file write must never be possible with nobody asked.
     "convert_images",
+    # Full GitHub mode (2026-11-25): its own module refuses any tier but "ask"
+    # before raising the card, so this page must name it, and it is never
+    # loosenable from an app for the same reason as change_approval_policy
+    # above - it is the one card that removes a card.
+    GITHUB_MODE_ID,
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -909,6 +1409,10 @@ MUST_ASK = frozenset({
     # pdf from an image"): ONE new file per conversion, and prepare() refuses
     # any tier but "ask" before the card, so it really does ask every time.
     "convert_images",
+    # Full GitHub mode (2026-11-25): `set_github_mode` refuses a tier other than
+    # "ask" BEFORE it raises the card, so a looser line switches the feature off
+    # rather than removing the card. The page says "Always asks" for it.
+    GITHUB_MODE_ID,
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -1266,6 +1770,14 @@ GROUPS = (
         # this PC with Windows Hello. It sits with the other cards over
         # Jarvis's own rules and has no switch: it can never become instant.
         "change_approval_policy",
+        # Full GitHub mode (2026-11-25): the owner's "activating github mode
+        # needs a card". This row is the page's half of that promise - always
+        # asks, no switch, approved on the PC with Windows Hello - and it sits
+        # with the other cards over Jarvis's own rules. Its on/off state and the
+        # one-line effect are drawn from the separate `github_mode` payload
+        # object (tools_status), not from this row: this one says the CARD
+        # exists, that one says whether the mode is on.
+        GITHUB_MODE_ID,
         "check_tool_updates",
         # "Update Jarvis" asked in chat (2026-10-26; jarvis_quick.py's
         # `desktop_update` card, run by the desktop's own update.rs): the one
@@ -2859,6 +3371,16 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
             or not isinstance(body.get("tool"), str):
         return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
     tool, enabled = body["tool"], body["enabled"]
+    if real_tool(tool) == GITHUB_MODE_ID:
+        # FULL GITHUB MODE (2026-11-25): its own switch, riding this route the
+        # way the master group switch does. ON is requested from the PC only and
+        # raises ONE `github_mode` card; OFF is instant and cardless from either
+        # app. The card, the words, the mode file and the group write all belong
+        # to `set_github_mode` below, so the Settings row and the chat tool are
+        # one implementation rather than two that can disagree.
+        return request_github_mode(body, peer=peer, local=local, gate=gate,
+                                   tier_of=tier_of, spawn=spawn, write=write,
+                                   armed=armed, here=here)
     is_group = real_tool(tool) == GITHUB_TOOLS_GROUP
     real = GITHUB_TOOLS_GROUP if is_group else real_tool(tool)
     known = True if is_group else _app_can_switch(tool)
@@ -3038,6 +3560,11 @@ def tools_status(*, here: bool = False) -> dict:
     NOT an item in `items`, so the per-tool list (and every app's pin on it)
     stays exactly what it is. It writes/removes the twenty GITHUB_TOOLS names in
     one atomic step; OFF is instant, ON is one card plus Windows Hello.
+
+    `github_mode` (2026-11-25) is a second object beside `github_group`: full
+    GitHub mode's own state, one line of effect and where it changes. It is not
+    an item either - it is a mode, not a tool - and its ON is the same
+    PC-requested card shape, while its OFF is instant from either app.
     """
     enabled = tools_enabled_set()
     with _T_LOCK:
@@ -3082,6 +3609,13 @@ def tools_status(*, here: bool = False) -> dict:
             "groups": [{"title": title, "ids": list(tools)}
                        for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
+            # Full GitHub mode (2026-11-25) sits BESIDE the group object, not
+            # inside it: `github_group` is one switch over twenty tools, and this
+            # is the mode that happens to offer the same twenty. Both apps draw
+            # its own row from these keys - `on`, `can_enable`, `effect` and
+            # `where` - and OFF is instant from either app, so a phone may draw
+            # the off half even though it can never draw the on.
+            "github_mode": github_mode_view(here=here),
             "github_group": github_group,
             "extra": _extra_tool_rows(items, enabled),
             # Q7 (2026-11-06): the tools this build offers that the owner's own

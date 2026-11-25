@@ -479,6 +479,12 @@ object PcOnlyActions {
         // It removes a check, so it is approved on the PC only, with Windows
         // Hello, and this phone is refused if it tries (403 pc_only).
         "change_approval_policy",
+        // 2026-11-25: full GitHub mode's own switch - the one loosening the
+        // owner asked to need a card, and the PC's card is where it is answered
+        // (Windows Hello there). This phone shows the mode read-only and may
+        // turn it OFF; turning it ON here is refused 403 pc_only, so the mode's
+        // row offers no ON.
+        "github_mode",
     )
 }
 

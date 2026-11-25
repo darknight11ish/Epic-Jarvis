@@ -3625,3 +3625,58 @@ _RISK.update({
 _TOOL_ACTIONS.update({
     "cancel_scheduled": "auto",
 })
+
+# --------------------------------------------------------------------------
+#   Full GitHub mode (slice 1) - the mode's own card (2026-11-25)
+# --------------------------------------------------------------------------
+# THE ROWS ARE HERE, AT THE END OF THE FILE, for the reason every block above
+# gives: nearly every line inside `_RISK`, `_TOOL_ACTIONS` and
+# `_NO_RULE_FROM_DENIAL` is an earlier patch's hunk context, and the end of this
+# file is the one region no patch's hunk claims. Both updates run at import,
+# before any `check()` call, so the gate sees the rows exactly as if they sat
+# inside the literals. NO NEW PATCH, per the owner's ruling of 2026-11-14:
+# `unknown-risk-approvable.patch` must stay the last patch that writes this
+# file, and this block is what keeps that true.
+#
+# WHAT THE MODE IS. The owner's ask, verbatim: "also add a full github mode that
+# gives full parity with less restrictions and less cards, full parity with
+# deepseek harness. it can be enabled in chat or settings and forwards anything
+# necessary to the cloud api"; "activating github mode needs a card"; "in
+# github mode i still want the local ai model to do as much work as possible
+# though". Slice 1 turns ONE mode on:
+#
+#   * it offers the twenty GitHub and review tools (the existing
+#     `github_tools_group` switch, `jarvis_asks_first.py`);
+#   * it is the second standing yes `jarvis_router.choose()` gate 6 reads, from
+#     its own `<settings>/github-mode.json`, and only for a GitHub-shaped turn;
+#   * in the ONE chat where it was turned on, it replaces the per-file
+#     `github_fix_write` card with the mode's own card (the conversation grant
+#     in jarvis_agent.py, 8-hour cap, memory only).
+#
+# Every other card stays exactly where it is - merge, push, open a pull request,
+# comment, re-run, create-repo, workflow, labels, edit-PR and review each raise
+# their own; that is the whole reason this is a NEW action rather than a looser
+# `enable_reading_tool`.
+#
+# WHY "yes" AND "outbound". Reversible: turning the mode off is instant, from
+# either app, with no card - it only ever takes permission away. Outbound: while
+# it is on, a GitHub-shaped turn may carry the owner's own words (and the name
+# of the repository they asked about) off this PC to the cloud service chosen in
+# the Presets menu, and nobody is asked for that one turn. So the class is the
+# honest worst case, which is what sends the card to Windows Hello on the PC and
+# to the phone's own signed approval - and `jarvis_owner_check.PC_ONLY_ACTIONS`
+# refuses the phone's approval outright (the activation is the ONE loosening
+# card the owner asked to be PC-only).
+#
+# WHY THE CHAT TOOL'S MAPPING IS HERE TOO. `_TOOL_ACTIONS` is what
+# `action_for_tool()` and the Reach page read: without the row the model's own
+# `github_mode` tool would answer `unclassified_tool`, and the Reach page would
+# list a tool that changes the gate's standing permissions as unclassified.
+_RISK.update({
+    "github_mode": ("yes", "outbound", "turns GitHub mode on for this PC: the AI model is offered all twenty GitHub and review tools, a hard GitHub-shaped question may go to the cloud service you chose without asking for that turn, and in the chat where you turned it on the fix loop's per-file card is replaced by this one approval - its words may leave this PC; turning it off is instant, from either app, with no card, and merge, push, open a pull request, comment, re-run, create-repo, workflow, labels, edit-PR and review each keep their own card"),
+})
+_TOOL_ACTIONS.update({
+    # The model-facing `github_mode` tool (jarvis_agent.py) resolves to the
+    # action above, so its card is the mode's own and never `unclassified_tool`.
+    "github_mode": "github_mode",
+})

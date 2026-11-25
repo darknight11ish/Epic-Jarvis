@@ -179,6 +179,27 @@ export const GITHUB_TOOLS_GROUP = "github_tools_group";
 /** The row's fallback title if an older PC sends the object without one. */
 export const GITHUB_TOOLS_GROUP_TITLE = "Offer GitHub tools to the AI model";
 /**
+ * FULL GITHUB MODE (2026-11-25, the owner's ask for "a full github mode ... full
+ * parity with less restrictions and less cards"). ONE PC setting, drawn as its
+ * own row beside the master group switch above. It is a SEPARATE object in the
+ * PC's `tools.github_mode`, NOT an item in `tools.items`, and it rides the SAME
+ * `set_tool_enabled` command and `POST /api/asks_first/tools` body as a tool,
+ * with this id: ON is one card plus Windows Hello on the PC, OFF is one click
+ * from either app. A PC that sends no `github_mode` object is an OLDER PC: the
+ * page draws no row and invents no default.
+ */
+export const GITHUB_MODE = "github_mode";
+/** The row's title, and the fallback words for a PC that sends neither. */
+export const GITHUB_MODE_TITLE = "GitHub mode";
+export const GITHUB_MODE_EFFECT =
+  "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud " +
+  "without asking again. Asked in chat, turning it on also makes the fix loop ask " +
+  "once for that chat, not once per file. Merge, push, open PR, comment, re-run, " +
+  "create a repo, labels, edit and review each keep their own card.";
+export const GITHUB_MODE_WHERE =
+  "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either " +
+  "app can turn it off.";
+/**
  * D4, the owner, 2026-11-04: every tool that is ON is listed, including one the
  * settings file switched on that this page has no switch row for. Since the
  * same day's ON decision the ONLY rows that land here are names this PC does
@@ -293,7 +314,7 @@ function readLockdown(k) {
 function readTools(t) {
   if (!t || typeof t !== "object" || !Array.isArray(t.items)) {
     return { canEnable: false, items: [], groups: [], vault: null, extra: [],
-      notSwitchable: null };
+      notSwitchable: null, githubMode: null };
   }
   const items = t.items.filter((i) => i && typeof i === "object").map(readToolItem);
   // D4, 2026-11-04: every tool that is ON, including ones with no switch row
@@ -362,8 +383,20 @@ function readTools(t) {
     last: ggLast ? text(ggLast.message) : "",
     lastOutcome: ggLast ? text(ggLast.outcome) : "",
   } : null;
+  // FULL GITHUB MODE (2026-11-25): a separate object beside `vault` and
+  // `github_group`, never an item. Its five keys are the whole contract - `on`,
+  // `can_enable`, `effect`, `where` (and the object's own name) - and a PC
+  // older than it sends none, which draws no row at all. The words are the
+  // PC's own; the fallbacks are the contract's, for a half-updated PC.
+  const gm = t.github_mode && typeof t.github_mode === "object" ? t.github_mode : null;
+  const githubMode = gm ? {
+    on: gm.on === true,
+    canEnable: gm.can_enable === true,
+    effect: text(gm.effect) || GITHUB_MODE_EFFECT,
+    where: text(gm.where) || GITHUB_MODE_WHERE,
+  } : null;
   return { canEnable: t.can_enable === true, items, groups, vault, extra, notSwitchable,
-    newOff, githubGroup };
+    newOff, githubGroup, githubMode };
 }
 
 /**
@@ -551,6 +584,44 @@ export function githubGroupSwitchView(g, tools, live) {
  */
 export function githubGroupRow(tools) {
   return tools && tools.githubGroup ? tools.githubGroup : null;
+}
+
+/**
+ * FULL GITHUB MODE's switch (2026-11-25): {checked, disabled, lines}.
+ * `checked` is the PC's own `on`. Turning it ON needs the PC to say this app
+ * may (`can_enable` is false on the phone and in any older app), a live link
+ * and no other tool card waiting - it raises ONE card plus Windows Hello on the
+ * PC, and the PC refuses it (403) from anywhere else. Turning it OFF is one
+ * click from either app and is never held. The words under the row are the
+ * PC's own `effect` and `where`; an older PC sends no object at all and this
+ * returns null, so nothing is drawn and no default is invented.
+ */
+export function githubModeSwitchView(m, tools, live) {
+  if (!m) return null;
+  const lines = [m.effect, m.where];
+  let disabled = false;
+  if (!m.on) {
+    const anyWaiting = ((tools && tools.items) || []).some((i) => i.waiting);
+    if (!m.canEnable) {
+      disabled = true;
+    } else if (anyWaiting) {
+      lines.push(ONE_AT_A_TIME);
+      disabled = true;
+    } else if (!live) {
+      lines.push(STALE);
+      disabled = true;
+    }
+  }
+  return { checked: m.on, disabled, lines };
+}
+
+/**
+ * The row to draw for FULL GITHUB MODE, or null from a PC older than
+ * 2026-11-25 (which sends no `github_mode` object). It is not an item: this is
+ * the one place the page reads it from.
+ */
+export function githubModeRow(tools) {
+  return tools && tools.githubMode ? tools.githubMode : null;
 }
 
 /**

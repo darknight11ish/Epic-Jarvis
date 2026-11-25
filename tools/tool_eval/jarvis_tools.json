@@ -2329,6 +2329,29 @@
  {
   "type": "function",
   "function": {
+   "name": "github_mode",
+   "description": "Turn full GitHub mode on or off. Call this tool when the owner asks for full GitHub mode or to stop it - \"turn on github mode\", \"turn it off\" - do not ask first, just call it. \"on\" raises ONE PC-only approval card; nothing is offered and nothing goes to the cloud before that yes. \"off\" is instant, needs no card, and gives every card back. The card says twenty GitHub and review tools are offered, a GitHub question may go to the cloud, and the fix loop asks once per file here. Merge, push, open a PR, comment, re-run and review still raise their own card. Never say the mode is on before a tool result says so.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ],
+      "description": "on raises ONE approval card; off is instant"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "feature_guide",
    "description": "Answer questions about one of Jarvis's own features from this tool's exact facts, never general knowledge. Use when: the owner asks what a feature is or does, where to switch it on, whether it asks first, its limit, which apps have it, or whether it is on now. Do NOT use it for anything that is not a Jarvis feature. Leave \"feature\" out (or empty) to list the groups; otherwise it is a feature's or a group's name. If a feature is not in the list, say so and offer the groups; never invent one. Reword the facts freely but add none. It only reads: nothing changes and no approval is needed.",
    "parameters": {

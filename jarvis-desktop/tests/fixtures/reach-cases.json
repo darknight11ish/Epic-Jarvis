@@ -1548,6 +1548,10 @@
      "name": "Cloud escalation (its card is the Presets menu's Cloud row switch)"
     },
     {
+     "id": "github_mode",
+     "name": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)"
+    },
+    {
      "id": "feature_guide",
      "name": "Explaining and checking one of Jarvis's own features (read-only)"
     },

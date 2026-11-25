@@ -554,7 +554,7 @@ def t_the_phone_may_approve_it_and_the_pc_still_asks_windows_hello():
               "loosen_what_asks_first", "restore_backup", "pair_device",
               "unretire_shared_key", "register_approval_key",
               "handoff_keep_offering", "handoff_bring_to_front",
-              "product_check", "change_approval_policy"]),
+              "product_check", "change_approval_policy", "github_mode"]),
           sorted(OC.PC_ONLY_ACTIONS))
 
     row = _update_card_row()

@@ -23,10 +23,16 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   DETAIL,
+  GITHUB_MODE,
+  GITHUB_MODE_EFFECT,
+  GITHUB_MODE_TITLE,
+  GITHUB_MODE_WHERE,
   GITHUB_TOOLS_GROUP,
   GITHUB_TOOLS_GROUP_TITLE,
   githubGroupRow,
   githubGroupSwitchView,
+  githubModeRow,
+  githubModeSwitchView,
   LIGHTS_DETAIL,
   LIGHTS_LABEL,
   LIGHTS_WAITING,
@@ -288,6 +294,89 @@ await check("the GitHub group switch: one row, truthfully off/on/partial, ON hel
     "an older PC sends no group object: nothing is drawn");
 });
 
+await check("Full GitHub mode: the PC's words, ON only when can_enable, OFF always", async () => {
+  // Hand-made, NOT the generated fixture: the backend lane owns that file and
+  // its `github_mode` object has not landed in it yet. The whole contract is
+  // the object's own name plus four keys - on, can_enable, effect, where.
+  const EFFECT = "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud " +
+    "without asking again. Asked in chat, turning it on also makes the fix loop ask " +
+    "once for that chat, not once per file. Merge, push, open PR, comment, re-run, " +
+    "create a repo, labels, edit and review each keep their own card.";
+  const WHERE = "Settings, What asks first, on this PC - turning it on needs Windows Hello. " +
+    "Either app can turn it off.";
+  assert.equal(GITHUB_MODE, "github_mode");
+  assert.equal(GITHUB_MODE_TITLE, "GitHub mode");
+  assert.equal(GITHUB_MODE_EFFECT, EFFECT, "the fallback is the contract's own sentence");
+  assert.equal(GITHUB_MODE_WHERE, WHERE, "and so is the second line");
+  const payload = (mode, items = []) => ({
+    available: true,
+    groups: [],
+    tools: {
+      label: TOOLS_LABEL, detail: TOOLS_DETAIL, can_enable: true,
+      items, groups: [], vault: null, extra: [], not_switchable: null,
+      ...(mode === undefined ? {} : { github_mode: mode }),
+    },
+  });
+  const effect = "The PC's effect words.";
+  const where = "The PC's where words.";
+  assert.equal(payload(undefined).tools.github_mode, undefined, "no object at all");
+  const off = readAsksFirst(payload({ on: false, can_enable: true, effect, where }));
+  const m = githubModeRow(off.tools);
+  assert.deepEqual(m, { on: false, canEnable: true, effect, where },
+    "exactly the object's four keys are read, and nothing is defaulted");
+  assert.deepEqual(githubModeSwitchView(m, off.tools, true),
+    { checked: false, disabled: false, lines: [effect, where] },
+    "on the PC, live: ON is offered and the words are the PC's own");
+  assert.equal(githubModeSwitchView(m, off.tools, false).disabled, true,
+    "turning the mode ON is held on a stale link");
+  // can_enable false (the phone, or any app the PC will not take ON from):
+  // ON is not offered at all.
+  const onlyOff = readAsksFirst(payload({ on: false, can_enable: false, effect, where }));
+  const ov = githubModeSwitchView(githubModeRow(onlyOff.tools), onlyOff.tools, true);
+  assert.equal(ov.disabled, true, "ON needs the PC to say this app may");
+  assert.equal(ov.checked, false);
+  // ON: one click takes it OFF, and OFF is never held, on any link.
+  const on = readAsksFirst(payload({ on: true, can_enable: false, effect, where }));
+  assert.deepEqual(githubModeSwitchView(githubModeRow(on.tools), on.tools, false),
+    { checked: true, disabled: false, lines: [effect, where] },
+    "already on: OFF is one click even on a stale link");
+  // One card at a time, like every other tool row on the page.
+  const busy = readAsksFirst(payload({ on: false, can_enable: true, effect, where },
+    [{ id: "calendar_read", waiting: true }]));
+  const bv = githubModeSwitchView(githubModeRow(busy.tools), busy.tools, true);
+  assert.equal(bv.disabled, true);
+  assert.ok(bv.lines.includes(ONE_AT_A_TIME), bv.lines.join(" | "));
+  // A PC that sends no github_mode object is an OLDER PC: nothing is drawn and
+  // no default is invented.
+  const older = readAsksFirst(payload(undefined));
+  assert.equal(githubModeRow(older.tools), null);
+  assert.equal(githubModeSwitchView(older.tools.githubMode, older.tools, true), null);
+  // The REAL generated fixture carries the object now (2026-11-25), so the page
+  // reads the PC's own words from it rather than from a hand-made copy - and
+  // the mode is still NOT one of the tool items.
+  const shipped = readAsksFirst(C.pc_shipped);
+  const sm = githubModeRow(shipped.tools);
+  assert.ok(sm, "the real payload's github_mode object is read");
+  assert.equal(sm.effect, GITHUB_MODE_EFFECT, "and it carries the contract's sentence");
+  assert.equal(shipped.tools.items.length, 84, "the mode is not a tool item");
+  assert.equal(shipped.tools.githubGroup.on, false, "the group row is untouched");
+  // The page draws the row, through the SAME command and route the group switch
+  // uses, with `github_mode` as the id: no new Tauri command, no new route.
+  const page = read("src/asks-first-settings.js");
+  assert.ok(page.includes('toggle("af-github-mode"'), "the mode's own checkbox id");
+  assert.ok(page.includes("changeTool(GITHUB_MODE, want, box2)"),
+    "the same set_tool_enabled path the group switch uses");
+  assert.ok(page.includes("li.dataset.tool = GITHUB_MODE"), "the row is the mode, not an item");
+  // The phone's row says the same words, so one screen cannot drift from the
+  // other (the same check the words at the top of this file make).
+  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/net/AsksFirst.kt")
+    .replace(/"\s*\+\s*\n\s*"/g, "");
+  for (const w of [GITHUB_MODE_TITLE, GITHUB_MODE_EFFECT, GITHUB_MODE_WHERE]) {
+    assert.ok(kt.includes(JSON.stringify(w).slice(1, -1)),
+      `the phone says: ${w.slice(0, 50)}`);
+  }
+});
+
 await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {  const pc = readAsksFirst(C.pc_shipped);
   assert.equal(pc.tools.items.length, 84,
     "every tool the model can be offered is a switch (84 at 2026-11-24, cancel_scheduled from the scheduling batch; 83 at 2026-11-20, the eight plan-store tools; 75 at 2026-11-14, 74 at 2026-11-11, 65 at 2026-11-10: 62 at 2026-11-09, 60 at 2026-11-05, which was 48 at 2026-11-04 and 21 before it; the seven GitHub tools, send_text_message, the four pack tools and the approval-policy row joined the list; wave 13's github_create_repo made 61 and project_read, the read half of Jarvis taking over dev work, made 62; wave 16's read-only PR cockpit, carded merge and carded fix-and-push make 63, 64 and 65; wave 16E's two local review gates, the parity pass's pull-request read and six carded writes, and wave 20's android_app builder took it to 75; the plan store's eight typed tools (2026-11-20, PM2) took it to 83)");
@@ -318,8 +407,8 @@ await check("the tool surface: groups, the vault row and the not-a-switch note",
   const no = pc.tools.notSwitchable;
   assert.deepEqual(no.ids,
     ["run_data_script", "product_check", "approve_web_search_for_conversation",
-      "stop_web_search_approval", "cloud_escalation"],
-    "the five whose own switch decides them");
+      "stop_web_search_approval", "cloud_escalation", "github_mode"],
+    "the six whose own switch decides them");
   for (const id of no.ids) {
     assert.ok(note.includes(no.labels[id] || id.replace(/_/g, " ")), "the note names " + id);
   }
@@ -388,7 +477,7 @@ await check("Settings: every group and row in the PC's words and order", async (
   }
   assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`),
     ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights",
-    "af-vault-organizer", "af-github-group"].sort());
+    "af-vault-organizer", "af-github-group", "af-github-mode"].sort());
   assert.ok(text.includes(LIGHTS_LABEL));
   assert.deepEqual(errors, []);
 });
@@ -558,7 +647,13 @@ await check("CONTROL: Settings only; Rust refuses an action off the list; no app
   // The master GitHub group switch (2026-11-10) is accepted by the SAME
   // command in both directions, and it is NOT added to the per-tool list.
   assert.match(rs, /pub\(crate\) const GITHUB_TOOLS_GROUP: &str = "github_tools_group"/);
-  assert.match(rs, /if enabled && tool != GITHUB_TOOLS_GROUP && !TOOLS_SWITCHABLE\.contains\(&tool\)/);
+  // FULL GITHUB MODE (2026-11-25) is the SECOND row id the SAME command accepts
+  // beside the group switch - no new Tauri command - and it is NOT added to the
+  // per-tool list, so the count of tool switches does not move.
+  assert.match(rs, /pub\(crate\) const GITHUB_MODE: &str = "github_mode"/);
+  assert.match(rs, /const ROW_SWITCHES: \[&str; 2\] = \[GITHUB_TOOLS_GROUP, GITHUB_MODE\]/);
+  assert.match(rs,
+    /if enabled && !ROW_SWITCHES\.contains\(&tool\) && !TOOLS_SWITCHABLE\.contains\(&tool\)/);
   assert.match(rs, /held_on_stale\(!ask\) && stale\(&app\)/);
   assert.doesNotMatch(rs, /api\/approve/);
   const js = read("src/asks-first-settings.js");

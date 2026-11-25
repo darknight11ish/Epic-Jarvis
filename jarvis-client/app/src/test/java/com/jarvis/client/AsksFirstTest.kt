@@ -209,7 +209,11 @@ class AsksFirstTest {
         assertTrue("its own words explain what it does", vault.what.contains("tidy-up"))
         assertTrue("its state is in words", AsksFirst.vaultState(vault).isNotEmpty())
         val no = requireNotNull(t.notSwitchable) { "the not-a-switch list is missing" }
-        assertEquals("5 tools have no switch of their own", 5, no.labels.size)
+        assertEquals("6 tools have no switch of their own", 6, no.labels.size)
+        assertTrue("... and full GitHub mode is one of them, with its own label",
+            no.labels.any { it.first == AsksFirst.GITHUB_MODE }
+                && no.labels.first { it.first == AsksFirst.GITHUB_MODE }.second
+                    .contains("Full GitHub mode"))
         assertTrue("the note names the real switch for the sandbox", no.why.contains("Data sandbox"))
         assertTrue("... and says the web-search two ride with web search",
             no.why.contains("Web search"))
@@ -223,7 +227,7 @@ class AsksFirstTest {
     }
 
     @Test
-    fun `the phone's plate draws the tools read-only and writes nothing`() {
+    fun `the phone's plate draws the tools read-only and writes nothing but the mode's OFF`() {
         val plate = java.io.File(
             "src/main/java/com/jarvis/client/ui/screens/AsksFirstPlate.kt"
         ).readText()
@@ -233,10 +237,82 @@ class AsksFirstTest {
         assertTrue("no not-a-switch note", plate.contains("AsksFirst.TOOLS_NOT_SWITCHABLE_TITLE"))
         val block = plate.substringAfter("v.tools?.let").substringBefore("(if (busy)")
         assertFalse("a switch was drawn inside the read-only tools block", block.contains("SwitchRow("))
+        // FULL GITHUB MODE (2026-11-25) is the ONE write in this block: its OFF.
+        // The mode's ON is never offered here, so the row can only take away.
+        assertTrue("no GitHub mode row", block.contains("t.githubMode?.let"))
+        assertTrue("no OFF control for the mode", block.contains("AsksFirst.GITHUB_MODE_OFF_LABEL"))
+        val modeBlock = block.substringAfter("t.githubMode?.let").substringBefore("t.groups.forEach")
+        assertTrue("the mode's OFF must be the one write",
+            modeBlock.contains("JarvisRuntime.turnOffGithubMode"))
+        assertFalse("the mode must never offer ON",
+            modeBlock.contains("turnOnGithubMode") || modeBlock.contains("GITHUB_MODE_ON_LABEL"))
+        assertTrue("the mode's words are the PC's own, never typed here",
+            modeBlock.contains("AsksFirst.githubModeView"))
+        val rest = block.replace(modeBlock, "")
         for (banned in listOf("JarvisRuntime.makeAskFirst", "JarvisRuntime.setLightsWithoutCard",
                               "JarvisRuntime.enableTool", "JarvisRuntime.setTool")) {
-            assertFalse("the tools block must not write: $banned", block.contains(banned))
+            assertFalse("the tools block must not write: $banned", rest.contains(banned))
         }
+    }
+
+    @Test
+    fun `FULL GITHUB MODE is read, drawn read-only, and only OFF is offered`() {
+        // The real answer the phone gets, with ONE key added by hand: the PC's
+        // own `github_mode` object, the five-key contract (the object's name
+        // plus on, can_enable, effect and where). The backend lane owns the
+        // generated fixture, so this payload is built here, never regenerated.
+        val mode = buildJsonObject {
+            put("on", true)
+            put("can_enable", false)
+            put("effect", AsksFirst.GITHUB_MODE_EFFECT)
+            put("where", AsksFirst.GITHUB_MODE_WHERE)
+        }
+        val root = cases["phone_shipped"]!!.jsonObject
+        val realTools = root["tools"]!!.jsonObject
+        val withMode = JsonObject(root + ("tools" to JsonObject(realTools + ("github_mode" to mode))))
+        val t = requireNotNull(AsksFirst.parse(withMode)?.tools) { "the patched view did not parse" }
+        val gm = requireNotNull(t.githubMode) { "the PC's github_mode object was not read" }
+        assertTrue("the mode is on, as the PC says", gm.on)
+        assertFalse("the phone may not turn it on", gm.canEnable)
+        assertEquals(AsksFirst.GITHUB_MODE_EFFECT, gm.effect)
+        assertEquals(AsksFirst.GITHUB_MODE_WHERE, gm.where)
+        val mv = AsksFirst.githubModeView(gm)
+        assertTrue("the row is drawn", mv.show)
+        assertTrue("it carries the PC's effect", mv.lines.contains(gm.effect))
+        assertTrue("it carries the PC's where", mv.lines.contains(gm.where))
+        assertTrue("while it is on, OFF is offered", mv.canTurnOff)
+        assertEquals(AsksFirst.GITHUB_MODE_ON, mv.state)
+        // The one body the phone sends is OFF, it is the tools route, and it
+        // names the mode the PC offered.
+        assertEquals("/api/asks_first/tools", AsksFirst.TOOLS_PATH)
+        assertEquals("""{"tool":"github_mode","enabled":false}""", AsksFirst.githubModeOffBody())
+        assertFalse("the phone never sends ON",
+            AsksFirst.githubModeOffBody().contains("\"enabled\":true"))
+        // Off: the row says so truthfully and offers no control at all.
+        val off = AsksFirst.githubModeView(gm.copy(on = false))
+        assertTrue("off is still a row", off.show)
+        assertFalse("nothing to turn off", off.canTurnOff)
+        assertEquals(AsksFirst.GITHUB_MODE_OFF, off.state)
+        // A PC older than the mode sends no object: no row, no control, and no
+        // invented default. Built by REMOVING the key from the same real answer,
+        // because the generated fixture now carries it (2026-11-25).
+        val olderRoot = JsonObject(
+            root + ("tools" to JsonObject(realTools.filterKeys { it != "github_mode" })))
+        val older = requireNotNull(AsksFirst.parse(olderRoot)?.tools)
+        assertNull("an older PC sends no github_mode", older.githubMode)
+        val none = AsksFirst.githubModeView(older.githubMode)
+        assertFalse("nothing is drawn", none.show)
+        assertFalse("and no control is offered", none.canTurnOff)
+        assertTrue("and no line is made up", none.lines.isEmpty())
+        // A half-updated PC that sends the object without the two word keys
+        // falls back to this app's own copy of the contract, never to a blank.
+        val bare = buildJsonObject { put("on", false); put("can_enable", false) }
+        val bareView = JsonObject(root + ("tools" to JsonObject(realTools + ("github_mode" to bare))))
+        val bareMode = requireNotNull(
+            AsksFirst.parse(bareView)?.tools?.githubMode,
+        ) { "a mode object with no words was not read" }
+        assertEquals(AsksFirst.GITHUB_MODE_EFFECT, bareMode.effect)
+        assertEquals(AsksFirst.GITHUB_MODE_WHERE, bareMode.where)
     }
 
     @Test

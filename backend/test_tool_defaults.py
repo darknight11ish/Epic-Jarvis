@@ -183,7 +183,7 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      # rides with change_setting and is not a [tools].enabled
                      # name, so it is not in DEFAULT_ENABLED - offered wherever
                      # change_setting is. See jarvis_agent.RIDES_WITH_SETTINGS.
-                     "cloud_escalation", "feature_guide",
+                     "cloud_escalation", "github_mode", "feature_guide",
                      "refresh_abilities", "self_portrait",
                      "conversation_find", "conversation_open",
                      "approval_policy",
@@ -210,7 +210,7 @@ OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list
                        "work_item_update_status", "work_item_link_dependency",
                        "project_checkpoint_reflect", "project_export_obsidian_hub",
                        "change_setting",
-                       "cloud_escalation", "feature_guide",
+                       "cloud_escalation", "github_mode", "feature_guide",
                        "refresh_abilities", "self_portrait",
                        "conversation_find", "conversation_open",
                        "approval_policy",

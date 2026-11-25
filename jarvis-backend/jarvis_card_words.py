@@ -202,6 +202,11 @@ TITLES = {
     "github_edit_pr": "edit a pull request's title or body",
     "github_pr_review": "post a pull request review, never an approval",
     "github_issue_state": "close or reopen one issue",
+    # Full GitHub mode (2026-11-25): the ONE card that offers the twenty tools,
+    # lets a GitHub-shaped question reach the cloud and removes the per-file fix
+    # card in one chat. Its own title, because it is a loosening in the same
+    # family as change_approval_policy, not a single tool being offered.
+    "github_mode": "turn on full GitHub mode",
     "github_search_run": "search GitHub",
     "github_search_run_authenticated": "search GitHub signed in as you",
     "check_records": "check repository records before a push",
@@ -509,6 +514,9 @@ SUMMARY = {
     "github_edit_pr": "edit a pull request's text",
     "github_pr_review": "post a review, never an approval",
     "github_issue_state": "close or reopen an issue",
+    # Full GitHub mode: the short line. It says "mode", not "enable", because
+    # what the card turns on is a switch over several abilities.
+    "github_mode": "turn on full GitHub mode",
     "github_search_run": "search GitHub",
     "github_search_run_authenticated": "search GitHub signed in as you",
     "check_records": "check repository records before a push",

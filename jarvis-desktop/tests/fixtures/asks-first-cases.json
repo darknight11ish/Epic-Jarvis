@@ -1806,6 +1806,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -1961,6 +1972,12 @@
      "total": 20,
      "waiting": true,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -2902,11 +2919,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -4733,6 +4752,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -4888,6 +4918,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -5825,11 +5861,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -7656,6 +7694,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -7811,6 +7860,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -8756,11 +8811,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -10592,6 +10649,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -10747,6 +10815,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -11692,11 +11766,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -13528,6 +13604,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -13683,6 +13770,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -14628,11 +14721,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -16459,6 +16554,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -16614,6 +16720,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -17559,11 +17671,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -19385,6 +19499,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -19540,6 +19665,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -20485,11 +20616,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -22316,6 +22449,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -22486,6 +22630,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -23427,11 +23577,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -25258,6 +25410,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -25423,6 +25586,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": true,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -26364,11 +26533,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -28190,6 +28361,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -28345,6 +28527,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": false,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -29290,11 +29478,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -31130,6 +31320,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -31285,6 +31486,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": false,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -32230,11 +32437,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -34061,6 +34270,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_mode",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_mode",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on full GitHub mode",
+       "windows_hello": false
+      },
+      {
        "action": "check_tool_updates",
        "confirmations": 1,
        "fixed": false,
@@ -34216,6 +34436,12 @@
      "total": 20,
      "waiting": false,
      "what": "On: the AI model is offered all twenty tools in this group - the eighteen GitHub tools (the library search, five card-free reads and twelve carded writes) and both local review gates - and every use is still decided by \"Ask me first\" as its own row says. Off: instantly, none of them is offered."
+    },
+    "github_mode": {
+     "can_enable": false,
+     "effect": "Offers all twenty GitHub tools, and lets a GitHub question go to the cloud without asking again. Asked in chat, turning it on also makes the fix loop ask once for that chat, not once per file. Merge, push, open PR, comment, re-run, create a repo, labels, edit and review each keep their own card.",
+     "on": false,
+     "where": "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either app can turn it off."
     },
     "groups": [
      {
@@ -35161,11 +35387,13 @@
       "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval",
-      "cloud_escalation"
+      "cloud_escalation",
+      "github_mode"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
       "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+      "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's own switch; it can only be turned on from the PC)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"

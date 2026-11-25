@@ -320,6 +320,13 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_work.py": 1,
     "backend/test_youtube.py": 2,
     "tools/check_plugins.py": 1,
+    # Full GitHub mode's own suite (2026-11-25): ten source-text pins, measured
+    # on landing with `--measure` and recorded as DEBT, not approval. They read
+    # the published gate, the base settings and the asks-first module as text to
+    # prove the mode's rows and its payload keys are really there; the ratchet
+    # only turns down, so a later pass that converts them to `ast`-node checks
+    # lowers this number and nothing raises it.
+    "backend/test_github_mode.py": 10,
 }
 
 #: git args that read history or a tree rather than the working directory.

@@ -193,9 +193,14 @@ def run_tool(setting, value, watch=None, table=None):
 
 def t_the_tool_exists_and_is_offered_only_when_enabled():
     check("change_setting is a tool", AG.SETTINGS_TOOL in AG.TOOLS)
+    # 2026-11-25: full GitHub mode put `github_mode` in RIDES_WITH_SETTINGS
+    # beside `cloud_escalation`, so the offered list is three. The pin stays
+    # exact on purpose: it still fails if either rider stops riding, and it
+    # fails if a fourth name appears that nobody decided on.
     check("it is offered when [tools].enabled names it",
           AG.offered_tools({AG.SETTINGS_TOOL}) == [AG.SETTINGS_TOOL,
-                                                   AG.ESCALATION_TOOL],
+                                                   AG.ESCALATION_TOOL,
+                                                   AG.GITHUB_MODE_TOOL],
           repr(AG.offered_tools({AG.SETTINGS_TOOL})))
     check("...and the cloud escalation switch rides with it, which is the one "
           "door in chat to a PRESETS row (2026-11-06)",

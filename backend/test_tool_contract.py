@@ -118,7 +118,8 @@ PRIVATE_CHAT_ALLOWED = []
 OFFERED_FRESH = [
     "approval_policy", "approve_web_search_for_conversation", "calculator",
     "change_setting", "check_records", "cloud_escalation", "coming_up",
-    "conversation_find", "conversation_open", "feature_guide", "memory_search",
+    "conversation_find", "conversation_open", "feature_guide", "github_mode",
+    "memory_search",
     "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
     "plugin_list", "plugin_switch",
     "project_checkpoint_reflect", "project_create", "project_decompose_plan",
@@ -139,8 +140,9 @@ OFFERED_FRESH = [
 #: ask rides with `web_search` - it is not a capability, and its card is the
 #: permission.
 CATALOGUE = [
-    # Every tool that exists, sorted, pinned in full (81 at the scheduling
-    # review's cancel tool, 2026-11-24; 80 at the Android app builder's entry
+    # Every tool that exists, sorted, pinned in full (82 at full GitHub mode's
+    # chat tool, 2026-11-25; 81 at the scheduling review's cancel tool,
+    # 2026-11-24; 80 at the Android app builder's entry
     # point, DEF-068, 2026-11-14; 79 at the GitHub union of 2026-11-11). A
     # future tool must be added here, which forces the
     # three lists above to be looked at in the same edit; the per-tool
@@ -177,6 +179,7 @@ CATALOGUE = [
     "github_issue_state",
     "github_list",
     "github_merge_pr",
+    "github_mode",
     "github_open_issue",
     "github_open_pr",
     "github_pr_detail",
