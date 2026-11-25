@@ -2537,11 +2537,91 @@ def _property_edit(text: str, action: str, key: str, value: str):
     return fresh, f'Set the "{key_s}" property.', preview, ""
 
 
+#: Obsidian's own frontmatter key for the other names a note answers to. It is a
+#: LIST there (`aliases:` then `  - name`), which is what Obsidian reads and
+#: writes; a scalar is coerced on read and dropped on the next edit. The chat
+#: resolver reads this key at tier 3 (jarvis_notes.py), so a name written here
+#: works in every later conversation and travels with the note.
+ALIAS_KEY = "aliases"
+
+
+def _alias_read(front: list) -> list:
+    """Every alias already on the note, from an inline or a block list."""
+    out, taking = [], False
+    for line in front:
+        if re.match(r"^aliases\s*:", line, re.I):
+            taking = True
+            rest = line.split(":", 1)[1].strip()
+            if rest.startswith("[") and rest.endswith("]"):
+                out += [p.strip().strip("\"'") for p in rest[1:-1].split(",")
+                        if p.strip()]
+            elif rest:
+                out.append(rest.strip().strip("\"'"))
+            continue
+        if taking:
+            if re.match(r"^\s+-\s+", line):
+                out.append(line.split("-", 1)[1].strip().strip("\"'"))
+                continue
+            taking = False
+    return [a for a in out if a]
+
+
+def _alias_add(text: str, alias: str):
+    """`(new_text, said, preview, why)` - one more name in `aliases:`.
+
+    The list is rebuilt from what the note already answers to, so an existing
+    alias is kept, a repeated one changes nothing, and the note's other
+    properties are untouched. One card, through handle_customize, like every
+    other edit to an existing note.
+    """
+    name = " ".join(str(alias or "").split()).strip().strip("\"'").strip()
+    if not name:
+        return text, "", {}, "which name should the note answer to?"
+    if (len(name) > 64 or "\n" in name
+            or any(c in name for c in "[]{}:,|#")):
+        return (text, "", {},
+                "a name for a note can use letters, numbers, spaces, dots and dashes")
+    opened, front, body, why = _split_frontmatter(text)
+    if why:
+        return text, "", {}, why
+    eol = _eol_of(text)
+    have = _alias_read(front)
+    if any(a.casefold() == name.casefold() for a in have):
+        return text, f'The note already answers to "{name}".', {}, ""
+    keep, skipping = [], False
+    for line in front:
+        if re.match(r"^aliases\s*:", line, re.I):
+            skipping = True
+            continue
+        if skipping and re.match(r"^\s+-\s+", line):
+            continue
+        skipping = False
+        keep.append(line)
+    new_front = keep + [f"{ALIAS_KEY}:{eol}"] + [
+        f"  - {a}{eol}" for a in have + [name]]
+    if not opened:
+        fresh = "---" + eol + "".join(new_front) + "---" + eol + text
+    else:
+        fresh = opened + "".join(new_front) + "---" + eol + body
+    preview = _preview("", f"aliases: {name}", note="another name")
+    return fresh, f'The note now also answers to "{name}".', preview, ""
+
+
 def _append_link(text: str, note_name: str, heading: str = ""):
     """`(new_text, said, preview, why)` - one `[[Note]]` line."""
     name = str(note_name or "").strip().strip("[]")
     if not name or "\n" in name or "[" in name or "]" in name:
         return text, "", {}, "which note should be linked?"
+    # The chat matcher lowercases the sentence, so the target arrived as
+    # "exercise" and the note was written `[[exercise]]` (measured 2026-11-24).
+    # A target that resolves to a real note takes that note's own title back,
+    # which is what Obsidian links on.
+    try:
+        _row, _why, _matches = find_name(name)
+        if _row and _row.get("path"):
+            name = str(_row["path"]).rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    except Exception:                       # noqa: BLE001 - keep the words given
+        pass
     link_line = "[[" + name + "]]"
     if "[[" + name + "]]" in text:
         return text, "That link is already in the note.", {}, ""
@@ -2698,6 +2778,10 @@ def handle_customize(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
         heading = str(body.get("heading") or "").strip()
         new_text, said, preview, why = _append_link(text, note_name, heading)
         card = f'add a link to "{_split_clip(note_name)}" in'
+    elif action == "add_alias":
+        alias = str(body.get("alias") or "").strip()
+        new_text, said, preview, why = _alias_add(text, alias)
+        card = f'add "{_split_clip(alias)}" as another name for'
     else:
         return _error(400, "unknown action.", state="refused")
     if why:

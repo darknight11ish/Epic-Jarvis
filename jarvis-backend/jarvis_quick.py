@@ -19087,11 +19087,38 @@ _DELETE_NOTE_LEAD = re.compile(
 _DELETE_NOTE_TAIL = re.compile(r"\s+notes?$", re.I)
 _DELETE_VAULT_TAIL = re.compile(
     r"\s+(?:from|in|out\s+of)\s+(?:my|the)\s+(?:obsidian\s+)?vault$", re.I)
+#: A count in front of the note word: "delete three notes: A, B and C", "remove
+#: 2 notes". Measured 2026-11-24: it was read as a note called "three notes:
+#: ideas, draft and shopping", so nothing that was named could ever be deleted.
+_DELETE_COUNT = re.compile(
+    r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a\s+few|some)"
+    r"\s+(?=notes?\b)", re.I)
 #: One list, four ways to write it.
 _DELETE_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
 #: A phrase that names a TOPIC rather than a note ("delete all notes about the
 #: trip"): answered by asking for names, never by guessing which notes match.
 _DELETE_TOPIC = re.compile(r"^(?:about|mentioning|containing|with|of)\b", re.I)
+_DELETE_SET = re.compile(r"\b(?:all|every|each|both|everything)\b", re.I)
+#: The words a SET is made of once its titles are taken out: quantifiers,
+#: articles, the note word itself, and a bare count ("all 3 notes").
+_DELETE_SET_WORDS = re.compile(
+    r"\b(?:all|every|each|both|everything|the|my|our|these|those|any|some|"
+    r"note|notes|of|one|\d+)\b", re.I)
+
+
+def _delete_names_everything(rest: str) -> bool:
+    """True when the sentence asked for a SET and named no title at all.
+
+    "all my notes", "every one of my notes", "delete everything" - yes.
+    "all the Alpha notes" - NO: Alpha is a title, so the ordinary resolver
+    answers it (and says how many matched), never this refusal. Read on the
+    sentence's own words because "every one of my notes" leaves "one of my"
+    after `_delete_phrases`, which would look like a note title.
+    """
+    text = str(rest or "")
+    if not _DELETE_SET.search(text):
+        return False
+    return not _DELETE_SET_WORDS.sub(" ", text).strip(" ,.;:!?")
 #: The scheduler's own nouns. A sentence naming one of these is never claimed by
 #: the note delete unless it also says "note", so "delete my 5pm reminder" and
 #: "delete the timer" stay the scheduler's even when a note happens to be called
@@ -19112,8 +19139,10 @@ def _delete_phrases(rest: str) -> list:
     """
     text = str(rest or "").strip().rstrip(".!?").strip()
     text = _DELETE_VAULT_TAIL.sub("", text).strip()
+    text = _DELETE_COUNT.sub("", text).strip()
     text = _DELETE_ARTICLE.sub("", text).strip()
     text = _DELETE_NOTE_LEAD.sub("", text).strip()
+    text = text.lstrip(":-,;").strip()
     text = _DELETE_NOTE_TAIL.sub("", text).strip()
     text = text.strip().strip('"').strip("'").strip()
     if not text:
@@ -19460,6 +19489,65 @@ def _note_iso_day(now: float, offset: int = 0) -> str:
             + datetime.timedelta(days=int(offset))).isoformat()
 
 
+#: The words that ask for a DATE and nothing else - "add today's date to my mood
+#: log" (the owner, 2026-11-24). Before this the literal words were appended:
+#: measured, a note whose last line read "today's date" and no date anywhere.
+_NOTE_DATE_WORDS = re.compile(
+    r"^(?:(?:the|my)\s+)?(?:(?P<rel>today|yesterday|tomorrow|tonight)"
+    r"(?:'s|s'|s)?\s+)?(?P<what>date|day|current\s+date)$|"
+    r"^(?P<bare>today|yesterday|tomorrow)$", re.I)
+#: A phrase that names a day without naming a date: "last Friday", "next Monday",
+#: "the 3rd of December". The weekday shapes are computed here (python-dateutil
+#: does not read "last Friday"); anything else is read by dateutil, already in
+#: the lock, and never guessed at.
+_NOTE_WEEKDAY_REL = re.compile(
+    r"^(?:(?P<when>last|next|this)\s+)?(?P<day>monday|tuesday|wednesday|"
+    r"thursday|friday|saturday|sunday)(?:'s)?(?:\s+date)?$", re.I)
+_NOTE_WEEKDAY = re.compile(
+    r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"date|of\s+\w+)\b", re.I)
+_NOTE_DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday",
+              "saturday", "sunday")
+
+
+def _note_date_body(text: str, now: float):
+    """`YYYY-MM-DD` when the words are a date phrase, else None.
+
+    Deterministic, and from the TURN's own clock in LOCAL time, so "today" near
+    midnight is the day the owner is living in. The vault's daily-note settings
+    do not apply here: this is a line inside an existing note, and the project's
+    append lane never falls back to a daily note.
+    """
+    import datetime
+    said = " ".join(str(text or "").strip().rstrip(".!?").split())
+    said = said.replace("\u2019", "'").lower()
+    if not said:
+        return None
+    m = _NOTE_DATE_WORDS.match(said)
+    if m:
+        rel = (m.group("rel") or m.group("bare") or "").lower()
+        return _note_iso_day(now, {"yesterday": -1, "tomorrow": 1}.get(rel, 0))
+    m = _NOTE_WEEKDAY_REL.match(said)
+    if m:
+        today = datetime.date.fromtimestamp(now)
+        delta = (_NOTE_DAYS.index(m.group("day").lower()) - today.weekday()) % 7
+        when = (m.group("when") or "").lower()
+        if when == "last":
+            delta = delta - 7 if delta else -7
+        elif when == "next":
+            delta = delta or 7
+        return (today + datetime.timedelta(days=delta)).isoformat()
+    if _NOTE_WEEKDAY.search(said):
+        try:
+            from dateutil import parser as _dp
+            got = _dp.parse(said, default=datetime.datetime.fromtimestamp(now),
+                            fuzzy=False)
+            return got.date().isoformat()
+        except Exception:                   # noqa: BLE001 - unreadable phrase
+            return None
+    return None
+
+
 def _note_date_at_start(text: str, now: float):
     """(YYYY-MM-DD, characters used) for a date phrase at the START of `text`."""
     m = _REL_WHEN.match(text)
@@ -19583,6 +19671,35 @@ def _note_append_name(raw: str) -> str:
     """
     name, _rest = _note_title_and_rest(str(raw or ""))
     return re.sub(r"\s+(?:and|then)\s*$", "", name).strip()
+
+
+_NOTE_NAME_TAIL = re.compile(r"\s+notes?$", re.I)
+
+
+def _note_name_clean(raw: str) -> str:
+    """A note's name with the word "note" taken off its end.
+
+    "set rating to 5 in my Ideas note" read the name as "Ideas note" and then
+    answered 'I could not find a note called "Ideas note"' (measured 2026-11-24).
+    The tail belongs to the sentence, not the title.
+    """
+    return _NOTE_NAME_TAIL.sub("", _note_append_name(str(raw or ""))).strip()
+
+
+#: The words that say "add something" without saying WHAT. They were appended as
+#: content - "add a line to my mood log" wrote the words "a line" (measured
+#: 2026-11-24) - and must ask instead.
+_NOTE_VAGUE_TEXT = frozenset({
+    "a line", "the line", "one line", "a note", "something", "this", "that",
+    "it", "some words", "a few words", "words", "text"})
+
+
+def _note_append_text(raw: str, now: float):
+    """`(text, ask)` - the words to add, or ("", True) when none were given."""
+    said = " ".join(str(raw or "").split()).strip()
+    if said.lower() in _NOTE_VAGUE_TEXT:
+        return "", True
+    return (_note_date_body(said, now) or said), False
 
 
 def _note_create_clauses(rest: str, now: float):
@@ -19901,6 +20018,49 @@ NOTE_REFERRAL_SAID = (
     'Understood: "{alias}" is what you call that note. I find notes by their '
     'name, so say "{alias}" in any chat and I will look for it.')
 
+#: A NAME WRITTEN FOR A NOTE THAT IS NAMED IN THE SAME SENTENCE (2026-11-24,
+#: ruling 5.3): "when I say workout I mean my Exercise note", "call my Exercise
+#: note workout", "add workout as another name for my Exercise note". The name is
+#: written into the note's own Obsidian `aliases:` frontmatter - one card, the
+#: File Guardian snapshot, and the resolver already reads tier 3 - so it works in
+#: every later chat and travels with the note. A referral with no note named in
+#: it ("this particular note") has no target and keeps NOTE_REFERRAL_SAID.
+_NOTE_ALIAS_MEAN = re.compile(
+    r"(?:every time|whenever|any time|when|from now on when)\s+"
+    r"i\s+(?:say|refer to|call it|call that|type|write)\s*"
+    r"(?P<alias>[^,.;]{1,60}?)\s*,?\s*"
+    r"i(?:'m|\s+am)?\s*(?:referring to|talking about|meaning|mean|"
+    r"pointing at)\s+(?:my|the)\s+(?P<name>.+?)\s+note\s*[.!?]?$", re.I)
+_NOTE_ALIAS_CALL = re.compile(
+    r"(?:please\s+)?(?:also\s+)?call\s+(?:my|the)\s+(?P<name>.+?)\s+note\s+"
+    r"(?P<alias>.+?)\s*[.!?]?$", re.I)
+_NOTE_ALIAS_ADD = re.compile(
+    r"(?:add|make|save)\s+(?P<alias>.+?)\s+(?:as\s+)?(?:an?\s+)?"
+    r"(?:another\s+name|alternative\s+name|alias|nickname)\s+for\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s+note\s*[.!?]?$", re.I)
+#: Said after the name is really written. It claims the two things that are
+#: true - the line is in the note, and the resolver reads it - and nothing about
+#: Obsidian's own search index, which this PC does not touch.
+NOTE_ALIAS_SAVED_SAID = (
+    'Say "{alias}" in any chat and I will look for that note. The name is '
+    "written in the note's own aliases line, so it travels with the note.")
+#: "add a line to my mood log" names no words to add. Before 2026-11-24 it
+#: appended the literal words "a line"; the honest answer asks for them.
+NOTE_APPEND_ASK_SAID = (
+    'What should I add to "{name}"? Say "add <the words> to my <note> note", '
+    "and nothing has been written yet.")
+
+#: A READ or a LIST that never says the word "note", but names an existing one
+#: (2026-11-24, found by the corpus): "what's in my mood log" went to the model.
+#: The bare read is claimed only when the name really is a note, so "what's in my
+#: calendar" stays the calendar's. The list shapes name no note at all.
+_NOTE_READ_BARE = re.compile(
+    r"what(?:'s|\s+is)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*[.!?]?$", re.I)
+_NOTE_LIST_WORDS = re.compile(
+    r"(?:what|which)\s+notes\s+(?:do\s+i\s+have|do\s+you\s+have|have\s+you\s+got|"
+    r"are\s+there|you\s+have)"
+    r"|(?:list|show)\s+(?:me\s+)?(?:my|all|the)\s+notes"
+    r"|my\s+notes\s+list\s*[.!?]?$", re.I)
 #: A LINE inside a note is still not deletable (2026-11-23): only a WHOLE note
 #: is, so "delete this line" and a delete that named nothing get two different
 #: true sentences, and neither may borrow the other's words.
@@ -20117,6 +20277,46 @@ def _run_note_location(f: dict, hidden: bool = False) -> Result:
     return Result(
         f"Your notes live in your Obsidian vault, at {vault_text}. Quick captures "
         "go into today's daily note inside it.", "note_location")
+
+
+def _run_note_alias(f: dict) -> Result:
+    """Write another name for a note into its own `aliases:` frontmatter.
+
+    The note is resolved FIRST by `_wave3_note` (the one resolver), so an
+    unknown or ambiguous name answers in words and nothing is written. The write
+    goes through `jarvis_notes_edit.handle_customize`'s `add_alias` action: ONE
+    card, the same File Guardian snapshot every note edit takes, so Undo puts the
+    old frontmatter back byte for byte.
+    """
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _wave3_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_alias_refused")
+    alias = str(f.get("alias") or "").strip()
+    try:
+        import jarvis_notes_edit as E
+        code, out = E.handle_customize(
+            {"path": path, "action": "add_alias", "alias": alias,
+             "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001 - module absent
+        return Result(f"The name could not be saved ({type(exc).__name__}), so "
+                      "nothing was changed.", "note_alias_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was changed.") \
+            if isinstance(out, dict) else "Nothing was changed."
+        return Result(said, "note_alias_refused")
+    out = out if isinstance(out, dict) else {}
+    state = str(out.get("state") or "")
+    said = str(out.get("message") or "").strip()
+    if state in ("saved", "unchanged", "created"):
+        words = said or f'Saved "{alias}" as another name for that note.'
+        return Result(words + " " + NOTE_ALIAS_SAVED_SAID.format(alias=alias),
+                      "note_alias_set")
+    if state == "waiting":
+        return Result(NOTE_DELETE_WAITING_SAID.format(said=said),
+                      "note_alias_waiting")
+    return Result(said or "Nothing was changed.", "note_alias_refused")
 
 
 def _run_note_referral(f: dict) -> Result:
@@ -20558,6 +20758,15 @@ NOTE_DELETE_ASK_SAID = (
     'notes Shopping, Workout and Ideas" - and I will list every one of them on '
     "one card first. I delete up to {most} notes at a time, and nothing was "
     "deleted yet.")
+#: A delete of EVERYTHING, refused in words (2026-11-24, measured). "delete all
+#: my notes" is not a note called "my" and must never be answered as one: the
+#: sentence names a set, so it is refused, the door is named, and the promise
+#: says nothing was deleted. It never guesses which notes the owner meant.
+NOTE_DELETE_EVERY_REFUSED = (
+    "I will not delete every note in your Obsidian vault, so nothing was "
+    "deleted. Name the ones you want - up to {most} at a time, like \"delete "
+    "notes Shopping, Workout and Ideas\" - and I will list every one of them "
+    "on one card before anything moves.")
 #: A name the resolver could not find. `_find_note` answers "not_found" as a
 #: code, so this is where a DELETE says it in words - with the delete's own verb,
 #: because "nothing was written" would be the wrong promise here.
@@ -20649,7 +20858,7 @@ def _run_note_delete(f: dict) -> Result:
 def _run_note_customize(f: dict, action: str, card: str) -> Result:
     if _notes_write_hidden():
         return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
-    path, sha, why = _wave3_note(str(f.get("name") or ""))
+    path, sha, why = _wave3_note(_note_name_clean(str(f.get("name") or "")))
     if path is None:
         return Result(why, "note_customize_refused")
     body = {"path": path, "action": action, "expected_sha256": sha}
@@ -21050,6 +21259,15 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
         return None
     # A sentence about what a NAME means is not a request to write to every
     # note: take it out first, then judge the command on its own words.
+    # When it names the note as well, the name is WRITTEN (ruling 5.3, 2026-11-24).
+    for rx in (_NOTE_ALIAS_MEAN, _NOTE_ALIAS_CALL, _NOTE_ALIAS_ADD):
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        alias = (m.group("alias") or "").strip(" \"'")
+        name = (m.group("name") or "").strip(" \"'")
+        if alias and name:
+            return Intent("note_alias_set", {"name": name, "alias": alias})
     command, alias = _split_note_referral(s)
     if alias and not command:
         return Intent("note_referral", {"alias": alias})
@@ -21272,19 +21490,25 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
         # The words are filed under TODAY's date heading (newest last). `now`
         # is the turn's own clock, so the heading is the day the owner said it
         # and a test can fix it; no model, no earlier conversation.
-        return Intent("note_append", {"name": name,
-                                      "text": m.group("text").strip(),
+        text, ask = _note_append_text(m.group("text"), now)
+        if ask:
+            return Intent("note_append_ask", {"name": name})
+        return Intent("note_append", {"name": name, "text": text,
                                       "dated": _note_iso_day(now)})
     m = _NOTE_APPEND_COLON.fullmatch(s)
     name = _note_append_name(m.group("name")) if m else ""
     if name and (_says_note or _named_note_exists(name)) and not _list_owns_name(name):
-        return Intent("note_append", {"name": name,
-                                      "text": m.group("text").strip()})
+        text, ask = _note_append_text(m.group("text"), now)
+        if ask:
+            return Intent("note_append_ask", {"name": name})
+        return Intent("note_append", {"name": name, "text": text})
     m = _NOTE_APPEND_PLAIN.fullmatch(s)
     name = _note_append_name(m.group("name")) if m else ""
     if name and (_says_note or _named_note_exists(name)) and not _list_owns_name(name):
-        return Intent("note_append", {"name": name,
-                                      "text": m.group("text").strip()})
+        text, ask = _note_append_text(m.group("text"), now)
+        if ask:
+            return Intent("note_append_ask", {"name": name})
+        return Intent("note_append", {"name": name, "text": text})
     # "pin my Workout Log note" / "unpin ..." (2026-11-09). An EXISTING note is
     # an edit, so it rides the customize route's own set_property /
     # remove_property: ONE `edit_vault_note` card, the File Guardian copy first,
@@ -21358,7 +21582,16 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
         tries = _delete_phrases(m.group("rest"))
         if tries and _DELETE_TOPIC.match(tries[0][0]):
             return Intent("note_delete_ask")
-        if tries and (_says_note or _named_note_exists(tries[0][0])):
+        if _delete_names_everything(m.group("rest")):
+            return Intent("note_delete_all")
+        # A list without the word "note" ("delete draft and Shopping") is claimed
+        # when EVERY name in one reading exists as a note. Measured 2026-11-24:
+        # it went to the model with nothing done. A phrase that names no note
+        # still falls through, so "delete my email and calendar" is untouched.
+        if tries and (_says_note
+                      or _named_note_exists(tries[0][0])
+                      or any(all(_named_note_exists(n) for n in t)
+                             for t in tries if t)):
             return Intent("note_delete", {"tries": tries})
         if _says_note:
             return Intent("note_delete_ask")
@@ -21372,6 +21605,13 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     # search, and anything else to the list of what there is. The old refusal
     # ("Chat does not read note text today") is gone: it was true when it was
     # written and this file replaced it.
+    m = _NOTE_READ_BARE.fullmatch(s)
+    if m:
+        bare = str(m.group("name") or "").strip(" \"'")
+        if bare and _named_note_exists(bare):
+            return Intent("note_read", {"title": bare})
+    if _NOTE_LIST_WORDS.fullmatch(s):
+        return Intent("note_list")
     for rx in _NOTE_READ_PATTERNS:
         m = rx.fullmatch(s)
         if not m:
@@ -31824,6 +32064,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result(NOTE_WRITE_BATCH_SAID, "notes_batch_refused")
     if n == "note_referral":
         return _run_note_referral(f)
+    if n == "note_alias_set":
+        return _run_note_alias(f)
+    if n == "note_append_ask":
+        return Result(NOTE_APPEND_ASK_SAID.format(
+            name=f.get("name") or "that note"), "note_append_ask")
     if n == "note_write_hidden":
         return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
     if n == "note_delete":
@@ -31831,6 +32076,9 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "note_delete_ask":
         return Result(NOTE_DELETE_ASK_SAID.format(most=_notes_delete_max()),
                       "note_delete_ask")
+    if n == "note_delete_all":
+        return Result(NOTE_DELETE_EVERY_REFUSED.format(most=_notes_delete_max()),
+                      "note_delete_refused")
     if n == "note_line_delete_refused":
         return Result(NOTE_LINE_DELETE_SAID, "note_line_delete_refused")
     if n == "note_delete_refused":
