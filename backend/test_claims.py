@@ -66,6 +66,17 @@ So this file also proves the checker holds the same contract:
     quoted rather than swallowed): the child does not see the ambient value, and
     does see it when the flag asks for it.
 
+And the AMBIENT REPOSITORY OVERRIDES are ignored too (architect ruling B,
+2026-11-25). `JARVIS_REVIEW_REPO` and `JARVIS_DEFECT_REGISTER` are set at USER
+level on this PC (the first names the MAIN checkout) and absent in CI, so a
+`test:` row's suite that read them judged a different tree at the desk than on a
+runner - measured before the fix, a probe suite the checker started printed the
+main checkout's path from inside a worktree. They now reach a suite only when
+`--repo` names the repository to judge, and one line names what was ignored. So
+this file also proves the env is stripped, that `--repo` points both at that
+copy, that the process's own environment is never mutated, and end to end that a
+set-but-unpassed `JARVIS_REVIEW_REPO` no longer changes a suite's result.
+
 And the suites run OFFLINE (2026-11-13), with the same six switches
 `backend/run_suites.py` forces. Without them the Live settings parity suite
 fetched five model files from Hugging Face inside one turn, and the empty
@@ -111,10 +122,11 @@ And on the real register, four things the checker cannot say about itself:
   * it exits 0 today, so the first run after this lands is green;
   * `--list` prints every row it checked - by id - so the happy line can be
     told apart from a run that looked at nothing;
-  * every one of the five kinds in the vocabulary is used by at least one row
-    (a kind nothing uses is a kind nothing tests);
-  * every row's `source` names a file that exists and a line inside it, so a
-    doc edit that moves the anchor is caught here rather than by a reader.
+  * every one of the seven kinds in the vocabulary is used by at least one row
+    (a kind nothing uses is a kind nothing tests; `symbol:` is row C54's check);
+  * every row's `source` names a file that exists and either a line inside it or
+    a symbol/heading the file really carries, so a doc edit that moves the anchor
+    (or a renamed function) is caught here rather than by a reader.
 
 And the decision record became TWO places on 2026-10-28. A new owner decision is
 one file under `decisions.d/`, rolled into `docs/DECISIONS.md` later
@@ -263,52 +275,68 @@ def t_list_prints_every_row_it_checked():
 
 
 def t_the_vocabulary_is_actually_used():
-    """A kind no row uses is a kind no test of this script would ever reach."""
+    """A kind no row uses is a kind no test of this script would ever reach.
+
+    `symbol:` joined the vocabulary on 2026-11-25 (architect ruling A). Row C54
+    uses it as its check - the same `faceSerious` declaration `grep:` used to
+    name - so the kind is exercised through a real row as well as through the
+    throwaway bite test below.
+    """
     kinds = {row["check"].split(":", 1)[0] for row in
              data_rows(REGISTER.read_text(encoding="utf-8"))
              if row["state"] != "unverifiable"}
-    for kind in ("file", "no-file", "grep", "absent", "test", "number"):
+    for kind in ("file", "no-file", "grep", "absent", "test", "number", "symbol"):
         check(f"the register uses a `{kind}:` row", kind in kinds, sorted(kinds))
 
 
 def source_problems(rows, repo: Path = REPO) -> list:
-    """Every row whose `source` is not a file with a line inside it.
+    """Every row whose `source` does not trace to what it names.
+
+    Three forms are accepted since the 2026-11-25 ruling: `path:line`,
+    `path::symbol` and `doc.md#heading`. The durable two are verified by the
+    checker's own `check_claims.source_problem`, so this suite and the checker
+    cannot disagree about what a citation means - a symbol or heading is looked
+    up in the file, not merely typed into the cell.
 
     Since 2026-10-28 a decision may be recorded as ONE file under
-    `decisions.d/` and rolled into `docs/DECISIONS.md` later, so a source may
-    name EITHER place - both are files with lines, and neither is treated
+    `decisions.d/` and rolled into `docs/DECISIONS.md` later, so a `:line` source
+    may name EITHER place - both are files with lines, and neither is treated
     specially here. What is special is the failure: the roll removes a fragment
     after folding it in, so a pointer that names one that is no longer there is
     told to cite the record, rather than reported as a typo. The roll rewrites
     those cells itself (`tools/roll_decisions.py`), which is what keeps this
     check from ever having to guess where the entry went.
     """
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
     bad = []
     for row in rows:
-        path, _, line = row["source"].rpartition(":")
-        target = repo / path
-        if not target.is_file():
-            hint = ""
-            if path.replace("\\", "/").startswith(DECISION_FRAGMENTS + "/"):
-                hint = (f" - a fragment is removed when it is rolled into "
+        source = row["source"]
+        problem = check_claims.source_problem(source, repo=repo)
+        if problem is None:
+            continue
+        durable = "::" in source or "#" in source
+        path, _, _line = source.rpartition(":")
+        if (not durable
+                and path.replace("\\", "/").startswith(DECISION_FRAGMENTS + "/")
+                and not (repo / path).is_file()):
+            problem += (f" - a fragment is removed when it is rolled into "
                         f"{DECISION_RECORD}; cite the record instead")
-            bad.append(f"{row['id']}: {path} is not a file{hint}")
-            continue
-        if not line.isdigit():
-            bad.append(f"{row['id']}: {row['source']} does not end in a line number")
-            continue
-        total = len(target.read_text(encoding="utf-8", errors="replace").splitlines())
-        if int(line) > total:
-            bad.append(f"{row['id']}: {row['source']} is past the end of {path} "
-                       f"({total} lines)")
+        bad.append(f"{row['id']}: {problem}")
     return bad
 
 
 def t_every_source_points_at_a_real_line():
     """A register whose sources drift off their anchor is a register nobody
-    can trace back to the sentence a claim came from."""
+    can trace back to the sentence a claim came from.
+
+    Since the 2026-11-25 ruling a source may name a symbol or a heading instead
+    of a line, and the CHECKER verifies that the named thing is really there -
+    so the migrated rows are proved here in the required `backend` job as well
+    as by `tools/check_claims.py`."""
     bad = source_problems(data_rows(REGISTER.read_text(encoding="utf-8")))
-    check("every source is a file and a line inside it", not bad, bad)
+    check("every source is a file and a line inside it, or a symbol or heading "
+          "that file really has", not bad, bad)
 
 
 def t_a_source_may_name_a_decisions_fragment():
@@ -331,6 +359,102 @@ def t_a_source_may_name_a_decisions_fragment():
     check("a source that names a rolled-away fragment says to cite the record",
           len(rolled) == 1 and "cite the record instead" in rolled[0]
           and DECISION_RECORD in rolled[0], rolled)
+
+
+def t_a_source_may_name_a_symbol_or_a_heading():
+    """Architect ruling A (2026-11-25): a citation can name a declaration or a
+    heading, and the checker verifies the named thing is really in the file -
+    so a renamed function or a reworded heading is caught, instead of a line
+    number quietly pointing at somebody else's sentence."""
+    root = Path(tempfile.mkdtemp(prefix="claims-citation-"))
+    (root / "mod.py").write_text(
+        "def present():\n    return 1\n\n\nclass PresentThing:\n    pass\n",
+        encoding="utf-8")
+    (root / "doc.md").write_text(
+        "# A document\n\n## The heading a claim cites\n\nWords.\n", encoding="utf-8")
+    good = [
+        {"id": "S1", "source": "mod.py::present"},
+        {"id": "S2", "source": "mod.py::PresentThing"},
+        {"id": "S3", "source": "doc.md#The heading a claim cites"},
+    ]
+    check("a source may name a declaration and a heading the file really has",
+          source_problems(good, root) == [], source_problems(good, root))
+    check("... a heading is matched case-insensitively",
+          source_problems([{"id": "S4", "source": "doc.md#the HEADING a claim cites"}],
+                          root) == [],
+          source_problems([{"id": "S4", "source": "doc.md#the HEADING a claim cites"}], root))
+    missing = source_problems([{"id": "S5", "source": "mod.py::gone"}], root)
+    check("a source naming a symbol that is not declared is reported",
+          len(missing) == 1 and "not declared" in missing[0], missing)
+    missing = source_problems([{"id": "S6", "source": "doc.md#A heading now gone"}], root)
+    check("a source naming a heading that is not there is reported",
+          len(missing) == 1 and "no heading" in missing[0], missing)
+    missing = source_problems([{"id": "S7", "source": "gone.py::present"}], root)
+    check("a source naming a file that is not there is still reported",
+          len(missing) == 1 and "not a file" in missing[0], missing)
+    # The bite: the same citation passes, then the declaration is removed and
+    # the SAME row fails. A form that cannot fail verifies nothing.
+    (root / "mod.py").write_text("def something_else():\n    pass\n", encoding="utf-8")
+    bite = source_problems([{"id": "S8", "source": "mod.py::present"}], root)
+    check("... and a declaration that was removed makes the same source fail",
+          len(bite) == 1 and "not declared" in bite[0], bite)
+
+
+def t_a_symbol_row_bites_on_a_temp_repository():
+    """The `symbol:` CHECK, end to end through the checker in a throwaway
+    repository: it passes while the declaration or heading is there and fails
+    the moment it is gone. The source names a DIFFERENT, still-present symbol,
+    so the failure is the check's own and cannot be the citation's."""
+    root = Path(tempfile.mkdtemp(prefix="claims-symbol-repo-"))
+    (root / "mod.py").write_text(
+        "def present():\n    return 1\n\n\nclass PresentThing:\n    pass\n",
+        encoding="utf-8")
+    (root / "doc.md").write_text(
+        "# A document\n\n## The heading the claim cites\n\nWords.\n", encoding="utf-8")
+    register = root / "CLAIMS.tsv"
+
+    def one(check, source="mod.py::present"):
+        register.write_text(
+            HEADER + f"S1\ta symbol claim\t{check}\tbuilt\t{source}\n",
+            encoding="utf-8")
+        return run("--repo", str(root), str(register))
+
+    code, out = one("symbol:mod.py::present")
+    check("a `symbol:` row passes when the declaration is there", code == 0, out)
+    code, out = one("symbol:mod.py::absent")
+    check("... and FAILS when the symbol is not declared",
+          code == 1 and "not declared" in out, out)
+    code, out = one("symbol:doc.md#The heading the claim cites")
+    check("a `symbol:` heading row passes when the heading is there", code == 0, out)
+    code, out = one("symbol:doc.md#The heading the claim cites".replace(
+        "The heading", "the HEADING"))
+    check("... matched case-insensitively", code == 0, out)
+    code, out = one("symbol:doc.md#A heading that is gone")
+    check("... and FAILS when the heading is gone",
+          code == 1 and "no heading" in out, out)
+    (root / "mod.py").write_text("def something_else():\n    pass\n", encoding="utf-8")
+    code, out = one("symbol:mod.py::present", source="mod.py::something_else")
+    check("... and the same row FAILS once the declaration is removed", code == 1, out)
+
+
+def t_the_about_generator_accepts_the_symbol_kind():
+    """`tools/gen_about_claims.py` counts the register through the checker's own
+    `read_register`, so a `symbol:` row must count like any other - and a
+    symbol/heading SOURCE must not make the About page unreadable. The ruling's
+    second half names this tool, so it is proved here rather than assumed."""
+    tools = REPO / "tools"
+    sys.path.insert(0, str(tools))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "gen_about_claims_probe", tools / "gen_about_claims.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = register_with(
+        "S1\ta symbol row is counted\tsymbol:backend/jarvis_agent.py::with_manner_note"
+        "\tbuilt\tbackend/jarvis_agent.py::with_manner_note\n")
+    values = module.counts(Path(path))
+    check("gen_about_claims counts a `symbol:` row and a symbol-form source",
+          values == {"rows": 1, "built": 1, "open": 0, "unverifiable": 0}, values)
 
 
 def t_the_record_grep_is_answered_by_both_places():
@@ -507,8 +631,12 @@ def t_a_check_kind_nobody_knows_is_refused():
                          "built\tCLAUDE.md:1\n")
     code, out = run(str(path))
     check("a check kind outside the vocabulary exits 1", code == 1, out)
-    check("... and names the five kinds that are allowed",
-          "file, grep, absent, test, number" in out, out)
+    # Each kind by name. The old assertion looked for one contiguous phrase and
+    # was satisfied by "no-file, grep" containing "file, grep" - it never named
+    # all of them, and it would not have noticed a kind missing from the list.
+    check("... and names every kind that is allowed",
+          all(kind in out for kind in ("file", "no-file", "grep", "absent",
+                                       "test", "number", "symbol")), out)
 
 
 def t_an_unknown_state_is_refused():
@@ -583,9 +711,13 @@ def t_a_missing_register_is_not_a_pass():
           "does not exist" in out, out)
 
 
-def t_the_five_kinds_all_answer_on_a_real_row():
+def t_every_kind_all_answers_on_a_real_row():
     """One live row per kind, so a kind that stopped working is caught here and
     not by the register going red for a reason nobody can read.
+
+    `symbol:` is the seventh kind (architect ruling A, 2026-11-25): its live row
+    names a declaration `backend/jarvis_agent.py` really carries, so the kind is
+    proved against the tree a run actually reads, not only against a fixture.
 
     The `test:` row points at a throwaway suite rather than at a real one: a
     real suite can need packages this container has not installed, and pointing
@@ -612,6 +744,7 @@ def t_the_five_kinds_all_answer_on_a_real_row():
         "absent": "absent:CLAUDE.md:a sentence that was never written",
         "test": f"test:{suite}",
         "number": "number:docs/DECISIONS.md:tools/shader_size.py:60,000",
+        "symbol": "symbol:backend/jarvis_agent.py::with_manner_note",
     }
     for name, expr in rows.items():
         path = register_with(f"K-{name}\ta live {name} check\t{expr}\tbuilt\tCLAUDE.md:1\n")
@@ -788,6 +921,11 @@ def t_the_owner_check_skip_is_named_and_not_counted_as_a_pass():
     # accepts it, and removing the entry reddens this row.
     fake_repo = Path(tempfile.mkdtemp(prefix="claims-owner-check-"))
     (fake_repo / "backend").mkdir()
+    # The register's `source` is `CLAUDE.md:1`, and since the 2026-11-25 ruling
+    # the checker verifies every source against the repository it judges - so a
+    # throwaway `--repo` must carry the file its register cites, exactly as a
+    # real copy of the repository would.
+    (fake_repo / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
     (fake_repo / "backend" / "test_owner_check.py").write_text(
         f"print({OWNER_CHECK_SKIP!r})\n"
         f"print('252 passed, 1 skipped, 0 failed')\n", encoding="utf-8")
@@ -864,6 +1002,9 @@ def t_a_documented_environment_skip_is_the_zero_check_exemption():
     """
     fake_repo = Path(tempfile.mkdtemp(prefix="claims-zero-guard-"))
     (fake_repo / "backend").mkdir()
+    # Same reason as the owner-check fake repository above: a `--repo` copy is
+    # judged whole, citations included, so it carries the file its rows cite.
+    (fake_repo / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
     suite = fake_repo / "backend" / "test_owner_check.py"
 
     # 1. The whole body is the documented machine-limit skip: the
@@ -947,6 +1088,9 @@ def t_the_zero_check_rule_reads_the_runners_own_parser():
 #: ambient variable reached the CHILD and not merely this test's own dict.
 LOOKS_LIVE = r"C:\a\pretend live backend"
 
+#: The same shape for the repository overrides (architect ruling B, 2026-11-25).
+LOOKS_OTHER = r"C:\a\pretend other checkout"
+
 
 def env_with_ambient(value=None):
     """This process's environment, carrying `JARVIS_BACKEND` `value` (or not).
@@ -961,6 +1105,18 @@ def env_with_ambient(value=None):
     if value is not None:
         env["JARVIS_BACKEND"] = value
     return env
+
+
+def env_without(*names):
+    """This process's environment with exactly `names` removed, in any spelling.
+
+    Windows treats environment names case-insensitively, so filtering the whole
+    name set (not just one key) means a test cannot pass because two spellings
+    both happened to be present.
+    """
+    upper = {name.upper() for name in names}
+    return {key: value for key, value in os.environ.items()
+            if key.upper() not in upper}
 
 
 def t_the_parser_offers_the_opt_in_flag():
@@ -1017,6 +1173,90 @@ def t_the_ambient_backend_variable_is_ignored_unless_asked_for():
           passed_through.get("JARVIS_BACKEND"))
     check("... and neither call mutates this process's own environment",
           still_there == LOOKS_LIVE, still_there)
+
+
+def t_the_ambient_repository_overrides_are_ignored_unless_a_repo_is_named():
+    """Architect ruling B, second half (2026-11-25): `JARVIS_REVIEW_REPO` and
+    `JARVIS_DEFECT_REGISTER` are set at USER level on this PC (the first names
+    the MAIN checkout) and absent in CI. A `test:` row's suite that reads them
+    used to judge a different tree at the desk than on a runner. They are now
+    removed unless `--repo` names the repository to judge.
+
+    Measured before the fix, with a probe suite started by this checker from a
+    worktree: it printed the main checkout's path. The same probe is what the
+    end-to-end checks below drive.
+    """
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+
+    before = {name: os.environ.get(name) for name in check_claims.AMBIENT_REPO_ENVS}
+    os.environ["JARVIS_REVIEW_REPO"] = LOOKS_OTHER
+    os.environ["JARVIS_DEFECT_REGISTER"] = LOOKS_OTHER + r"\docs\defect-register.tsv"
+    try:
+        note = io.StringIO()
+        with contextlib.redirect_stdout(note):
+            ignored = check_claims._suite_env(False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            named = check_claims._suite_env(False, repo=Path(r"C:\a\named repo"))
+        still = {name: os.environ.get(name) for name in check_claims.AMBIENT_REPO_ENVS}
+    finally:
+        for name, value in before.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+    check("without --repo the environment a suite is given carries neither "
+          "ambient repository override",
+          not any(name in ignored for name in check_claims.AMBIENT_REPO_ENVS),
+          {k: ignored.get(k) for k in check_claims.AMBIENT_REPO_ENVS})
+    check("... and one line names every value that was ignored",
+          "ignoring ambient" in note.getvalue()
+          and "JARVIS_REVIEW_REPO" in note.getvalue()
+          and "JARVIS_DEFECT_REGISTER" in note.getvalue()
+          and LOOKS_OTHER in note.getvalue(), note.getvalue())
+    check("with --repo the suite is told THAT repository, not the machine's",
+          named.get("JARVIS_REVIEW_REPO") == r"C:\a\named repo"
+          and named.get("JARVIS_DEFECT_REGISTER")
+          == str(Path(r"C:\a\named repo") / "docs" / "defect-register.tsv"),
+          {k: named.get(k) for k in check_claims.AMBIENT_REPO_ENVS})
+    check("... and neither call mutates this process's own environment",
+          still["JARVIS_REVIEW_REPO"] == LOOKS_OTHER, still["JARVIS_REVIEW_REPO"])
+
+    # End to end: a suite whose PASS/FAIL is decided by the variable. With the
+    # ambient value set and no --repo the row still passes, so the value did not
+    # change the result.
+    suite = Path(tempfile.mkstemp(suffix=".py")[1])
+    suite.write_text(
+        "import os, sys\n"
+        "print('SEEN=' + str(os.environ.get('JARVIS_REVIEW_REPO')))\n"
+        "print('ok  the ambient repository value is gone')\n"
+        "print('1 passed, 0 skipped, 0 failed')\n"
+        "sys.exit(0 if os.environ.get('JARVIS_REVIEW_REPO') is None else 1)\n",
+        encoding="utf-8")
+    path = register_with(
+        f"X18\tthe suite must judge this checkout\ttest:{suite}\tbuilt\t"
+        f"CLAUDE.md:1\n")
+    code, out = run(str(path), env=env_without(
+        "JARVIS_BACKEND", *check_claims.AMBIENT_REPO_ENVS)
+        | {"JARVIS_REVIEW_REPO": LOOKS_OTHER,
+           "JARVIS_DEFECT_REGISTER": LOOKS_OTHER + r"\docs\defect-register.tsv"})
+    check("a set-but-unpassed JARVIS_REVIEW_REPO no longer changes the result",
+          code == 0, out)
+    # ...and the child really saw nothing, read off its own output: the suite
+    # FAILS on purpose so the checker quotes what it printed.
+    probe = Path(tempfile.mkstemp(suffix=".py")[1])
+    probe.write_text(
+        "import os, sys\n"
+        "print('SEEN=' + str(os.environ.get('JARVIS_REVIEW_REPO')))\n"
+        "print('DEFECT=' + str(os.environ.get('JARVIS_DEFECT_REGISTER')))\n"
+        "sys.exit(1)\n", encoding="utf-8")
+    path = register_with(
+        f"X19\tthe suite must print what it saw\ttest:{probe}\tbuilt\tCLAUDE.md:1\n")
+    code, out = run(str(path), env=env_without(
+        "JARVIS_BACKEND", *check_claims.AMBIENT_REPO_ENVS)
+        | {"JARVIS_REVIEW_REPO": LOOKS_OTHER})
+    check("... and a suite the checker starts sees SEEN=None from its own print",
+          "SEEN=None" in out and "ignoring ambient" in out, out)
 
 
 def t_the_model_loaders_are_forced_offline_like_the_runner():
@@ -1158,6 +1398,9 @@ if __name__ == "__main__":
                t_the_vocabulary_is_actually_used,
                t_every_source_points_at_a_real_line,
                t_a_source_may_name_a_decisions_fragment,
+               t_a_source_may_name_a_symbol_or_a_heading,
+               t_a_symbol_row_bites_on_a_temp_repository,
+               t_the_about_generator_accepts_the_symbol_kind,
                t_the_record_grep_is_answered_by_both_places,
                t_the_about_page_quotes_the_register_it_describes,
                t_a_built_row_that_stopped_holding_fails,
@@ -1172,7 +1415,7 @@ if __name__ == "__main__":
                t_an_unverifiable_row_with_a_reason_is_green,
                t_an_empty_register_is_not_a_pass,
                t_a_missing_register_is_not_a_pass,
-               t_the_five_kinds_all_answer_on_a_real_row,
+               t_every_kind_all_answers_on_a_real_row,
                t_a_skipped_substance_is_not_proof,
                t_a_clean_suite_still_proves_a_row,
                t_a_skip_count_with_no_reason_is_not_proof,
@@ -1183,6 +1426,7 @@ if __name__ == "__main__":
                t_the_zero_check_rule_reads_the_runners_own_parser,
                t_the_parser_offers_the_opt_in_flag,
                t_the_ambient_backend_variable_is_ignored_unless_asked_for,
+               t_the_ambient_repository_overrides_are_ignored_unless_a_repo_is_named,
                t_the_model_loaders_are_forced_offline_like_the_runner,
                t_a_suite_leaves_no_bytecode_in_the_tree,
                t_a_suite_the_checker_runs_does_not_see_the_ambient_value):

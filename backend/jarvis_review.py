@@ -173,9 +173,11 @@ _FRAGMENT_NAME = re.compile(r"^(\d{4}-\d{2}-\d{2})-([a-z0-9][a-z0-9-]*)\.md$")
 #: is the em dash, exactly as `tools/roll_decisions.py`'s own `BULLET_RE` has it.
 _DECISION_BULLET = re.compile(r"^- \*\*(\d{4}-\d{2}-\d{2}) \u2014 .+?:\*\*\s+\S", re.S)
 
-#: The six kinds a claims row's `check` column may begin with
-#: (`tools/check_claims.py`'s own list).
-CLAIM_CHECK_KINDS = ("file:", "no-file:", "grep:", "absent:", "test:", "number:")
+#: The seven kinds a claims row's `check` column may begin with
+#: (`tools/check_claims.py`'s own list). `symbol:` joined on 2026-11-25
+#: (architect ruling A): the file exists AND declares that symbol or heading.
+CLAIM_CHECK_KINDS = ("file:", "no-file:", "grep:", "absent:", "test:", "number:",
+                     "symbol:")
 
 #: The states a claims row may carry.
 CLAIM_STATES = ("built", "open", "unverifiable")

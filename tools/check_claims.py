@@ -79,7 +79,7 @@ and a row about stale prose carries an `absent` for the wrong sentence. When
 somebody fixes that prose the `absent` starts passing, and rule 2 above tells
 the next reader to flip the row.
 
-THE SIX KINDS, each with a definite answer:
+THE SEVEN KINDS, each with a definite answer:
 
   * `file:<path>` - this file exists (repo-relative, `/` separators);
   * `no-file:<path>` - this file is NOT there. `file:`'s mirror, and it was
@@ -100,11 +100,29 @@ THE SIX KINDS, each with a definite answer:
     name resolved under `backend/`; the skip rule is the next paragraph);
   * `number:<doc>:<path>:<value>` - the figure `<value>` is written in `<doc>`
     AND the same number appears in `<path>`, comparing digits only so
-    `7,680` and `7680` and `60_000` are the same figure.
+    `7,680` and `7680` and `60_000` are the same figure;
+  * `symbol:<path>::<name>` or `symbol:<path>#<heading>` - the file exists AND
+    contains that named declaration or that markdown heading (architect
+    ruling A, 2026-11-25). `::` names a DECLARATION - a Python `def`/`class`,
+    a Rust `fn`/`struct`/`const`, a JS `function`/`const`, a Kotlin
+    `fun`/`val`/`class`/`object` - matched case-sensitively after the keyword
+    that declares it, never a mention in prose. `#` names a markdown heading,
+    matched case-insensitively on its text with whitespace collapsed. This is
+    the kind that does not rot when a file grows above the place it names.
+
+A CLAIM'S `source` MAY USE THE SAME DURABLE FORMS (2026-11-25). Beside
+`path:line` - which is still accepted, and still rots as soon as an edit lands
+above it - a source may be `path::symbol` or `doc.md#heading`. `read_register`
+verifies every source: the file must be in the tree, a `:line` must be inside
+the file, and a symbol/heading must really be present. So a renamed function or
+reworded heading turns the register red the day it moves, instead of leaving a
+citation that points at a sentence the document no longer has. The migration of
+the worst-rotted rows is why this exists; the source comment in
+`docs/CLAIMS.tsv` says which form to use.
 
 A claim that needs judgement goes in as `unverifiable` with the reason in the
-`check` column - never as a guess. A reason that begins with one of the five
-kinds is refused, because a row that names a definite check cannot be
+`check` column - never as a guess. A reason that begins with one of the kinds
+above is refused, because a row that names a definite check cannot be
 unverifiable.
 
 A SKIP IS NOT PROOF. `test:` used to read success from the exit code alone, and
@@ -228,8 +246,18 @@ DECISION_FRAGMENTS = "decisions.d"
 #: guessed at, because a register whose shape is uncertain cannot be checked.
 COLUMNS = ("id", "claim", "check", "state", "source")
 
-#: The six kinds a `check` may be, each with a definite answer.
-KINDS = ("file", "no-file", "grep", "absent", "test", "number")
+#: The seven kinds a `check` may be, each with a definite answer. `symbol` was
+#: added 2026-11-25 (architect ruling A) so a claim can name a declaration or a
+#: heading that survives normal edits, instead of a `grep:` for a sentence that
+#: may be reworded - and so a row's `source` can use the same durable forms.
+KINDS = ("file", "no-file", "grep", "absent", "test", "number", "symbol")
+
+#: The ambient variables that name state OUTSIDE this checkout - the review
+#: gates' repository and the defect register file. They are set at USER level on
+#: the owner's PC and absent in CI, so a `test:` row's suite that reads them
+#: judges a different tree at the desk than on a runner (architect ruling B,
+#: 2026-11-25). `_suite_env` removes them unless `--repo` names a repository.
+AMBIENT_REPO_ENVS = ("JARVIS_REVIEW_REPO", "JARVIS_DEFECT_REGISTER")
 
 #: The three states a row may carry.
 STATES = ("built", "open", "unverifiable")
@@ -693,6 +721,177 @@ def check_number(doc: str, path: str, value: str):
     return True, f"{value} in {doc} agrees with {digits} in {path}"
 
 
+#: A symbol is a DECLARATION, not a mention (architect ruling A, 2026-11-25).
+#: The name must follow a keyword that declares it, anchored at the start of a
+#: line, with any run of MODIFIERS in front (`pub async fn`, `pub(crate) fn`,
+#: `private suspend fun`, `export const`, `static mut`, an annotation such as
+#: `@Composable`, an `extern "C"` block). The languages the ruling names -
+#: Python `def`/`class`, Rust `fn`/`struct`/`const`, JS `function`/`const` - and
+#: the Kotlin declarations this repository also cites (`fun`, `val`/`var`,
+#: `class`, `object`) all read the same way. Case-sensitive: `faceSerious` is not
+#: `FaceSerious`. A name in a comment or a docstring does not count as a
+#: declaration (a plain word is not a modifier, so prose cannot slip through); a
+#: `grep:` is the kind for a text mention.
+SYMBOL_MODIFIERS = (
+    "export", "default", "declare", "pub", "async", "unsafe", "const", "static",
+    "public", "private", "internal", "protected", "override", "suspend", "inline",
+    "operator", "open", "final", "abstract", "data", "sealed", "annotation",
+    "value", "external", "extern", "tailrec", "infix", "lateinit", "actual",
+    "expect", "readonly")
+
+SYMBOL_DECLARATION = (
+    r"(?m)^[ \t]*(?:(?:(?:" + "|".join(SYMBOL_MODIFIERS) + r")(?:\([^)\n]*\))?"
+    r"|@[A-Za-z_][\w]*(?:\([^)\n]*\))?"
+    r"|\"[^\"\n]*\")[ \t]+)*"
+    r"(?:def|class|fn|struct|const|static(?:[ \t]+mut)?|function|fun|val|var|let|"
+    r"object|interface|trait|enum|type)[ \t]+(?:<[^>\n]*>[ \t]*)?")
+
+#: One markdown ATX heading - `# Title` to `###### Title`, indented at most
+#: three spaces, with any run of closing `#`s ignored (CommonMark).
+HEADING_LINE = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$")
+
+
+def symbol_present(text: str, name: str) -> bool:
+    """Does `text` declare `name`? A declaration, not a mention - see above."""
+    if not name:
+        return False
+    pattern = SYMBOL_DECLARATION + re.escape(name) + r"(?=[\s(:<{,=]|$)"
+    return re.search(pattern, text) is not None
+
+
+def heading_present(text: str, heading: str) -> bool:
+    """Does `text` carry a markdown heading whose TEXT is `heading`?
+
+    Case-insensitive, whitespace collapsed, matched on the heading's text
+    (never its level, and never a substring of a longer heading) - the form
+    `docs/FILE.md#section-heading` names. The heading's punctuation is part of
+    it, so a reworded heading fails instead of quietly pointing at a nearby
+    section.
+    """
+    want = " ".join(heading.split()).casefold()
+    if not want:
+        return False
+    for line in text.splitlines():
+        match = HEADING_LINE.match(line)
+        if match and " ".join(match.group(1).split()).casefold() == want:
+            return True
+    return False
+
+
+def check_symbol(where: str, form: str, target: str):
+    """(passed, detail) for a `symbol:` check: the file exists AND names it.
+
+    `form` is "symbol" (`path::name`) or "heading" (`path#heading`). The file is
+    judged by the TRACKED tree, like every other path in this checker, so a
+    scratch copy is not evidence - and a binary file cannot hide a symbol.
+    """
+    kind = tracked_entry(where)
+    if kind is None:
+        return False, f"no such path: {where}"
+    if kind != "file":
+        return False, f"{where} is a directory, not a file"
+    text, why = read_text(REPO / where)
+    if why:
+        return False, f"{where} {why}"
+    if text is None:
+        return False, f"{where} is not a text file, so no {form} can be read in it"
+    if form == "symbol":
+        if symbol_present(text, target):
+            return True, f"{target!r} is declared in {where}"
+        return False, (f"{target!r} is not declared in {where} (no def, class, "
+                       f"fn, struct, const, function, fun, val or object names it)")
+    if heading_present(text, target):
+        return True, f"the heading {target!r} is in {where}"
+    return False, f"no heading {target!r} in {where}"
+
+
+def _read_source_text(path: Path) -> str | None:
+    """The file's text, or None when it cannot be read (the caller says why)."""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _source_text(path: Path, texts: dict | None = None) -> str | None:
+    """`path`'s text, cached per run when `texts` is given (None if unreadable)."""
+    key = str(path)
+    if texts is not None and key in texts:
+        return texts[key]
+    text = _read_source_text(path)
+    if texts is not None:
+        texts[key] = text
+    return text
+
+
+def source_problem(source: str, repo: Path | None = None,
+                   texts: dict | None = None) -> str | None:
+    """Why this `source` cell does not trace to what it names, or None.
+
+    Three forms are accepted, and the durable two are VERIFIED here rather than
+    trusted (architect ruling A, 2026-11-25):
+
+      * `path:line` - the file exists and the line is inside it. This is the old
+        form: correct when written, and wrong the moment an edit lands above it.
+        It stays accepted because not every row is migrated; a new row should
+        prefer one of the forms below.
+      * `path::symbol` - the file exists AND declares that symbol.
+      * `doc.md#heading` - the file exists AND carries that exact heading.
+
+    `repo` is the tree the path is judged against (the checker's `REPO`, or a
+    throwaway repository in the tests). `texts` is an optional cache so a run
+    that reads one big document 65 times reads it once.
+    """
+    base = Path(repo) if repo is not None else REPO
+    source = (source or "").strip()
+    if not source:
+        return "the source names nothing"
+    if "::" in source:
+        where, _, name = source.partition("::")
+        where, name = where.strip(), name.strip()
+        if not where or not name:
+            return f"{source!r} needs <path>::<symbol>"
+        return _citation_problem(base, where, "symbol", name, texts)
+    if "#" in source:
+        where, _, heading = source.partition("#")
+        where, heading = where.strip(), heading.strip()
+        if not where or not heading:
+            return f"{source!r} needs <path>#<heading>"
+        return _citation_problem(base, where, "heading", heading, texts)
+    path, _, line = source.rpartition(":")
+    where = path.strip()
+    line = line.strip()
+    target = base / where
+    if not where or not target.is_file():
+        return f"{where or source!r} is not a file"
+    if not line.isdigit():
+        return f"{source!r} does not end in a line number"
+    text = _source_text(target, texts)
+    if text is None:
+        return f"{where} could not be read"
+    total = len(text.splitlines())
+    if int(line) > total or int(line) < 1:
+        return f"{source!r} is past the end of {where} ({total} lines)"
+    return None
+
+
+def _citation_problem(base: Path, where: str, form: str, target: str,
+                      texts: dict | None) -> str | None:
+    path = base / where
+    if not path.is_file():
+        return f"{where} is not a file"
+    text = _source_text(path, texts)
+    if text is None:
+        return f"{where} could not be read"
+    if form == "symbol":
+        if symbol_present(text, target):
+            return None
+        return f"{target!r} is not declared in {where}"
+    if heading_present(text, target):
+        return None
+    return f"no heading {target!r} in {where}"
+
+
 def skip_blocks(output: str) -> list[str]:
     """Every skip a suite printed, one string each, marker plus its reason.
 
@@ -871,7 +1070,8 @@ def exception_lines(text: str, limit: int = 2) -> list[str]:
     return found[-limit:]
 
 
-def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
+def _suite_env(use_env_backend: bool = False,
+               repo: Path | None = None) -> dict[str, str]:
     """The environment every `test:` row's suite is started with.
 
     THE DEFAULT IS HERMETIC, the contract `backend/run_suites.py:881-884` holds
@@ -883,6 +1083,18 @@ def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
     is 95/95 green against this checkout. So the ambient value is popped from
     the copy this returns and NEVER reaches a suite; `--use-env-backend` puts it
     back on purpose.
+
+    AND AMBIENT REPOSITORY OVERRIDES ARE IGNORED TOO (architect ruling B,
+    2026-11-25). `JARVIS_REVIEW_REPO` and `JARVIS_DEFECT_REGISTER` are set at
+    USER level on this PC - the first names the MAIN checkout, the second a file
+    inside it - and CI sets neither. A `test:` row's suite that reads them
+    therefore judges a different tree at the desk than on a runner: measured
+    before this fix, a probe suite started by this checker printed
+    `SEEN=C:\\Users\\pcadmin\\Documents\\Jarvis github\\Epic-Jarvis-main` from
+    inside a worktree whose own tree it was supposed to test. They are removed
+    unless `--repo` names the repository to judge, in which case they are set to
+    THAT repository (and its `docs/defect-register.tsv`) so a suite reading them
+    reads what the checker is judging. One line names what was ignored.
 
     THE MODEL LOADERS ARE OFFLINE IN EVERY RUN, the same six switches and values
     `backend/run_suites.py` forces (`OFFLINE_ENVS`, 2026-10-18). Without them a
@@ -909,6 +1121,20 @@ def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
     env = dict(os.environ)
     env.update(OFFLINE_ENVS)
     env.update(NO_BYTECODE_ENVS)
+    ignored: list[str] = []
+    if repo is not None:
+        # The operator explicitly named the repository with --repo: every suite
+        # that reads a repository override is told the SAME one.
+        env["JARVIS_REVIEW_REPO"] = str(repo)
+        env["JARVIS_DEFECT_REGISTER"] = str(Path(repo) / "docs" / "defect-register.tsv")
+    else:
+        for name in AMBIENT_REPO_ENVS:
+            value = env.pop(name, None)
+            if value:
+                ignored.append(f'{name}="{value}"')
+    if ignored:
+        print(f"[check_claims] Note: ignoring ambient {', '.join(ignored)} "
+              f"(a suite judges THIS checkout; pass --repo to name another one)")
     if use_env_backend:
         return env
     ambient = env.pop("JARVIS_BACKEND", None)
@@ -1012,6 +1238,19 @@ def parse_check(check: str):
         if not rest.strip():
             return None, None, "test: names no suite"
         return kind, (rest.strip(),), ""
+    if kind == "symbol":
+        # symbol:<path>::<name>  OR  symbol:<path>#<heading>
+        if "::" in rest:
+            where, _, name = rest.partition("::")
+            if not where.strip() or not name.strip():
+                return None, None, "symbol: needs <path>::<symbol> or <path>#<heading>"
+            return kind, (where.strip(), "symbol", name.strip()), ""
+        if "#" in rest:
+            where, _, heading = rest.partition("#")
+            if not where.strip() or not heading.strip():
+                return None, None, "symbol: needs <path>::<symbol> or <path>#<heading>"
+            return kind, (where.strip(), "heading", heading.strip()), ""
+        return None, None, "symbol: needs <path>::<symbol> or <path>#<heading>"
     # number:<doc>:<path>:<value>
     doc, sep, rem = rest.partition(":")
     path, sep2, value = rem.partition(":")
@@ -1035,6 +1274,8 @@ def run_row(row: dict, env: dict[str, str] | None = None):
         return check_grep(args[0], args[1], False)
     if kind == "test":
         return check_test(*args, env=env)
+    if kind == "symbol":
+        return check_symbol(*args)
     return check_number(*args)
 
 
@@ -1051,6 +1292,9 @@ def read_register(register: Path = REGISTER):
         return rows, [f"{relative(register)} does not exist"]
     seen: dict[str, int] = {}
     seen_bodies: dict[tuple, int] = {}
+    #: One cache for this read: a 42,000-line document cited by 65 rows is
+    #: opened once, not 65 times.
+    source_texts: dict[str, str | None] = {}
     for number, raw in enumerate(
             register.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw.strip() or raw.lstrip().startswith("#"):
@@ -1099,6 +1343,20 @@ def read_register(register: Path = REGISTER):
                     f"{relative(register)}:{number}  {row['id']}: a row is "
                     f"unverifiable only when NO definite check exists, and this "
                     f"one's reason starts with `{first}:`, which is a check")
+        # THE CITATION IS VERIFIED, NOT TRUSTED (architect ruling A,
+        # 2026-11-25). A `source` is how a reader traces a claim back to the
+        # sentence it came from; a file:line whose line has moved points at
+        # somebody else's sentence, and nothing used to say so (56 of the
+        # worst-rotted rows were measured more than 10 lines off). The durable
+        # forms are checked for the file AND the symbol/heading; the old line
+        # form is checked for the file and that the line is inside it. This runs
+        # for every row, in one pass, with `texts` so a big document read by 65
+        # rows is read once.
+        citation = source_problem(row["source"], texts=source_texts)
+        if citation:
+            problems.append(
+                f"{relative(register)}:{number}  {row['id']}: source "
+                f"{row['source']!r} cannot be traced - {citation}")
         rows.append(row)
     return rows, problems
 
@@ -1140,10 +1398,15 @@ def _parser() -> argparse.ArgumentParser:
     # `docs/DECISIONS.md` and a `decisions.d/` fragment disagree, so the rule
     # that the decision record is read in BOTH places is proved end to end
     # instead of asserted. Pointing this at the wrong folder cannot pass, only
-    # fail differently - every row is then answered about that folder.
+    # fail differently - every row is then answered about that folder. Since the
+    # 2026-11-25 ruling B it is also the ONE way an ambient repository override
+    # reaches a `test:` row's suite: naming a repository here sets
+    # `JARVIS_REVIEW_REPO` and `JARVIS_DEFECT_REGISTER` to that copy.
     parser.add_argument("--repo", default=None,
                         help="the repository to judge paths against (default: "
-                             "this checkout)")
+                             "this checkout); every suite a test: row starts is "
+                             "told this repository too, instead of the machine's "
+                             "ambient JARVIS_REVIEW_REPO")
     return parser
 
 
@@ -1161,11 +1424,15 @@ def main() -> int:
 
     # ONE environment for every `test:` row, built before any suite runs and
     # used only through `subprocess.run(env=...)`. The ambient `JARVIS_BACKEND`
-    # is gone unless `--use-env-backend` asked for it, and one line says so when
-    # it was there - the contract `backend/run_suites.py:881-884` has held since
-    # 2026-10-21, which this check did not (2026-10-25). Built here, once, so
-    # the note is printed once rather than once per row.
-    suite_env = _suite_env(args.use_env_backend)
+    # is gone unless `--use-env-backend` asked for it, and the ambient repository
+    # overrides (`JARVIS_REVIEW_REPO`, `JARVIS_DEFECT_REGISTER`) are gone unless
+    # `--repo` named a repository - one line says what was ignored. Built here,
+    # once, so the note is printed once rather than once per row. The contract
+    # `backend/run_suites.py:881-884` has held since 2026-10-21, which this check
+    # did not (2026-10-25); the repository overrides joined it under architect
+    # ruling B (2026-11-25).
+    suite_env = _suite_env(args.use_env_backend,
+                           REPO if args.repo else None)
     # A second `main()` in one process (a test) starts with no skips or suite
     # counts carried over from the first.
     ACCEPTED_ENVIRONMENT_SKIPS.clear()
