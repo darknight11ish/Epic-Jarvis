@@ -353,36 +353,68 @@ instruction tries to wear a person into pressing Approve without reading.
 The limit is a refusal, never a grant. `backend/README.md`, "The approval
 gate, tightened".
 
-**A standing permission is allowed for exactly ONE action, and it is never a
+**Standing permissions are allowed for exactly TWO things, and neither is a
 setting** (the owner's ask, 2026-11-01: *"you have full approval to search the
 web for anything during this conversation ... make sure a card comes up that I
 have to approve before this happens"*, and *"if I ask anything further like book
 a flight for me online then it will have to have another card"*; `docs/JARVIS-API.md`
-section 175). ONE card, once, stands in for the `search_the_web` card for the rest
-of ONE conversation - and for nothing else. The four rules that make it a
+section 175. The second was added on 2026-11-25 with full GitHub mode, the
+owner's *"less restrictions and less cards"* - and it is GitHub-shaped only, for
+the reasons at the end of this paragraph). ONE card, once, stands in for the
+`search_the_web` card for the rest of ONE conversation; and ONE card, once,
+stands in for the `github_fix_write` card in the ONE chat full GitHub mode was
+turned on from - each for nothing else. The four rules that make it a
 permission model rather than a hole in it:
 
-- **One action.** The only code that reads a grant is `_web_search_call`, the one
-  place whose gate action is `search_the_web`; the only code that writes or
-  clears one is the pair of tools that ask for it and stop it. Every other
-  action keeps its own tier, its own card and its own yes - "book a flight" is
-  `browser_control` and still asks, with a grant live.
+- **One action each.** The only code that reads a grant is the one place whose
+  gate action it replaces: `_web_search_call` for `search_the_web`, and
+  `_github_fix_write_grant` (reached from `_one_call` before `checker()`) for
+  `github_fix_write` alone - never the fix loop's PUSH stage, never a merge.
+  The only code that writes or clears one is the pair of tools that ask for it
+  and stop it, or the mode's own switch. Every other action keeps its own tier,
+  its own card and its own yes - "book a flight" is `browser_control` and still
+  asks, with a grant live.
 - **A card first, always.** The model may ask for the grant; it may never decide
   it. The store is written only down the ordinary prepare()/gate/execute() path
   after a verdict from a card, a denial or an unanswered card writes nothing, and
   the tool is in `NEEDS_A_PERSON`, so a settings file that loosened its tier
-  still cannot make it self-approve.
+  still cannot make it self-approve. Full GitHub mode's per-file approval follows
+  the same rule: `jarvis_asks_first.set_github_mode` writes it only after the
+  mode's OWN card was approved, on the PC, with Windows Hello.
 - **It dies by itself.** Keyed on the request's own `conversation_id` (so one
   chat's grant cannot reach another, and a request with no id can neither give
   nor use one), capped at 8 hours, in memory only - no file, no setting, nothing
   that survives a restart - and ended instantly by the stop tool, which is tier
-  `auto` because revoking only ever takes permission away. Lockdown outranks it.
-- **Always logged.** `gate.grant_made`, one `gate.granted` per search it covered
-  (with the grant's id) and `gate.grant_ended` go in the gate's own audit log,
-  written through `jarvis_gate`'s own functions. The conversation id is never
-  written down, so the log says a search ran unasked without becoming a way to
-  link chats together. A backend whose gate is too old to write those lines
-  refuses to create a grant at all.
+  `auto` because revoking only ever takes permission away, or by turning full
+  GitHub mode off. Lockdown outranks both.
+- **Always logged.** `gate.grant_made`, one `gate.granted` per search or file
+  write it covered (with the grant's id) and `gate.grant_ended` go in the gate's
+  own audit log, written through `jarvis_gate`'s own functions. The conversation
+  id is never written down, so the log says a search ran unasked without becoming
+  a way to link chats together. A backend whose gate is too old to write those
+  lines refuses to create a grant at all.
+
+**The second one, and why it is GitHub-shaped only** (2026-11-25). Full GitHub
+mode is ONE PC setting, `<settings>/github-mode.json`, and that one file is both
+the mode's state and a second standing yes of the same kind the Presets menu's
+Cloud switch is: `jarvis_router.choose()` reads it at gate 6, through
+`github_mode_escalation()`, and nowhere else. It differs from the Cloud switch in
+scope, deliberately. It is consulted only when `github_shaped_turn()` says the
+newest message is about GitHub work (a repository, a branch, a pull request, CI,
+a workflow, a merge or a push), so a tax question, a private one, or anything a
+gate above refused still stays exactly where it was; it never lifts a gate, since
+gates 0b-3 run first and can only answer local; and the per-file approval it
+grants is the second standing permission above, one action, one chat, eight
+hours, ended by an off, a new chat, a restart or Lockdown. A second WHOLE-cloud
+switch is wider than the owner asked for and would make its card's words false,
+which is why the Presets switch stays the one that covers every hard question.
+Nothing else is loosened: merge, push, open a pull request, comment, re-run a
+workflow, create a repository, use a workflow, change labels, edit a pull request
+and post a review each keep their own card and their own `ask` tier, email,
+files, credentials and stored memory still never leave this PC, and the mode adds
+no `auto` line to any action. `backend/test_github_mode.py`,
+`backend/test_github_mode_chat.py` and `backend/test_github_mode_router.py` hold
+the whole of it.
 
 **THE OWNER CAN CHANGE WHAT ASKS, BY TALKING - ONE ACTION AND ONE THING AT A
 TIME** (the owner's ask of 2026-11-05: *"i would also like the ability to
@@ -3291,7 +3323,14 @@ backend routes, in both directions; the rest are listed here only.
   rebase, no admin bypass, no auto-merge, no bypassing required checks, no
   pushing to main, no delete or close of a repository or branch, no approve-pr,
   no workflow dispatch and no gist. `backend/test_github_tools.py` holds the
-  whole of it.
+  whole of it. **Full GitHub mode** (2026-11-25) is a second switch beside that
+  group, with its own payload object `tools.github_mode`: the phone reads ONLY
+  that object from the asks-first payload and may send
+  `{"tool": "github_mode", "enabled": false}` through the existing
+  `POST /api/asks_first/tools` - the OFF half, at once and with no card - while
+  every per-tool switch stays desktop-only, and the mode's ON is requested from
+  the PC only (`403 pc_only` away from it) and its card is approved there with
+  Windows Hello (`jarvis_owner_check.PC_ONLY_ACTIONS`).
 
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
@@ -4434,7 +4473,7 @@ are deliberate and recorded rather than left to be discovered:
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
-| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 60 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
+| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello on the PC. **Corrected 2026-11-25:** the REQUEST to turn a tool ON is still refused from any device but the PC (`403 pc_only`, `jarvis_asks_first.request_tool_enable`), but the card's APPROVAL is no longer PC-only - the owner's ruling of 2026-11-10 lets the phone approve a tool switch too, with its own signed approval (a fingerprint or PIN over a one-use challenge), and a phone with no approval key is refused with the sentence that offers to set one up. `enable_reading_tool` is a RISKY row, not a `jarvis_owner_check.PC_ONLY_ACTIONS` member; `change_approval_policy` and full GitHub mode's `github_mode` are the two loosening cards that set is for. CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 60 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
 | "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
 | A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |

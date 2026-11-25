@@ -173,6 +173,12 @@ TOOL_NAMES = {
     # rule - the row says so in words rather than claiming the tool's own
     # action name (SETTINGS_GATE_ACTION) is the whole truth.
     "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
+    # Full GitHub mode (2026-11-25): the mode switch, whose ONE card is the
+    # Settings, "What asks first" row's own switch - the same shape as the Cloud
+    # row above. Listed because test_reach.py requires every tool to have plain
+    # words for the "What can Jarvis reach" page.
+    "github_mode": "Full GitHub mode (its card is the Settings, What asks first row's "
+                   "own switch; it can only be turned on from the PC)",
     "change_setting": "Changing one of Jarvis's own settings when you ask (only a "
                       "loosening, or a switch that reads more, asks first)",
     # FEATURE_GUIDE_TOOL (2026-10-20): read-only, always no card - it lists and

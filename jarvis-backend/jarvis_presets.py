@@ -1097,6 +1097,89 @@ def _write_cloud_escalate(on: bool) -> bool:
         return False
 
 
+# --------------------------------------------------------------------------
+#   Full GitHub mode (slice 1, 2026-11-25) - the SECOND standing yes
+# --------------------------------------------------------------------------
+# ONE FILE, AND IT IS BOTH THE MODE AND THE STANDING YES. The owner's ask:
+# "also add a full github mode that gives full parity with less restrictions and
+# less cards ... it can be enabled in chat or settings and forwards anything
+# necessary to the cloud api"; "activating github mode needs a card". The design
+# first wrote the mode as a setting and the standing yes as a second file; that
+# is two facts one switch would have to keep in step, and the day they disagree
+# is the day "off" is on. So this file IS the mode: `github-mode.json` says
+# `{"on": true}` and nothing else is the truth.
+#
+# WRITTEN ONLY AFTER A CARD. `jarvis_asks_first.set_github_mode` raises ONE
+# `github_mode` card (PC-only, Windows Hello - `jarvis_owner_check.
+# PC_ONLY_ACTIONS`) and calls `write_github_mode` only when a person approved
+# it. Turning it OFF is immediate and cardless, the asymmetry every other
+# switch in this program keeps; the caller also clears the conversation grant
+# in jarvis_agent.py, and the grant READS this file on every use, so a stale
+# in-memory grant cannot outlive an off.
+#
+# READ WHERE. `jarvis_router.github_mode_escalation()` is the ONLY reader that
+# decides anything, and it is consulted at gate 6 and nowhere else - so no
+# request body, header or client flag can reach it, and every privacy gate in
+# choose() has already had its chance to answer local. `jarvis_asks_first` and
+# `jarvis_agent` read it for the status/payload and for the fix-write grant;
+# neither can *set* it.
+#
+# WHY IT IS SEPARATE FROM `escalate-cloud.json` (an owner decision for the lead,
+# recorded in the design): reusing the cloud switch would make GitHub mode cover
+# every cloud-escalatable turn, which is wider than the owner asked for. This
+# one is consulted only for a GitHub-shaped turn (`github_shaped_turn`) and it
+# does not choose the service - the Presets menu's own Cloud row does.
+GITHUB_MODE_FILE = "github-mode.json"
+
+
+def _github_mode_path():
+    return _config_dir() / GITHUB_MODE_FILE
+
+
+def github_mode_on() -> bool:
+    """Is full GitHub mode ON? Read from THIS PC's file and from nowhere else.
+
+    ON only when the file says so, literally: absent, unreadable, corrupt or
+    holding anything but `"on": true` reads as OFF. A privacy switch fails
+    closed, the same rule `escalate_on()` above keeps. Never raises.
+    """
+    try:
+        import json
+        doc = json.loads(_github_mode_path().read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return isinstance(doc, dict) and doc.get("on") is True
+
+
+def github_mode_why() -> str:
+    """The plain sentence for why the mode is off - "" when it is ON."""
+    if github_mode_on():
+        return ""
+    return ("not turned on for this PC" if not _github_mode_path().exists()
+            else "the setting on this PC cannot be read, so it stays off")
+
+
+def write_github_mode(on: bool) -> bool:
+    """Save the mode. Atomic; False (and nothing changed) on any error.
+
+    Called ONLY from `jarvis_asks_first.set_github_mode`, after the
+    `github_mode` card was approved - the same rule
+    `_write_cloud_escalate` follows: a denial, a timeout or a refusal writes
+    nothing at all. Short of an OS-level failure this cannot be called by a
+    request body, a client flag or a tool's own choice.
+    """
+    import json
+    try:
+        _config_dir().mkdir(parents=True, exist_ok=True)
+        tmp = _github_mode_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"on": bool(on), "on_since": time.time()},
+                                  indent=2) + "\n", encoding="utf-8")
+        tmp.replace(_github_mode_path())
+        return True
+    except Exception:
+        return False
+
+
 def cloud_providers() -> list:
     """One row per connected API service, for the Cloud submenu.
 

@@ -243,6 +243,10 @@
       "title": "Jarvis wants to merge a pull request with a merge commit"
     },
     {
+      "action": "github_mode",
+      "title": "Jarvis wants to turn on full GitHub mode"
+    },
+    {
       "action": "github_open_issue",
       "title": "Jarvis wants to open an issue on GitHub"
     },
@@ -1303,6 +1307,18 @@
         "summary": "Jarvis wants to merge a pull request (merge commit only).",
         "full": "merges one pull request with a merge commit, pinned to the exact head commit the card showed; refused with nothing sent if that commit has moved, it is a draft, it conflicts or is blocked, a check is still running or a required check did not pass; Jarvis cannot squash, rebase, force, use an admin bypass or bypass a required check, and a merge cannot be undone. nothing has happened yet.",
         "body": "merges one pull request with a merge commit, pinned to the exact head commit the card showed; refused with nothing sent if that commit has moved, it is a draft, it conflicts or is blocked, a check is still running or a required check did not pass; Jarvis cannot squash, rebase, force, use an admin bypass or bypass a required check, and a merge cannot be undone. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_mode",
+      "notice": {
+        "title": "Jarvis wants to turn on full GitHub mode",
+        "summary": "Jarvis wants to turn on full GitHub mode.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -2573,6 +2589,7 @@
   "refresh": "Refresh",
   "pc_only_actions": [
     "change_approval_policy",
+    "github_mode",
     "handoff_bring_to_front",
     "handoff_keep_offering",
     "loosen_what_asks_first",

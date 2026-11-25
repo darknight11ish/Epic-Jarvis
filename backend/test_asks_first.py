@@ -1005,12 +1005,26 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
     # The four whose own switch decides them are refused with a sentence that
     # names that switch - never the false "does not know that name".
     for tool in AF.NOT_A_SWITCH:
+        if tool == AF.GITHUB_MODE_ID:
+            # Full GitHub mode (2026-11-25) is not one of those any more: it has
+            # a REAL switch of its own (the Settings row and the chat tool both
+            # go through jarvis_asks_first.set_github_mode), so the route raises
+            # its own card instead of answering with a note. It is in this tuple
+            # only because it rides with change_setting in the offered list; the
+            # check below proves the switch is real.
+            continue
         tools = ToolsFile()
         code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
         check(f"{tool}: refused with its own real switch, not 'does not know that name'",
               code == 403 and tools.writes == []
               and out["error"] == AF.NO_SWITCH_NOTE[tool]
               and out.get("not_a_switch") is True, (code, out))
+    tools = ToolsFile()
+    code, out = _treq({"tool": AF.GITHUB_MODE_ID, "enabled": True}, tools, here=True)
+    check("github_mode is a REAL switch: its own card, and the twenty names written",
+          code == 202 and out.get("waiting") is True
+          and tools.writes == [(AF.GITHUB_TOOLS_GROUP, True)], (code, out, tools.writes))
+    AF.set_github_mode(False, write=lambda t, on: None)
     tools = ToolsFile()
     code, out = _treq({"tool": "nonsense", "enabled": True}, tools, here=True)
     check("an unknown tool: 403, the 'does not know that name' answer",

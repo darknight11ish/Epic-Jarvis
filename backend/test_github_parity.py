@@ -1778,9 +1778,16 @@ def t_the_api_doc_190_agrees_with_the_code():
 
     tiers = _toml_tiers()[0][1]
     ask_github = {a for a, t in tiers.items()
-                  if str(t) == "ask" and a.startswith("github_")}
+                  if str(t) == "ask" and a.startswith("github_")
+                  # `github_mode` (2026-11-25) is full GitHub mode's own switch,
+                  # not one of the eighteen GitHub tools this subsection is
+                  # about; the name shares the prefix because it is the mode's
+                  # action. Its own line is pinned separately below.
+                  and a != "github_mode"}
     check("the shipped settings file has thirteen GitHub actions at `ask`",
           len(ask_github) == 13, sorted(ask_github))
+    check("... and full GitHub mode's own switch is `ask`, outside the thirteen",
+          str(tiers.get("github_mode")) == "ask", tiers.get("github_mode"))
     check("... and `github_inspect` ships `auto` there",
           str(tiers.get("github_inspect")) == "auto", tiers.get("github_inspect"))
 

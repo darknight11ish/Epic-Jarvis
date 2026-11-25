@@ -907,12 +907,23 @@ def cloud_lanes(lanes) -> list:
 def standing_escalation() -> bool:
     """Is the PC's own standing cloud switch ON? (`escalate-cloud.json`)
 
-    THE ONLY SOURCE OF A STANDING YES, and that is the point of it being here:
-    no request body, no header and no client flag can reach this. The owner
-    turns it on in the Presets menu, which raises ONE `change_own_config` card
-    (jarvis_presets.cloud_escalate); turning it off is immediate. Absent,
-    unreadable, corrupt, or a `jarvis_presets.py` that is not there all read as
-    OFF - a privacy switch fails closed.
+    ONE OF THE TWO SOURCES OF A STANDING YES - and the point of both being here
+    is that no request body, no header and no client flag can reach either. The
+    owner turns this one on in the Presets menu, which raises ONE
+    `change_own_config` card (jarvis_presets.cloud_escalate); turning it off is
+    immediate. Absent, unreadable, corrupt, or a `jarvis_presets.py` that is not
+    there all read as OFF - a privacy switch fails closed.
+
+    THE SECOND SOURCE is `github_mode_escalation()` below (2026-11-25): full
+    GitHub mode's own `<settings>/github-mode.json`, written only after ITS one
+    PC-only `github_mode` card. It is deliberately a SEPARATE file rather than a
+    second flag in this one, because its scope is narrower: it is consulted at
+    gate 6 only for a GitHub-shaped turn (`github_shaped_turn`), while this
+    switch governs every cloud-escalatable turn. Reusing one file would have
+    made "full GitHub mode" a second whole-cloud switch, which is wider than
+    the owner asked for and would make its card's words false. Architecture:
+    docs/ARCHITECTURE.md's standing-permission paragraph names both grants and
+    says why the second one is GitHub-shaped only.
 
     docs/DECISIONS.md's 2026-10-27 entry records that this reverses the
     "no standing grant" rule of 2026-09-24; `choose()`'s own docstring still
@@ -926,6 +937,70 @@ def standing_escalation() -> bool:
         return bool(jarvis_presets.escalate_on())
     except Exception:
         return False
+
+
+def github_mode_escalation() -> bool:
+    """Is full GitHub mode ON for this PC? (`github-mode.json`, 2026-11-25)
+
+    THE SECOND SOURCE OF A STANDING YES, read from a file on THIS machine and
+    from nowhere else - the same shape as `standing_escalation()` above, and
+    the same fail-closed reading: absent, unreadable, corrupt, or a
+    `jarvis_presets.py` that is not there all read as OFF.
+
+    IT IS CONSULTED AT GATE 6 AND NOWHERE ELSE, after every privacy gate has
+    had its chance to answer local, and `choose()` pairs it with
+    `github_shaped_turn(query)` so it can only ever move a GitHub-shaped
+    question - never a tax question, a private one, or anything a gate above
+    refused. It is written only by `jarvis_asks_first.set_github_mode` after a
+    person approved ONE PC-only `github_mode` card; this function cannot write
+    it, and no request body, header or client flag reaches it.
+    """
+    try:
+        import jarvis_presets
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_presets.github_mode_on())
+    except Exception:
+        return False
+
+
+#: What makes a turn "GitHub-shaped" for the second standing yes above.
+#:
+#: DELIBERATELY NARROW, and a false NEGATIVE is the safe direction: the turn
+#: then keeps the ordinary gate-6 rule (local, with the cloud offered) and
+#: costs the owner one click. A false POSITIVE would send a question nobody
+#: called a GitHub question to the cloud with no per-turn yes, so every word
+#: here names GitHub or a git/GitHub act, and nothing generic ("code", "fix",
+#: "review", "my project") is in the list. The `self_repo` gate above already
+#: sends questions about THIS PC's own repository local before gate 6, so what
+#: is left here is work on a repository the owner named.
+GITHUB_SHAPED = re.compile(
+    r"\bgithub\b"
+    r"|\bpull\s+requests?\b"
+    r"|\bprs?\b"
+    r"|\brepos?(?:itory|itories)?\b"
+    r"|\bbranch(?:es)?\b"
+    r"|\bcommits?\b"
+    r"|\bworkflows?\b"
+    r"|\brebase\b"
+    r"|\bmerge[ds]?\b"
+    r"|\bpush(?:ed|es)?\b"
+    r"|\bchecks?\b"
+    r"|\bcis?\b"
+    r"|\bissues?\b"
+    r"|\bfork(?:ed|s)?\b",
+    re.IGNORECASE)
+
+
+def github_shaped_turn(query) -> bool:
+    """Does this NEWEST message read as work on a GitHub repository?
+
+    Read only at gate 6, after every privacy gate. It never stores anything,
+    never lifts a refusal (it is only consulted once the turn has already
+    passed every gate above), and an empty message is not GitHub-shaped.
+    """
+    return bool(GITHUB_SHAPED.search(str(query or "")))
 
 
 #: The phrases that count as the owner asking for the cloud IN THE MESSAGE.
@@ -1214,7 +1289,8 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
                                         below applies to a coding turn
       5. budget spent                -> local
       6. the owner has not said yes  -> local, with the cloud lane OFFERED
-         for THIS question
+         (a yes is the per-question click, the Presets standing switch, full
+          GitHub mode for a GitHub-shaped turn, or the phrase in the message)
       otherwise                      -> the first cloud lane
 
     STAGE 1 AND THE 2-STRIKE PAIRING (2026-11-19, external review ruling 6.1).
@@ -1240,26 +1316,32 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
     file's words can be anything - and because `cloud-one-turn.patch` keeps
     exactly the NEWEST user turn, which is where those words ride.
 
-    GATE 6, AND WHY THE DEFAULT IS "NO" (the owner's decision, 2026-09-24).
-    docs/ARCHITECTURE.md says cloud use is "per use, with permission ...
-    and asks. No standing grant." This function used to decide on its own:
-    any long, non-private question went to the first cloud lane, and the
-    owner saw a Cloud badge afterwards. Now a turn reaches a cloud lane only
-    when one of three things says so, and even then gates 0-5 still apply, so
-    a yes can never carry a private or tainted turn out:
-      * `owner_said_yes=True` - the owner's own yes for this one question;
-      * the PC's own standing switch (`standing_escalation()`, the checkbox in
-        the Presets menu). The owner CHANGED the "no standing grant" rule on
-        2026-10-27 - docs/DECISIONS.md records it - and the switch is a file on
-        this PC raised by one `change_own_config` card. No request body, no
-        header and no client flag is consulted for it, so a stale page or a
-        phone cannot make a standing decision this PC has not made;
-      * the owner asking for the cloud in the message itself
-        (`explicit_escalation`), for THAT TURN only - nothing is stored.
-    Without any of them the turn is answered here and `offer` names the lane
-    that could have answered, so an app can ask. Nothing learned, remembered
-    or configured sets the per-question yes.
-    The last two are "automatic" - no click - and the decision says so
+     GATE 6, AND WHY THE DEFAULT IS "NO" (the owner's decision, 2026-09-24).
+     docs/ARCHITECTURE.md says cloud use is "per use, with permission ...
+     and asks. No standing grant." This function used to decide on its own:
+     any long, non-private question went to the first cloud lane, and the
+     owner saw a Cloud badge afterwards. Now a turn reaches a cloud lane only
+     when one of FOUR things says so, and even then gates 0-5 still apply, so
+     a yes can never carry a private or tainted turn out:
+       * `owner_said_yes=True` - the owner's own yes for this one question;
+       * the PC's own standing switch (`standing_escalation()`, the checkbox in
+         the Presets menu). The owner CHANGED the "no standing grant" rule on
+         2026-10-27 - docs/DECISIONS.md records it - and the switch is a file on
+         this PC raised by one `change_own_config` card. No request body, no
+         header and no client flag is consulted for it, so a stale page or a
+         phone cannot make a standing decision this PC has not made;
+       * the SECOND standing switch, full GitHub mode
+         (`github_mode_escalation()`, 2026-11-25): its own file on this PC,
+         raised by its own PC-only `github_mode` card, and consulted only for a
+         GitHub-shaped turn (`github_shaped_turn`). It never lifts a gate above
+         and never covers anything but GitHub-shaped work, so the card's words
+         stay true;
+       * the owner asking for the cloud in the message itself
+         (`explicit_escalation`), for THAT TURN only - nothing is stored.
+     Without any of them the turn is answered here and `offer` names the lane
+     that could have answered, so an app can ask. Nothing learned, remembered
+     or configured sets the per-question yes.
+     The last three are "automatic" - no click - and the decision says so
     (`Decision.auto`), so a cloud answer with no usable text in it is never
     dressed up as an answer. See jarvis_chatbot_api.CloudAnswer.
 
@@ -1479,17 +1561,28 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
     # he chose "automatic" would change how a blank cloud answer is shown for
     # it. So the standing switch is consulted only when he did not click.
     standing = False if clicked else standing_escalation()
-    if not (clicked or standing or asked):
+    # THE SECOND STANDING YES (2026-11-25, full GitHub mode). Consulted only
+    # when the first switch did not already say yes (one yes is enough), only
+    # when the owner did not click (see above), and only for a GitHub-shaped
+    # message: the mode's card says "a hard GitHub question may go to the
+    # cloud", so a tax question must keep the ordinary offer. `github_shaped_
+    # turn` is checked FIRST so the file is not even read on a non-GitHub turn.
+    github_standing = False if (clicked or standing) else (
+        github_shaped_turn(query) and github_mode_escalation())
+    if not (clicked or standing or github_standing or asked):
         d = local_decision(
             "offer", f"{lead}: {lane} could answer this, but the cloud is used "
                      f"only when you say yes for this question")
         d.offer = lane
         return d
-    auto = bool(asked or standing)
+    auto = bool(asked or standing or github_standing)
     if asked:
         why = f"{lead}, budget available, and you asked for the cloud in this message"
     elif clicked:
         why = f"{lead}, budget available, and you said yes for this question"
+    elif github_standing:
+        why = (f"{lead}, budget available, and GitHub mode is on for this PC, so a "
+               f"GitHub question may go to the cloud without asking")
     else:
         why = (f"{lead}, budget available, and cloud escalation is on for this PC "
                f"in the Presets menu")
