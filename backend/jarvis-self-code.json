@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "5457b58d78706c85634ae1b7b2315df048d7569e",
- "built_at": "2026-11-25T09:10:28-08:00",
+ "ref": "cba900fe4b77428da2f67abbfec9b2fab3093ba4",
+ "built_at": "2026-11-25T10:30:43-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6200,14 +6200,9 @@
  ],
  "recent_commits": [
   {
-   "sha": "5457b58d78706c85634ae1b7b2315df048d7569e",
+   "sha": "cba900fe4b77428da2f67abbfec9b2fab3093ba4",
    "date": "2026-11-25",
-   "subject": "chore(records): re-take the recent-changes module"
-  },
-  {
-   "sha": "2631ae9fbc9cbde7e808bd1fdad28d8f83ae0894",
-   "date": "2026-11-25",
-   "subject": "chore(records): roll the changelog and decisions fragments"
+   "subject": "chore(records): roll the fragments and re-take the generated files (#1498)"
   },
   {
    "sha": "bf8c2ff5f63c3b5e54c07d242957f4d393ad2d42",
@@ -6298,6 +6293,11 @@
    "sha": "58cacf7ed31104851cf532f3110fbb88c8f3b0ea",
    "date": "2026-11-24",
    "subject": "fix(desktop): cancel_scheduled reaches the Tools page, and four more pinned counts follow"
+  },
+  {
+   "sha": "754d0c78c2ae359f8ed822ec8622899444ccc534",
+   "date": "2026-11-24",
+   "subject": "Merge pull request #1487 from darknight11ish/fix/def032-page-source-2026-11-24"
   }
  ],
  "top_level": [
