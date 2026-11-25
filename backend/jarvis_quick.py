@@ -19507,7 +19507,7 @@ _NOTE_DATE_WORDS = re.compile(
 #: A phrase that names a day without naming a date: "last Friday", "next Monday",
 #: "the 3rd of December". The weekday shapes are computed here (python-dateutil
 #: does not read "last Friday"); anything else that names a MONTH is read by
-#: dateutil, already in the lock, and never guessed at.
+#: dateutil, which backend/requirements.txt declares, and never guessed at.
 _NOTE_WEEKDAY_REL = re.compile(
     r"^(?:(?P<when>last|next|this)\s+)?(?P<day>monday|tuesday|wednesday|"
     r"thursday|friday|saturday|sunday)(?:'s)?(?:\s+date)?$", re.I)
@@ -19526,6 +19526,56 @@ _NOTE_MONTH = re.compile(
     r"\b(?:january|february|march|april|may|june|july|august|september|"
     r"october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\b",
     re.I)
+#: Month name -> month number, for the phrase this module computes itself
+#: ("the 3rd of december", "december 3"). It exists so that a note's date does
+#: NOT depend on whether a third-party package happens to be installed: the
+#: first version of this feature handed every month phrase to python-dateutil,
+#: and CI installs an exact package list, so the row that pins "the 3rd of
+#: december" could only pass on a PC that happened to have it (measured
+#: 2026-11-25: the corpus row was green at the desk and red in CI).
+_NOTE_MONTHS = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
+    "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7, "aug": 8,
+    "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+#: "the 3rd of december" / "december 3" / "3 december" - a day and a month, in
+#: either order. The ordinal suffix is optional and never required.
+_NOTE_MONTH_DAY = re.compile(
+    r"(?:\b(?:the\s+)?(?P<day1>\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?"
+    r"(?P<mon1>[a-z]{3,9})\b)"
+    r"|(?:\b(?P<mon2>[a-z]{3,9})\s+(?P<day2>\d{1,2})(?:st|nd|rd|th)?\b)", re.I)
+
+
+def _note_month_day(said: str, now: float):
+    """YYYY-MM-DD for a phrase naming a month and a day, or None.
+
+    THE YEAR IS THE ONE NEAREST TODAY: a note written in November about "the 3rd
+    of december" means the December nine days ahead, and one written in January
+    means the December just gone. That is a heuristic, so it is written here and
+    pinned by the corpus suite rather than left to a library's own default - the
+    one thing this must never do is write a date in a different year than the
+    owner meant and say nothing.
+    """
+    import datetime
+    m = _NOTE_MONTH_DAY.search(said or "")
+    if not m:
+        return None
+    day_text = m.group("day1") or m.group("day2")
+    mon_text = (m.group("mon1") or m.group("mon2") or "").lower()
+    month = _NOTE_MONTHS.get(mon_text)
+    if not month or not day_text:
+        return None
+    today = datetime.date.fromtimestamp(now)
+    for year in (today.year, today.year - 1, today.year + 1):
+        try:
+            cand = datetime.date(year, month, int(day_text))
+        except ValueError:              # "31st of february" is not a day
+            return None
+        if abs((cand - today).days) <= 183:
+            return cand.isoformat()
+    return None
 
 
 def _note_date_body(text: str, now: float):
@@ -19556,20 +19606,27 @@ def _note_date_body(text: str, now: float):
             delta = delta or 7
         return (today + datetime.timedelta(days=delta)).isoformat()
     if _NOTE_WEEKDAY.search(said) or _NOTE_MONTH.search(said):
-        # "the 3rd of december" is how the owner says it, and the leading "the"
-        # made dateutil return None - so "add the 3rd of december to my mood log"
-        # appended the literal words, the exact failure this feature exists to
-        # remove (measured 2026-11-24).
+        # "the 3rd of december" is how the owner says it. It is computed here,
+        # from a month table, and NOT handed to a third-party parser: the first
+        # version did, and CI installs an exact package list, so the row that
+        # pins this sentence could pass at the desk and fail in CI (2026-11-25).
+        got = _note_month_day(said, now)
+        if got:
+            return got
+        # A month phrase this table could not read is still worth one try with
+        # python-dateutil, which backend/requirements.txt declares - but only
+        # when it can parse the phrase and a month is really named in it. The
+        # leading "the" defeated it once, so it is stripped first.
         phrase = said[4:] if said.startswith("the ") else said
-        try:
-            from dateutil import parser as _dp
-            got = _dp.parse(phrase, default=datetime.datetime.fromtimestamp(now),
-                            fuzzy=False)
-        except Exception:                   # noqa: BLE001 - unreadable phrase
-            return None
         if not _NOTE_MONTH.search(phrase):
             return None                     # "friday at 5" is not a date
-        return got.date().isoformat()
+        try:
+            from dateutil import parser as _dp
+            parsed = _dp.parse(phrase, default=datetime.datetime.fromtimestamp(now),
+                               fuzzy=False)
+        except Exception:                   # noqa: BLE001 - unreadable phrase
+            return None
+        return parsed.date().isoformat()
     return None
 
 
