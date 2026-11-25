@@ -3607,6 +3607,26 @@ object JarvisRuntime {
     }
 
     /**
+     * FULL GITHUB MODE OFF (2026-11-25): one tap, from either app, no card - it
+     * only takes something away, so it is never held on a stale link. The phone
+     * never sends ON: turning it on is ONE card plus Windows Hello on the PC,
+     * which refuses it from a phone.
+     * @return the sentence to show.
+     */
+    suspend fun turnOffGithubMode(): String {
+        val r = api.turnOffGithubMode()
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.AsksFirst.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
      * Lockdown ON (2026-09-28) - the desktop's `set_asks_first` with the
      * action "lockdown" and `ask: true`. Never held on a stale link: it only
      * makes Jarvis ask more. The phone never turns it off.

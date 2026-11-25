@@ -196,6 +196,31 @@ internal fun AsksFirstSection(canAct: Boolean) {
                         Text(t.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         Text(AsksFirst.TOOLS_PC_ONLY, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid)
+                        // FULL GITHUB MODE (2026-11-25): ONE row, read-only
+                        // except OFF. It says whether the mode is on and the
+                        // PC's own words for what it does and where it changes,
+                        // and it offers "Turn off GitHub mode" only while it is
+                        // on. Turning it ON is never offered here - that is ONE
+                        // card plus Windows Hello on the PC. A PC that sends no
+                        // `github_mode` draws nothing (githubMode is null).
+                        t.githubMode?.let { gm ->
+                            val mv = AsksFirst.githubModeView(gm)
+                            Gap(10)
+                            Text(AsksFirst.GITHUB_MODE_TITLE,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (mv.on) chrome.warnInk else chrome.textHi)
+                            mv.lines.forEach {
+                                Text(it, style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textMid)
+                            }
+                            Text(mv.state, style = MaterialTheme.typography.bodySmall,
+                                color = if (mv.on) chrome.textHi else chrome.textMid)
+                            if (mv.canTurnOff) {
+                                Quiet(AsksFirst.GITHUB_MODE_OFF_LABEL, color = chrome.warnInk,
+                                    enabled = !busy,
+                                    onClick = { change { JarvisRuntime.turnOffGithubMode() } })
+                            }
+                        }
                         t.groups.forEach { tg ->
                             Gap(8)
                             if (tg.title.isNotEmpty()) {
