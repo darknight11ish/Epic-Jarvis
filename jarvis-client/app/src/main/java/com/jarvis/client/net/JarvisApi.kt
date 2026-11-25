@@ -2700,6 +2700,16 @@ class JarvisApi(
     suspend fun lockdownOn(): ApiResult<DesktopWrite.Outcome> =
         postWrite(AsksFirst.TIER_PATH, AsksFirst.lockdownBody())
 
+    /**
+     * `POST /api/asks_first/tools {"tool": "github_mode", "enabled": false}` -
+     * FULL GITHUB MODE OFF (2026-11-25), the same route the desktop's own tool
+     * switches use. The phone sends ONLY this direction: turning the mode on is
+     * ONE card plus Windows Hello on the PC, which refuses it from here
+     * ([AsksFirst.githubModeOffBody]). OFF is instant and raises no card.
+     */
+    suspend fun turnOffGithubMode(): ApiResult<DesktopWrite.Outcome> =
+        postWrite(AsksFirst.TOOLS_PATH, AsksFirst.githubModeOffBody())
+
     /** `GET /api/media` - what is playing on the PC, in its own sentence ([PcMedia]). */
     suspend fun pcMedia(): ApiResult<JsonObject> = probeKeeping503(PcMedia.PATH)
 

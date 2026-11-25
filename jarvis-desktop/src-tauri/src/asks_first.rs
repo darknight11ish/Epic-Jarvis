@@ -92,6 +92,22 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// step on the PC. The phone never sends it (it is read-only there).
 pub(crate) const GITHUB_TOOLS_GROUP: &str = "github_tools_group";
 
+/// FULL GITHUB MODE (2026-11-25, the owner's ask for "a full github mode ...
+/// full parity with less restrictions and less cards"): ONE PC setting that
+/// offers all twenty GitHub tools and stops the fix loop asking once per file
+/// in this conversation. It is NOT a model tool and NOT an entry in
+/// [`TOOLS_SWITCHABLE`]: the PC's `tools.github_mode` object carries its row
+/// (`on`, `can_enable`, `effect`, `where`), and it rides the SAME
+/// `set_tool_enabled` command and `POST /api/asks_first/tools` body as a tool,
+/// with this id. ON is ONE card plus Windows Hello on the PC, which refuses it
+/// `403 pc_only` from anywhere else; OFF is one click from either app.
+pub(crate) const GITHUB_MODE: &str = "github_mode";
+
+/// The two row ids [`tool_body`] accepts that are NOT model tools: the master
+/// GitHub group switch and Full GitHub mode. Every OTHER id must be on
+/// [`TOOLS_SWITCHABLE`] to be turned on.
+const ROW_SWITCHES: [&str; 2] = [GITHUB_TOOLS_GROUP, GITHUB_MODE];
+
 /// The tools that may be OFFERED to the AI model at all from
 /// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 84 at
 /// 2026-11-24 (`cancel_scheduled` is the 84th; 83 at
@@ -344,11 +360,12 @@ pub(crate) fn tool_body(tool: &str, enabled: bool) -> Result<serde_json::Value, 
     if !plausible_tool_name(tool) {
         return Err(TOOLS_NOT_ON_LIST.to_string());
     }
-    // The master GitHub group switch (2026-11-10) is ONE of the names this
-    // command accepts, although it is not a model tool: the PC writes the ten
-    // GitHub tool names for it. It is accepted in both directions; OFF is the
-    // same instant "narrow it" change every tool's OFF is.
-    if enabled && tool != GITHUB_TOOLS_GROUP && !TOOLS_SWITCHABLE.contains(&tool) {
+    // The master GitHub group switch (2026-11-10) and FULL GITHUB MODE
+    // (2026-11-25) are the two names this command accepts although neither is a
+    // model tool: the PC writes the twenty names for the group, and the mode is
+    // its own PC setting. Both are accepted in both directions; OFF is the same
+    // instant "narrow it" change every tool's OFF is.
+    if enabled && !ROW_SWITCHES.contains(&tool) && !TOOLS_SWITCHABLE.contains(&tool) {
         if let Some((_, note)) = TOOLS_NO_SWITCH.iter().find(|(name, _)| *name == tool) {
             return Err((*note).to_string());
         }
@@ -491,8 +508,8 @@ pub async fn set_vault_organizer_enabled(
 mod tests {
     use super::{
         asks_first_answer, change_answer, held_on_stale, tier_body, tool_body, ASKS_FIRST_MISSING,
-        GITHUB_TOOLS_GROUP, LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_NO_SWITCH,
-        TOOLS_SWITCHABLE,
+        GITHUB_MODE, GITHUB_TOOLS_GROUP, LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST,
+        TOOLS_NO_SWITCH, TOOLS_SWITCHABLE,
     };
 
     /// The real answers, made by `tools/gen_asks_first_cases.py`.
@@ -653,6 +670,25 @@ mod tests {
         // It is not a model tool and not a per-tool row, so the app must never
         // pretend it is one: the contract's own list does not contain it.
         assert!(!TOOLS_SWITCHABLE.contains(&GITHUB_TOOLS_GROUP));
+    }
+
+    #[test]
+    fn full_github_mode_goes_by_the_same_command_both_ways() {
+        // 2026-11-25: ONE mode row beside the group switch, accepted by the SAME
+        // command and body as a tool, in both directions. ON raises the PC's one
+        // card (Windows Hello) and is held on a stale link; OFF is instant, from
+        // either app, and is never held.
+        let on = tool_body(GITHUB_MODE, true).unwrap();
+        assert_eq!(on["tool"], "github_mode");
+        assert_eq!(on["enabled"], true);
+        let off = tool_body(GITHUB_MODE, false).unwrap();
+        assert_eq!(off["enabled"], false);
+        assert!(held_on_stale(true), "ON is loosening: held on a stale link");
+        assert!(!held_on_stale(false), "OFF is never held");
+        // It is a mode, not a model tool: the contract's own list has no such id,
+        // and it is a different name from the group switch it sits beside.
+        assert!(!TOOLS_SWITCHABLE.contains(&GITHUB_MODE));
+        assert_ne!(GITHUB_MODE, GITHUB_TOOLS_GROUP);
     }
 
     #[test]

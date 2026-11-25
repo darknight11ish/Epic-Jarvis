@@ -31,6 +31,11 @@ import kotlinx.serialization.json.contentOrNull
  *    OFF: that is the PC's alone, one card plus Windows Hello, like
  *    loosening. Home says "Lockdown is on" from the handshake and the
  *    `lockdown` event ([lockdownFrom]).
+ *  - FULL GITHUB MODE (2026-11-25): read-only here except OFF. The row shows
+ *    on/off and the PC's own `effect` and `where`; the phone can turn it OFF
+ *    in one tap ([githubModeOffBody], the same route the desktop's tool
+ *    switches use) and NEVER ON - that is one card plus Windows Hello on the
+ *    PC, refused from here. A PC older than it draws no row.
  *
  * Pure Kotlin, no Android types, so `AsksFirstTest` runs it on a plain JVM.
  */
@@ -38,6 +43,9 @@ object AsksFirst {
     const val PATH = "/api/asks_first"
     const val TIER_PATH = "/api/asks_first/tier"
     const val LIGHTS_PATH = "/api/asks_first/lights"
+
+    /** The desktop's own tool-switch route; the mode's OFF rides it (2026-11-25). */
+    const val TOOLS_PATH = "/api/asks_first/tools"
 
     /** The approval card that loosens one action: approved on the PC only. */
     const val LOOSEN_ACTION = "loosen_what_asks_first"
@@ -97,6 +105,34 @@ object AsksFirst {
     /** On the approval card of [LOOSEN_ACTION], in place of Approve. */
     const val APPROVE_ON_PC =
         "Approve this one on the PC - it needs Windows Hello there. Deny still works here."
+
+    /**
+     * FULL GITHUB MODE (2026-11-25) - the owner's ask for "a full github mode ...
+     * full parity with less restrictions and less cards". ONE PC setting, shown
+     * on the phone as a read-only row in the tools card: it says whether the
+     * mode is on, the PC's own `effect` and `where`, and offers OFF when it is
+     * on. ON is NEVER offered here - that is ONE card plus Windows Hello on the
+     * PC, which refuses it `403 pc_only` from anywhere else, so
+     * [githubModeOffBody] is the only body this app sends. A PC older than this
+     * sends no `github_mode` object, and then no row is drawn at all.
+     */
+    const val GITHUB_MODE = "github_mode"
+    const val GITHUB_MODE_TITLE = "GitHub mode"
+    const val GITHUB_MODE_EFFECT =
+        "Offers all twenty GitHub tools, and stops the fix loop asking once per file in " +
+            "this conversation. Merge, push, open PR, comment, re-run, create a repo, labels, " +
+            "edit and review each keep their own card."
+    const val GITHUB_MODE_WHERE =
+        "Settings, What asks first, on this PC - turning it on needs Windows Hello. Either " +
+            "app can turn it off."
+    /** The row's state, in the same words the tools rows use ("On: ..." / "Off: ..."). */
+    const val GITHUB_MODE_ON =
+        "On: all twenty GitHub tools are offered, and the fix loop asks once for this conversation."
+    const val GITHUB_MODE_OFF =
+        "Off: the fix loop asks once per file, and the tools are offered only as the group " +
+            "switch says."
+    /** The one control the phone offers for the mode: turn it OFF. */
+    const val GITHUB_MODE_OFF_LABEL = "Turn off GitHub mode"
 
     /** The actions the apps may switch - `jarvis_asks_first.SWITCHABLE`. */
     val SWITCHABLE = listOf(
@@ -208,7 +244,49 @@ object AsksFirst {
         val vault: VaultSwitch?,
         val notSwitchable: ToolsNotSwitchable?,
         val newOff: NewOff? = null,
+        /** FULL GITHUB MODE (2026-11-25); null from a PC older than it. */
+        val githubMode: GithubMode? = null,
     )
+
+    /**
+     * FULL GITHUB MODE as the PC sends it: `on`, `can_enable`, `effect` and
+     * `where` - those four keys and nothing else. The words fall back to this
+     * file's own copy of the contract only if a half-updated PC omits them.
+     */
+    data class GithubMode(
+        val on: Boolean,
+        val canEnable: Boolean,
+        val effect: String,
+        val where: String,
+    )
+
+    /** The mode's row: what to draw, and whether OFF may be offered. */
+    data class GithubModeView(
+        val show: Boolean,
+        val on: Boolean,
+        val state: String,
+        val lines: List<String>,
+        val canTurnOff: Boolean,
+    )
+
+    /**
+     * The mode's row on the phone: read-only except OFF. The phone never offers
+     * ON (that is one card plus Windows Hello on the PC, refused from here), and
+     * OFF is one tap and is never held - it only takes something away.
+     */
+    fun githubModeView(m: GithubMode?): GithubModeView {
+        if (m == null) return GithubModeView(false, false, "", emptyList(), false)
+        return GithubModeView(
+            show = true,
+            on = m.on,
+            state = if (m.on) GITHUB_MODE_ON else GITHUB_MODE_OFF,
+            lines = listOf(m.effect, m.where),
+            canTurnOff = m.on,
+        )
+    }
+
+    /** The one body the phone sends for the mode: OFF. Never ON. */
+    fun githubModeOffBody(): String = "{\"tool\":\"$GITHUB_MODE\",\"enabled\":false}"
 
     /** One tool's state in words - the phone shows it, never changes it. */
     fun toolState(r: ToolSwitch): String = when {
@@ -369,6 +447,18 @@ object AsksFirst {
                 titles = titles,
             )
         }
+        // FULL GITHUB MODE (2026-11-25): a separate object beside `vault`, never
+        // an item. A PC older than it sends none, so the plate draws no row and
+        // nothing is invented.
+        val githubMode = (o["github_mode"] as? JsonObject)?.let { m ->
+            val on = m.flag("on") ?: return@let null
+            GithubMode(
+                on = on,
+                canEnable = m.flag("can_enable") == true,
+                effect = m.text("effect") ?: GITHUB_MODE_EFFECT,
+                where = m.text("where") ?: GITHUB_MODE_WHERE,
+            )
+        }
         return Tools(
             label = label,
             detail = o.text("detail") ?: "",
@@ -377,6 +467,7 @@ object AsksFirst {
             vault = vault,
             notSwitchable = notSwitchable,
             newOff = newOff,
+            githubMode = githubMode,
         )
     }
 
