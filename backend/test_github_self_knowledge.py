@@ -403,10 +403,15 @@ def t_no_merge_push_commit_close_surface_exists():
                and re.search(r"squash|rebase|admin|force|delete|close|commit|"
                              r"approve|dispatch|gist", n)],
           [n for n in AG.TOOLS if n.startswith("github")])
-    check("the seventeen GitHub tools are the only github_* tools registered for "
-          "the owner's own GitHub (github_search is the separate research tool)",
+    # 2026-11-25: full GitHub mode's own switch is `github_mode` - a PC setting,
+    # not one of the seventeen surface tools, sharing the prefix only because it
+    # is the mode's name. The pin stays exact: every github_* name registered
+    # here must be one of these eighteen, and every one of them must be there.
+    check("the seventeen GitHub tools and full GitHub mode's own switch are the "
+          "only github_* tools registered for the owner's own GitHub "
+          "(github_search is the separate research tool)",
           sorted(n for n in AG.TOOLS if n.startswith("github_")) ==
-          sorted(list(SIXTEEN_TOOLS) + ["github_search"]),
+          sorted(list(SIXTEEN_TOOLS) + ["github_search", "github_mode"]),
           sorted(n for n in AG.TOOLS if n.startswith("github_")))
     check("every merge/push tool is carded and can never be auto-approved",
           all(t in AG.NEEDS_A_PERSON and t in AG.GITHUB_ACTION_TOOLS
