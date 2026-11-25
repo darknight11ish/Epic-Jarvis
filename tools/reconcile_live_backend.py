@@ -4585,11 +4585,14 @@ def planned_managed_bytes(plan: Plan, live) -> dict:
     """
     live = Path(live)
     files = {}
+    # The bytes the INSTALL copies there - `action.blob`, the source this deploy
+    # would put in the live folder - never a re-read of whatever the live folder
+    # holds now. "unchanged" was decided by comparing the live file with
+    # `action.blob` byte for byte (`plan_shipped`), so the source blob is the
+    # honest hash; re-reading the live file would let one that drifted after that
+    # comparison have its own stale bytes blessed by the record.
     for action in plan.shipped:
-        if action.status == "unchanged":
-            files[action.live_name] = (live / action.live_name).read_bytes()
-        else:
-            files[action.live_name] = action.blob or b""
+        files[action.live_name] = action.blob or b""
     for delta in plan.deltas:
         name = str(delta.file)
         if name in plan.staged:
@@ -4613,8 +4616,9 @@ def plan_deploy_manifest(plan: Plan, live) -> ManifestAction:
     dry run can report them and a second apply sees them unchanged - but the
     write itself happens only after the deploy has written and proved the live
     files (`apply_deploy_manifest`). The plan is built from the post-write bytes
-    the plan itself names: a `write` action's blob, the staged HUD text, or the
-    live bytes of a file this run leaves untouched.
+    the plan itself names: the source blob every `$SHIPPED` and `write` action
+    carries, the staged HUD text, or - for a release marker or delta file this run
+    leaves untouched, where no other copy exists - the live bytes.
 
     No manifest is planned when the deploy cannot state what it deployed - no
     readable commit (`SOURCE-COMMIT` skipped) or no installed desktop's `VERSION`
@@ -4684,25 +4688,40 @@ def manifest_lines(action: Optional[ManifestAction], *, done: bool = False) -> l
 def apply_deploy_manifest(action: ManifestAction, live, backup: Backup) -> dict:
     """Write the planned manifest LAST, after proving the bytes it records.
 
-    Not from the plan's hope: every managed leaf is re-read now, re-hashed and
-    rebuilt into the manifest, and the result must be exactly the planned bytes.
-    A live folder that moved under the run is a failure that names it, never a
-    record of bytes nobody has. The old manifest (when there is one) is backed up
+    The record was built from the bytes the install copies there (the plan's own
+    source blobs), so it is never re-derived from the live folder - that would let
+    a stale live file have its own stale hash blessed. Every managed leaf is
+    re-read and compared with the planned record instead: a file that is not
+    those bytes is a failure that NAMES it, with its live size and modified time,
+    and says it is not installed. The old manifest (when there is one) is backed up
     first, the new bytes go to a sibling temp file that is renamed into place, and
     the write is read back before it is claimed. Returns `{"ok": bool, "why": str}`.
     """
     live = Path(live)
     try:
-        raw = {leaf: (live / leaf).read_bytes() for leaf in action.names}
-        blob = build_deploy_manifest(
-            action.commit, action.version,
-            {leaf: file_fingerprint(data) for leaf, data in raw.items()})
+        planned = json.loads(action.blob.decode("utf-8"))["files"]
+    except (AttributeError, KeyError, TypeError, UnicodeDecodeError, ValueError):
+        return {"ok": False, "why": "the planned record is not the manifest this "
+                                    "run built"}
+    stale = []
+    try:
+        for leaf in action.names:
+            target = live / leaf
+            data = target.read_bytes()
+            want = planned.get(leaf) or {}
+            if (file_fingerprint(data)
+                    != {"size": want.get("size"), "sha256": want.get("sha256")}):
+                modified = time.strftime("%Y-%m-%d %H:%M:%S",
+                                         time.localtime(target.stat().st_mtime))
+                stale.append(f"{leaf} is {len(data)} bytes, modified {modified}")
     except (OSError, Refused) as exc:
         return {"ok": False, "why": f"the live files could not be re-read ({exc})"}
-    if blob != action.blob:
+    if stale:
         return {"ok": False,
-                "why": "the live files changed after this run's plan, so the "
-                       "manifest would not describe the bytes that are there"}
+                "why": f"not installed: {', '.join(stale)} - these are not the "
+                       "bytes this deploy's source holds, and the manifest records "
+                       "the source, so it will not bless them as installed"}
+    blob = action.blob
     target = live / DEPLOY_MANIFEST
     try:
         if target.exists():
