@@ -18,10 +18,13 @@ answer from a wrong one:
     group opened on request reaches the model, and it costs fewer tokens;
   - the results file is dated, and only a local Ollama address is accepted.
 
-No model, no network, no GPU.
+No model, no network, no GPU - and it never reads the owner's saved settings:
+the whole run gets a temporary config folder (see the note before the imports),
+so a personality chosen on this PC cannot change the Plain-manner check.
 
     python3 test_tool_eval.py
 """
+import atexit
 import json
 import os
 import socket
@@ -34,8 +37,48 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped, REPO  # noqa: E402
 require_shipped("jarvis_agent.py")
+
+# THIS SUITE'S OWN CONFIG FOLDER, BEFORE ANY PRODUCT MODULE READS ONE
+# (architect ruling B, 2026-11-25). The Plain-manner check below asserts the one
+# line jarvis_manner.note("plain") gives a PC that has chosen NO personality.
+# `manner.json` is the owner's saved setting, so on a PC where a personality has
+# been chosen (this one has: `personality_explicit: true`) with_manner_note
+# emits that personality's whole persona block instead - and the check failed at
+# the desk while passing in CI, which is the test reading the desk it runs on.
+# Measured on this PC before the fix: 373 passed, 1 failed - "the plain case
+# carries the owner's Plain manner line". So the folder is made empty for this
+# process, BEFORE jarvis_agent imports anything that could cache the real one,
+# and the setting is put back on the way out. This is test_schedule.py's own
+# pattern, for the same reason.
+_CFG = tempfile.TemporaryDirectory(prefix="jarvis-tool-eval-cfg-")
+_SAVED_OPENJARVIS_CONFIG_DIR = os.environ.get("OPENJARVIS_CONFIG_DIR")
+_SAVED_JARVIS_CONFIG_DIR = os.environ.get("JARVIS_CONFIG_DIR")
+os.environ["OPENJARVIS_CONFIG_DIR"] = _CFG.name
+os.environ["JARVIS_CONFIG_DIR"] = _CFG.name
+
+
+def _restore_config_dir():
+    for name, value in (("OPENJARVIS_CONFIG_DIR", _SAVED_OPENJARVIS_CONFIG_DIR),
+                        ("JARVIS_CONFIG_DIR", _SAVED_JARVIS_CONFIG_DIR)):
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    _CFG.cleanup()
+
+
+atexit.register(_restore_config_dir)
+
 sys.path.append(str(HERE / "rebuilt"))
 import jarvis_agent as AG  # noqa: E402
+import jarvis_manner as MANNER  # noqa: E402
+
+#: Every jarvis_manner read/write goes through `settings_path()` ->
+#: `_config_dir()`, and a chosen personality makes `personality_chosen()` true.
+#: Pointing it at THIS RUN's temp folder is the explicit injection: the owner's
+#: real `manner.json` cannot be read even if some other module imported
+#: jarvis_framework before the environment above was set.
+MANNER._config_dir = lambda: Path(_CFG.name)
 sys.path.insert(0, str(REPO / "tools" / "tool_eval"))
 import ollama_tool_eval as E  # noqa: E402
 import behaviour_cases as BH  # noqa: E402
@@ -303,10 +346,43 @@ def t_every_behaviour_check_tells_good_from_bad():
     check("a spoken case carries Jarvis's spoken-answer note",
           any(m.get("content") == AG.SPOKEN_NOTE for m in msgs))
     plain = next(c for c in BH.CASES if c.get("manner") == "plain")
+    # The fixture says manner="plain" EXPLICITLY, and the temp config folder has
+    # no manner.json, so the answer is the owner's Plain line - not whatever this
+    # PC has saved.
+    plain_note = MANNER.NOTE[MANNER.PLAIN]
     msgs = E.behaviour_messages(plain)
     check("the plain case carries the owner's Plain manner line",
-          any(m.get("role") == "system" and "businesslike" in (m.get("content") or "")
-              for m in msgs), repr([m.get("content", "")[:60] for m in msgs]))
+          plain["manner"] == "plain"
+          and any(m.get("role") == "system" and m.get("content") == plain_note
+                  for m in msgs), repr([m.get("content", "")[:60] for m in msgs]))
+    # THE COMPANION ROW (architect ruling B, 2026-11-25): the SAME explicit
+    # manner="plain" fixture, with a personality chosen in THIS RUN's temp
+    # manner.json, must carry that personality's persona block instead of the
+    # Plain line - and the persona path's own hint after it. That was the bug:
+    # the old check assumed no personality was ever chosen, and this PC's own
+    # settings choose one. Written here and removed in the `finally`, so no later
+    # check in this run sees it.
+    persona_path = MANNER.settings_path()
+    persona_path.write_text(json.dumps({
+        "manner": "warm", "personality": "warm_peer",
+        "personality_explicit": True}), encoding="utf-8")
+    try:
+        chosen = E.behaviour_messages(plain)
+        persona = MANNER.prompt_block()
+        hint = MANNER.post_history_hint()
+        system_texts = [m.get("content") or "" for m in chosen
+                        if m.get("role") == "system"]
+        check("a personality chosen in the temp manner.json makes the SAME plain "
+              "fixture carry the persona block, not the Plain line",
+              any(text == persona for text in system_texts)
+              and not any(text == plain_note for text in system_texts),
+              [text[:80] for text in system_texts])
+        check("... and the persona path's own hint is the line after the block",
+              bool(hint) and any(text == hint for text in system_texts)
+              and system_texts.index(persona) < system_texts.index(hint),
+              [text[:80] for text in system_texts])
+    finally:
+        persona_path.unlink()
     check("sentences() does not split 3.5 or e.g.",
           BH.sentences("It is 3.5 metres, e.g. tall. Yes.") == 2)
 
