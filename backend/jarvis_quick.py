@@ -1363,16 +1363,23 @@ def _run_stop_everything() -> Result:
 
 
 def match(text, now: Optional[float] = None,
-          conversation: Optional[str] = None) -> Optional[Intent]:
+          conversation: Optional[str] = None,
+          said: Optional[str] = None) -> Optional[Intent]:
     """The intent of a sentence, or None when it is not one of ours.
 
     `conversation`: the request's conversation_id, read by the read-a-link
     follow-up alone (Q2, 2026-11-03) - one page per chat is kept for 15 minutes
     after a read, and a question about it is answered from the kept words with
     no card and no fetch. Optional, so every older caller is unchanged.
+
+    `said`: the newest ASSISTANT sentence in this request's own history, read
+    by ONE follow-up (2026-11-23; the owner's "Turn on that setting for me."):
+    a settings change that names no row resolves to the one setting that answer
+    named. Optional, so every older caller is unchanged and a caller with no
+    history keeps the old refusal.
     """
     now = time.time() if now is None else now
-    got = _match(text, now, conversation)
+    got = _match(text, now, conversation, said)
     if got is None:
         # A trailing META-INSTRUCTION ("... One sentence.", "... in one
         # sentence", "... briefly") is about the ANSWER, not the command:
@@ -1382,7 +1389,7 @@ def match(text, now: Optional[float] = None,
         # end that way keeps whichever matcher claims it first.
         stripped = _strip_meta_instruction(text)
         if stripped is not None:
-            got = _match(stripped, now, conversation)
+            got = _match(stripped, now, conversation, said)
     # THE ONE FAMILY-WIDE GATE (2026-11-22, the external review's ruling): a
     # capability explanation may answer only a QUESTION that names no concrete
     # target. A command - "merge #1472 ...", "comment on pull request 1471",
@@ -1443,7 +1450,8 @@ def _chat_picture_save(s):
         return Intent("chat_picture_save")
     return None
 
-def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Intent]:
+def _match(text, now: float, conversation: Optional[str] = None,
+           said: Optional[str] = None) -> Optional[Intent]:
     s = normalize_spoken_command(text)
     if not s or len(s) > 400 or "\n" in s:
         return None
@@ -2232,7 +2240,7 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _chat_picture_save(s)
     if got is not None:
         return got
-    got = _settings_adjust(s)
+    got = _settings_adjust(s, said)
     if got is not None:
         return got
     # "What changed in your last update?" (2026-11-07): read from the shipped
@@ -6510,6 +6518,105 @@ _SETTING_UNKNOWN = re.compile(
     r"|(?:change|edit|adjust|update)\s+(?:my|the|a)\s+settings"
     r"|(?:turn|switch)\s+(?:on|off)\s+(?:my|the|a)\s+settings")
 
+#: The deictic half of a settings change (2026-11-23): "turn on that setting
+#: for me", "switch that off", "turn it on", "disable it". Deliberately narrow:
+#: the pronoun form is answered ONLY when the previous answer named exactly one
+#: setting (see `_settings_follow_up`), so "turn it on" about a lamp still
+#: falls through to the model exactly as it did before.
+_FOLLOW_UP_SETTING = re.compile(
+    r"(?:turn|switch)\s+(?P<on>on|off)\s+(?:the\s+|my\s+|a\s+)?"
+    r"(?:that|this|it)(?:\s+one)?(?:\s+setting)?(?:\s+for\s+me)?"
+    r"|(?:turn|switch)\s+(?:that|this|it)(?:\s+one)?(?:\s+setting)?\s+(?P<on2>on|off)"
+    r"|(?P<enable>enable|disable)\s+(?:that|this|it)(?:\s+one)?(?:\s+setting)?")
+
+
+def _named_setting_in(text):
+    """The ONE setting, tool or page-only row these words name, or None.
+
+    Scans every 1-4 word window with the registry's OWN matchers - never a
+    typed list of names - keeps the longest name at each place (so "notes
+    search tool" is not re-read as "notes"), and refuses when the words name
+    two different things: ambiguity gets the old refusal, never a guess.
+    Returns (kind, key) where kind is "bool", "tool" or "page".
+    """
+    words = re.findall(r"[a-z0-9]+", str(text or "").lower())
+    if not words:
+        return None
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - no registry, no answer
+        return None
+    hits = []                               # (start, end, kind, key)
+    for size in (1, 2, 3, 4):
+        for i in range(0, len(words) - size + 1):
+            phrase = " ".join(words[i:i + size])
+            # A BOOLEAN SWITCH IS ASKED ABOUT FIRST, then a tool, then a
+            # page-only row: "web search" is both a BOOL_SETTINGS row and the
+            # name of a tool, and the sentence that names it ("turn on web
+            # search") is settings_bool - so the follow-up must be the same
+            # intent, not a second way to change the same thing.
+            try:
+                setting = R.find_bool_setting(phrase)
+            except Exception:               # noqa: BLE001
+                setting = None
+            if setting is not None:
+                hits.append((i, i + size, "bool", setting.key))
+            try:
+                tool = R.find_tool_target(phrase)
+            except Exception:               # noqa: BLE001
+                tool = None
+            if tool:
+                hits.append((i, i + size, "tool", tool))
+            try:
+                dom_id, _mixed = R.page_only_asked(phrase)
+            except Exception:               # noqa: BLE001
+                dom_id = None
+            if dom_id:
+                hits.append((i, i + size, "page", dom_id))
+    if not hits:
+        return None
+    # Longest name first; a shorter hit inside one already kept is part of that
+    # name, not a second setting ("notes search tool" contains "notes").
+    kept = []
+    for hit in sorted(hits, key=lambda h: (h[0] - h[1], h[0])):
+        start, end = hit[0], hit[1]
+        if any(k[0] <= start and end <= k[1] for k in kept):
+            continue
+        kept.append(hit)
+    named = {(k[2], k[3]) for k in kept}
+    if len(named) != 1:
+        return None
+    return named.pop()
+
+
+def _settings_follow_up(s, said):
+    """Intent for a settings change that points at the previous answer's setting.
+
+    `said`: the newest assistant sentence in this request (or None). Nothing is
+    changed here: a boolean change comes back as `settings_bool`, a tool switch
+    as `settings_tool`, and a page-only row as `settings_not_by_asking`, naming
+    the row. None when the sentence is not a settings follow-up, or when the
+    previous answer named no setting or more than one - then the caller keeps
+    its existing refusal."""
+    m = _FOLLOW_UP_SETTING.fullmatch(s)
+    if not m or not said:
+        return None
+    on = m.group("on") or m.group("on2")
+    if on is None and m.group("enable"):
+        on = "on" if m.group("enable") == "enable" else "off"
+    if on is None:
+        return None
+    want = on == "on"
+    named = _named_setting_in(said)
+    if named is None:
+        return None
+    kind, key = named
+    if kind == "bool":
+        return Intent("settings_bool", {"key": key, "on": want})
+    if kind == "tool":
+        return Intent("settings_tool", {"tool": key, "on": want})
+    return Intent("settings_not_by_asking", {"dom_id": key, "mixed": False})
+
 #: "set the hand-off to patient", "set how long my chats are kept to 30 days"
 #: (2026-10-22, the owner's universal-controls requirement). ONLY a name from
 #: jarvis_settings_registry.CHOICE_SETTINGS may match: a tail naming anything
@@ -7525,7 +7632,7 @@ def _one_moment_intent(s: str) -> Optional[Intent]:
     return None
 
 
-def _settings_adjust(s: str) -> Optional[Intent]:
+def _settings_adjust(s: str, said: Optional[str] = None) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
     except Exception:
@@ -7728,6 +7835,21 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     if _READ_ALOUD_STATE.fullmatch(s):
         return Intent("self_read_aloud")
     got = _wifi_reconnect_read(s)
+    if got is not None:
+        return got
+    # A FOLLOW-UP THAT NAMES NOTHING (2026-11-23). The owner typed "Turn on
+    # that setting for me." right after an answer that said the notes search
+    # tool was off; "that setting" names no row, so it fell into
+    # `settings_unknown` below - "I cannot change that setting by asking yet" -
+    # while the setting it pointed at was changeable by name all along. `said`
+    # is the newest ASSISTANT sentence in the request's own history (passed by
+    # `answer`), and the follow-up resolves only when that sentence names
+    # EXACTLY ONE setting: two names, or none, keep the old refusal byte for
+    # byte. What comes back is the SAME intent the named sentence produces, so
+    # the registry's own setter runs with the same tier and the same card - and
+    # a page-only row comes back as `settings_not_by_asking`, naming the row
+    # instead of claiming the name is unknown.
+    got = _settings_follow_up(s, said)
     if got is not None:
         return got
     # A sentence that clearly asks to change A SETTING, naming one nothing
@@ -33457,7 +33579,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     if _made is not None:
         return Result(str(_made.get("reply") or ""),
                       str(_made.get("intent") or "personality_draft"))
-    intent = match(text, now, conversation)
+    intent = match(text, now, conversation, said=newest_jarvis_words(messages))
     if intent is None:
         # GOOGLE CALENDAR: READS AND EVENT CHANGES, AND ONLY THOSE (2026-10-28).
         # Asked HERE - after the fast path has declined - so one sentence has
@@ -33648,6 +33770,34 @@ def _newest_plain_message(body):
     if not isinstance(content, str) or not content.strip():
         return None, None
     return last, content
+
+
+def newest_jarvis_words(body) -> Optional[str]:
+    """The NEWEST assistant sentence in this request's history, or None.
+
+    Read for ONE follow-up (2026-11-23): "Turn on that setting for me." names
+    no setting, and the setting it points at is the one Jarvis named in the
+    answer just before. Only plain text is read - a picture or a structured
+    part is skipped - and the words are never acted on by themselves
+    (`_settings_follow_up` resolves at most one named setting from them).
+    """
+    if not isinstance(body, dict):
+        return None
+    msgs = body.get("messages")
+    if not isinstance(msgs, list):
+        return None
+    for m in reversed(msgs):
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        content = m.get("content")
+        if isinstance(content, list):
+            content = " ".join(
+                str(p.get("text") or "") for p in content
+                if isinstance(p, dict) and p.get("type") in (None, "text"))
+        if isinstance(content, str) and content.strip():
+            return content
+        return None     # the newest assistant turn carries no plain words
+    return None
 
 
 def newest_own_words(body) -> Optional[str]:

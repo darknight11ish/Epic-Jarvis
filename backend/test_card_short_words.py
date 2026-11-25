@@ -568,9 +568,16 @@ def t_the_older_show_everything_still_means_the_menus():
     i = Q.match(MENU_PHRASE_NOT_OURS)
     check(f"{MENU_PHRASE_NOT_OURS!r} is still the menu list, not a card style",
           i is not None and i.name == "menu_visibility", i and (i.name, i.f))
-    src = _read("jarvis_quick.py")
-    check("... because the menu block is checked before the settings one",
-          src.index("got = _menu_visibility(s)") < src.index("got = _settings_adjust(s)"))
+    # Behaviour, not source text (2026-11-24): the ordering is load-bearing
+    # exactly because the settings grammar WOULD claim this sentence - ask it
+    # directly and it answers `settings_card_mode` - so the full matcher
+    # returning `menu_visibility` is what proves the menu block ran first.
+    check("... because the menu block is checked before the settings one, which "
+          "would claim the phrase as a card mode",
+          getattr(Q._settings_adjust(MENU_PHRASE_NOT_OURS), "name", None)
+          == "settings_card_mode"
+          and i is not None and i.name == "menu_visibility",
+          i and (i.name, i.f))
     # And the phrase itself still names a mode if the registry is asked
     # directly - it is the grammar's older claim that wins, not a hole here.
     check("the phrase is still understood by the module itself",
