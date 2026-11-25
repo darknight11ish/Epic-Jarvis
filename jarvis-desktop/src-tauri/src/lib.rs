@@ -1986,9 +1986,19 @@ pub fn run() {
                 // 2026-11-15); before it, three pieces sat at three commits
                 // and nothing said so. `unknown` is said rather than guessed
                 // at for a build made from a source copy with no `.git`.
+                //
+                // The version is the RUNNING APP's own, not the crate's:
+                // `Cargo.toml` says `0.2.0` for ever while the release build
+                // stamps `0.2.<run number>` into the bundled config
+                // (`desktop-release.yml`), so the crate-version macro wrote
+                // "Jarvis Desktop 0.2.0 starting" into every log while the
+                // About card said 0.2.503 (DEF-036). That made this line
+                // useless for the very comparison it exists for: the update
+                // answer reads it and could not match it against the installed
+                // version. `package_info()` is the value the installer wrote.
                 Some(dir) => logfile::log(&format!(
                     "\n===== Jarvis Desktop {} starting ===== (commit {}, logs in {})",
-                    env!("CARGO_PKG_VERSION"),
+                    handle.package_info().version,
                     crate::backend_update::app_commit().unwrap_or_else(|| "unknown".to_string()),
                     dir.display()
                 )),
