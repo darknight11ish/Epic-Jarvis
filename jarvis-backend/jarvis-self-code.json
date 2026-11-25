@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "d842081801a9becfe1562eeffbd568a9cd0d9830",
- "built_at": "2026-11-23T21:54:50-08:00",
+ "ref": "5457b58d78706c85634ae1b7b2315df048d7569e",
+ "built_at": "2026-11-25T09:10:28-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3888,12 +3888,14 @@
     "backend/test_card_words.py",
     "backend/test_catalogue_phrasing.py",
     "backend/test_character.py",
+    "backend/test_chat_flexibility.py",
     "backend/test_chat_fork.py",
     "backend/test_chat_honesty.py",
     "backend/test_chat_kinds.py",
     "backend/test_chat_log.py",
     "backend/test_chat_marks.py",
     "backend/test_chat_picture.py",
+    "backend/test_chat_picture_save.py",
     "backend/test_chat_pins.py",
     "backend/test_chat_stream.py",
     "backend/test_chat_stream_contract.py",
@@ -4019,6 +4021,9 @@
     "backend/test_github_authoring.py",
     "backend/test_github_ci_count.py",
     "backend/test_github_commands.py",
+    "backend/test_github_mode.py",
+    "backend/test_github_mode_chat.py",
+    "backend/test_github_mode_router.py",
     "backend/test_github_off_switch_card.py",
     "backend/test_github_own_repo.py",
     "backend/test_github_parity.py",
@@ -4155,7 +4160,9 @@
     "backend/test_no_videos_in_the_tree.py",
     "backend/test_note_and_vault_asking.py",
     "backend/test_note_capture.py",
+    "backend/test_note_grammar_corpus.py",
     "backend/test_note_multihop_taint.py",
+    "backend/test_note_referral.py",
     "backend/test_notes.py",
     "backend/test_notes_chat_read.py",
     "backend/test_notes_create_find_append.py",
@@ -4346,6 +4353,7 @@
     "backend/test_sensitive.py",
     "backend/test_setting_alias_phrasing.py",
     "backend/test_setting_explain.py",
+    "backend/test_settings_followup.py",
     "backend/test_settings_help.py",
     "backend/test_settings_receipts.py",
     "backend/test_settings_registry.py",
@@ -4434,6 +4442,7 @@
     "backend/test_ui_control.py",
     "backend/test_uncensored_optins.py",
     "backend/test_unmanaged_files.py",
+    "backend/test_update_answers.py",
     "backend/test_update_backend.py",
     "backend/test_update_chat.py",
     "backend/test_update_progress_shape.py",
@@ -4491,7 +4500,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 739,
+   "file_count": 748,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4538,13 +4547,7 @@
     "LICENSE",
     "README.md",
     "THIRD-PARTY-NOTICES.txt",
-    "changelog.d/2026-11-23-deny-ignores-cookie-advisory.md",
-    "changelog.d/2026-11-23-obsidian-delete-notes.md",
-    "changelog.d/2026-11-23-several-files-from-the-phone.md",
     "changelog.d/README.md",
-    "decisions.d/2026-11-23-a-cookie-advisory-that-cannot-reach-windows.md",
-    "decisions.d/2026-11-23-obsidian-delete-notes.md",
-    "decisions.d/2026-11-23-several-files-in-one-pick.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5051,7 +5054,7 @@
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/README-ACCEPTANCE-WAVE17.md",
     "field-test-archive/2026-11/WAVE17-DEPLOY-2026-11-11/ROLLBACK-WAVE17.md"
    ],
-   "file_count": 519,
+   "file_count": 513,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6197,111 +6200,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "d842081801a9becfe1562eeffbd568a9cd0d9830",
-   "date": "2026-11-23",
-   "subject": "chore(generated): take the recent-changes modules from the record after #1479"
+   "sha": "5457b58d78706c85634ae1b7b2315df048d7569e",
+   "date": "2026-11-25",
+   "subject": "chore(records): re-take the recent-changes module"
   },
   {
-   "sha": "cdc68de8154c16315408b28e8920420ef339f340",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1479 from darknight11ish/feat/obsidian-delete-notes"
+   "sha": "2631ae9fbc9cbde7e808bd1fdad28d8f83ae0894",
+   "date": "2026-11-25",
+   "subject": "chore(records): roll the changelog and decisions fragments"
   },
   {
-   "sha": "e6b717062773a900efc4194e98ef489a57e18a1e",
-   "date": "2026-11-23",
-   "subject": "fix(notes): the delete action is on the asks-first page, and the suites agree"
+   "sha": "bf8c2ff5f63c3b5e54c07d242957f4d393ad2d42",
+   "date": "2026-11-25",
+   "subject": "feat(notes): a date sentence writes a date, a name sentence writes an alias (#1493)"
   },
   {
-   "sha": "29a427ae067c878ee4f05cfd43e02eec772b95c9",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1480 from darknight11ish/feat/send-many-files-2026-11-23"
+   "sha": "2d91fc38cb511ff4abf78a6ed4cbcf373fb35861",
+   "date": "2026-11-25",
+   "subject": "feat(github): full GitHub mode, slice 1 - one PC-only card, one extra yes, one card removed (#1494)"
   },
   {
-   "sha": "010081623f35e84a19ec73b7268cf085450ef7de",
-   "date": "2026-11-23",
-   "subject": "test(gate): call the renamed delete-note check by its new name"
+   "sha": "da58e6f80052517012f8396618e0e9164c2ba13b",
+   "date": "2026-11-25",
+   "subject": "chore(records): close the defect rows the code already fixed, file the update gaps, and correct the claims register's drifted rows (#1497)"
   },
   {
-   "sha": "c6fb04535c06883a04201c2c08c2fd85927fc3af",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1478 from darknight11ish/chore/records-and-generated-refresh-4"
+   "sha": "a2f93513771910976f9ebefccea8c4d337970110",
+   "date": "2026-11-25",
+   "subject": "fix(desktop): the startup line names the version that is installed, not 0.2.0 (#1496)"
   },
   {
-   "sha": "146693f0ec9f804d0c7a51a276da1a6f53ec1914",
-   "date": "2026-11-23",
-   "subject": "feat(phone): one pick can send several files to the PC"
+   "sha": "f2b25fac39c7f2c5beb8819c524defe74d0acfb8",
+   "date": "2026-11-25",
+   "subject": "feat(chat): answer 'did my update finish' from the stamps on this PC (#1495)"
   },
   {
-   "sha": "5bc1d7fae756228f39e185bf4975c5affb05a110",
-   "date": "2026-11-23",
-   "subject": "chore(generated): retake the self-code map on the rebased tree"
+   "sha": "f9eeb10bf94a5210f71b8e18ac8623941ab18c4e",
+   "date": "2026-11-24",
+   "subject": "fix(notes): one note and its name in one sentence, and 'and favorite' is a flag (#1492)"
   },
   {
-   "sha": "80536040fe9f8b2c0d9e1e8cb424549f6b077c06",
-   "date": "2026-11-23",
-   "subject": "chore(generated): take the recent-changes modules from the record after #1477"
+   "sha": "b62fa57193a7ed6f94efefc7d0a7076136e8bf5a",
+   "date": "2026-11-24",
+   "subject": "fix(deploy): the manifest records the source, not the live bytes (#1491)"
   },
   {
-   "sha": "123a2f91fca4376bc1b4ef76cf65bfd94c8fac0f",
-   "date": "2026-11-23",
-   "subject": "chore(generated): refresh the self-code map and the docs map"
+   "sha": "84aef861608acc2d4929a6610a029aaed2d1af59",
+   "date": "2026-11-24",
+   "subject": "fix(update): say which half is ahead, and claim done only for one release (#1490)"
   },
   {
-   "sha": "733cbcc692d18c320fa01e570dccc5aab31b5f2b",
-   "date": "2026-11-23",
-   "subject": "chore(generated): take the recent-changes modules from the rolled record"
+   "sha": "23b042dca005fd71430ee7fc21300aa083be1221",
+   "date": "2026-11-24",
+   "subject": "feat(chat): understand a request that is close to the right wording (48% -> 69%) (#1489)"
   },
   {
-   "sha": "efd09f747e40aaf021b09e891940b02453e617f1",
-   "date": "2026-11-23",
-   "subject": "chore(records): roll the changelog and the decision fragments"
+   "sha": "ef70b17b086bdb82e005afc43621aff769ec2171",
+   "date": "2026-11-24",
+   "subject": "docs(defects): file the seven prompts that produced no code as DEF-092..DEF-098 (#1488)"
   },
   {
-   "sha": "cb2595bf8332f3926e9fa890f772280740883099",
-   "date": "2026-11-23",
-   "subject": "feat(notes): delete up to 20 notes from chat, on one card that names them"
+   "sha": "2d8ff86ccece712042ec11f4d6fba8c6512c47e4",
+   "date": "2026-11-24",
+   "subject": "Merge pull request #1484 from darknight11ish/fix/scheduling-truth-2026-11-24"
   },
   {
-   "sha": "b6fb7d9e5192181a95166a2f5863e68ed2327f83",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1477 from darknight11ish/fix/rustsec-2026-0594-cookie-2026-11-23"
+   "sha": "711b2e9a3cd0de8699246bbf7c53969a512fd8d8",
+   "date": "2026-11-24",
+   "subject": "docs(api): the cancel tool is written down, and the page says it starts off"
   },
   {
-   "sha": "18513ad72291b6d071f31850e4ec4ea1c20b672e",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1474 from darknight11ish/feat/startup-preset-settings-row-2026-11-22"
+   "sha": "cd70be0f7a9f7aa5784837b29ee333a1fd00942e",
+   "date": "2026-11-24",
+   "subject": "fix(tests): the two JS pins and the one generated table that list every tool"
   },
   {
-   "sha": "a9f15c2f8de25dc701883c0d8d6832b10882c10e",
-   "date": "2026-11-23",
-   "subject": "deps(desktop): waive RUSTSEC-2026-0594, which no Windows build can reach"
+   "sha": "b0926662ec0bd355c09df0d108dd4f5a777550a1",
+   "date": "2026-11-24",
+   "subject": "Merge pull request #1481 from darknight11ish/fix/settings-follow-up-resolution-2026-11-23"
   },
   {
-   "sha": "cff90a155916f53849e6052db20625a9fb1ef9d1",
-   "date": "2026-11-23",
-   "subject": "chore(desktop): regenerate the feature directory for the new contract row"
+   "sha": "18ffc17611fe0905796ade37ed66a62f12f828a6",
+   "date": "2026-11-24",
+   "subject": "Merge pull request #1486 from darknight11ish/fix/phone-empty-reminders-copy-2026-11-24b"
   },
   {
-   "sha": "61e01289861f31e19503dd0ed23bb7bbf8cf266f",
-   "date": "2026-11-23",
-   "subject": "Merge pull request #1476 from darknight11ish/feat/rerun-by-pr-and-check-2026-11-22"
+   "sha": "fb09ecd195304ea30458bd07000f8e76991c71b9",
+   "date": "2026-11-24",
+   "subject": "merge: carry main into the settings follow-up, and prove the menu ordering by behaviour"
   },
   {
-   "sha": "817aae7dc5b74a61adf215080776a07e3d513f24",
-   "date": "2026-11-23",
-   "subject": "fix(phone): the startup preset has a phone decision, and a matrix row"
+   "sha": "914a805eb4c0a1a237acecb11a6dd818959dfda7",
+   "date": "2026-11-24",
+   "subject": "fix(desktop): the Coming up panel and the phone say the same empty sentence"
   },
   {
-   "sha": "90223bdf0b91916c198eb2d30ffd991a1c8575ca",
-   "date": "2026-11-23",
-   "subject": "docs(about): bring the claims totals up to the new row"
+   "sha": "58cacf7ed31104851cf532f3110fbb88c8f3b0ea",
+   "date": "2026-11-24",
+   "subject": "fix(desktop): cancel_scheduled reaches the Tools page, and four more pinned counts follow"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1508
+   "files": 1517
   },
   {
    "path": "jarvis-desktop/",
@@ -6374,16 +6377,6 @@
    "files": 6
   },
   {
-   "path": "changelog.d/",
-   "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 4
-  },
-  {
-   "path": "decisions.d/",
-   "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 4
-  },
-  {
    "path": "server/",
    "line": "the old Android app's WebSocket server, kept for reference",
    "files": 3
@@ -6397,6 +6390,16 @@
    "path": "skills/",
    "line": "skill packs a person can add",
    "files": 2
+  },
+  {
+   "path": "changelog.d/",
+   "line": "one bullet per pull request, rolled into CHANGELOG.md",
+   "files": 1
+  },
+  {
+   "path": "decisions.d/",
+   "line": "one dated decision per pull request, rolled into DECISIONS.md",
+   "files": 1
   },
   {
    "path": "features/",
@@ -6420,8 +6423,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5536,
-  "covered": 5048,
+  "tracked_files": 5539,
+  "covered": 5051,
   "excluded": 488,
   "subsystems": 27
  },
