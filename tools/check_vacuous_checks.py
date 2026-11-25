@@ -281,7 +281,9 @@ def findings(tree: ast.Module, rel: str):
     at = condition_index(fn)
     if at is None:
         unreadable.append((rel, "its `def check` has no parameter this tool "
-                                "recognises as the condition"))
+                                "recognises as the condition - the house "
+                                "signature is `def check(name, cond, detail=\"\")`, "
+                                "whose `cond` is the boolean the check is about"))
         return problems, unreadable, accepted
     if fn.args.defaults and at >= len(fn.args.args) - len(fn.args.defaults):
         problems.append((rel, fn.lineno, "a check that can be called with no "

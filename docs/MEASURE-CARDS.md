@@ -59,14 +59,14 @@ trust; the rest is evidence around it.
 
 ```
 NAME        ID              SIZE      PROCESSOR    CONTEXT    UNTIL
-qwen3:8b    500a1f067a9f    5.6 GB    100% GPU     4096       Forever
+qwen3:8b    500a1f067a9f    5.6 GB    100% GPU     16384      Forever
 ```
 
 | Column | What it means |
 |---|---|
 | **SIZE** | How much memory Ollama is holding for the model, as Ollama counts it. |
 | **PROCESSOR** | **The column that matters.** `100% GPU` means every layer is on a graphics card. Anything else - `52%/48% CPU/GPU`, or `100% CPU` - means part of the model is on your processor, which is about five times slower for that part, and nothing else warns you. |
-| **CONTEXT** | How much conversation the model can hold at once, in tokens (a token is a word or part of a word). What you have now is 4,096; the everyday setting this project documents is 16,384. |
+| **CONTEXT** | How much conversation the model can hold at once, in tokens (a token is a word or part of a word). What you have now is 16,384; the everyday setting this project documents is 16,384. |
 | **UNTIL** | When the model unloads. `Forever` means never. |
 
 The one you do not want to see:
