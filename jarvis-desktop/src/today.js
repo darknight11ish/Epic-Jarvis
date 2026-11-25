@@ -164,7 +164,7 @@ export function addArgs(text, at, days) {
 /** The sections' words. */
 export const DUE_TITLE = "Due now";
 export const DUE_DETAIL =
-  "Reminders, alarms and timers whose time has come, or that went off in the last hour.";
+  "Reminders, alarms and timers whose time has come, or that went off in the last 24 hours.";
 export const NEXT_TITLE = "Next steps";
 export const NEXT_DETAIL =
   "The first step of each goal you are working on, and of each project's work list.";

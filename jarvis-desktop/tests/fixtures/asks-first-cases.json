@@ -1979,7 +1979,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -2161,6 +2162,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -2862,6 +2871,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -4877,7 +4906,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -5059,6 +5089,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -5756,6 +5794,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -7771,7 +7829,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -7953,6 +8012,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -8658,6 +8725,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -10678,7 +10765,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -10860,6 +10948,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -11565,6 +11661,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -13585,7 +13701,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -13767,6 +13884,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -14472,6 +14597,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -16487,7 +16632,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -16669,6 +16815,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -17374,6 +17528,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -19384,7 +19558,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -19566,6 +19741,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -20271,6 +20454,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -22301,7 +22504,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -22483,6 +22687,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -23184,6 +23396,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -25209,7 +25441,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -25391,6 +25624,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -26092,6 +26333,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -28102,7 +28363,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -28284,6 +28546,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -28989,6 +29259,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -31013,7 +31303,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -31195,6 +31486,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -31900,6 +32199,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -33915,7 +34234,8 @@
        "set_reminder",
        "todo_add",
        "todo_done",
-       "coming_up"
+       "coming_up",
+       "cancel_scheduled"
       ],
       "title": "Timers, lists and plans"
      },
@@ -34097,6 +34417,14 @@
       "last": null,
       "on": false,
       "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "cancel_scheduled",
+      "last": null,
+      "on": false,
+      "title": "Cancelling a timer, an alarm, a reminder or a to-do item",
       "waiting": false
      },
      {
@@ -34802,6 +35130,26 @@
       {
        "id": "project_export_obsidian_hub",
        "title": "Writing a one-way copy of a project into your Obsidian vault (one card)"
+      },
+      {
+       "id": "set_timer",
+       "title": "Timers"
+      },
+      {
+       "id": "set_reminder",
+       "title": "Reminders"
+      },
+      {
+       "id": "todo_add",
+       "title": "Adding to the to-do list"
+      },
+      {
+       "id": "todo_done",
+       "title": "Ticking off the to-do list"
+      },
+      {
+       "id": "coming_up",
+       "title": "Coming up (timers, alarms, reminders)"
       }
      ],
      "label": "New — currently off",
@@ -34880,6 +35228,7 @@
   "todo_add",
   "todo_done",
   "coming_up",
+  "cancel_scheduled",
   "protect_from_jarvis",
   "github_search",
   "send_file_to_phone",

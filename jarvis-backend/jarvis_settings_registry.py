@@ -1579,6 +1579,7 @@ _TOOL_TARGETS = {
     'todo_add': ('the todo add tool', 'todo add tool', 'the todo add', 'todo add'),
     'todo_done': ('the todo done tool', 'todo done tool', 'the todo done', 'todo done'),
     'coming_up': ('the coming up tool', 'coming up tool', 'the coming up', 'coming up'),
+    'cancel_scheduled': ('the cancel scheduled tool', 'cancel scheduled tool', 'the cancel scheduled', 'cancel scheduled'),
     'protect_from_jarvis': ('the protect from jarvis tool', 'protect from jarvis tool', 'the protect from jarvis', 'protect from jarvis'),
     'github_search': ('the github search tool', 'github search tool', 'the github search', 'github search'),
     'send_file_to_phone': ('the send file to phone tool', 'send file to phone tool', 'the send file to phone', 'send file to phone', 'file to phone'),

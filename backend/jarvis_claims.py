@@ -271,6 +271,12 @@ ACTING_TOOLS = frozenset({
     "approve_web_search_for_conversation", "stop_web_search_approval",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",
+    # "cancel_scheduled" (2026-11-24): it DELETES one of the owner's timers,
+    # alarms, reminders or to-do items from the scheduler's store. A cancel
+    # that found nothing, or an ambiguous match that deleted nothing, must be
+    # corrected exactly like a to-do tick that did not land - so it is an
+    # action, never a read.
+    "cancel_scheduled",
     # The goals writes (2026-11-02): adding a goal, recording a progress line
     # and marking one done all CHANGE the owner's own store, so "nothing was
     # done" after one of them is the same false claim a to-do tick would be.

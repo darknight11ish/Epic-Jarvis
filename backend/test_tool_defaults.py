@@ -139,7 +139,17 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    "project_create", "project_seed_plan",
                    "project_decompose_plan", "work_item_add",
                    "work_item_update_status", "work_item_link_dependency",
-                   "project_checkpoint_reflect", "project_export_obsidian_hub"]
+                   "project_checkpoint_reflect", "project_export_obsidian_hub",
+                   # The five scheduler tools (2026-11-24, the scheduling
+                   # review's first fix). A timer, an alarm, a reminder, a to-do
+                   # item and "what's coming up" are the owner's own words into
+                   # the owner's own list; a FRESH install used to offer the model
+                   # none of them, so a reminder the fast lane missed was answered
+                   # "set" with no row written. Appended, in the order the
+                   # template names them. Each keeps its Tools-page switch and
+                   # starts on (test_tool_profiles.ON_WITH_A_SWITCH).
+                   "set_timer", "set_reminder", "todo_add", "todo_done",
+                   "coming_up"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
@@ -158,6 +168,10 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      # The two review gates (2026-11-11, Q-D/Q7) sit where TOOLS
                      # puts them, after the pack tools and before web_search.
                      "review_changes", "check_records", "web_search",
+                     # The five scheduler tools (2026-11-24) sit where TOOLS
+                     # puts them: after web_search and before the plan store's.
+                     "set_timer", "set_reminder", "todo_add", "todo_done",
+                     "coming_up",
                      # The plan store's eight (2026-11-20, PM2) sit where TOOLS
                      # puts them, after web_search and before change_setting.
                      "project_create", "project_seed_plan",
@@ -184,6 +198,11 @@ OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list
                        # folder-gated my_files as before.
                        "review_changes", "check_records", "web_search",
                        "my_files",
+                       # The five scheduler tools (2026-11-24), same TOOLS
+                       # position as above - after my_files, before the plan
+                       # store's eight.
+                       "set_timer", "set_reminder", "todo_add", "todo_done",
+                       "coming_up",
                        # The plan store's eight (2026-11-20, PM2), same TOOLS
                        # position as above.
                        "project_create", "project_seed_plan",
@@ -292,7 +311,7 @@ def t_a_fresh_install_offers_the_defaults():
     os.environ["JARVIS_FRAMEWORK_TOML"] = str(settings)
     try:
         enabled = AG.enabled_tools_for_turn()
-        check("a fresh install's turn reads the twenty-one-name enabled set",
+        check("a fresh install's turn reads the pinned enabled set",
               enabled == set(DEFAULT_ENABLED), enabled)
         offered = AG.offered_tools(enabled)
         check("...and the model is offered the local defaults, plus the grant ask "

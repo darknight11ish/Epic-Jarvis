@@ -491,7 +491,8 @@ LOOSEN_ACTION = "loosen_what_asks_first"
 TIER_A = (
     "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
     "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
-    "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+    "coming_up", "cancel_scheduled", "protect_from_jarvis", "github_search",
+    "send_file_to_phone",
 )
 
 #: The conversation web-search approval and its instant stop are NOT rows here
@@ -680,7 +681,8 @@ TOOL_GROUPS = (
      ("calendar_read", "notes_search", "append_obsidian_daily",
       "create_joplin_note", "append_logseq_journal")),
     ("Timers, lists and plans",
-     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
+     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up",
+      "cancel_scheduled")),
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
@@ -2244,6 +2246,11 @@ TEMPLATE_TOOLS = (
     "project_create", "project_seed_plan", "project_decompose_plan",
         "work_item_add", "work_item_update_status", "work_item_link_dependency",
         "project_checkpoint_reflect", "project_export_obsidian_hub",
+    # The five scheduler tools (2026-11-24, the scheduling review's first
+    # fix), in the order the shipped template names them. A fresh install used
+    # to offer the model none of them, so a reminder the fast lane missed was
+    # answered "set" with no row written.
+    "set_timer", "set_reminder", "todo_add", "todo_done", "coming_up",
 )
 #: The tools this build added on top of what the owner's live file named on
 #: 2026-11-05/06. A name here that is NOT in the live list is offered with the

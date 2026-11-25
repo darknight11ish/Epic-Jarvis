@@ -357,9 +357,9 @@ def tool_counts_are_the_real_tools():
             own.write_bytes(had)
         SP._clear_caches()
     check("putting the settings file back puts the shipped list back",
-          # The shipped [tools].enabled names 29 tools since PM2 added the
-          # plan store's eight (2026-11-20); it was 21 before.
-          SP.tool_inventory()["enabled"] == 29,
+          # The shipped [tools].enabled names 34 tools since the five scheduler
+          # tools joined on 2026-11-24 (29 after PM2's eight, 21 before that).
+          SP.tool_inventory()["enabled"] == 34,
           str(SP.tool_inventory()["enabled"]))
 
 

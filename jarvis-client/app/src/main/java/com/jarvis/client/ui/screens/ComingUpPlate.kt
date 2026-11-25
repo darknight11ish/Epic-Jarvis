@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
  * a timer still counts down; Show brings the words back.
  *
  * Since 2026-09-25: "Just went off" at the top - a timer, alarm or reminder
- * that went off in the last hour, with Snooze ([Schedule.SNOOZE], ONE job,
+ * that went off in the last 24 hours, with Snooze ([Schedule.SNOOZE], ONE job,
  * no card, held on a stale link) and, since 2026-10-13, Delete (the same
  * word and the same route every other row's Delete uses, which reaches a job
  * that has already gone off; DEF-008); and under the to-do list the NAMED
@@ -208,7 +208,7 @@ internal fun ComingUpSection(
                     // owner actually looks at - and draws nothing at all when
                     // no file is waiting (SendFilePlate.kt).
                     SendFileWaitingBlock(canAct = canAct, privateHidden = privateHidden)
-                    // Just went off (the last hour): Snooze, ONE job per tap.
+                    // Just went off (the last 24 hours): Snooze, ONE job per tap.
                     if (shown.wentOff.isNotEmpty()) {
                         Text(Schedule.WENT_OFF_TITLE, style = MaterialTheme.typography.labelMedium,
                             color = chrome.textMid)
@@ -459,7 +459,7 @@ internal fun ComingUpSection(
 }
 
 /**
- * Something that went off in the last hour: its words, when, Snooze and
+ * Something that went off in the last 24 hours: its words, when, Snooze and
  * Delete - ONE job per tap. Delete is coloured like every other row's
  * ([ScheduleRow] below, `chrome.badInk`) and reaches a fired job since
  * 2026-10-13 (DEF-008; net/Schedule.kt's [Schedule.WENT_OFF_ACTIONS] says why

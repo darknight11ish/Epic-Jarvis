@@ -349,7 +349,7 @@ def t_the_two_ends():
               j["id"] in went, went)
         check("its event says notify false and carries no words",
               ev and ev[-1].get("notify") is False and set(ev[-1]) ==
-              {"id", "kind", "state", "late", "notify"}, ev)
+              {"id", "kind", "state", "late", "notify", "fired_at"}, ev)
         timer_ev = [d for k, d in w.events if d.get("kind") == "timer" and d["state"] == "fired"]
         check("a timer's event says notify true (the flag the phone reads)",
               timer_ev and timer_ev[-1].get("notify") is True, timer_ev)

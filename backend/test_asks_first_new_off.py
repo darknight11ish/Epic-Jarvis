@@ -87,8 +87,9 @@ def t_the_constant_is_the_shipped_template():
     names = template_tools()
     check("the shipped template's [tools] enabled list was found", bool(names),
           "no line matched; this suite is blind")
-    check("the template offers 29 abilities (21 + the plan store's eight)",
-          len(names) == 29, len(names))
+    check("the template offers 34 abilities (21, the plan store's eight and the "
+          "five scheduler tools)",
+          len(names) == 34, len(names))
     check("jarvis_asks_first.TEMPLATE_TOOLS is exactly the template's list",
           tuple(AF.TEMPLATE_TOOLS) == names, (tuple(AF.TEMPLATE_TOOLS), names))
     check("the five this build added are all in it",
@@ -98,7 +99,8 @@ def t_the_constant_is_the_shipped_template():
 def t_with_the_live_list_the_five_and_the_review_gates_appear():
     live = tuple(t for t in AF.TEMPLATE_TOOLS
                  if t not in THE_FIVE and t not in REVIEW and t not in PLAN)
-    check("the live fixture is the owner's own 14", len(live) == 14, len(live))
+    check("the live fixture is the owner's own 19 (his file also names the five "
+          "scheduler tools)", len(live) == 19, len(live))
     rows = AF.newly_off_tools(set(live))
     ids = [r["id"] for r in rows]
     new_here = THE_FIVE + REVIEW + PLAN
@@ -127,7 +129,8 @@ def t_the_review_gates_are_offered_on_an_older_pc_template():
     by default" reaches an EXISTING install."""
     older = tuple(t for t in AF.TEMPLATE_TOOLS
                   if t not in REVIEW and t not in PLAN)
-    check("the older fixture is the old 19-name template", len(older) == 19,
+    check("the older fixture is the old 24-name template (the five scheduler "
+          "tools came with it)", len(older) == 24,
           len(older))
     rows = AF.newly_off_tools(set(older))
     check("both review gates and the plan store's eight appear on an older PC",

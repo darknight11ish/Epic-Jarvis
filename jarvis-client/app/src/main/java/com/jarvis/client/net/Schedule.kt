@@ -50,7 +50,9 @@ import kotlinx.serialization.json.doubleOrNull
  *
  * SINCE 2026-09-25 (the creativity audit's everyday quick wins), in the
  * desktop's words: "Just went off" - a timer, alarm or reminder that went off
- * in the last hour, with Snooze ([SNOOZE]: a one-off copy ten minutes later
+ * in the last 24 hours (the window moved from an hour on 2026-11-24, so the
+ * phone can still show one that fired while its link was down), with Snooze
+ * ([SNOOZE]: a one-off copy ten minutes later
  * on the PC; a repeating one keeps its usual times; no card) and, since
  * 2026-10-13, Delete ([WENT_OFF_ACTIONS]: DEF-008 - deleting a job that has
  * already gone off works now) - also on the notification
@@ -153,7 +155,7 @@ object Schedule {
     /** "Just went off" and Snooze - the desktop's coming-up.js, word for word. */
     const val WENT_OFF_TITLE = "Just went off"
     const val WENT_OFF_DETAIL =
-        "In the last hour. Snooze sets it to go off again in 10 minutes - a repeating one keeps its " +
+        "In the last 24 hours. Snooze sets it to go off again in 10 minutes - a repeating one keeps its " +
             "usual times."
     const val SNOOZE = "Snooze 10 minutes"
 
@@ -502,7 +504,7 @@ object Schedule {
         val jobs: List<Job>,
         val todo: List<Job>,
         val hidden: Boolean,
-        /** What went off in the last hour (an older PC sends none). */
+        /** What went off in the last 24 hours (an older PC sends an hour's). */
         val wentOff: List<Job> = emptyList(),
         val lists: List<NamedList> = emptyList(),
         /**

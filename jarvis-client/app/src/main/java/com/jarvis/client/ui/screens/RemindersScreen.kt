@@ -421,7 +421,7 @@ internal fun RemindersScreen(
                                     color = chrome.warnInk,
                                 )
                             }
-                            // Just went off (the last hour): Snooze and Delete,
+                            // Just went off (the last 24 hours): Snooze and Delete,
                             // one job per tap - the same rows and words the Brain
                             // plate draws.
                             if (list.wentOff.isNotEmpty()) {

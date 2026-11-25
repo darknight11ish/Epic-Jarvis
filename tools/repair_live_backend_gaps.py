@@ -1406,10 +1406,49 @@ DEVICES_CLEANUP_GATE_ROWS = Repair(
 )
 
 
+#: Wave 24 (2026-11-24, the scheduling review's fifth fix): the model can now
+#: cancel ONE of the owner's timers, alarms, reminders or to-do items
+#: (`jarvis_agent.cancel_scheduled`). It calls the scheduler's own delete path
+#: and raises no card - a delete only makes things quieter - so its action is
+#: "auto". The published base carries the row in an end-of-file
+#: `_TOOL_ACTIONS.update({...})` block, the region no patch's hunk claims; this
+#: install predates it, so without this repair `action_for_tool()` answers
+#: "unclassified_tool" for the new tool, the Reach page calls it unclassified,
+#: and the gate's own record of the action is wrong. The row text is copied
+#: from the published base byte for byte.
+#:
+#: WHY THE ROW SITS INSIDE THE `_TOOL_ACTIONS` LITERAL HERE. This is the LIVE
+#: file and no patch is applied after this write, so the base's end-of-file rule
+#: does not bind - `tool-actions` and `project-tools` above use the same shape
+#: for the same reason.
+CANCEL_SCHEDULED_TOOL_ACTION = Repair(
+    name="cancel-scheduled",
+    filename="jarvis_gate.py",
+    probes=('"cancel_scheduled": "auto",',),
+    anchor="_TOOL_ACTIONS: dict[str, str] = {\n",
+    replace_with=(
+        "_TOOL_ACTIONS: dict[str, str] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-24, Wave 24):\n"
+        "    # cancelling one scheduled thing. The published base has this\n"
+        "    # row in an end-of-file `_TOOL_ACTIONS.update` block; this\n"
+        "    # install predates it, so action_for_tool() answered\n"
+        "    # \"unclassified_tool\" for the tool. The action is \"auto\"\n"
+        "    # because a delete only makes things quieter - the same line\n"
+        "    # todo_done sits on. Copied from jarvis-backend/jarvis_gate.py\n"
+        "    # byte for byte.\n"
+        '    "cancel_scheduled": "auto",\n'
+    ),
+    why="without this row action_for_tool() calls the new cancel tool "
+        "unclassified, so the Reach page names the wrong thing and the gate's "
+        "own record of the action is wrong",
+)
+
+
 REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               NOTE_DELETE_RISK, NOTE_DELETE_NO_RULE,
                               PROJECT_GATE_ROWS,
                               DEVICES_CLEANUP_GATE_ROWS,
+                              CANCEL_SCHEDULED_TOOL_ACTION,
                               GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
                               UNKNOWN_RISK)}
 

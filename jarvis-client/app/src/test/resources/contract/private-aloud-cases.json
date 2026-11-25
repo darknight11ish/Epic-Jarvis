@@ -1779,6 +1779,34 @@
       "read": false
     },
     {
+      "name": "the tool cancel_scheduled ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "cancel_scheduled"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "cancel_scheduled"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool goals_list ran",
       "heard": {
         "private_aloud": false,

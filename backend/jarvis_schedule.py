@@ -201,9 +201,19 @@ SNOOZE_MIN = 60.0
 SNOOZE_MAX = MAX_TIMER
 #: The kinds that can be snoozed once they went off.
 SNOOZABLE = ("timer", "alarm", "reminder")
-#: Something that went off is shown under "Just went off" in both apps, and
-#: is what a spoken "snooze" means, for this long.
-WENT_OFF_SHOWN = 3600.0
+#: Something that went off is shown under "Just went off" in both apps for as
+#: long as it stays readable at all (2026-11-24, the scheduling review's second
+#: fix): the phone keeps no copy and gets no push, so a reminder that fired
+#: while its link was down used to vanish from the phone an hour later while
+#: the PC would still have shown it for a day. ONE window, a day - not two
+#: different numbers for the list and for the row.
+WENT_OFF_SHOWN = FIRED_KEEP
+
+#: ...but a SPOKEN "snooze" still reaches back only this far (2026-11-24): the
+#: phrase means "the one that just went off", not "anything from today", and a
+#: timer set from a twenty-hour-old firing would read as a bug. The list shows
+#: a day; the spoken verb that acts on one keeps its hour.
+SNOOZE_SHOWN = 3600.0
 
 #: "Cancel that": how long after the fast path set something it may be
 #: taken back by saying so, and how long the note is kept to say "that was
@@ -3936,8 +3946,8 @@ class Scheduler:
 
         Routed before act()'s own list gate, the same way snooze() is. A job
         that WENT OFF is not on the live list any more, but it is still
-        SHOWN under "Just went off" for WENT_OFF_SHOWN (an hour) and stays
-        readable by id for FIRED_KEEP (a day), and the owner decided on
+        SHOWN under "Just went off" for WENT_OFF_SHOWN (a day) and stays
+        readable by id for FIRED_KEEP (the same day), and the owner decided on
         2026-10-13 that an entry the apps list must be one they can clear.
         So 'fired' is the one extra state this accepts; the rest of the set
         (active, paused, waiting) is exactly act()'s, and a 'waiting' job
@@ -4022,14 +4032,17 @@ class Scheduler:
 
     def went_off(self, now: Optional[float] = None) -> list:
         """What went off in the last WENT_OFF_SHOWN seconds and could be
-        snoozed - newest first, at most five. One already snoozed is left
-        out: its copy is on the list."""
+        snoozed - newest first, at most twenty. A day's worth is what the
+        phone needs to show a reminder that fired while it was away; a fired
+        one-off is deleted FIRED_KEEP after it fires, so the window and the
+        cap are the same day. One already snoozed is left out: its copy is on
+        the list."""
         now = self.now() if now is None else now
         with self._lock, self._db() as c:
             rows = c.execute("SELECT * FROM jobs WHERE fired_at IS NOT NULL AND fired_at >= ? "
                              "AND kind IN ('timer','alarm','reminder') "
                              "AND state IN ('fired','active','paused') AND snoozed_to IS NULL "
-                             "ORDER BY fired_at DESC LIMIT 5",
+                             "ORDER BY fired_at DESC LIMIT 20",
                              (now - WENT_OFF_SHOWN,)).fetchall()
         return [self._view(r, now) for r in rows]
 
@@ -4362,7 +4375,14 @@ class Scheduler:
                     self._changed(jid, kind)
             else:
                 _audit("schedule.fired", {"id": jid, "kind": kind, "late": late})
-                data = {"id": jid, "kind": kind, "state": "fired", "late": bool(late)}
+                # `fired_at` (2026-11-24, the scheduling review's third fix):
+                # WHEN, as an absolute epoch, so a client that receives the
+                # frame late - a reconnect, a replayed event - can tell a fresh
+                # firing from an old one. An `age_s` computed here would always
+                # be 0: the number is only meaningful against the reader's own
+                # clock. Additive, so an older client ignores it.
+                data = {"id": jid, "kind": kind, "state": "fired", "late": bool(late),
+                        "fired_at": now}
                 if part is not None:
                     # Additive keys an older client ignores: WHICH part this is,
                     # so both apps can say "2 of 4" and put the part's own
@@ -4890,7 +4910,7 @@ class Scheduler:
                 "todo_mode": self.todo_mode(),
                 "todo_modes": [dict(m) for m in TODO_MODE_WORDS],
                 "todo_days": _todo_days(daily, now),
-                # 2026-09-25: what went off in the last hour (Snooze), and
+                # 2026-09-25: what went off in the last 24 hours (Snooze), and
                 # the named lists. An app from before them ignores both.
                 "went_off": self.went_off(now), "lists": self.lists(),
                 "running": self.running, "limits": {

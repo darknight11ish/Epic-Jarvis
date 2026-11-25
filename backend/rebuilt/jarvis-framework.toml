@@ -2299,11 +2299,23 @@ star_floor = 25        # ...but never fewer than this many
 # owner's own or one the import copies from a row that really had it. Nothing
 # is deleted by any of them.
 #
+# The five SCHEDULER tools ALSO ship ON (2026-11-24, the scheduling review's
+# first fix). A timer, an alarm, a reminder, a to-do item and "what's coming
+# up" are the owner's own words going into the owner's own list: the owner
+# decided on 2026-09-25 that a one-off timer, alarm or reminder needs no card,
+# and on 2026-09-26 that a plain repeat needs none either. On a FRESH install
+# this line used to name none of them, so a reminder sentence the fast lane
+# missed was answered "set" while no row was written - the code's own note at
+# jarvis_quick.py:3147-3155 records exactly that. The owner's live PC escaped
+# it only because its older settings file already named all five. Each can be
+# switched off at once on the Tools page, and a turn shaped by outside text
+# still sets nothing (SCHEDULE_TOOLS refuses it).
+#
 # Everything else here stays opt-in - send_email, browser_control,
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy", "review_changes", "check_records", "project_create", "project_seed_plan", "project_decompose_plan", "work_item_add", "work_item_update_status", "work_item_link_dependency", "project_checkpoint_reflect", "project_export_obsidian_hub"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy", "review_changes", "check_records", "project_create", "project_seed_plan", "project_decompose_plan", "work_item_add", "work_item_update_status", "work_item_link_dependency", "project_checkpoint_reflect", "project_export_obsidian_hub", "set_timer", "set_reminder", "todo_add", "todo_done", "coming_up"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

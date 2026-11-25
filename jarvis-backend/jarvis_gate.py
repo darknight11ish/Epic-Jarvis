@@ -3604,3 +3604,24 @@ _NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
 _RISK.update({
     "delete_vault_notes": ("no", "local", "moves the notes named on the card out of your own Obsidian vault and into its hidden .trash folder - every byte is kept and you can put one back from Windows Explorer, but neither app can, so nothing here can undo it"),
 })
+
+# --------------------------------------------------------------------------
+#   Cancelling a scheduled thing (jarvis_agent.py's cancel_scheduled, 2026-11-24)
+# --------------------------------------------------------------------------
+# THE ROW IS HERE, AT THE END OF THE FILE, for the reason every block above
+# gives: almost every line inside `_RISK`, `_TOOL_ACTIONS` and
+# `_NO_RULE_FROM_DENIAL` is some earlier patch's hunk context, and the end of
+# this file is the one region no patch's hunk claims. The update runs at
+# import, before any `check()` call, so the gate sees the row exactly as if it
+# sat inside the literal.
+#
+# WHY "auto". The tool calls the scheduler's own delete path
+# (jarvis_schedule.Scheduler.act(jid, "delete")): it removes ONE of the
+# owner's own timers, alarms, reminders or to-do items from a list this PC
+# keeps, and nothing leaves the PC. A delete only makes things quieter - the
+# same reason marking a to-do done is cardless - so the row says so and the
+# tool raises no card. It also keeps `action_for_tool()` answering the
+# specific action rather than "unclassified_tool" on the Reach page.
+_TOOL_ACTIONS.update({
+    "cancel_scheduled": "auto",
+})

@@ -82,12 +82,13 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
     "approval_policy", "calculator", "change_setting", "check_records",
-    "conversation_find", "conversation_open",
+    "coming_up", "conversation_find", "conversation_open",
     "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install",
     "pack_list", "pack_remove", "phone_apps", "plugin_list", "plugin_switch",
     "project_checkpoint_reflect", "project_create", "project_decompose_plan",
     "project_export_obsidian_hub", "project_seed_plan",
     "refresh_abilities", "review_changes", "self_portrait", "send_text_message",
+    "set_reminder", "set_timer", "todo_add", "todo_done",
     "web_search", "work_item_add", "work_item_link_dependency",
     "work_item_update_status",
 ]
@@ -101,7 +102,7 @@ CLOUD_ALLOWED = []
 #: so the decision is recorded here rather than assumed.
 PRIVATE_CHAT_ALLOWED = []
 
-#: What those enabled twenty-one become when a turn is built: `my_files` is
+#: What those enabled tools become when a turn is built: `my_files` is
 #: dropped while no folder is listed (the model is never offered a tool that
 #: could read nothing), so a fresh PC offers twelve base tools - plus the
 #: conversation web-search approval and its instant stop, which ride with
@@ -116,14 +117,15 @@ PRIVATE_CHAT_ALLOWED = []
 #: tool at all, so it cannot appear here.
 OFFERED_FRESH = [
     "approval_policy", "approve_web_search_for_conversation", "calculator",
-    "change_setting", "check_records", "cloud_escalation",
+    "change_setting", "check_records", "cloud_escalation", "coming_up",
     "conversation_find", "conversation_open", "feature_guide", "memory_search",
     "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
     "plugin_list", "plugin_switch",
     "project_checkpoint_reflect", "project_create", "project_decompose_plan",
     "project_export_obsidian_hub", "project_seed_plan",
     "refresh_abilities", "review_changes",
-    "self_portrait", "stop_web_search_approval", "web_search", "work_item_add",
+    "self_portrait", "set_reminder", "set_timer", "stop_web_search_approval",
+    "todo_add", "todo_done", "web_search", "work_item_add",
     "work_item_link_dependency", "work_item_update_status",
 ]
 
@@ -137,9 +139,10 @@ OFFERED_FRESH = [
 #: ask rides with `web_search` - it is not a capability, and its card is the
 #: permission.
 CATALOGUE = [
-    # Every tool that exists, sorted, pinned in full (80 at the Android app
-    # builder's entry point, DEF-068, 2026-11-14; 79 at the GitHub union of
-    # 2026-11-11). A future tool must be added here, which forces the
+    # Every tool that exists, sorted, pinned in full (81 at the scheduling
+    # review's cancel tool, 2026-11-24; 80 at the Android app builder's entry
+    # point, DEF-068, 2026-11-14; 79 at the GitHub union of 2026-11-11). A
+    # future tool must be added here, which forces the
     # three lists above to be looked at in the same edit; the per-tool
     # commentary this block used to carry lives in the profiles and docs.
     "android_app",
@@ -150,6 +153,7 @@ CATALOGUE = [
     "browser_control",
     "calculator",
     "calendar_read",
+    "cancel_scheduled",
     "change_setting",
     "check_records",
     "cloud_escalation",
@@ -338,7 +342,7 @@ def t_a_fresh_install_enables_exactly_the_pinned_set():
         return sorted(AG.enabled_tools_for_turn())
 
     got = _with_fresh_settings(read)
-    check("a fresh install's turn enables exactly the twenty-one pinned names",
+    check("a fresh install's turn enables exactly the pinned names",
           got == FULL_ENABLED, got)
 
 
@@ -350,9 +354,9 @@ def t_a_fresh_install_offers_exactly_the_pinned_list():
             lambda: sorted(AG.offered_tools(AG.enabled_tools_for_turn())))
     finally:
         JD.folders = real_folders
-    check("a fresh install (no folder listed) offers exactly twenty-three names - "
-          "the seventeen local defaults plus the grant ask and its stop, which "
-          "ride with web search - with my_files withheld by its own rule",
+    check("a fresh install (no folder listed) offers exactly the pinned names - "
+          "the local defaults plus the grant ask and its stop, which ride with web "
+          "search - with my_files withheld by its own rule",
           got == OFFERED_FRESH, got)
     check("...so my_files is enabled but not offered: the folder is the only "
           "thing keeping it out",
