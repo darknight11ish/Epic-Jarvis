@@ -30,9 +30,9 @@
  *     one.
  *
  * THE SCREEN LAYOUTS SAY WHAT THEY ARE FOR (2026-11-09, Gemini's UI review
- * §1.2). The seven built-in layouts keep their internal ids exactly as they
- * are - `cockpit`, `second_brain`, `quiet`, `telemetry`, `studio`, `ambient`,
- * `minimal` are the layout contract (`contract/hud-presets.json`,
+ * §1.2). The eight built-in layouts keep their internal ids exactly as they
+ * are - `simple`, `cockpit`, `second_brain`, `quiet`, `telemetry`, `studio`,
+ * `ambient`, `minimal` are the layout contract (`contract/hud-presets.json`,
  * `hud_layout.rs`, every saved document) - and only the WORDS a person reads
  * change: "Cockpit" is "Just Talk", "Second Brain & Planner" is "Command
  * Center", and so on, each with one short line saying what the layout is for.
@@ -41,6 +41,15 @@
  * own display name as if they were two different layouts. There is still ONE
  * Presets menu and ONE layout write: no second picker, no second way to
  * switch a lane.
+ *
+ * SIMPLE IS FIRST (the owner, 2026-11-10: "also add a simple layout and have
+ * it at the top of layout presets for jarvis hud on the desktop. have this be
+ * simple with just the essential tools and not too much customization or
+ * options"). It is a new id at the TOP of the built-in list - every existing
+ * preset keeps its id, its words and its relative order - and its composition
+ * is essential tools only (see `hud-layout.js` `cardsFor`). It is NOT the
+ * fallback for an old or unreadable document: `DEFAULT_PRESET_ID` stays
+ * Cockpit, so nobody who already picked a layout is moved to it silently.
  *
  * TWO KINDS, TWO RULES, and the second one is why this file now fetches:
  *
@@ -131,7 +140,8 @@ import { call } from "./invoke-budget.js";
 /* ── 1. Pure library helpers (node-tested) ───────────────────────────────── */
 
 /**
- * THE SEVEN LAYOUTS IN PLAIN WORDS (2026-11-09, Gemini's UI review §1.2).
+ * THE EIGHT LAYOUTS IN PLAIN WORDS (2026-11-09, Gemini's UI review §1.2;
+ * Simple added first 2026-11-10).
  *
  * The internal ids do NOT move: they are the layout contract, every saved
  * document and what `hud-layout.js` builds, so only the words change. `name`
@@ -146,6 +156,8 @@ import { call } from "./invoke-budget.js";
  * layouts.
  */
 export const LAYOUT_CHOICES = Object.freeze([
+  { id: "simple", name: "Simple",
+    subtitle: "Chat, voice and approvals with no side panels." },
   { id: "cockpit", name: "Just Talk",
     subtitle: "Chat and voice front and center." },
   { id: "second_brain", name: "Command Center",
@@ -165,7 +177,7 @@ export const LAYOUT_CHOICES = Object.freeze([
 const LAYOUT_CHOICE_BY_ID = new Map(LAYOUT_CHOICES.map((row) => [row.id, row]));
 
 /** One built-in layout's plain-words row, or null for an id that is not one of
- *  the seven built-ins (the owner's saved copy of a layout is not one). */
+ *  the eight built-ins (the owner's saved copy of a layout is not one). */
 export function layoutChoice(id) {
   return LAYOUT_CHOICE_BY_ID.get(String(id || "")) || null;
 }

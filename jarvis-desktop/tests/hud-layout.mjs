@@ -4,7 +4,7 @@
  *     node tests/hud-layout.mjs
  *
  * WHY THIS SUITE EXISTS, AND WHY IT NEEDS NO BROWSER. This is the data half of
- * the editable HUD: the card registry, the seven built-in presets, the
+ * the editable HUD: the card registry, the eight built-in presets, the
  * closed-world normalizer, the protected-card rule and the migration of the
  * old three-way setting. None of that draws anything, so it is tested here as
  * plain functions - the page itself is still covered by tests/hud.mjs.
@@ -12,10 +12,10 @@
  * WHAT IT PROVES, in order:
  *   1. every registry row is sane (known region, bounded spans, unique id, the
  *      four protected cards marked) and the four protected ids are all there;
- *   2. there are exactly seven presets, cockpit is the default and first, and
- *      each one is a fixed point of normalizeLayout (so "save then load" can
- *      never rewrite a preset), uses only registry cards, and keeps every
- *      protected card visible;
+ *   2. there are exactly eight presets, Simple is first and Cockpit is still
+ *      the default, and each one is a fixed point of normalizeLayout (so "save
+ *      then load" can never rewrite a preset), uses only registry cards, and
+ *      keeps every protected card visible;
  *   2b. each layout draws the composition the redesign spec asks for (Wave 15,
  *      2026-11-09): the right column is capped at two cards in Cockpit and
  *      exactly three in Command Center (counting the page's own reminders
@@ -103,15 +103,21 @@ await check("no registry card is protected by accident", () => {
   assert.deepEqual(extras.map((card) => card.id), []);
 });
 
-/* ── 2. The seven presets ───────────────────────────────────────────────── */
+/* ── 2. The eight presets ───────────────────────────────────────────────── */
 
-await check("exactly seven presets, cockpit first and the default", () => {
-  assert.equal(L.PRESETS.length, 7);
-  assert.equal(L.PRESETS[0].id, "cockpit");
-  assert.equal(L.DEFAULT_PRESET_ID, "cockpit");
+await check("exactly eight presets, Simple first and Cockpit still the default", () => {
+  assert.equal(L.PRESETS.length, 8);
+  // The owner's ask (2026-11-10): Simple is the FIRST row the presets list
+  // draws. It sits at the top; the seven existing ids keep their own order.
+  assert.equal(L.PRESETS[0].id, "simple");
   assert.deepEqual(L.PRESETS.map((preset) => preset.id), [
-    "cockpit", "studio", "ambient", "quiet", "telemetry", "second_brain", "minimal",
+    "simple", "cockpit", "studio", "ambient", "quiet", "telemetry", "second_brain", "minimal",
   ]);
+  // The top row and the fallback default are deliberately different decisions
+  // (see DEFAULT_PRESET_ID's own comment): an old or unreadable document still
+  // means the everyday layout, not the new one.
+  assert.equal(L.DEFAULT_PRESET_ID, "cockpit");
+  assert.deepEqual(L.presetLayout("not-a-layout"), L.presetLayout("cockpit"));
 });
 
 await check("every preset is a complete, normalized document", () => {
@@ -188,6 +194,40 @@ function isGone(id, cardId) {
   const card = preset.cards.find((entry) => entry.id === cardId);
   return !card || card.visible === false;
 }
+
+await check("simple (Simple) is the essentials only, and every heavy surface is named and off", () => {
+  const doc = L.presetLayout("simple");
+  // A normal-size one-column chat, not Mini View's compact corner: the shell
+  // puts both rails in drawers and the density stays comfortable.
+  assert.equal(doc.shell_template, "single-stage-bento");
+  assert.equal(doc.density, "comfortable");
+  assert.equal(doc.default_stage_tab, "talk");
+  // What the owner actually gets on the first paint: the four protected cards
+  // plus the conversation and its ask box, and nothing else.
+  assert.deepEqual(onTheGlass("simple"),
+    ["emergency_stop", "bar_launcher", "approvals", "voice_controls",
+      "conversation", "composer"],
+    `Simple draws: ${JSON.stringify(onTheGlass("simple"))}`);
+  // "Not too much customization": the Focus presets card, the navigation and
+  // the Systems readouts are not on the glass either.
+  for (const id of ["nav", "lanes", "systems", "galaxy", "reminders", "memory",
+    "calendar", "waiting", "telemetry", "tools", "brain_stats", "budget",
+    "voice_stats"]) {
+    const card = doc.cards.find((entry) => entry.id === id);
+    assert.ok(card, `Simple does not NAME ${id}, so Edit HUD would put it back visible`);
+    assert.equal(card.visible, false, `Simple still shows ${id}`);
+  }
+  // Every movable card is named, so the first Edit HUD visit cannot turn the
+  // simple layout back into a full deck (hud-edit.js adds unnamed cards).
+  assert.deepEqual([...doc.cards.map((card) => card.id)].sort(),
+    L.CARD_REGISTRY.map((card) => card.id).sort(),
+    "Simple does not carry every registry card");
+  // No side panel is on the glass and no return pill is claimed.
+  assert.deepEqual([...L.rightColumn(doc).cards], [], "Simple has a right column");
+  assert.deepEqual([...L.visibleCards(doc, "left_rail")], ["bar_launcher"],
+    "Simple's left rail carries more than the protected Jarvis bar");
+  assert.equal(L.returnPillFor(doc), null, "Simple claims a return pill");
+});
 
 await check("cockpit (Just Talk) is conversation + ask box, and its column is capped at 2", () => {
   const cockpit = L.presetLayout("cockpit");

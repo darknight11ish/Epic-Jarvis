@@ -1,19 +1,21 @@
 /**
- * The seven screen layouts say their plain-words names (2026-11-09, Gemini's
+ * The eight screen layouts say their plain-words names (2026-11-09, Gemini's
  * UI review §1.2 / rulings Q2-Q3; the owner's ruling: ONE Presets menu,
- * display names only, internal ids unchanged).
+ * display names only, internal ids unchanged. Simple added 2026-11-10).
  *
  *   node tests/hud-presets-names.mjs
  *
  * WHAT IS PROVEN:
  *
- *   - the seven internal ids are unchanged and are exactly the layout
- *     contract's seven (`contract/hud-presets.json`), each once - so a saved
+ *   - the eight internal ids are unchanged and are exactly the layout
+ *     contract's eight (`contract/hud-presets.json`), each once - so a saved
  *     document, `hud_layout.rs` and every existing test still see the ids they
  *     know;
- *   - the seven plain-words names are the ones the review asks for, once each,
- *     and none is its own internal label (so "Cockpit" can never be drawn next
- *     to "Just Talk" as if they were two layouts);
+ *   - the eight plain-words names are the ones the review asks for, once each,
+ *     and none of the SEVEN RENAMED ids carries its old internal label (so
+ *     "Cockpit" can never be drawn next to "Just Talk" as if they were two
+ *     layouts). Simple is new: its internal label and its plain name are the
+ *     same word on purpose, and are pinned to be exactly "Simple";
  *   - the one-line subtitles are short and say what the layout is for;
  *   - `layoutDisplayName()` answers for a built-in, for the owner's saved copy
  *     (its own name), and for an unknown id (never blank, never "undefined");
@@ -23,8 +25,9 @@
  *     the retired `data-hud-layout` pill key never comes back;
  *   - §2.1's one-popover-at-a-time helper exists and this module registers its
  *     three popovers with it;
- *   - the REAL page draws the seven plain names (real headless Chromium, the
- *     page's API stubbed), and none of the internal labels is on screen;
+ *   - the REAL page draws the eight plain names (real headless Chromium, the
+ *     page's API stubbed), and none of the SEVEN OLD internal labels is on
+ *     screen;
  *   - the three served copies of hud-presets.js stay byte-identical.
  *
  * The browser half needs Playwright (the clone has it); the rest needs Node.
@@ -61,8 +64,10 @@ async function check(name, fn) {
   }
 }
 
-/** The review's table, §1.2. The ids are the contract's; only the words are new. */
+/** The review's table, §1.2, plus the owner's 2026-11-10 Simple row first.
+ *  The ids are the contract's; only the words are new. */
 const NAMES = {
+  simple: "Simple",
   cockpit: "Just Talk",
   second_brain: "Command Center",
   quiet: "Quiet Desk",
@@ -72,41 +77,57 @@ const NAMES = {
   minimal: "Mini View",
 };
 
+/** The ids whose plain name is deliberately different from their old internal
+ *  label - the seven the 2026-11-09 review renamed. Simple is not one of them:
+ *  it is a new layout, so its label and its plain name are the same word. */
+const RENAMED = new Set(["cockpit", "second_brain", "quiet", "telemetry",
+  "studio", "ambient", "minimal"]);
+
 /** The labels the ids used to be drawn as, and must never be drawn as again in
  *  the picker. */
 const OLD_LABELS = ["Cockpit", "Second Brain & Planner", "Quiet", "Telemetry & Ops",
   "Studio", "Ambient", "Minimal"];
 
-await check("the seven internal ids are unchanged and are the contract's own seven", () => {
+await check("the eight internal ids are unchanged and are the contract's own eight", () => {
   const ids = P.LAYOUT_CHOICES.map((row) => row.id);
-  assert.equal(ids.length, 7, `the table lists ${ids.length} layouts, not seven`);
-  assert.equal(new Set(ids).size, 7, `an id is listed twice: ${JSON.stringify(ids)}`);
+  assert.equal(ids.length, 8, `the table lists ${ids.length} layouts, not eight`);
+  assert.equal(new Set(ids).size, 8, `an id is listed twice: ${JSON.stringify(ids)}`);
   assert.deepEqual(ids.slice().sort(), CONTRACT.presets.map((p) => p.id).slice().sort(),
     `the table's ids are not the layout contract's: ${JSON.stringify(ids)}`);
   assert.deepEqual(ids.slice().sort(), L.PRESETS.map((p) => p.id).slice().sort(),
     "the table's ids are not hud-layout.js's built-in presets");
+  // The owner's 2026-11-10 ask: Simple is the FIRST row in both tables, and
+  // every existing id keeps the order it had.
+  assert.equal(ids[0], "simple", "Simple is not the first layout row");
+  assert.equal(L.PRESETS[0].id, "simple", "Simple is not the first built-in preset");
   // Every built-in the picker can draw has words, and every row is a built-in.
   for (const preset of L.PRESETS) {
     assert.ok(NAMES[preset.id], `the picker has no plain name for ${preset.id}`);
   }
 });
 
-await check("the seven plain-words names are the review's, once each, and none is the old label", () => {
+await check("the eight plain-words names are the review's, once each, and no renamed id is its old label", () => {
   const rows = P.LAYOUT_CHOICES;
   assert.deepEqual(rows.map((row) => row.name),
-    ["Just Talk", "Command Center", "Quiet Desk", "System Monitor", "Custom Grid",
-      "Face Only", "Mini View"],
+    ["Simple", "Just Talk", "Command Center", "Quiet Desk", "System Monitor",
+      "Custom Grid", "Face Only", "Mini View"],
     "the display names are not the review's §1.2 table");
-  assert.equal(new Set(rows.map((row) => row.name)).size, 7,
+  assert.equal(new Set(rows.map((row) => row.name)).size, 8,
     "two layouts share one display name");
   for (const row of rows) {
     assert.equal(row.name, NAMES[row.id], `${row.id} is named "${row.name}"`);
-    assert.notEqual(row.name, L.presetInfo(row.id).label,
-      `${row.id} still reads its internal label "${row.name}"`);
+    if (RENAMED.has(row.id)) {
+      assert.notEqual(row.name, L.presetInfo(row.id).label,
+        `${row.id} still reads its internal label "${row.name}"`);
+    }
     assert.ok(!OLD_LABELS.includes(row.name),
       `${row.id} is drawn as the old label "${row.name}"`);
     assert.ok(row.name.length <= 24, `${row.id}'s display name is too long for a row`);
   }
+  // Simple's two names are the same word on purpose, so the contract, the
+  // model and the menu cannot drift into "Simple Mode" in one place only.
+  assert.equal(L.presetInfo("simple").label, "Simple");
+  assert.equal(P.layoutDisplayName("simple"), "Simple");
 });
 
 await check("each subtitle is one short line saying what the layout is for", () => {
@@ -122,6 +143,7 @@ await check("each subtitle is one short line saying what the layout is for", () 
 });
 
 await check("layoutDisplayName answers a built-in, a saved copy and an unknown id", () => {
+  assert.equal(P.layoutDisplayName("simple"), "Simple");
   assert.equal(P.layoutDisplayName("cockpit"), "Just Talk");
   assert.equal(P.layoutDisplayName("second_brain"), "Command Center");
   assert.equal(P.layoutDisplayName(L.normalizeLayout(L.presetLayout("studio"))), "Custom Grid",
@@ -209,7 +231,7 @@ async function openRail(page) {
   return opened;
 }
 
-await check("the real page draws the seven plain names, not the internal labels", async () => {
+await check("the real page draws the eight plain names, Simple first, not the internal labels", async () => {
   const browser = await launch();
   const site = await serve();
   try {
@@ -243,7 +265,12 @@ await check("the real page draws the seven plain names, not the internal labels"
       hint: button.title,
       label: button.getAttribute("aria-label") || "",
     })));
-    assert.equal(drawn.length, 7, `the page drew ${drawn.length} layouts, not seven`);
+    assert.equal(drawn.length, 8, `the page drew ${drawn.length} layouts, not eight`);
+    assert.deepEqual(drawn.map((row) => row.id),
+      L.PRESETS.map((preset) => preset.id),
+      `the page did not draw the built-ins in the registry's order: ${JSON.stringify(drawn.map((r) => r.id))}`);
+    assert.equal(drawn[0].id, "simple",
+      `the first built-in row is ${drawn[0].id}, not Simple`);
     assert.deepEqual(drawn.map((row) => row.id).slice().sort(),
       CONTRACT.presets.map((p) => p.id).slice().sort(),
       `the page drew ids the contract does not have: ${JSON.stringify(drawn.map((r) => r.id))}`);

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "The desktop HUD's built-in layout presets (H1; H3 renders shell_template, density and default_stage_tab). Mirror of the seven built-in presets in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Colour theme is NOT part of a layout (Appearance owns it). The seven fixed cards H2 does not reparent have no col_span/row_span here: their spans are renderer-inert, so the contract does not carry them. Desktop-only on purpose: the phone has its own MenuCatalog-backed presets and does not read this file (docs/ARCHITECTURE.md section 8).",
+  "note": "The desktop HUD's built-in layout presets (H1; H3 renders shell_template, density and default_stage_tab). Mirror of the eight built-in presets in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Colour theme is NOT part of a layout (Appearance owns it). The seven fixed cards H2 does not reparent have no col_span/row_span here: their spans are renderer-inert, so the contract does not carry them. Desktop-only on purpose: the phone has its own MenuCatalog-backed presets and does not read this file (docs/ARCHITECTURE.md section 8).",
   "regions": [
     "header",
     "left_rail",
@@ -17,6 +17,202 @@
     "single-stage-bento"
   ],
   "presets": [
+    {
+      "version": 1,
+      "id": "simple",
+      "name": "Simple",
+      "base_preset": "simple",
+      "shell_template": "single-stage-bento",
+      "density": "comfortable",
+      "default_stage_tab": "talk",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "galaxy",
+          "region": "stage_main",
+          "order": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {
+            "tab": "galaxy"
+          }
+        },
+        {
+          "id": "reminders",
+          "region": "stage_main",
+          "order": 3,
+          "visible": false,
+          "collapsed": false,
+          "options": {
+            "tab": "today"
+          }
+        },
+        {
+          "id": "memory",
+          "region": "stage_main",
+          "order": 4,
+          "visible": false,
+          "collapsed": false,
+          "options": {
+            "tab": "memory"
+          }
+        },
+        {
+          "id": "calendar",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 6,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
     {
       "version": 1,
       "id": "cockpit",
