@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "update-window",
+  "description": "The update's own progress window (jarvis-desktop/src-tauri/src/update_window.rs, DEF-098; the owner asked on 2026-11-24: 'when i update jarvis there should be a pop up with a progress bar'). It shows one title, one line of what is happening and a bar, painted only from the updater's own events - the backend tool's `JARVIS-EVENT` progress (`backend-update-progress`), the desktop package's bytes (`update-progress`), each half's step (`update-step`) and one sentence from `update-window-note`. It holds NO app command at all: it cannot start, resume, approve or install anything, and it does not even read the theme over IPC - update-window.js takes the saved theme from this computer's localStorage. It needs the event permission because listening is how it draws; the core window calls are the minimum every window needs.",
+  "windows": [
+    "update-progress"
+  ],
+  "permissions": [
+    "core:app:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default"
+  ]
+}

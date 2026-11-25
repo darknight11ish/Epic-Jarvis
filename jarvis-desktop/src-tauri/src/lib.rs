@@ -132,6 +132,7 @@ pub mod tray;
 pub mod tutorials;
 pub mod update;
 pub mod update_progress;
+pub mod update_window;
 pub mod vision;
 pub mod voice;
 pub mod voice_flow;
@@ -261,6 +262,13 @@ pub mod events {
     /// state is why it exists: the backend half takes minutes, and a card that
     /// said nothing for that long would look like a button that did nothing.
     pub const UPDATE_STEP: &str = "update-step";
+    /// Payload: [`crate::update_window::Note`] — one sentence for the update's
+    /// own progress window (`update_window.rs`, DEF-098): the run started with
+    /// its pace's words, the installer is about to take over, or how the run
+    /// ended. Sent only from `update_both` and only for a run a person started;
+    /// like the three events above, nothing that receives it can start, resume
+    /// or approve anything.
+    pub const UPDATE_WINDOW_NOTE: &str = "update-window-note";
     /// Payload: none. The appearance document (which face, which state
     /// bindings) changed — the tray already repaints on this via
     /// `on_appearance_changed`; sent to every window too so a display-mode

@@ -143,6 +143,7 @@ use tauri_plugin_store::StoreExt;
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::commands;
+use crate::update_window;
 
 /// Store key for the one preference here.
 const CHECK_ON_START: &str = "updates.check_on_start";
@@ -1927,6 +1928,14 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
          time). This can take several minutes - it applies every patch and then runs the \
          test suites. {halves}"
     );
+    // ONE WINDOW, AND IT OPENS BEFORE THE RUN DOES (DEF-098). It is opened from
+    // HERE, not from the Settings page or the tray, so every door that reaches
+    // an update - the Settings button, the tray row and an approved
+    // `desktop_update` card - gets the same window and no page can open one on
+    // its own. `open` is best-effort and returns nothing: a machine that cannot
+    // draw a window must still update, and there is no error here that a later
+    // edit could turn into "the update did not start".
+    update_window::open(&app, &opening);
     announce_step(&app, &step_starting(STEP_BACKEND, Some(&opening)));
     // The build the desktop is running NOW - the release before this action.
     // The backend tool needs it to tell the tools THIS release newly ships ON
@@ -1983,13 +1992,17 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         };
         announce_step(&app, &skipped);
         steps.push(skipped);
-        return Ok(BothOutcome {
+        let outcome = BothOutcome {
             updated_both: both_updated(&steps),
             steps,
             // Only when this attempt actually stopped Jarvis. A refusal that
             // never got that far has nothing to start again.
             restart_needed: backend_stopped,
-        });
+        };
+        // The window says the same ending, so a run that stopped here cannot
+        // sit under a bar that still looks like it is working.
+        update_window::ended(&app, &outcome);
+        return Ok(outcome);
     }
 
     // ---- 2. the executable: verify, record, stop, and install LAST ------
@@ -2020,15 +2033,23 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
             );
             announce_step(&app, &failed);
             steps.push(failed);
-            return Ok(BothOutcome {
+            let outcome = BothOutcome {
                 updated_both: both_updated(&steps),
                 steps,
                 // The refusal happens before the desktop half stops anything,
                 // so Jarvis is off only if the backend half itself stopped it.
                 restart_needed: backend_stopped,
-            });
+            };
+            update_window::ended(&app, &outcome);
+            return Ok(outcome);
         }
     };
+    // The last honest note this process can send about the desktop half: the
+    // package is verified, the record is written and read back, and the backend
+    // is stopped - the installer is the next line, and it ends this process.
+    // The window says what is about to happen instead of pretending to watch it
+    // (see `update_window.rs`'s module docs).
+    update_window::installing(&app);
     let desktop_step = match install_now(&app, ready).await {
         Ok(target) => Step::ok(
             STEP_DESKTOP,
@@ -2053,6 +2074,10 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         // running, or Jarvis was stopped for the backend half and is still off.
         restart_needed: installed || backend_stopped,
     };
+    // This line is reached only when the installer did NOT take the process
+    // (a failed install, or a platform without the Windows exit): the window
+    // gets the ending here, and stays open until the owner closes it.
+    update_window::ended(&app, &outcome);
     Ok(outcome)
 }
 

@@ -3358,7 +3358,13 @@ backend routes, in both directions; the rest are listed here only.
   rules keep off it. The phone's own update path is unchanged and still its own
   (the `client-latest` APK, Platform checks). No route is added for the
   handshake side beyond the read both apps may make; `tools/check_parity.py`
-  classifies no new phone surface.
+  classifies no new phone surface. **The update's own progress window is the
+  desktop's for the same reason** (added 2026-11-25, DEF-098, the owner's ask
+  *"when i update jarvis there should be a pop up with a progress bar"*): the
+  run happens at the PC, and a window inside that process can show the backend
+  tool's fractions and the desktop package's bytes while it runs. A phone
+  cannot show that window, and the phone's own update path is still its own;
+  nothing here adds a route or a command the phone could call.
 
 - **A scheduled task's own words (`job`) can be sent by neither app's Reminders
   screen yet, and that is one-sided on purpose** (2026-11-03; the owner's
