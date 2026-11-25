@@ -317,6 +317,18 @@ BESIDE_BINARY = (
      "the home-screen icon served at /icons/jarvis-192.png"),
     ("jarvis-512.png", "{repo}/backend/static/jarvis-512.png",
      "the maskable home-screen icon served at /icons/jarvis-512.png"),
+    # The owner's own "Hey Atlas" wake-word head (2026-11-25). It is a BYTE
+    # file like the fonts, and it lands FLAT in the base as `hey_atlas.onnx`
+    # because `jarvis_wakeword.py` reads it from its own folder at load time
+    # (`shipped_model_dir()`), the same shape as jarvis_hud.py's static files.
+    # The patcher flattens `wakeword/hey_atlas.onnx` to the same leaf name
+    # beside the server, so a repository checkout and a live install both
+    # find it. 215,964 bytes, SHA-256 0DBE0AA5... - `KNOWN_FILES` in
+    # jarvis_wakeword.py pins it, and that module refuses a file whose hash
+    # differs. The phone does NOT ship it: docs/ARCHITECTURE.md section 8
+    # says why (its assets and its spotter would have to be rebuilt together).
+    ("hey_atlas.onnx", "{repo}/backend/wakeword/hey_atlas.onnx",
+     "the owner's trained \"Hey Atlas\" wake-word head; read beside jarvis_wakeword.py"),
 )
 
 #: Files the base folder carries that are NOT part of the copy: the folder's

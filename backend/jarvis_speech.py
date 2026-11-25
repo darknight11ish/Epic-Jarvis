@@ -1033,16 +1033,21 @@ def _write_wake(enabled: bool) -> Optional[str]:
 
 
 def describe_wake_on() -> str:
-    """The card. Every word from here; what refusing costs is on it."""
+    """The card. Every word from here; what refusing costs is on it.
+
+    The phrase comes from the spotter (`jarvis_wakeword.phrase_title()`), so
+    the card asks about the word this PC is actually listening for - since
+    2026-11-25 that can be "hey atlas" as well as "hey jarvis"."""
+    said = jarvis_wakeword.phrase_title().lower()
     return (
-        "Turn on \"hey Jarvis\"?\n\n"
-        "If you say yes: the PC will accept recordings that start with \"hey "
-        "Jarvis\". The desktop app and the phone each still need their own "
+        f"Turn on \"{said}\"?\n\n"
+        f"If you say yes: the PC will accept recordings that start with \"{said}\". "
+        "The desktop app and the phone each still need their own "
         "listening switched on before anything listens - that stays off until "
         "you turn it on there, and the phone shows a notification the whole "
         "time it listens.\n\n"
         "The wake word is heard on the device itself. No sound is sent "
-        "anywhere until it hears \"hey Jarvis\", and then only to this PC, "
+        f"anywhere until it hears \"{said}\", and then only to this PC, "
         "where your voice is checked before any words are written down.\n\n"
         "If you did not just ask for this, say no.\n\n"
         "If you say no: nothing changes. Push-to-talk keeps working."
@@ -1097,7 +1102,8 @@ def _wake_decide(pid: str, gate: Callable) -> dict:
     """Raise the card, wait for the answer, act on it. Blocks - runs on its
     own thread. Only tier "ask" + outcome "approved" turns the wake word on."""
     text = describe_wake_on()
-    detail = {"text": text, "what": "turn on the \"hey Jarvis\" wake word",
+    detail = {"text": text,
+              "what": f'turn on the "{jarvis_wakeword.phrase_title().lower()}" wake word',
               "setting": "[voice] wake_word_enabled", "to": True}
     try:
         v = gate(WAKE_ACTION, detail, text)
@@ -3710,7 +3716,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     found, rest = jarvis_wakeword.split_wake(text)
     if not found:
         return Heard(True, text="", engine=engine,
-                     reason="that did not start with \"hey Jarvis\", so it was ignored",
+                     reason=(f"that did not start with "
+                             f"\"{jarvis_wakeword.phrase_title().lower()}\", so it was ignored"),
                      **common)
     if not rest:
         # "Hey Jarvis." on its own, heard by two devices: only the first

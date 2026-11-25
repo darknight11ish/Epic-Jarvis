@@ -580,7 +580,7 @@ private fun WakeWordSummaryCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dot(tint)
             Spacer(Modifier.width(10.dp))
-            Text("Wake phrase: Hey Jarvis.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Text("Wake phrase: Hey Atlas.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
             Spacer(Modifier.weight(1f))
             Text(
                 when {
@@ -595,7 +595,7 @@ private fun WakeWordSummaryCard(
         }
         Gap(6)
         val desktopLine = when {
-            state == WakeWord.ON -> "Your desktop takes \"hey Jarvis\"."
+            state == WakeWord.ON -> "Your desktop takes \"hey Atlas\"."
             state == WakeWord.OFF && pending -> "A card to turn it on is waiting on your PC."
             state == WakeWord.OFF -> "Off. Nothing can wake Jarvis by speaking a phrase; the talk button still works."
             else -> "The desktop has not answered, so this is not known."

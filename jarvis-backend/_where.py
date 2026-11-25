@@ -961,6 +961,12 @@ SHIPPED = (
     # refuses a whitelist entry nothing loads. Shipping it now is the asset
     # plumbing only; backend/test_vendored_three.py pins its bytes.
     "static/three.min.js",
+    # The owner's trained "Hey Atlas" wake-word head (2026-11-25). Not a module:
+    # jarvis_wakeword.py reads it from its own folder, so a live install needs it
+    # beside the server - and the patcher flattens this entry to `hey_atlas.onnx`
+    # for exactly that reason. `[voice] wake_phrase = "hey_atlas"` is what makes
+    # the PC use it; the shipped default stays "hey_jarvis".
+    "wakeword/hey_atlas.onnx",
     # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
     # Found by comparing a working backend against this list: all five were
     # already IN jarvis-backend/, and a SHIPPED module imports each of them, but

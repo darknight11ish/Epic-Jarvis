@@ -6093,12 +6093,24 @@ cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $t = p
 $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $m = Join-Path $base 'voice-models'; New-Item -ItemType Directory -Force -Path $m | Out-Null; $f = Join-Path $env:TEMP 'jarvis-tts.tar.bz2'; Write-Host 'Downloading the voice (320 MB)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2' -OutFile $f; if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '912804855A04745FA77A30BE545B3F9A5D15C4D66DB00B88CBCD4921DF605AC7') { Remove-Item $f; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { tar -xjf $f -C $m; Remove-Item $f; $d = Join-Path $m 'tts'; if (Test-Path $d) { Rename-Item $d ('tts-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; Rename-Item (Join-Path $m 'kokoro-en-v0_19') 'tts'; Write-Host "OK - the voice is in $d" -ForegroundColor Green }
 ```
 
-**5. The speech detector (Silero VAD) and the "hey Jarvis" model** - four
+**5. The speech detector (Silero VAD) and the wake-word models** - four
 small files, 4 MB, into `voice-models\vad` and `voice-models\wakeword`:
 
 ```powershell
 $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $ow = 'https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/'; $files = @( @('vad', 'silero_vad.onnx', 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx', '9E2449E1087496D8D4CABA907F23E0BD3F78D91FA552479BB9C23AC09CBB1FD6'), @('wakeword', 'melspectrogram.onnx', ($ow + 'melspectrogram.onnx'), 'BA2B0E0F8B7B875369A2C89CB13360FF53BAC436F2895CCED9F479FA65EB176F'), @('wakeword', 'embedding_model.onnx', ($ow + 'embedding_model.onnx'), '70D164290C1D095D1D4EE149BC5E00543250A7316B59F31D056CFF7BD3075C1F'), @('wakeword', 'hey_jarvis_v0.1.onnx', ($ow + 'hey_jarvis_v0.1.onnx'), '94A13CFE60075B132F6A472E7E462E8123EE70861BC3FB58434A73712EE0D2CB') ); $ok = $true; foreach ($x in $files) { $d = Join-Path (Join-Path $base 'voice-models') $x[0]; New-Item -ItemType Directory -Force -Path $d | Out-Null; $p = Join-Path $d $x[1]; Invoke-WebRequest -UseBasicParsing -Uri $x[2] -OutFile $p; if ((Get-FileHash $p -Algorithm SHA256).Hash -ne $x[3]) { Remove-Item $p; $ok = $false; Write-Host "$($x[1]) is not the expected file - deleted it." -ForegroundColor Red } }; if ($ok) { Write-Host "OK - the speech detector and the wake word are in $base\voice-models" -ForegroundColor Green } else { Write-Host 'Run this line again.' -ForegroundColor Red }
 ```
+
+**The "Hey Atlas" model is not in that line, because it does not need to be
+downloaded (2026-11-25).** It ships in this repository at
+`backend/wakeword/hey_atlas.onnx` - 215,964 bytes, SHA-256
+`0DBE0AA5DAF88538A4D368B5DF1654CDAED7CB9AEF8110A600735F6389CE2FBD` - and step 6
+copies it beside `jarvis_wakeword.py`. The module reads it from its own folder
+when `[voice] wake_phrase = "hey_atlas"`, and it **refuses to use the file at
+all** if its SHA-256 is not the one above, so a half-copied model says so
+instead of scoring nonsense. Setting `wake_phrase = "hey_jarvis"` keeps the old
+model and the old phrase working, which is what the shipped template still
+sets: nothing re-points itself without your word. The phone still ships and
+listens for `hey_jarvis` only - `docs/ARCHITECTURE.md` section 8 says why.
 
 **6. Put the new code on the PC**, from this repository's folder. It copies
 in `jarvis_speech.py` and the new `jarvis_wakeword.py` (backing up older

@@ -101,7 +101,7 @@ internal fun WakeWordSwitchesCard(
             Spacer(Modifier.width(10.dp))
             // The owner's ruling of 2026-11-21 (decisions.d/2026-11-21-wake-copy-hey-jarvis.md):
             // the copy is simple and factual, with no promise about an unshipped model.
-            Text("Wake phrase: Hey Jarvis.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Text("Wake phrase: Hey Atlas.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
             Spacer(Modifier.weight(1f))
             Text(
                 when {
@@ -118,7 +118,7 @@ internal fun WakeWordSwitchesCard(
         Text(
             when {
                 state == WakeWord.ON ->
-                    "Your desktop takes \"hey Jarvis\". It checks the phrase and your voice " +
+                    "Your desktop takes \"hey Atlas\". It checks the phrase and your voice " +
                         "again before it writes down a word."
                 state == WakeWord.OFF && pending ->
                     "A card to turn it on is waiting. ${com.jarvis.client.net.Approvals.WHERE} " +
@@ -434,7 +434,7 @@ internal fun WakeWordSwitchesCard(
         if (state == WakeWord.OFF && !pending && onTurnOn != null) {
             Gap(12)
             Primary(
-                text = if (busy) "Asking…" else "Turn on \"hey Jarvis\"",
+                text = if (busy) "Asking…" else "Turn on \"hey Atlas\"",
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onTurnOn,

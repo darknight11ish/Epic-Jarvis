@@ -5,19 +5,30 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The owner's ruling of 2026-11-21 (Gemini's ruling 7; recorded in
- * `decisions.d/2026-11-21-wake-copy-hey-jarvis.md`), verbatim:
+ * The owner's ruling of 2026-11-25 (recorded in
+ * `decisions.d/2026-11-25-hey-atlas-wake-model-ships.md`), which is the step
+ * the 2026-11-21 ruling left open, in the owner's own words:
  *
- *   "Standardize on `Hey Jarvis` everywhere until `Hey Atlas` actually ships.
- *    Drop `Hey Atlas is in training` from user-facing guides and in-app
- *    Settings copy - users shouldn't read about an unshipped model in daily UI.
- *    Keep the copy simple and factual: 'Wake phrase: Hey Jarvis.'"
+ *   "Once the custom Hey Atlas model passes local false-accept testing, swap
+ *    the string in one PR."
+ *
+ * The model passed and it ships with the PC (`backend/wakeword/hey_atlas.onnx`),
+ * so the copy says "Hey Atlas" and this suite REQUIRES it. What it still
+ * forbids is the wording that would still be false: any claim that a wake
+ * phrase is "in training" or "being trained", and the old factual sentence
+ * coming back.
  *
  * This is the phone's half of the guard (the desktop's is
  * `jarvis-desktop/tests/wake-copy.mjs`): the two screens that SHOW the wake
  * phrase state it as that factual sentence, and no user-facing phone copy
  * promises a phrase that does not ship. KDoc and comments may explain the
  * history - the ruling allows that - so comments are stripped before scanning.
+ *
+ * ONE-SIDED, AND SAID SO: the phone's OWN listener still runs openWakeWord's
+ * `hey_jarvis` model (`assets/wakeword/`), so the sentences that describe what
+ * THIS PHONE hears keep saying "hey jarvis" on purpose - changing them would be
+ * the false claim. `docs/ARCHITECTURE.md` section 8 records why the phone was
+ * not rebuilt in the same change.
  */
 class WakePhraseCopyTest {
 
@@ -43,37 +54,33 @@ class WakePhraseCopyTest {
         val settings = code(text("ui/screens/VoiceSwitchesPlate.kt"))
         val checks = code(text("ui/screens/ReadinessScreen.kt"))
         assertTrue(
-            "Settings no longer says \"Wake phrase: Hey Jarvis.\"",
-            settings.contains("\"Wake phrase: Hey Jarvis.\""),
+            "Settings no longer says \"Wake phrase: Hey Atlas.\"",
+            settings.contains("\"Wake phrase: Hey Atlas.\""),
         )
         assertTrue(
-            "Platform checks no longer says \"Wake phrase: Hey Jarvis.\"",
-            checks.contains("\"Wake phrase: Hey Jarvis.\""),
+            "Platform checks no longer says \"Wake phrase: Hey Atlas.\"",
+            checks.contains("\"Wake phrase: Hey Atlas.\""),
         )
         assertFalse("Settings still carries the old wake-word title", settings.contains("Wake word - "))
         assertFalse("Platform checks still carries the old wake-word title", checks.contains("Wake word - "))
     }
 
-    /* ── Nothing on the phone promises an unshipped phrase ──────────────── */
+    /* ── Nothing on the phone promises a phrase that does not ship ──────── */
 
     private data class Rule(val re: Regex, val why: String)
 
     private val forbidden = listOf(
         Rule(
-            Regex("(?i)hey atlas"),
-            "names a wake phrase the shipped spotter cannot hear (the ruling says Hey Jarvis until the model ships)",
-        ),
-        Rule(
             Regex("(?i)\\bin training\\b"),
-            "tells the owner a model is in training - the ruling drops that from user-facing copy",
+            "tells the owner a model is in training - nothing is: the model shipped on 2026-11-25",
         ),
         Rule(
             Regex("(?i)\\bbeing trained\\b"),
-            "promises a wake phrase that is still being trained",
+            "promises a wake phrase that is still being trained - it shipped on 2026-11-25",
         ),
         Rule(
-            Regex("(?i)spoken name is atlas"),
-            "promises an unshipped spoken name",
+            Regex("(?i)wake phrase:\\s*hey jarvis"),
+            "states the old phrase as the factual sentence; it is \"Wake phrase: Hey Atlas.\" now",
         ),
     )
 

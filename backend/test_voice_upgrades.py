@@ -1092,11 +1092,40 @@ def t_real_pocket():
 # ------------------------------------------------------------ "hey Jarvis" --
 
 def t_one_file_one_hash_both_apps():
-    for name, info in W.KNOWN_FILES.items():
+    """One file, one hash - per surface, which is the truth since 2026-11-25.
+
+    The three openWakeWord files are in BOTH apps and pinned to v0.5.1. The
+    owner's "Hey Atlas" head is the PC's alone: it ships in this repository
+    (`backend/wakeword/`) and NOT in the phone's APK, because the phone's
+    assets and its spotter would have to be rebuilt together and that was not
+    done (docs/ARCHITECTURE.md section 8). This test says that out loud rather
+    than pretending the phone carries a file it does not."""
+    phone_files = ([W.MODEL_FILES["melspectrogram"], W.MODEL_FILES["embedding"]]
+                   + [W.PHRASE_MODELS[p] for p in W.PHONE_PHRASES])
+    for name in phone_files:
+        info = W.KNOWN_FILES[name]
         p = ASSETS / name
         check(f"the phone's {name} is the pinned file", p.is_file() and sha(p) == info["sha256"])
         check(f"{name}: publisher, version and licence recorded",
               info["publisher"] and info["version"] == "v0.5.1" and "CC BY-NC-SA" in info["licence"])
+
+    pc_only = [n for n in W.KNOWN_FILES if n not in phone_files]
+    check("the PC has one model the phone does not carry", pc_only == ["hey_atlas.onnx"], pc_only)
+    for name in pc_only:
+        info = W.KNOWN_FILES[name]
+        here = REPO / "backend" / "wakeword" / name
+        base = REPO / "jarvis-backend" / name
+        check(f"the PC's {name} is in this repository and is the pinned file",
+              here.is_file() and sha(here) == info["sha256"], str(here))
+        check(f"{name}: the published base holds the same bytes",
+              base.is_file() and base.read_bytes() == here.read_bytes(), str(base))
+        check(f"{name}: publisher, version and licence recorded, and it is not "
+              f"passed off as openWakeWord's v0.5.1",
+              info["publisher"] and info["version"] != "v0.5.1"
+              and "CC BY-NC-SA" in info["licence"])
+        check(f"{name}: the phone's assets do NOT carry it (one-sided, said so)",
+              not (ASSETS / name).exists())
+
     readme = (HERE / "README.md").read_text(encoding="utf-8")
     check("the PC's install line checks the same hashes",
           all(i["sha256"].upper() in readme for i in W.KNOWN_FILES.values()))

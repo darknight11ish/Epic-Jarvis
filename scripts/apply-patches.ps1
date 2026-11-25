@@ -2710,6 +2710,14 @@ $SHIPPED = @(
     # refuses a whitelist entry nothing loads. Shipping it now is the asset
     # plumbing only; backend/test_vendored_three.py pins its bytes.
     'static/three.min.js'
+    # The owner's trained "Hey Atlas" wake-word head (2026-11-25). Not a
+    # module either: `jarvis_wakeword.py` reads it from its OWN folder at load
+    # time (`shipped_model_dir()`), so it has to sit beside the server for a
+    # PC to hear "Hey Atlas" without downloading anything. Flattened to its
+    # leaf name like the static files, which is the name the module reads.
+    # `[voice] wake_phrase = "hey_atlas"` is what makes the PC use it; the
+    # default stays "hey_jarvis", so an update never re-points a working PC.
+    'wakeword/hey_atlas.onnx'
     # --- The five the base carried but this list did not (2026-10-07) ---
     # All five were already in jarvis-backend/ and a SHIPPED module imports each,
     # but none was listed here and no patch delivered any of them - so a backend

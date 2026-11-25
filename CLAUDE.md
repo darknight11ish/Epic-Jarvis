@@ -113,7 +113,7 @@ dated sections of `docs/MODEL-TOPOLOGY.md` still describe that layout because
 they are the record of the machine they measured; this rule replaces it.
 
 
-## The product is Atlas, and the spoken name is not there yet
+## The product is Atlas, and the wake phrase follows
 
 **The owner's ruling, 2026-11-18.** Everything in this product is **Atlas**: the
 app, the visible assistant name, and the spoken wake phrase is **"Hey Atlas"**.
@@ -122,18 +122,31 @@ hears it. The old name survives only where it is an identifier that must not
 move - file names, module names and the repository name are full of it, and
 **nobody renames a `jarvis_*.py` module chasing this rule**; that would break
 the patch stack, the lane tables and every path the record cites. A new display
-name is a wording change; a renamed module is a refactor. This supersedes the
-earlier "keep Hey Jarvis as the default" position.
+name is a wording change; a renamed module is a refactor.
 
-**Be honest about the wake phrase in the same breath: it is not done.** The
-shipped spotter is still openWakeWord's `hey_jarvis` model, and the owner's own
-recording of "Hey Atlas" measured a **peak of 0.1744 with zero frames at the 0.5
-threshold** - the software physically cannot hear "Hey Atlas" today. A new
-keyword model is being trained. **Until that model ships, user-facing copy must
-not tell the owner to say "Hey Atlas"** - that would be a promise the software
-cannot keep - and the copy moves with the model, not before it. Code, comments
-and this file may explain the ruling; the app's words to the owner may claim
-only what the shipped spotter can do.
+**The spoken name landed on 2026-11-25.** The paragraph that used to stand here
+said the model was still being trained and that the owner's recording measured a
+**peak of 0.1744 with zero frames at the 0.5 threshold**, so the copy must keep
+saying "Hey Jarvis". That model now ships: `backend/wakeword/hey_atlas.onnx`
+(215,964 bytes, SHA-256 `0DBE0AA5…`) is in this repository, `PHRASE_MODELS`
+maps `"hey_atlas"` to it, and on the same recording it measures **0.925805 with
+63 frames at or above 0.5**, with 0 of 2,000 held-out negative clips firing.
+**So the copy now says "Hey Atlas" and must not drift back**, and the two guards
+(`jarvis-desktop/tests/wake-copy.mjs`, `WakePhraseCopyTest`) enforce it while
+still forbidding "in training" / "being trained". The full evidence, the route
+that trained it and what is still unmeasured are in
+`decisions.d/2026-11-25-hey-atlas-wake-model-ships.md`.
+
+**What is left one-sided, and must stay honest.** The **phone** still ships and
+listens for openWakeWord's `hey_jarvis` only, so the sentences that describe
+*that phone's own listening* keep saying "hey jarvis" on purpose: changing them
+would be the false claim, not the fix. Its assets, `OrtWakeModels.WAKE_FILE` and
+its spotter have to be rebuilt together and driven on a real phone, and
+`docs/ARCHITECTURE.md` section 8 records why that was not done with the model.
+The **PC's** default `[voice] wake_phrase` is still `"hey_jarvis"` in the shipped
+template, so an update never re-points a working PC; "Hey Atlas" is switched on
+with `wake_phrase = "hey_atlas"`. **Do not claim the 0.1 false-accepts-per-hour
+bar is met** - it is unmeasured, and no microphone has been driven.
 
 
 ## The five rules that are not negotiable
