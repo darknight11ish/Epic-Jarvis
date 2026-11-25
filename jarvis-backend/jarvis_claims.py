@@ -251,6 +251,12 @@ ACTING_TOOLS = frozenset({
     "append_logseq_journal", "append_obsidian_daily", "browser_control",
     "change_setting", "connect_account", "control_computer", "control_phone",
     "create_joplin_note",
+    # "github_mode" (2026-11-25): turning full GitHub mode on writes
+    # <settings>/github-mode.json and the twenty tool names after ONE card, and
+    # turning it off writes the file and drops the conversation grants - so a
+    # claimed "nothing was done" after it must be corrected exactly like a
+    # settings change, not treated as a read.
+    "github_mode",
     "draft_email", "home_control", "protect_from_jarvis", "run_data_script",
     "send_email",
     # "send_file_to_phone" (2026-10-31, Gemini Q7): ONE file from the PC's

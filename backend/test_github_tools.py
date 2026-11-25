@@ -1241,6 +1241,11 @@ def t_the_gate_knows_the_ten_tools_and_six_actions():
         # is an action-to-itself row exactly as github_fix_write's is.
         "github_search_run": "github_search_run",
         "github_search_run_authenticated": "github_search_run_authenticated",
+        # Full GitHub mode's own chat tool (2026-11-25) is the third
+        # action-to-itself row: it is a PC setting, not one of the eighteen
+        # GitHub tools, and its action is the mode's own card. It shares the
+        # `github` prefix only because it is the mode's name.
+        "github_mode": "github_mode",
     }
     for tool, action in EXPECTED.items():
         check(f"the gate maps {tool} to {action}",

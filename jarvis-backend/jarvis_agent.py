@@ -13100,6 +13100,12 @@ TOOL_HINTS = {
     # hints only decide what the model is SHOWN, and ON still raises ONE
     # change_own_config card - nothing is sent before that yes.
     "cloud_escalation": (r"\bescalat", r"\bcloud\b"),
+    # Full GitHub mode's chat tool (2026-11-25). Narrow on purpose, like every
+    # hint here: the words "github mode" (in either order of the two ideas) and
+    # "full github", which is how the owner asked for it. A bare "github" must
+    # not pull it in - that word belongs to the twenty tools' own hints.
+    "github_mode": (r"\bgithub mode\b", r"\bfull github\b",
+                    r"\bmode\b[^.!?\n]{0,20}\bgithub\b"),
     # FEATURE_GUIDE_TOOL (2026-10-20): "what is the prompt coach", "is it on",
     # "how do I turn it on". Deliberately narrower than change_setting's own
     # hints: a plain "what is ..." must not pull a tool in for every question,

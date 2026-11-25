@@ -2199,6 +2199,34 @@
       "read": false
     },
     {
+      "name": "the tool github_mode ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_mode"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_mode"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool feature_guide ran",
       "heard": {
         "private_aloud": false,

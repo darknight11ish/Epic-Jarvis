@@ -351,12 +351,14 @@ await check("Full GitHub mode: the PC's words, ON only when can_enable, OFF alwa
   const older = readAsksFirst(payload(undefined));
   assert.equal(githubModeRow(older.tools), null);
   assert.equal(githubModeSwitchView(older.tools.githubMode, older.tools, true), null);
-  // The REAL generated fixture is that older PC today - the backend lane has
-  // not added the object yet - so the page draws no mode row there, and every
-  // existing row and count stands exactly as it was.
+  // The REAL generated fixture carries the object now (2026-11-25), so the page
+  // reads the PC's own words from it rather than from a hand-made copy - and
+  // the mode is still NOT one of the tool items.
   const shipped = readAsksFirst(C.pc_shipped);
-  assert.equal(githubModeRow(shipped.tools), null);
-  assert.equal(shipped.tools.items.length, C.pc_shipped.tools.items.length);
+  const sm = githubModeRow(shipped.tools);
+  assert.ok(sm, "the real payload's github_mode object is read");
+  assert.equal(sm.effect, GITHUB_MODE_EFFECT, "and it carries the contract's sentence");
+  assert.equal(shipped.tools.items.length, 84, "the mode is not a tool item");
   assert.equal(shipped.tools.githubGroup.on, false, "the group row is untouched");
   // The page draws the row, through the SAME command and route the group switch
   // uses, with `github_mode` as the id: no new Tauri command, no new route.
@@ -405,8 +407,8 @@ await check("the tool surface: groups, the vault row and the not-a-switch note",
   const no = pc.tools.notSwitchable;
   assert.deepEqual(no.ids,
     ["run_data_script", "product_check", "approve_web_search_for_conversation",
-      "stop_web_search_approval", "cloud_escalation"],
-    "the five whose own switch decides them");
+      "stop_web_search_approval", "cloud_escalation", "github_mode"],
+    "the six whose own switch decides them");
   for (const id of no.ids) {
     assert.ok(note.includes(no.labels[id] || id.replace(/_/g, " ")), "the note names " + id);
   }
@@ -475,7 +477,7 @@ await check("Settings: every group and row in the PC's words and order", async (
   }
   assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`),
     ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights",
-    "af-vault-organizer", "af-github-group"].sort());
+    "af-vault-organizer", "af-github-group", "af-github-mode"].sort());
   assert.ok(text.includes(LIGHTS_LABEL));
   assert.deepEqual(errors, []);
 });
