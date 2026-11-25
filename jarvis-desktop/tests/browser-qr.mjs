@@ -257,7 +257,7 @@ await check("CONTROL: Rust draws from ONE address string, returns only svg + url
   assert.doesNotMatch(RUST, /browser_key/, "a key producer is back");
 });
 
-await check("CONTROL: registered once, and granted to Settings and the HUD", async () => {
+await check("CONTROL: registered once, and granted to Settings and nothing else", async () => {
   const lib = read("src-tauri/src/lib.rs");
   const build = read("src-tauri/build.rs");
   const surfaces = read("src-tauri/permissions/surfaces.toml");
@@ -268,10 +268,18 @@ await check("CONTROL: registered once, and granted to Settings and the HUD", asy
   const sets = surfaces.split("[[set]]").slice(1);
   const holders = sets.filter((set) => set.includes('"allow-browser-qr"'))
     .map((set) => set.match(/identifier = "([^"]+)"/)[1]);
-  assert.deepEqual(holders, ["settings-surface", "hud-browser-qr"],
+  // ONCE, and only to the window that has the control. The old branch carried a
+  // second set for a HUD half that was never built: it was written for a server
+  // route that mints a browser credential, and that route does not exist by
+  // design (docs/JARVIS-API.md section 90 - minting one is what the `pair_device`
+  // card gates). A grant with no caller is a door with no room behind it, and
+  // `tests/hud.mjs` pins the HUD's capability list exactly, so it caught it.
+  assert.deepEqual(holders, ["settings-surface"],
     `browser_qr is granted to ${JSON.stringify(holders)}`);
-  assert.match(read("src-tauri/capabilities/hud.json"), /"hud-browser-qr"/,
-    "the HUD capability does not grant it");
+  assert.match(read("src-tauri/capabilities/hud.json"), /"hud-nav"/,
+    "the HUD capability no longer names hud-nav at all");
+  assert.ok(!read("src-tauri/capabilities/hud.json").includes("hud-browser-qr"),
+    "the HUD capability grants browser_qr, and nothing in the HUD calls it");
   assert.match(read("src-tauri/capabilities/settings.json"), /"settings-surface"/,
     "the settings capability does not grant settings-surface");
 });

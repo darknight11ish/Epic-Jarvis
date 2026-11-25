@@ -625,11 +625,11 @@ permissions = [
   # page, on a click, so the owner can type it into the phone. Here and
   # nowhere else - the other windows never need to see it.
   "allow-reveal-pairing-token",
-  # "Show a QR code for my phone's browser" (2026-11-13): the picture is drawn
+  # "Show a QR code for my phone's browser" (2026-11-25): the picture is drawn
   # in Rust and the page gets the SVG plus the address WITHOUT the sign-in
-  # part; the token and the one-time key never reach it. See `hud-browser-qr`
-  # below for the HUD's copy, which the HUD page will use once the server half
-  # that mints the key exists.
+  # part; the token and the one-time key never reach it, because no route mints
+  # a browser credential by design (docs/JARVIS-API.md section 90). Settings is
+  # the only window that holds this command.
   "allow-browser-qr",
   # "Second graphics card": what was found, and one switch at a time. Turning
   # a switch ON starts a second copy of Ollama once its approval card is
@@ -2586,22 +2586,3 @@ permissions = ["allow-get-wifi-reconnect"]
 identifier = "wifi-reconnect-write"
 description = "Turn the auto Wi-Fi reconnect on or off (Settings -> On this PC). Cardless both ways."
 permissions = ["allow-set-wifi-reconnect"]
-
-# ---------------------------------------------------------------------------
-# "Show a QR code for my phone's browser" (2026-11-13): ONE command,
-# `browser_qr`, with no arguments. The bind address, the port and (when the
-# server half exists) the token are read in Rust; the page gets the finished
-# SVG and the address WITHOUT the one-time key the picture carries.
-#
-# It is its own set rather than a line in an existing HUD set because the HUD
-# page will call it too, and `hud-link` is granted to every window that reads
-# the stream - a code that signs a phone in does not belong in all of them.
-# The settings window's copy is in `settings-surface` above. Nothing in the
-# HUD calls it YET: the HUD half of the feature is the page that follows once
-# the server endpoint exists, and this grant is the one piece of that seam
-# that is already in place.
-# ---------------------------------------------------------------------------
-[[set]]
-identifier = "hud-browser-qr"
-description = "Draw the QR code that opens Jarvis in the owner's phone browser (Settings -> Connection, and the HUD page later). The picture is made in Rust; the token and the one-time key never reach the page. Read-only: it changes no setting."
-permissions = ["allow-browser-qr"]
