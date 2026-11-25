@@ -32,9 +32,12 @@
 //! * `update-step` - [`crate::update::Step`], which half is running and, on a
 //!   failure, the tool's own sentence about it.
 //! * `update-window-note` - this module's own one-liners: the run started (with
-//!   the pace's words), the installer is about to take over, and how the run
-//!   ended. The start note is sent from the page-load hook, so a slow first
-//!   paint cannot miss it.
+//!   the pace's words), the download was verified, the installer is about to
+//!   take over, and how the run ended. The start note is sent from the
+//!   page-load hook, so a slow first paint cannot miss it; the verified note is
+//!   sent at the end of the download, before the backend is stopped, because the
+//!   note sent immediately before the install races the installer's own
+//!   termination of this process (the ruling of 2026-11-25, [`VERIFIED_WORDS`]).
 //!
 //! ## What the window cannot show, and says so instead
 //!
@@ -78,11 +81,25 @@ pub const INSTALLER_WORDS: &str = "The installer is starting now. Atlas closes a
      installer cannot report its own progress to Atlas, so the bar stops here instead of \
      pretending to move.";
 
+/// The words the window shows the moment the package's download and signature
+/// check are done - **before** the record is written, before the backend is
+/// stopped, and therefore before the installer can end this process.
+///
+/// The owner's architect ruling of 2026-11-25, in its own words: *"Emitting
+/// immediately before `install_now` races with process termination by the
+/// NSIS/MSI installer, so the WebView often never paints the final line. Emit
+/// `\"Download verified — closing Atlas to install and restart…\"` right after
+/// download verification (before `stop_backend`) ... and allow a short ~200 ms
+/// yield before calling `install_now` so the last frame reliably paints."* This
+/// constant is that sentence, word for word; the page draws it as its own line
+/// and it claims nothing about the installer's own progress.
+pub const VERIFIED_WORDS: &str = "Download verified — closing Atlas to install and restart…";
+
 /// One sentence for the window, above its bar.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Note {
-    /// `started`, `installing` or `ended`.
+    /// `started`, `verified`, `installing` or `ended`.
     pub kind: String,
     /// The sentence itself. Fixed words, counts or the tool's own sentence -
     /// never anything the owner wrote.
@@ -105,6 +122,14 @@ impl Note {
         Note {
             kind: "installing".to_string(),
             line: INSTALLER_WORDS.to_string(),
+            bad: false,
+        }
+    }
+
+    fn verified() -> Note {
+        Note {
+            kind: "verified".to_string(),
+            line: VERIFIED_WORDS.to_string(),
             bad: false,
         }
     }
@@ -167,13 +192,28 @@ pub fn open(app: &AppHandle, opening: &str) {
     }
 }
 
+/// Tells the window the download was verified, at the end of the download and
+/// before the backend is stopped - [`crate::update::prepare_desktop_half`] sends
+/// this immediately after the signature check returns.
+///
+/// It is sent this early on purpose (the ruling of 2026-11-25): a note sent only
+/// immediately before the install races the installer's termination of this
+/// process, so the WebView often never paints that final line. This one is on
+/// screen while the backend is being stopped and while the 200 ms paint flush in
+/// [`crate::update::install_now`] runs. It reports the verification and nothing
+/// else - the installer's own progress is not something Atlas can show.
+pub fn verified(app: &AppHandle) {
+    send(app, Note::verified());
+}
+
 /// Tells the window the installer is about to take over, immediately before
 /// [`crate::update::update_both`] calls the install.
 ///
 /// This is sent as a best-effort note, not a promise that it was painted: the
-/// Windows installer path exits this process at once, so the page also words
-/// the same fact from the download reaching its end. Neither half claims to
-/// show installer progress.
+/// Windows installer path exits this process at once. The page also words the
+/// same fact from the download reaching its end, and the install step yields for
+/// a bounded 200 ms before it calls the installer so the last frame has a chance
+/// to paint. Neither this note nor the page claims to show installer progress.
 pub fn installing(app: &AppHandle) {
     send(app, Note::installing());
 }
@@ -307,10 +347,39 @@ mod tests {
             .unwrap_or("")
             .contains("installer"));
 
+        let verified = serde_json::to_value(Note::verified()).expect("a note serialises");
+        assert_eq!(verified["kind"], "verified");
+        assert_eq!(verified["bad"], false);
+
         let ended = serde_json::to_value(Note::ended("did not finish".to_string(), true))
             .expect("a note serialises");
         assert_eq!(ended["kind"], "ended");
         assert_eq!(ended["bad"], true);
+    }
+
+    /// The verified note is the ruling's sentence, word for word, on the wire:
+    /// the page draws this line, and the page's row in
+    /// `tests/update-window.mjs` drives the same field names.
+    #[test]
+    fn the_verified_note_carries_the_ruling_s_sentence_on_the_wire() {
+        assert_eq!(
+            VERIFIED_WORDS,
+            "Download verified — closing Atlas to install and restart…"
+        );
+        let note = serde_json::to_value(Note::verified()).expect("a note serialises");
+        assert_eq!(note["kind"], "verified");
+        assert_eq!(
+            note["line"],
+            serde_json::json!(VERIFIED_WORDS),
+            "the verified note's line is not the sentence the window draws"
+        );
+        assert_eq!(note["bad"], false);
+        // It reports the verification; it cannot and does not claim the
+        // installer's own progress.
+        assert!(
+            !VERIFIED_WORDS.contains('%'),
+            "the verified line claims a percentage: {VERIFIED_WORDS}"
+        );
     }
 
     /// The backend progress the window's bar is painted from is the updater

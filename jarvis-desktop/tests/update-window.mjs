@@ -20,6 +20,8 @@
  *   is never painted as success;
  * - the installer phase stops the bar and says what is about to happen,
  *   because the installer ends the process that owns this page;
+ * - the verified line is drawn where it is sent - at the end of the download,
+ *   before the backend is stopped - and it never claims installer progress;
  * - the page only lists, never invokes: it cannot start, resume or approve an
  *   update, and closing it does not stop the run.
  */
@@ -79,6 +81,8 @@ const state = (patch = {}) => ({
   backend: null,
   download: null,
   steps: { backend: null, desktop: null },
+  verified: false,
+  verifiedLine: "",
   installing: false,
   installingLine: "",
   ended: null,
@@ -262,6 +266,40 @@ check("the installer note stops the bar and says Atlas closes and starts again",
   assert.match(view.headline, /installer is starting now/);
   assert.equal(view.detail, line);
   assert.doesNotMatch(view.detail, /installer progress[^,]*\d+%/);
+});
+
+check("the verified note is drawn as its own line, before the installer and with no bar", () => {
+  const line = "Download verified — closing Atlas to install and restart…";
+  const view = viewFor(state({ source: "desktop", verified: true, verifiedLine: line }));
+  assert.equal(view.detail, line, "the page did not draw the verified note's own sentence");
+  assert.equal(view.bar, null, "the verified phase drew a bar for something it cannot measure");
+  assert.doesNotMatch(view.detail, /\d+\s*%|percent(age)?/i,
+    "the verified line claimed a percentage of the installer");
+  assert.doesNotMatch(view.headline, /installer is starting now/i,
+    "the verified note is drawn as the installer already taking over");
+  assert.doesNotMatch(view.detail, /updated/i, "a verified download was called an update");
+
+  // The page's own note handler recognises the kind, so this row is not just
+  // `viewFor` being driven with a hand-made state.
+  assert.match(js, /note\.kind === "verified"/,
+    "the page's note handler ignores the verified kind");
+
+  // A malformed verified note still says Atlas closes and restarts, and still
+  // draws no bar; the installer note then wins over it, as the run's order.
+  const bare = viewFor(state({ verified: true }));
+  assert.equal(bare.bar, null);
+  assert.match(bare.detail, /closes and restarts/);
+  const installing = viewFor(state({
+    verified: true,
+    verifiedLine: line,
+    installing: true,
+    installingLine: "The installer is starting now. Atlas closes and starts again.",
+  }));
+  assert.match(installing.headline, /installer is starting now/,
+    "the installer note did not win over the verified one");
+
+  // The static explanation is still on the page, in the page's own words.
+  assert.match(page.replace(/\s+/g, " "), /Atlas closes and starts again/);
 });
 
 check("the desktop half before its first byte says nothing is measured", () => {

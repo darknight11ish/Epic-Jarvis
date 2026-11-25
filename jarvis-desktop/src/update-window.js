@@ -8,7 +8,8 @@
  *   backend-update-progress  the Python tool's progress (`update_progress.rs`)
  *   update-progress          the desktop package's bytes (`update.rs`)
  *   update-step              each half starting/ending, with the tool's words
- *   update-window-note       started / installer next / how the run ended
+ *   update-window-note       started / download verified / installer next /
+ *                            how the run ended
  *
  * It never invokes a command, never starts, resumes or approves anything, and
  * never moves the bar itself: `viewFor` returns `bar: null` until a real
@@ -45,6 +46,8 @@ function freshState() {
     backend: null,
     download: null,
     steps: { backend: null, desktop: null },
+    verified: false,
+    verifiedLine: "",
     installing: false,
     installingLine: "",
     ended: null,
@@ -58,9 +61,10 @@ let state = freshState();
  *
  * The order is the order of the run: an ending wins over everything, a half
  * that failed or did not run wins over a bar that would otherwise keep moving,
- * the installer note wins over the download that preceded it, and only then
- * are the two real sources drawn - the desktop package's bytes, or the backend
- * tool's own fraction/counts.
+ * the installer note wins over the verified note that preceded it, the verified
+ * note wins over the download before it, and only then are the two real sources
+ * drawn - the desktop package's bytes, or the backend tool's own
+ * fraction/counts.
  */
 function viewFor(state) {
   const s = state || {};
@@ -209,7 +213,21 @@ function viewFor(state) {
     );
   }
 
-  /* 4. The desktop package's bytes, and only those bytes. */
+  /* 4. The package is verified. The backend is being stopped and the installer
+   *    is next; this line is sent before the stop so it has a process left to
+   *    paint in (the installer ends this one). It claims no installer progress,
+   *    so the bar stays hidden. */
+  if (s.verified) {
+    return plain(
+      "The download is verified",
+      typeof s.verifiedLine === "string" && s.verifiedLine
+        ? s.verifiedLine
+        : "The package was checked against the signing key. Atlas closes and restarts " +
+          "to install it, and the installer cannot report its own progress to Atlas."
+    );
+  }
+
+  /* 5. The desktop package's bytes, and only those bytes. */
   if (s.source === "desktop" && download) {
     const total = Number.isFinite(download.total) ? download.total : null;
     const downloaded = Number.isFinite(download.downloaded) ? download.downloaded : 0;
@@ -236,7 +254,7 @@ function viewFor(state) {
     };
   }
 
-  /* 5. The backend half, from the update tool's own numbers. */
+  /* 6. The backend half, from the update tool's own numbers. */
   if (s.source === "backend" && backend) {
     const done = Number.isInteger(backend.done) ? backend.done : 0;
     const total = Number.isInteger(backend.total) && backend.total > 0 ? backend.total : null;
@@ -286,7 +304,7 @@ function viewFor(state) {
     };
   }
 
-  /* 6. The desktop half has started but the first bytes are not in yet. */
+  /* 7. The desktop half has started but the first bytes are not in yet. */
   if (s.source === "desktop") {
     return plain(
       "Preparing the Atlas Desktop download",
@@ -295,7 +313,7 @@ function viewFor(state) {
     );
   }
 
-  /* 7. Opened, nothing measured yet. */
+  /* 8. Opened, nothing measured yet. */
   return plain(
     "Starting the update…",
     (typeof s.startLine === "string" && s.startLine ? s.startLine + " " : "") +
@@ -350,6 +368,9 @@ on("update-window-note", (note) => {
   if (note.kind === "started") {
     state = freshState();
     state.startLine = typeof note.line === "string" ? note.line : "";
+  } else if (note.kind === "verified") {
+    state.verified = true;
+    state.verifiedLine = typeof note.line === "string" ? note.line : "";
   } else if (note.kind === "installing") {
     state.installing = true;
     state.installingLine = typeof note.line === "string" ? note.line : "";
