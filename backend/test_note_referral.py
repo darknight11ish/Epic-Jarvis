@@ -88,10 +88,16 @@ OWNER_SENTENCE = ("Make a note called mood log and favorite. And every time I "
 CHECKS = []
 
 
-def check(name, got, want=True):
-    ok = got == want
-    CHECKS.append(ok)
-    print(("ok    " if ok else "FAIL  ") + name + ("" if ok else f"  (got {got!r})"))
+def check(name, cond, detail=""):
+    # `cond` is the CONDITION and is the second positional argument with NO
+    # default, which is the shape `tools/check_vacuous_checks.py` reads. PR
+    # #1492 was red because this harness used `check(name, got, want)`: the
+    # checker found no parameter it recognised as the condition at all, and,
+    # once named, treated the `want` argument as the condition - so a string
+    # `want` read as a condition that can never be false. Both were measured.
+    CHECKS.append(bool(cond))
+    print(("ok    " if cond else "FAIL  ") + name
+          + (("  " + detail) if detail and not cond else ""))
 
 
 def ask(sentence):
@@ -120,53 +126,55 @@ def vault_notes():
 reset_vault()
 res = ask(OWNER_SENTENCE)
 check("the owner's sentence is a note CREATE, not a batch refusal",
-      res is not None and res.intent == "note_created", True)
+      res is not None and res.intent == "note_created")
 check("it never says 'one note at a time'",
-      res is not None and "one note at a time" in (res.reply or ""), False)
+      "one note at a time" not in (res.reply or ""))
 notes = vault_notes()
-check("exactly one note was written", len(notes), 1)
-check("the note is called mood log", notes[0].name if notes else "", "mood log.md")
+check("exactly one note was written", len(notes) == 1, f"{len(notes)} written")
+check("the note is called mood log",
+      (notes[0].name if notes else "") == "mood log.md",
+      f"got {notes[0].name if notes else '<no note>'}")
 text = notes[0].read_text(encoding="utf-8") if notes else ""
-check("the note carries favorite: true", "favorite: true" in text, True)
-check("'favorite' was NOT written as the note's body", text.strip().endswith("---"),
-      True)
-check("the reply says it is favourited", "favourited" in (res.reply or ""), True)
+check("the note carries favorite: true", "favorite: true" in text)
+check("'favorite' was NOT written as the note's body",
+      text.strip().endswith("---"))
+check("the reply says it is favourited", "favourited" in (res.reply or ""))
 
 # 2. THE REFERRAL ON ITS OWN: answered, and it promises a lookup only.
 reset_vault()
 res = ask("Every time I refer to mood log, I'm referring to this particular note.")
 check("the referral alone is understood", res is not None
-      and res.intent == "note_referral", True)
-check("it repeats the name the owner used", "mood log" in (res.reply or ""), True)
+      and res.intent == "note_referral")
+check("it repeats the name the owner used", "mood log" in (res.reply or ""))
 check("it never claims to have written an alias line",
-      "aliases" in (res.reply or ""), False)
-check("the referral alone writes nothing", len(vault_notes()), 0)
+      "aliases" not in (res.reply or ""))
+check("the referral alone writes nothing", len(vault_notes()) == 0)
 
 # 3. A REAL BATCH STILL REFUSES. The fix must not open the door it guards.
 res = ask("add a line about milk to all my notes")
 check("a real batch is still refused", res is not None
-      and res.intent == "notes_batch_refused", True)
+      and res.intent == "notes_batch_refused")
 
 # 4. THE SAME BARE FORM FOR PIN, and its negative.
 reset_vault()
 res = ask("Make a note called reading list and pin.")
 notes = vault_notes()
 text = notes[0].read_text(encoding="utf-8") if notes else ""
-check("a bare 'and pin' sets pinned: true", "pinned: true" in text, True)
-check("a bare pin is not written as the body", text.strip().endswith("---"), True)
+check("a bare 'and pin' sets pinned: true", "pinned: true" in text)
+check("a bare pin is not written as the body", text.strip().endswith("---"))
 
 # 5. THE BARE FLAG IS ONLY THE WHOLE CLAUSE: body text is not eaten.
 #    Asked of the clause reader itself, because the TITLE grammar is greedy
 #    ("a note called recipes and my favorite things" makes the whole tail the
 #    name), so a sentence-level check here would test the wrong grammar.
 body, pinned, favourite, _date = Q._note_create_clauses("favorite", NOW)
-check("a bare 'favorite' is a FLAG, with no body", (list(body), favourite),
-      ([], True))
+check("a bare 'favorite' is a FLAG, with no body",
+      (list(body), favourite) == ([], True))
 body, pinned, favourite, _date = Q._note_create_clauses("my favorite things", NOW)
 check("'my favorite things' stays BODY text, not a flag",
-      ("favorite things" in " ".join(body), favourite), (True, None))
+      "favorite things" in " ".join(body) and favourite is None)
 body, pinned, favourite, _date = Q._note_create_clauses("pin", NOW)
-check("a bare 'pin' is a FLAG, with no body", (list(body), pinned), ([], True))
+check("a bare 'pin' is a FLAG, with no body", (list(body), pinned) == ([], True))
 
 print()
 print(f"{sum(CHECKS)} passed, {len(CHECKS) - sum(CHECKS)} failed")
