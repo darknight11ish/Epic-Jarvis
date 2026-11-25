@@ -1266,8 +1266,31 @@ pub fn ending_words(
     ending: &DesktopEnding,
     app_commit: Option<&str>,
     backend_commit: Option<&str>,
+    repo: Option<&str>,
 ) -> String {
-    let halves = crate::backend_update::halves_line(app_commit, backend_commit);
+    // WHICH HALF IS AHEAD, asked once, from git (`is_ancestor`), never inferred
+    // from the version numbers: they are CI run numbers, so two different trees
+    // can both call themselves 0.2.502 - which is exactly what happened on the
+    // owner's PC on 2026-11-24. `repo` is the folder the backend came from; with
+    // no folder the answer is Unknown and the sentence says so.
+    let app_in_backend = crate::backend_update::is_ancestor(repo, app_commit, backend_commit);
+    let backend_in_app = crate::backend_update::is_ancestor(repo, backend_commit, app_commit);
+    let class = crate::backend_update::classify_halves(
+        app_commit,
+        backend_commit,
+        app_in_backend,
+        backend_in_app,
+    );
+    let halves = crate::backend_update::halves_sentence(class, app_commit, backend_commit);
+    // "Both halves are done" may only be said of ONE RELEASE - both halves on
+    // the same commit. Before 2026-11-24 this clause came from the backend
+    // half's own state alone, so a card could read "so both halves are done"
+    // and then, in the next clause, "they differ".
+    let done = if class == crate::backend_update::Halves::Same {
+        " Both halves are done."
+    } else {
+        ""
+    };
     match ending {
         DesktopEnding::Finished {
             from,
@@ -1276,7 +1299,7 @@ pub fn ending_words(
             ..
         } => format!(
             "Jarvis Desktop is now {target}; it was {from} when the Windows installer \
-             started.{} {halves}",
+             started.{}{done} {halves}",
             backend_finished_sentence(backend)
         ),
         DesktopEnding::NotLaunched {
@@ -1316,12 +1339,15 @@ pub fn ending_words(
 }
 
 /// One sentence about the backend half, when the desktop half did land.
+///
+/// This function may say what the BACKEND HALF did; it may never say the two
+/// halves are one release, because it does not know the commits. That claim
+/// lives in `ending_words`, which asks git - until 2026-11-24 this arm ended
+/// "so both halves are done", and the card then said "they differ" in the very
+/// next clause, on a machine whose backend was one commit AHEAD (benign).
 fn backend_finished_sentence(backend: &Option<BackendHalf>) -> &'static str {
     match backend.as_ref().map(|half| half.state.as_str()) {
-        Some("ok") => {
-            " The backend half had already finished before the installer ran, so both \
-             halves are done."
-        }
+        Some("ok") => " The backend half had already finished before the installer ran.",
         Some("partial") => {
             " The backend half had patched but its checks were skipped, so it is not \
              proven; only the desktop half finished cleanly."
@@ -1535,6 +1561,12 @@ pub fn reconcile_pending_at_startup(app: &AppHandle) {
         &ending,
         crate::backend_update::app_commit().as_deref(),
         pending.backend_commit.as_deref(),
+        // No repository is at hand on this startup path - the pending record
+        // carries the backend's commit but not the folder it came from. So git
+        // is not asked, and a difference is reported as "which one is newer
+        // could not be read" rather than guessed at. The interactive update
+        // path does have the folder and classifies it exactly.
+        None,
     );
     // Forgot before it is said: the sentence is in memory and in the log, and a
     // notification that fails must not make the same news arrive on every launch.
@@ -1877,9 +1909,13 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
     };
     // Which source each half is coming from. Read and said, never enforced: an
     // older program folder still patches the backend, and this sentence is what
-    // stops "both halves" from meaning only "both ran".
+    // stops "both halves" from meaning only "both ran". `here.repo` is the folder
+    // the backend half will be installed from, so git can be asked which of the
+    // two commits contains the other - the difference between "the backend is
+    // newer, which is fine" and "the backend is older, which is the problem".
     let backend_commit = crate::backend_update::repo_commit(here.repo.as_deref());
-    let halves = crate::backend_update::halves_line(
+    let halves = crate::backend_update::halves_line_in(
+        here.repo.as_deref(),
         crate::backend_update::app_commit().as_deref(),
         backend_commit.as_deref(),
     );
@@ -3948,17 +3984,43 @@ mod tests {
                 backend: Some(an_ok_backend_half()),
             }
         );
-        let said = ending_words(&ending, Some("333333333333"), Some("222222222222"));
+        let said = ending_words(&ending, Some("333333333333"), Some("222222222222"), None);
         assert!(said.contains("is now 0.2.500"), "{said}");
         assert!(said.contains("was 0.2.412"), "{said}");
-        // ONLY a finished desktop half plus a backend half that ended `ok`
-        // (which already means proven) may say both are done.
-        assert!(said.contains("both halves are done"), "{said}");
-        // ...and the version comparison is part of the same sentence, from the
-        // NEW app's commit, so "both halves" is never just "both ran".
+        // A finished desktop half plus a backend half that ended `ok` is NOT
+        // enough to say both halves are done: they must be the same RELEASE.
+        // These two commits differ, so the sentence may not claim it - and this
+        // is the assertion that would have caught the card the owner read on
+        // 2026-11-24, which said "both halves are done ... they differ".
+        assert!(!said.contains("both halves are done"), "{said}");
+        assert!(
+            said.contains("The backend half had already finished"),
+            "{said}"
+        );
+        // ...and the comparison is part of the same sentence, from the NEW app's
+        // commit, so "both halves" is never just "both ran". With no folder to
+        // ask, it must say the newer one could not be read rather than guess.
         assert!(said.contains("they differ"), "{said}");
+        assert!(
+            said.contains("which one is newer could not be read"),
+            "{said}"
+        );
         assert!(said.contains("222222222222"), "{said}");
         assert!(said.contains("333333333333"), "{said}");
+    }
+
+    #[test]
+    fn one_release_is_the_only_thing_that_may_say_both_halves_are_done() {
+        let pending = a_pending("0.2.500", true, Some(an_ok_backend_half()));
+        let ending = reconcile(Some(&pending), "0.2.500").expect("a record was there");
+        let same = ending_words(&ending, Some("222222222222"), Some("222222222222"), None);
+        assert!(same.contains("Both halves are done."), "{same}");
+        assert!(same.contains("they match"), "{same}");
+        // With no commit for either half, nothing may be claimed - an unreadable
+        // answer must never read as a match.
+        let unknown = ending_words(&ending, None, None, None);
+        assert!(!unknown.contains("Both halves are done."), "{unknown}");
+        assert!(unknown.contains("cannot be compared"), "{unknown}");
     }
 
     #[test]
@@ -3969,7 +4031,7 @@ mod tests {
         };
         let pending = a_pending("0.2.500", true, Some(partial));
         let ending = reconcile(Some(&pending), "0.2.500").expect("a record was there");
-        let said = ending_words(&ending, Some("333333333333"), Some("222222222222"));
+        let said = ending_words(&ending, Some("333333333333"), Some("222222222222"), None);
         assert!(!said.contains("both halves are done"), "{said}");
         assert!(said.contains("not proven"), "{said}");
         assert!(
@@ -3982,7 +4044,7 @@ mod tests {
         // A lone Install (no backend half at all) can never say both either.
         let lone = a_pending("0.2.500", true, None);
         let ending = reconcile(Some(&lone), "0.2.500").expect("a record was there");
-        let said = ending_words(&ending, None, None);
+        let said = ending_words(&ending, None, None, None);
         assert!(!said.contains("both halves are done"), "{said}");
         assert!(said.contains("No backend update ran with it"), "{said}");
         assert!(said.contains("cannot be compared"), "{said}");
@@ -3995,7 +4057,7 @@ mod tests {
         let pending = a_pending("0.2.500", false, Some(an_ok_backend_half()));
         let ending = reconcile(Some(&pending), "0.2.412").expect("a record was there");
         assert!(matches!(ending, DesktopEnding::NotLaunched { .. }));
-        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"));
+        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"), None);
         assert!(said.contains("installer never ran"), "{said}");
         assert!(said.contains("still 0.2.412"), "{said}");
         assert!(said.contains("Press Install"), "{said}");
@@ -4020,7 +4082,7 @@ mod tests {
                 backend: Some(an_ok_backend_half()),
             }
         );
-        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"));
+        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"), None);
         assert!(said.contains("has not taken effect"), "{said}");
         assert!(said.contains("cancelled"), "{said}");
         assert!(!said.contains("is now 0.2.500"), "{said}");
@@ -4031,7 +4093,7 @@ mod tests {
         let pending = a_pending("0.2.500", true, None);
         let ending = reconcile(Some(&pending), "0.2.501").expect("a record was there");
         assert!(matches!(ending, DesktopEnding::OtherVersion { .. }));
-        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"));
+        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"), None);
         assert!(said.contains("cannot say which version"), "{said}");
         assert!(!said.contains("is now 0.2.500"), "{said}");
         assert!(!said.contains("both halves"), "{said}");
