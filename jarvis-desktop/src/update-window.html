@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atlas update</title>
+    <!--
+      The update's own progress window (update_window.rs; DEF-098, the owner's
+      request of 2026-11-24: "when i update jarvis there should be a pop up with
+      a progress bar").
+
+      What it shows: a title, ONE line of what is happening, and a bar painted
+      only from the updater's own events - `backend-update-progress` (the
+      backend tool's fraction or its done/total counts), `update-progress` (the
+      desktop package's bytes), `update-step` (each half's start and the tool's
+      own failing sentence) and `update-window-note` (started / download
+      verified / installer next / ended). Before the first real number the bar
+      stays hidden and the line says so; nothing here advances a bar on a timer.
+
+      What it cannot show: the installer's own progress. On Windows the
+      installer ends the process that owns this page, so the window says what is
+      about to happen - Atlas closes and starts again - and the next launch's
+      reconcile of the pending record says how it ended. See update_window.rs.
+
+      The window only reports. It has no buttons, calls no command and starts,
+      resumes, approves and installs nothing; closing it does not stop the run,
+      and the sentence at the bottom says that to the owner in words.
+    -->
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="update-window.css" />
+  </head>
+  <body>
+    <main class="uw" id="uw" data-tone="working">
+      <h1 class="uw-title">Atlas update</h1>
+      <p class="uw-headline" id="uw-headline">Starting the update…</p>
+      <p class="uw-detail" id="uw-detail">
+        Nothing has been measured yet — the bar stays empty until the update
+        tool reports a real number.
+      </p>
+      <div
+        class="uw-track"
+        id="uw-track"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+        aria-labelledby="uw-headline"
+        hidden
+      >
+        <div class="uw-fill" id="uw-fill"></div>
+      </div>
+      <p class="uw-meta">
+        <span id="uw-count"></span>
+        <span id="uw-eta"></span>
+      </p>
+      <p class="uw-failed-title" id="uw-failed-title" hidden>
+        What did not pass, in the update tool's own words:
+      </p>
+      <ul class="uw-failed" id="uw-failed" hidden></ul>
+      <p class="uw-close" id="uw-close">
+        Closing this window does not stop the update — the run carries on, and
+        Settings shows the same progress. The installer cannot report its own
+        progress here: when it starts, Atlas closes and starts again, and the
+        next start says how the update ended.
+      </p>
+    </main>
+    <script type="module" src="update-window.js"></script>
+  </body>
+</html>

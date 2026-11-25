@@ -143,6 +143,7 @@ use tauri_plugin_store::StoreExt;
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::commands;
+use crate::update_window;
 
 /// Store key for the one preference here.
 const CHECK_ON_START: &str = "updates.check_on_start";
@@ -924,7 +925,13 @@ struct StoppedDesktop {
 ///   installer never ran");
 /// * the backend is stopped **before** the installer can replace the files it is
 ///   running from, and the wait is bounded so a wedged backend cannot hold the
-///   installer for ever.
+///   installer for ever;
+/// * the window is told the download was verified **right after** the signature
+///   check and **before** the record and the stop, because a note sent only
+///   immediately before the installer races the installer's own termination of
+///   this process (the ruling of 2026-11-25,
+///   [`crate::update_window::VERIFIED_WORDS`]); [`install_now`] also yields for a
+///   bounded [`PAINT_FLUSH`] before it calls the installer.
 async fn prepare_desktop_half(
     app: &AppHandle,
     backend: Option<BackendHalf>,
@@ -947,6 +954,13 @@ async fn prepare_desktop_half(
         desktop_half_trace()
     ));
     let verified = verify_desktop_package(app, &record).await?;
+    // The download-verified point. Say it NOW: the package is known good and
+    // nothing on this PC has been changed, but the backend is about to be
+    // stopped and the installer will then end this process. A note sent only
+    // immediately before the install raced that termination and the WebView
+    // often never painted it (the architect ruling of 2026-11-25), so the last
+    // line the window can reliably show is sent here instead.
+    update_window::verified(app);
     let recorded = write_desktop_record(app, &record, verified, backend, backend_commit)?;
     Ok(stop_backend_for_installer(app, recorded))
 }
@@ -1069,11 +1083,28 @@ fn stop_backend_for_installer(app: &AppHandle, recorded: RecordedDesktop) -> Sto
     StoppedDesktop { recorded }
 }
 
+/// How long [`install_now`] yields before it hands the package to the installer.
+///
+/// The architect ruling of 2026-11-25: the NSIS/MSI installer ends this process,
+/// and a note emitted immediately before the install raced that termination often
+/// enough that the WebView never painted the final line. ~200 ms is the bound -
+/// long enough for the page to paint a frame, short enough not to be a delay the
+/// owner notices. It is a non-blocking sleep: [`install_now`] is already async
+/// and runs on the tauri runtime, so the timer is available and nothing is
+/// blocked while it waits.
+const PAINT_FLUSH: std::time::Duration = std::time::Duration::from_millis(200);
+
 /// Step (e), LAST: hands the verified package to the Windows installer.
 ///
 /// It takes a [`StoppedDesktop`], so there is no way to call it before the
 /// package was verified, the record was written and the backend was stopped:
 /// the order is the type, not a comment.
+///
+/// It yields for [`PAINT_FLUSH`] immediately before the installer is called.
+/// That is not a delay for its own sake: the window was told the download was
+/// verified in [`prepare_desktop_half`] and that the installer is starting in
+/// `update_both`, and the installer ends this process - without the bounded
+/// yield the last frame could be lost before it was ever painted.
 ///
 /// # What happens after the last line of this function on Windows
 ///
@@ -1095,6 +1126,11 @@ async fn install_now(app: &AppHandle, ready: StoppedDesktop) -> Result<String, S
          the backend is stopped.",
         version(app)
     ));
+    // The bounded paint flush (the ruling of 2026-11-25): give the window's last
+    // frame - the verified line sent before the backend was stopped, and the
+    // installing note the caller sent just before this function - time to reach
+    // the screen before the installer ends this process. Non-blocking on purpose.
+    tokio::time::sleep(PAINT_FLUSH).await;
     let result = update.install(&bytes);
 
     // On Windows this point is reached only when the installer was NOT
@@ -1927,6 +1963,14 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
          time). This can take several minutes - it applies every patch and then runs the \
          test suites. {halves}"
     );
+    // ONE WINDOW, AND IT OPENS BEFORE THE RUN DOES (DEF-098). It is opened from
+    // HERE, not from the Settings page or the tray, so every door that reaches
+    // an update - the Settings button, the tray row and an approved
+    // `desktop_update` card - gets the same window and no page can open one on
+    // its own. `open` is best-effort and returns nothing: a machine that cannot
+    // draw a window must still update, and there is no error here that a later
+    // edit could turn into "the update did not start".
+    update_window::open(&app, &opening);
     announce_step(&app, &step_starting(STEP_BACKEND, Some(&opening)));
     // The build the desktop is running NOW - the release before this action.
     // The backend tool needs it to tell the tools THIS release newly ships ON
@@ -1983,13 +2027,17 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         };
         announce_step(&app, &skipped);
         steps.push(skipped);
-        return Ok(BothOutcome {
+        let outcome = BothOutcome {
             updated_both: both_updated(&steps),
             steps,
             // Only when this attempt actually stopped Jarvis. A refusal that
             // never got that far has nothing to start again.
             restart_needed: backend_stopped,
-        });
+        };
+        // The window says the same ending, so a run that stopped here cannot
+        // sit under a bar that still looks like it is working.
+        update_window::ended(&app, &outcome);
+        return Ok(outcome);
     }
 
     // ---- 2. the executable: verify, record, stop, and install LAST ------
@@ -2020,15 +2068,23 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
             );
             announce_step(&app, &failed);
             steps.push(failed);
-            return Ok(BothOutcome {
+            let outcome = BothOutcome {
                 updated_both: both_updated(&steps),
                 steps,
                 // The refusal happens before the desktop half stops anything,
                 // so Jarvis is off only if the backend half itself stopped it.
                 restart_needed: backend_stopped,
-            });
+            };
+            update_window::ended(&app, &outcome);
+            return Ok(outcome);
         }
     };
+    // The last honest note this process can send about the desktop half: the
+    // package is verified, the record is written and read back, and the backend
+    // is stopped - the installer is the next line, and it ends this process.
+    // The window says what is about to happen instead of pretending to watch it
+    // (see `update_window.rs`'s module docs).
+    update_window::installing(&app);
     let desktop_step = match install_now(&app, ready).await {
         Ok(target) => Step::ok(
             STEP_DESKTOP,
@@ -2053,6 +2109,10 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         // running, or Jarvis was stopped for the backend half and is still off.
         restart_needed: installed || backend_stopped,
     };
+    // This line is reached only when the installer did NOT take the process
+    // (a failed install, or a platform without the Windows exit): the window
+    // gets the ending here, and stays open until the owner closes it.
+    update_window::ended(&app, &outcome);
     Ok(outcome)
 }
 
@@ -2806,7 +2866,7 @@ mod tests {
         same_version, state_of, step_starting, write_pending, AutoFinish, AutoFinishAttempts,
         BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf, PendingDesktopInstall, Status,
         Step, BEFORE_INSTALLER, DESKTOP_HALF, DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL,
-        INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE, STEP_BACKEND, STEP_DESKTOP,
+        INSTALL_CLOSES_AND_RESTARTS, PAINT_FLUSH, PENDING_FILE, STEP_BACKEND, STEP_DESKTOP,
     };
 
     // ---- the four-state truth (Task-50, Wave 12) ---------------------------
@@ -4270,6 +4330,90 @@ mod tests {
         assert!(
             prepared < installed,
             "update_both installs before it verifies, records and stops"
+        );
+    }
+
+    /// The verified note is sent at the download-verified point: after the
+    /// package was downloaded and its signature checked, and BEFORE the record is
+    /// written and the backend is stopped.
+    ///
+    /// The ruling of 2026-11-25, in its own words: *"Emitting immediately before
+    /// `install_now` races with process termination by the NSIS/MSI installer, so
+    /// the WebView often never paints the final line. Emit ... right after
+    /// download verification (before `stop_backend`)"*. A note sent only just
+    /// before the install has no process left to paint it in.
+    #[test]
+    fn the_verified_note_is_sent_at_the_download_verified_point() {
+        let src = include_str!("update.rs");
+        let prepare = &src[src
+            .find("async fn prepare_desktop_half(")
+            .expect("update.rs has no prepare_desktop_half")..];
+        let prepare = &prepare[..prepare.find("\n}\n").expect("it has no end")];
+        let verify = prepare
+            .find("verify_desktop_package(")
+            .expect("the package is never verified");
+        // Split so this test's own text cannot satisfy the pin: only the real
+        // call in the prepare half can.
+        let note = prepare
+            .find(concat!("update_window::", "verified(app);"))
+            .expect("the desktop half no longer tells the window the download was verified");
+        let record = prepare
+            .find("write_desktop_record(")
+            .expect("the record is never written");
+        let stop = prepare
+            .find("stop_backend_for_installer(")
+            .expect("the backend is never stopped for the installer");
+        assert!(
+            verify < note,
+            "the verified note is sent before the package is downloaded and checked"
+        );
+        assert!(
+            note < record,
+            "the record is written before the window is told the download was verified"
+        );
+        assert!(
+            note < stop,
+            "the backend is stopped before the window is told the download was verified - \
+             the note would race the installer's termination again"
+        );
+    }
+
+    /// The install step yields for a bounded 200 ms BEFORE it calls the
+    /// installer, so the last frame the window was sent has time to paint.
+    ///
+    /// The same ruling: without the yield the installer can end this process
+    /// before the WebView has painted the final line.
+    #[test]
+    fn the_last_frame_gets_a_bounded_yield_before_the_installer() {
+        assert_eq!(
+            PAINT_FLUSH,
+            std::time::Duration::from_millis(200),
+            "the paint flush is no longer the bounded ~200 ms the ruling asked for"
+        );
+        let src = include_str!("update.rs");
+        let install_fn = &src[src
+            .find("async fn install_now(")
+            .expect("update.rs has no install_now")..];
+        let install_fn = &install_fn[..install_fn
+            .find("\n// ---------------------------------------------------------------------------\n// The desktop half across the process that ends it")
+            .expect("install_now has no end")];
+        // Split for the same reason: only a real awaited sleep in this function
+        // can satisfy it.
+        let flush = install_fn
+            .find(concat!("tokio::time::", "sleep(PAINT_FLUSH).await;"))
+            .expect("the install step no longer yields so the last frame can paint");
+        let install = install_fn
+            .find("update.install(&bytes)")
+            .expect("the install step no longer installs the bytes step (b) verified");
+        assert!(
+            flush < install,
+            "the installer is called before the paint flush, so the last frame can be lost"
+        );
+        // It is the non-blocking timer on the async install path, not a thread
+        // sleep: this function already runs on the tauri runtime.
+        assert!(
+            !install_fn[..install].contains("std::thread::sleep"),
+            "the install step blocks the runtime thread instead of yielding"
         );
     }
 
