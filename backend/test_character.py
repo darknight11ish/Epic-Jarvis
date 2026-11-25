@@ -105,9 +105,9 @@ CAPABILITY_LINES = (
     "- Jarvis has a real drop-in plug-in system, not only built-in tools: 45 optional plug-ins live as folders under jarvis_plugins beside jarvis_hud.py, added with scripts/add-plugin.ps1 -Name <name> and a restart; the loader raises no card of its own, and an installed plug-in's feature keeps its own one card. Never say Jarvis has no plug-ins.\n"
     "- Jarvis has a real Skills menu too: Settings, Skills installs a SKILL.md from a "
     "folder or .zip, imports Hermes skills from %USERPROFILE%\\.hermes\\skills, turns "
-    "one off/on and edits one - each behind ONE approval card; a risky skill is "
-    "quarantined and never carded; nothing is downloaded or auto-installed. Never say "
-    "you cannot install skills.\n"
+    "one on and edits one - each behind ONE approval card; turning one off, and "
+    "removing one, are immediate; a risky skill is quarantined and never carded; "
+    "nothing is downloaded or auto-installed. Never say you cannot install skills.\n"
     '- Jarvis can really build a small Android app: in a project task it writes a fixed template around your own index.html/app.js/app.css, then Gradle builds it behind ONE app_build_android card and adb installs it behind ONE app_install_android card over the cable. It needs the Android SDK, a Java 17 JDK, its Gradle wrapper files and, for the install, USB debugging; a first build downloads Gradle and the Android Gradle plugin. No Play Store, no release signing. Never say you cannot build Android apps or write code.\n'
     "- Jarvis really does keep track of goals on this PC: Brain, Work, Goals stores each goal's own words and a short editable plan of at most 7 steps. Accepting a drafted goal raises ONE ordinary approval card; ticking a step and the weekly check-in raise NO card; every acting step still needs its own card. Nothing ticks a step silently - you tick it, and a step that names a project benchmark is met when that number reaches its target. Never say Jarvis has no goal tracking.\n"
     "- Jarvis really does have a read-only price and flight radar (jarvis_price_radar.py): it can read Google Flights' public search page (unofficial and experimental) and keep a local price history with target prices. It is OFF by default ([price_radar] enabled = false in the settings file; no chat approval card for that switch exists yet); this chat can run a read-only lookup when it is on, and there is no app screen yet. It never books, holds a seat, adds to a cart or checks out. Never say you cannot check flight prices - say the radar is off or unwired until it is on, and never invent prices.\n"
@@ -128,15 +128,19 @@ CHARACTER_WITH_CAPABILITIES = (CHARACTER_BLOCK[:-len(_FINAL_LINE)]
 #: measurement: the block plus the original rules should stay well inside
 #: it, so a much longer addition later fails loudly instead of quietly
 #: eating the context budget.
-#: Re-pinned 2026-11-09: the block is now ~1,751 tokens, because the seven
-#: capability-honesty lines joined it (each lane had appended its line to
-#: the Modelfile but none had carried it into LANE_SYSTEM; the Skills line
-#: joined 2026-11-09). 1,800 is the
-#: measured ceiling with room for a normal edit, and it still fails loudly
-#: on a story's worth of new prompt. The 2026-11-13 "facts come from
-#: feature_guide or not at all" line took it to ~1,797, still inside the cap;
-#: a longer version of that line failed this check, which is why it is terse.
-TOKEN_CAP = 1800
+#: Re-pinned 2026-11-25: the Skills line now says what the Skills module's own
+#: `menu()` note says - turning one off and removing one are immediate, only
+#: install/on/edit raise the ONE card - which is 46 characters longer than the
+#: sentence it replaced (the block is now ~1,813 tokens, measured). 1,830 is
+#: the ceiling with room for a normal edit, and it still fails loudly on a
+#: story's worth of new prompt. Re-pinned 2026-11-09: the block was ~1,751
+#: tokens, because the seven capability-honesty lines joined it (each lane had
+#: appended its line to the Modelfile but none had carried it into
+#: LANE_SYSTEM; the Skills line joined 2026-11-09). The 2026-11-13 "facts come
+#: from feature_guide or not at all" line took it to ~1,797, still inside the
+#: old 1,800 cap; a longer version of that line failed this check, which is why
+#: it is terse.
+TOKEN_CAP = 1830
 
 #: Phrases that would loosen a rule if the block said them - test_manner.py's
 #: own LOOSENING list, kept in step with it deliberately (a change to one

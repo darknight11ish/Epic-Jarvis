@@ -568,6 +568,112 @@ def test_wake_word_activation_answer_is_the_catalogues_own():
         assert wrong not in low, (wrong, words)
 
 
+# ---------------------------------------------------------------------------
+# THE TWO SENTENCES THIS WORK MADE TRUE (2026-11-25)
+# ---------------------------------------------------------------------------
+# Both sentences came from the two rescued branches (2026-11-07/09) and both
+# were false on main at 0922b44d. Each check reads the module that OWNS the
+# fact, so a future reword cannot quietly make the sentence false again, and
+# each FAILS if the honesty is reverted - which is the property that matters:
+# a suite that only proved "some answer exists" would pass with either fault
+# present.
+
+
+def test_notification_styles_place_is_the_style_modules_own_hint():
+    """The answer names the row the style module names, not a guess.
+
+    MEASURED WRONG ON MAIN at 0922b44d: "...the phone's own: Settings,
+    Appearance, notification styles ... The PC has no card for them" - but the
+    phone draws `NotificationStylesSection` inside the Settings row
+    "Notifications from Jarvis" (`JarvisNotifyPlate.kt`), and the PC STORES the
+    six values (`jarvis_notification_styles.py`: "the PC stores only the six
+    values above"). So the old words sent the owner to a row that does not hold
+    the control and denied a thing the PC really does.
+
+    The owning module ships both halves in its own words - `PREVIEW_HINT` names
+    where the preview is seen, `NO_CARD` says why no approval card is raised -
+    so this check reads THOSE, never a hand copy.
+    """
+    import jarvis_feature_guide as G
+    import jarvis_notification_styles as N
+    Q = _quick()
+    place = G.place_for("notification styles")
+    assert place, "the off-list place table lost notification styles"
+    words = str(place.get("words") or "")
+    # Half 1: the place is the module's own hint, word for word.
+    assert "Settings, Notifications from Jarvis" in N.PREVIEW_HINT, N.PREVIEW_HINT
+    assert "Settings, Notifications from Jarvis" in words, words
+    # Half 2: the card rule is the module's own, not a guess.
+    assert "no approval card" in N.NO_CARD.lower(), N.NO_CARD[:200]
+    assert "no approval card" in words.lower(), words
+    # The wrong row the audit-era words named must not come back.
+    assert "appearance" not in words.lower(), (
+        "the 2026-11-07 wrong place came back: " + words)
+    # ... and the chat answer IS those words: one table, one answer.
+    got = Q.match("where do I change the notification styles?")
+    assert got is not None and got.name == "settings_where", got
+    reply = str(Q._run_settings_where(got.f).reply)
+    assert reply == words, (reply, words)
+
+
+def test_skills_digest_does_not_card_turning_a_skill_off():
+    """The digest's card rule is the Skills module's own note.
+
+    MEASURED WRONG ON MAIN at 0922b44d: "turns one off/on and edits one - each
+    behind ONE approval card". The module's own `menu()` note says the opposite
+    for OFF: "Turning one off, and removing one - installed or turned off - are
+    immediate", and `skill_uninstall` is the "auto" row. The live model reads
+    this digest, so the over-claim was a false capability sentence of exactly
+    DEF-093's class: a statement about its own cards that the registry does not
+    back.
+    """
+    import inspect
+    import jarvis_agent as A
+    import jarvis_skill_menu as SM
+    Q = _quick()
+    digest = A.LANE_SYSTEM
+    assert "turning one off, and removing one, are immediate" in digest, digest[-600:]
+    assert "turns one off/on" not in digest, "the over-claim came back"
+    # The module's own note carries both halves; read it, do not copy it.
+    note = inspect.getsource(SM.menu)
+    assert "are immediate" in note, note[-600:]
+    assert "ONE approval card" in note, note[-600:]
+    # The chat answer's fallback note (used when the skills module cannot be
+    # read on this PC) says the same two halves as the module.
+    fallback = Q._skill_menu_words()[1]
+    assert "ONE approval card" in fallback and "immediate" in fallback, fallback
+
+
+def test_skills_digest_is_one_line_in_every_copy():
+    """The corrected line is in all five copies, and none keeps the old claim.
+
+    The digest reaches the model through five files (`jarvis-primary.Modelfile`,
+    `jarvis_agent.LANE_SYSTEM`, `jarvis_profiles.JARVIS_SYSTEM`, the try-out
+    Modelfile and `test_character.CAPABILITY_LINES`); the suite already pins
+    that they are word-for-word equal, and this row pins the two halves of the
+    repaired claim in each, so a fix in one copy only is a FAIL here.
+    """
+    files = (
+        HERE / "jarvis-primary.Modelfile",
+        HERE / "jarvis_agent.py",
+        HERE / "jarvis_profiles.py",
+        HERE.parent / "tools" / "model_tryout" / "Modelfile.jarvis-qwen35-9b",
+        HERE / "test_character.py",
+    )
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        assert "Jarvis has a real Skills menu too" in text, path.name
+        region = text.split("Jarvis has a real Skills menu too", 1)[1]
+        region = region.split("Never say you cannot install skills", 1)[0]
+        # Join the Python string literals the wrapped copies are written in, so
+        # the SAME words can be found in a one-line Modelfile and in a wrapped
+        # `jarvis_profiles.py` literal.
+        flat = "".join(region.replace('"', "").replace("\\", "").split())
+        assert "turningoneoff,andremovingone,areimmediate" in flat, path.name
+        assert "eachbehindONEapprovalcard" in flat, path.name
+        assert "turnsoneoff/on" not in flat, f"{path.name} still over-claims"
+
+
 def main():
     checks = [
         ("approval policy is deterministic", test_approval_policy_is_deterministic),
@@ -577,6 +683,12 @@ def main():
         ("scoped anti-slop honesty", test_scoped_antislop_never_claims_on_while_filter_off),
         ("unchanged toggle makes no change", test_unchanged_toggle_says_already_and_calls_no_setter),
         ("off-list places answer", test_off_list_places_answer_the_real_place),
+        ("notification styles place is the module's own hint",
+         test_notification_styles_place_is_the_style_modules_own_hint),
+        ("skills digest cards only what the module cards",
+         test_skills_digest_does_not_card_turning_a_skill_off),
+        ("skills digest is one line in every copy",
+         test_skills_digest_is_one_line_in_every_copy),
         ("heritage both halves", test_heritage_both_halves_and_named_borrows),
         ("two-part capability joins rows", test_two_part_capability_question_joins_every_row),
         ("chat storage questions are deterministic", test_chat_storage_questions_are_deterministic),

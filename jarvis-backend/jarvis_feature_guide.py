@@ -4351,9 +4351,23 @@ PLACES = {
     },
     "notification styles": {
         "key": "notification styles",
-        "words": ("Notification styles are the phone's own: Settings, Appearance, "
-                  "notification styles, on the Android app. The PC has no card for them - "
-                  "Windows draws its own toast - and the chat preview works on both."),
+        # CORRECTED 2026-11-25: the 2026-11-07 words said "Settings, Appearance,
+        # notification styles" on the phone and "the PC has no card for them" -
+        # but the phone moved these onto Settings, Notifications from Jarvis
+        # (`JarvisNotifyPlate.kt` draws `NotificationStylesSection`), and the PC
+        # STORES the six values (`jarvis_notification_styles.py`: "the PC stores
+        # only the six values above"), so the old sentence names a row that does
+        # not hold them and denies a thing the PC does. The place is the style
+        # module's own PREVIEW_HINT, and a test now reads that hint rather than
+        # trusting these words.
+        "words": ("Notification styles are on your phone: Settings, Notifications from "
+                  "Jarvis. Describe one in chat or in the box there - \"make my "
+                  "notifications look like ...\" - and the PC's local model turns it into "
+                  "a closed menu of six choices that plain code checks; the PC stores "
+                  "those six values and the phone draws them. Tap Add there to keep the "
+                  "one preview: no approval card is raised, because a style shows nothing "
+                  "new, adds no button and grants nothing. The PC's own Settings, "
+                  "Notifications chooses which notifications appear, not how they look."),
     },
     "face size": {
         "key": "face size",
