@@ -7339,6 +7339,7 @@ def main():
                t_a_corrupt_deploy_manifest_is_named_and_never_silently_accepted,
                t_no_installed_desktop_means_no_manifest_rather_than_a_guessed_one,
                t_a_manifest_write_killed_before_the_rename_keeps_the_old_valid_record,
+               t_a_stale_live_file_is_named_not_installed_and_never_recorded,
                t_source_commit_is_recorded_beside_version_and_never_guessed,
                t_source_commit_blob_is_stable_and_validated,
                t_the_lists_parse_from_apply_patches,
@@ -7530,6 +7531,59 @@ def t_the_cloud_turn_identity_is_carried_as_two_literal_replaces():
               and statuses.get("cloud-turn-identity.patch") == "already"
               and statuses.get("cloud-turn-identity-cut.patch") == "already",
               (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_stale_live_file_is_named_not_installed_and_never_recorded():
+    """The manifest records the SOURCE the install copied, never the live bytes.
+
+    `plan_shipped` calls a file "unchanged" only after comparing it with the
+    ref's blob byte for byte, and the manifest is planned after that comparison -
+    so a live file that drifts in between is the case that matters. The record
+    must still carry the source's hash, and must NAME the drifted file as not
+    installed, with its live size and modified time. A stale file's own hash must
+    never enter DEPLOY-MANIFEST and be blessed as the deployed tree.
+    """
+    root = tmpdir()
+    try:
+        live = root / "live"
+        source = b'"""the bytes the install copies"""\n'
+        stale = b'"""a stale live copy"""\n'
+        write(live / "stale.py", source.decode("utf-8"))
+        write(live / "VERSION", "1.0.0")
+        write(live / "SOURCE-COMMIT",
+              R.source_commit_blob("a" * 40, "origin/main",
+                                   version="1.0.0").decode("utf-8"))
+        plan = SimpleNamespace(
+            shipped=[R.ShippedAction("stale.py", "stale.py", "unchanged", source)],
+            deltas=[], staged={},
+            release=[R.ReleaseAction(R.SOURCE_COMMIT, "unchanged", old="a" * 40,
+                                     commit="a" * 40),
+                     R.ReleaseAction("VERSION", "unchanged", old="1.0.0")])
+        write(live / "stale.py", stale.decode("utf-8"))   # drifts after the plan
+        stale = (live / "stale.py").read_bytes()   # what is really live now
+        action = R.plan_deploy_manifest(plan, live)
+        recorded = json.loads(action.blob)["files"]["stale.py"]
+        check("stale-live: the manifest hashes the SOURCE, not the stale live bytes",
+              recorded["sha256"] == hashlib.sha256(source).hexdigest()
+              and recorded["sha256"] != hashlib.sha256(stale).hexdigest(),
+              recorded)
+        outcome = R.apply_deploy_manifest(action, live,
+                                          R.Backup(live, stamp="stale"))
+        why = str(outcome.get("why") or "")
+        check("stale-live: a live file that is not the source is NOT recorded",
+              outcome.get("ok") is False, outcome)
+        check("stale-live: ... it is named 'not installed', with its live size",
+              "not installed" in why and "stale.py" in why
+              and f"{len(stale)} bytes" in why, why)
+        modified = R.time.strftime(
+            "%Y-%m-%d %H:%M:%S",
+            R.time.localtime((live / "stale.py").stat().st_mtime))
+        check("stale-live: ... and with its live modified time",
+              modified in why, (modified, why))
+        check("stale-live: ... so no DEPLOY-MANIFEST declares the stale tree correct",
+              not (live / R.DEPLOY_MANIFEST).exists())
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
