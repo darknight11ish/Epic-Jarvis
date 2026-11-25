@@ -32733,7 +32733,7 @@ Guardian copy first, an atomic write, one Undo, no deletions.
 
 | route | body | action values |
 |---|---|---|
-| `POST /api/notes/customize` | `{"path", "action", "expected_sha256", ...}` | `format` (`style`: bold/italic/strike/code, `format_action`: add/remove, `target`); `line` (`line_action`: bullet/number/checklist/quote/heading/plain/untick, `target` = the whole line, `level` for a heading); `rename_heading` (`old`, `new`); `new_section` (`heading`, optional `text`, `level`); `set_property`/`remove_property` (`key`, `value`); `link` (`note`, optional `heading`); `save_template` (`name` optional) |
+| `POST /api/notes/customize` | `{"path", "action", "expected_sha256", ...}` | `format` (`style`: bold/italic/strike/code, `format_action`: add/remove, `target`); `line` (`line_action`: bullet/number/checklist/quote/heading/plain/untick, `target` = the whole line, `level` for a heading); `rename_heading` (`old`, `new`); `new_section` (`heading`, optional `text`, `level`); `set_property`/`remove_property` (`key`, `value`); `link` (`note`, optional `heading`); `add_alias` (`alias` = the other name to add to the note's own `aliases:` list); `save_template` (`name` optional) |
 | `GET /api/notes/templates` | - | `{"ok", "count", "templates": [names only], "why"}` - never any template text |
 
 - **Exactness.** A line shape needs ONE line equal to `target` after stripping
@@ -32744,6 +32744,19 @@ Guardian copy first, an atomic write, one Undo, no deletions.
   anything else is a quoted string. Only that one line changes; every other byte
   (other properties, order, line endings, body) is kept. Malformed front matter
   is refused, never repaired.
+- **`add_alias`** adds ONE other name to the note's own `aliases:` list, which is
+  the list Obsidian reads from the note itself (section 170.12/170.13). Every
+  value is written as a quoted YAML scalar, so a comma, a `#`, a `*`, a `&` or a
+  leading `- ` is a character in the name rather than YAML syntax. An alias
+  already on the list changes nothing; a name that already opens a DIFFERENT note
+  is refused in words that name that note, because the resolver reads a file's
+  own name before any aliases list and the alias could never win. A comment line
+  or a blank line inside the `aliases:` block, a one-line `[a, b]` list, and more
+  than one `aliases:` line are refused rather than rebuilt - this editor never
+  rewrites YAML it cannot put back. The note's other properties are left byte for
+  byte and the `aliases:` block is written back as one block at the end of the
+  frontmatter, ONE `edit_vault_note` card is raised, and one Undo restores the
+  old frontmatter.
 - **Line shapes** keep the line's indentation, blank lines and line endings:
   bullet `- `, numbered `1. `, checklist `- [ ] `, quote `> `, heading `#`..`######`;
   `plain` removes one leading shape; `untick` only changes `- [x]` to `- [ ]`.
@@ -33037,16 +33050,28 @@ The favourite said as a description - "and have this be one of my favorite
 notes", "and make this one of my favourites" - sets the SAME separate
 `favorite: true` front-matter property that "favourite it" already writes;
 `pinned` and `favorite` stay different properties. The append's words after
-"that" are the entry verbatim: the commas and the "didn't know when to call it
-quits, disappointed" clause are CONTENT, not further instructions, and the date
-heading is TODAY from the turn's clock, never a date read out of the sentence.
-A name that is genuinely not in the vault still answers "I could not find a note
-called ... Nothing was written" and creates nothing - the fix never turns a
-failed lookup into a create.
+"that" are the entry as the owner said it: the commas and the "didn't know when
+to call it quits, disappointed" clause are CONTENT, not further instructions, and
+the date heading is TODAY from the turn's clock, never a date read out of the
+sentence. The one exception is an entry that is WHOLLY a date phrase - "add
+today's date to my mood log", "add the 3rd of december to my mood log", "add last
+friday to my mood log": that writes the ISO day it names (`2026-11-24`,
+`2026-12-03`) instead of the words, computed from the turn's own local clock, and
+"add friday at 5 to my mood log" keeps the owner's words rather than writing a
+date, because a bare number is a day of the month to dateutil and would land in
+the past. A name that is genuinely not in the vault still answers "I could not
+find a note called ... Nothing was written" and creates nothing - the fix never
+turns a failed lookup into a create.
 
-**What this does NOT do (said plainly).** It does not create aliases, edit
-frontmatter other than the note's own `aliases` read, patch headings, blocks or
-properties, or build a search index - those are later phases. The chat path is
+**What this does NOT do (said plainly).** It does not patch headings, blocks or
+properties through the append path, and it does not build a search index - those
+are later phases or other routes. It DOES write the note's own `aliases:` list
+when the sentence names both the note and the new name ("when I say workout I
+mean my Exercise note", "call my Exercise note gym time", "add legs day as
+another name for my Exercise note"): one `edit_vault_note` card, the existing
+names kept and appended to, and the three refusals in section 170.9's `add_alias`
+bullet. A referral sentence that names no note ("this particular note") writes
+nothing and says only that the name will be looked up. The chat path is
 deterministic and PC-side; the phone gets it through the same `/api/chat`
 endpoint, and no app rebuild is needed.
 

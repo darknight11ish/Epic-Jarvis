@@ -564,6 +564,99 @@ def t_a_topic_or_no_name_asks_for_names():
           got.intent if got else "the model")
 
 
+def t_every_note_is_refused_never_read_as_a_note_called_my():
+    # Measured on the owner's own words, 2026-11-24: "delete all my notes"
+    # stripped "all" as an article, left "my", and answered "I could not find a
+    # note called \"my\"". A mass delete must be refused in words instead.
+    reset_all()
+    put("Shopping.md")
+    put("draft.md")
+    for text in ("delete all my notes", "delete every note", "delete all notes",
+                 "delete everything", "delete every one of my notes",
+                 "delete each note"):
+        GATE["calls"].clear()
+        got = ask(text)
+        check(f"{text!r} is a refusal, not a missing note",
+              got is not None and got.intent == "note_delete_refused",
+              got.intent if got else "the model")
+        check(f"... it never claims a note called \"my\" is missing ({text!r})",
+              "no note called" not in (got.reply if got else "").lower(),
+              got.reply if got else "")
+        check(f"... it says every note was not deleted ({text!r})",
+              "every note" in (got.reply if got else "").lower(),
+              got.reply if got else "")
+        check(f"... it names the door and the cap ({text!r})",
+              "delete notes" in (got.reply if got else "")
+              and str(E.MAX_DELETE) in (got.reply if got else ""),
+              got.reply if got else "")
+        check(f"... nothing was deleted ({text!r})",
+              here("Shopping.md") and here("draft.md"))
+        check(f"... and no card was raised ({text!r})",
+              GATE["calls"] == [], GATE["calls"])
+    # A TOPIC that happens to open with "all" still asks by name, never refuses.
+    got = ask("delete all notes about the trip")
+    check("'all notes about the trip' still asks for names, not refused",
+          got is not None and got.intent == "note_delete_ask",
+          got.intent if got else "the model")
+
+
+def t_a_count_or_a_list_without_the_word_note_still_deletes():
+    # Both measured 2026-11-24 on the owner's own shapes. "remove three notes:
+    # Ideas, draft and Shopping" was read as ONE note called "three notes: ideas,
+    # draft and shopping", and "delete draft and Shopping" reached no code at all
+    # (the model answered), so a list without the word "note" did nothing.
+    reset_all()
+    put("Ideas.md")
+    put("draft.md")
+    put("Shopping.md")
+    got = ask("remove three notes: Ideas, draft and Shopping")
+    check("a count before the note word is not part of a title",
+          got is not None and got.intent == "note_deleted",
+          got.intent if got else "the model")
+    check("... all three named notes are in the trash",
+          not here("Ideas.md") and not here("draft.md") and not here("Shopping.md"))
+    action, _detail, prompt = GATE["cards"][-1]
+    for name in ("Ideas.md", "draft.md", "Shopping.md"):
+        check(f"... the one card names {name}", name in prompt, prompt)
+
+    reset_all()
+    put("draft.md")
+    put("Shopping.md")
+    put("Ideas.md")
+    got = ask("delete draft and Shopping")
+    check("a list without the word 'note' is claimed when both exist",
+          got is not None and got.intent == "note_deleted",
+          got.intent if got else "the model")
+    check("... exactly those two went, and the third stayed",
+          not here("draft.md") and not here("Shopping.md") and here("Ideas.md"))
+    action, _detail, prompt = GATE["cards"][-1]
+    check("... and its one card names both",
+          "draft.md" in prompt and "Shopping.md" in prompt, prompt)
+
+    # A list that names no note is still nobody's note delete. Proved on a vault
+    # that HAS notes, and against the note lane's own matcher as well as the
+    # answer: this row used to run on an EMPTY vault and accepted
+    # note_delete_ask, note_delete_all and note_delete_refused, every one of
+    # which is the note lane claiming the sentence (2026-11-24).
+    reset_all()
+    put("Shopping.md")
+    put("Ideas.md")
+    for text in ("delete my email and calendar",
+                 "delete my tax return and the invoice"):
+        GATE["calls"].clear()
+        got = ask(text)
+        check(f"{text!r} is not claimed by the note lane",
+              got is None or not str(getattr(got, "intent", "")).startswith("note_"),
+              got.intent if got else "the model")
+        check(f"... the note lane's own matcher releases it ({text!r})",
+              Q._note_asking(text, now=time.time()) is None,
+              Q._note_asking(text, now=time.time()))
+        check(f"... nothing was deleted ({text!r})",
+              here("Shopping.md") and here("Ideas.md"))
+        check(f"... and no card was raised ({text!r})",
+              GATE["calls"] == [], GATE["calls"])
+
+
 def t_the_lane_caps_a_batch_at_the_module_limit():
     reset_all()
     names = [f"N{i:02d}" for i in range(1, E.MAX_DELETE + 2)]

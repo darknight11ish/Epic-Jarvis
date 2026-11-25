@@ -119,6 +119,13 @@ THIRD_PARTY = {
     # (jarvis_ocr.set_reader). Imported inside a `try`, lazily, so a backend
     # without it still reads pictures with Windows' own reader.
     "rapidocr": "rapidocr",
+    # Notes (2026-11-25): a date phrase that names a MONTH ("the 3rd of
+    # december") is read by dateutil, and the weekdays ("last Friday") are
+    # computed by hand because dateutil cannot read those. It is imported
+    # inside a `try`, so a PC without it keeps the owner's own words instead
+    # of writing a wrong date. `dateutil` is the import name; python-dateutil
+    # is the pip name, which is what backend/requirements.txt carries.
+    "dateutil": "python-dateutil",
     # jarvis_ocr.bgra_from_bytes decodes a picture that is not a PNG the
     # backend can open itself (a phone's JPEG), in a `try`, so the black-out
     # can paint on it. PIL is pillow's own import name; the INDIRECT entry
