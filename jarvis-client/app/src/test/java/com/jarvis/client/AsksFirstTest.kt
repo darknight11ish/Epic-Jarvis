@@ -209,7 +209,11 @@ class AsksFirstTest {
         assertTrue("its own words explain what it does", vault.what.contains("tidy-up"))
         assertTrue("its state is in words", AsksFirst.vaultState(vault).isNotEmpty())
         val no = requireNotNull(t.notSwitchable) { "the not-a-switch list is missing" }
-        assertEquals("5 tools have no switch of their own", 5, no.labels.size)
+        assertEquals("6 tools have no switch of their own", 6, no.labels.size)
+        assertTrue("... and full GitHub mode is one of them, with its own label",
+            no.labels.any { it.first == AsksFirst.GITHUB_MODE }
+                && no.labels.first { it.first == AsksFirst.GITHUB_MODE }.second
+                    .contains("Full GitHub mode"))
         assertTrue("the note names the real switch for the sandbox", no.why.contains("Data sandbox"))
         assertTrue("... and says the web-search two ride with web search",
             no.why.contains("Web search"))
@@ -290,8 +294,11 @@ class AsksFirstTest {
         assertFalse("nothing to turn off", off.canTurnOff)
         assertEquals(AsksFirst.GITHUB_MODE_OFF, off.state)
         // A PC older than the mode sends no object: no row, no control, and no
-        // invented default. `phone_shipped` is that PC.
-        val older = requireNotNull(AsksFirst.parse(root)?.tools)
+        // invented default. Built by REMOVING the key from the same real answer,
+        // because the generated fixture now carries it (2026-11-25).
+        val olderRoot = JsonObject(
+            root + ("tools" to JsonObject(realTools.filterKeys { it != "github_mode" })))
+        val older = requireNotNull(AsksFirst.parse(olderRoot)?.tools)
         assertNull("an older PC sends no github_mode", older.githubMode)
         val none = AsksFirst.githubModeView(older.githubMode)
         assertFalse("nothing is drawn", none.show)
