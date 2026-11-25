@@ -895,30 +895,159 @@ pub fn normalise_commit(raw: &str) -> Option<String> {
     )
 }
 
+/// Which half is ahead of the other, as git's own ancestry answer decides it.
+///
+/// "They differ" is true of four very different machines and was, until
+/// 2026-11-24, the only thing this module could say. Measured on the owner's PC
+/// that evening: the desktop was built from `18ffc17611fe`, the backend was
+/// installed from `b0926662ec0b`, and git proves the first is an ANCESTOR of the
+/// second - so the backend was one step ahead, which is benign, while the card
+/// read "both halves are done ... they differ". A sentence that is technically
+/// true and practically useless is how a correct update still looked broken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Halves {
+    /// One release: both halves carry the same commit.
+    Same,
+    /// The backend carries a commit that contains this app's. Normal, and not a
+    /// failure: the backend only grows, an older app talks to a newer backend
+    /// fine, and the next desktop release catches up to it.
+    BackendAhead,
+    /// This app contains the backend's commit, so the backend half is OLDER than
+    /// the app talking to it. This is the one direction that must be fixed.
+    AppAhead,
+    /// Two divergent lines: neither commit contains the other. Nothing may be
+    /// said about which is newer, because nothing is true.
+    Unrelated,
+    /// A commit could not be read, or git could not answer.
+    Unknown,
+}
+
+/// The classification, from the two commits and git's two ancestry answers.
+///
+/// Pure on purpose: the git calls happen once, in [`halves_line_in`], and every
+/// rule here can be proved without a repository. `app_in_backend` answers "is
+/// the app's commit an ancestor of the backend's"; `backend_in_app` the other
+/// way round. Both `None` means git could not be asked, which is `Unknown` -
+/// never `Same`, because an unreadable answer must not read as a match.
+pub fn classify_halves(
+    app: Option<&str>,
+    backend: Option<&str>,
+    app_in_backend: Option<bool>,
+    backend_in_app: Option<bool>,
+) -> Halves {
+    let app = match app.and_then(normalise_commit) {
+        Some(app) => app,
+        None => return Halves::Unknown,
+    };
+    let backend = match backend.and_then(normalise_commit) {
+        Some(backend) => backend,
+        None => return Halves::Unknown,
+    };
+    if app == backend {
+        return Halves::Same;
+    }
+    match (app_in_backend, backend_in_app) {
+        (Some(true), _) => Halves::BackendAhead,
+        (_, Some(true)) => Halves::AppAhead,
+        (Some(false), Some(false)) => Halves::Unrelated,
+        _ => Halves::Unknown,
+    }
+}
+
 /// The honest sentence about which source each half came from.
 ///
 /// Always says which half is unknown rather than dropping the comparison: a
 /// line that goes missing when `git` is missing would be read as "they match".
-pub fn halves_line(app: Option<&str>, backend: Option<&str>) -> String {
+pub fn halves_sentence(class: Halves, app: Option<&str>, backend: Option<&str>) -> String {
     let app = app.and_then(normalise_commit);
     let backend = backend.and_then(normalise_commit);
-    match (app.as_deref(), backend.as_deref()) {
-        (Some(app), Some(backend)) if app == backend => {
+    match (class, app.as_deref(), backend.as_deref()) {
+        (Halves::Same, Some(app), Some(backend)) => {
             format!("Backend at {backend}, app at {app}; they match.")
         }
-        (Some(app), Some(backend)) => format!("Backend at {backend}, app at {app}; they differ."),
-        (Some(app), None) => format!(
+        (Halves::BackendAhead, Some(app), Some(backend)) => format!(
+            "Backend at {backend}, app at {app}; the backend half is newer than this app, \
+             which is not a failure - the next desktop update catches up to it."
+        ),
+        (Halves::AppAhead, Some(app), Some(backend)) => format!(
+            "Backend at {backend}, app at {app}; this app is newer than the backend half, \
+             so the backend half is the one that has not caught up. Press Update everything."
+        ),
+        (Halves::Unrelated, Some(app), Some(backend)) => format!(
+            "Backend at {backend}, app at {app}; these are two different lines of history, \
+             so neither is newer. Do not guess at it - read the update log before pressing \
+             anything."
+        ),
+        (Halves::Unknown, Some(app), Some(backend)) => {
+            format!("Backend at {backend}, app at {app}; they differ, and which one is newer could not be read.")
+        }
+        (_, Some(app), None) => format!(
             "App at {app}; the backend folder's commit could not be read, so the two \
              halves cannot be compared."
         ),
-        (None, Some(backend)) => format!(
+        (_, None, Some(backend)) => format!(
             "Backend at {backend}; this build did not record its own commit, so the two \
              halves cannot be compared."
         ),
-        (None, None) => "Neither this build nor the backend folder can name its commit, so \
-                         the two halves cannot be compared."
+        (_, None, None) => "Neither this build nor the backend folder can name its commit, so \
+                            the two halves cannot be compared."
             .to_string(),
     }
+}
+
+/// Is `ancestor` an ancestor of `descendant` (or the same commit), per git?
+///
+/// `None` for any unreadable input, a missing folder, a missing commit in this
+/// clone, or a failed git - the caller then says it could not be read rather
+/// than picking an answer. Local only, never the network.
+pub fn is_ancestor(
+    repo: Option<&str>,
+    ancestor: Option<&str>,
+    descendant: Option<&str>,
+) -> Option<bool> {
+    let repo = repo.map(str::trim).filter(|r| !r.is_empty())?;
+    let ancestor = normalise_commit(ancestor?)?;
+    let descendant = normalise_commit(descendant?)?;
+    let mut command = std::process::Command::new("git");
+    command
+        .arg("-C")
+        .arg(repo)
+        .arg("merge-base")
+        .arg("--is-ancestor")
+        .arg(&ancestor)
+        .arg(&descendant)
+        .stdin(std::process::Stdio::null());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = crate::commands::run_with_deadline(
+        "comparing the two halves' commits",
+        command,
+        GIT_LIMIT,
+    )?
+    .ok()?;
+    Some(output.status.success())
+}
+
+/// The sentence, with git asked which half is ahead.
+///
+/// The one impure entry point: the two ancestry answers are read here and
+/// nowhere else, so every rule stays provable in [`classify_halves`].
+pub fn halves_line_in(repo: Option<&str>, app: Option<&str>, backend: Option<&str>) -> String {
+    let app_in_backend = is_ancestor(repo, app, backend);
+    let backend_in_app = is_ancestor(repo, backend, app);
+    let class = classify_halves(app, backend, app_in_backend, backend_in_app);
+    halves_sentence(class, app, backend)
+}
+
+/// The sentence when no repository is at hand - git is never asked, so a
+/// difference can only be reported as `Unknown`, never guessed at.
+pub fn halves_line(app: Option<&str>, backend: Option<&str>) -> String {
+    let class = classify_halves(app, backend, None, None);
+    halves_sentence(class, app, backend)
 }
 
 // ---------------------------------------------------------------------------
