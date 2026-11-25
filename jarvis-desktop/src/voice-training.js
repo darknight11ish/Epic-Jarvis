@@ -92,7 +92,7 @@ export const FREE_SPEECH = Object.freeze([
 ]);
 
 /** The fixed wake words: the detector's own words, never training material. */
-export const WAKE_PHRASES = Object.freeze(["hey Jarvis"]);
+export const WAKE_PHRASES = Object.freeze(["hey Atlas"]);
 
 /** The twelve texts only, for a caller that does not need the focus labels. */
 export const SENTENCES = Object.freeze(READ_PHRASES.map((p) => p.text));
@@ -120,26 +120,26 @@ export const DESKTOP_ROUND_LIMIT = 4;
  * .mjs compares the two files.
  */
 export const TEST_SENTENCES = Object.freeze([
-  "Hey Jarvis, what time is my first meeting tomorrow?",
+  "Hey Atlas, what time is my first meeting tomorrow?",
   "Can you read me the last message from my brother?",
   "Add bread, eggs and coffee to the shopping list.",
-  "Hey Jarvis, how long until the next train into town?",
+  "Hey Atlas, how long until the next train into town?",
   "Remind me to water the plants on Saturday morning.",
   "What did I say I wanted to do this weekend?",
   "Turn the heating down by two degrees, please.",
-  "Hey Jarvis, set an alarm for half past six.",
+  "Hey Atlas, set an alarm for half past six.",
   "Find the notes I wrote about the garden last month.",
   "How much rain is forecast for the afternoon?",
-  "Hey Jarvis, pause the music for a moment.",
+  "Hey Atlas, pause the music for a moment.",
   "Put the dentist in my calendar for next Tuesday.",
   "What was the name of that film we talked about?",
-  "Hey Jarvis, tell me the headlines in one minute.",
+  "Hey Atlas, tell me the headlines in one minute.",
   "Send me a reminder when I get home tonight.",
   "Is there anything I need to do before Friday?",
-  "Hey Jarvis, start a timer for the pasta, eleven minutes.",
+  "Hey Atlas, start a timer for the pasta, eleven minutes.",
   "Read my calendar for the rest of the week, please.",
   "How far is it to the nearest petrol station?",
-  "Hey Jarvis, thank you, that is everything for now.",
+  "Hey Atlas, thank you, that is everything for now.",
 ]);
 
 /** The PC's limits (`gate.training.limits`), with the phone's numbers when missing. */
@@ -189,7 +189,7 @@ export const CLEAR_LABEL = "Clear previous voice training";
  */
 export const CLEAR_WHAT_IT_DOES =
   "Deletes every saved voice print on your PC (one per microphone you trained), " +
-  "the \"hey Jarvis\" check built from those recordings, and the small notes it " +
+  "the \"hey Atlas\" check built from those recordings, and the small notes it " +
   "kept from learning your voice in Live. It does not delete your custom " +
   "speaking voices, your chat history or your phone pairing. ONE card approves " +
   "it: nothing is deleted until you say yes, and voice commands and Jarvis Live " +
@@ -907,12 +907,12 @@ const SETTING_NAMES = {
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
-  hands_free: "how far \"Hey Jarvis\" is trusted",
-  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
+  hands_free: "how far \"Hey Atlas\" is trusted",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Atlas\"",
   hands_free_live: "how far Jarvis Live is trusted",
   live_end: "when Jarvis Live ends on this PC",
   talk_to_type: "talk-to-type",
-  wake_confirm: "the second \"hey Jarvis\" check",
+  wake_confirm: "the second \"hey Atlas\" check",
   voice_id_model: "the voice-ID model",
 };
 
@@ -994,19 +994,19 @@ export const HANDS_FREE = Object.freeze([
     id: "same_as_button",
     label: "Same as the talk button",
     isDefault: true,
-    detail: "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+    detail: "A question started with \"Hey Atlas\" is trusted like one where you press the button.",
   },
   {
     id: "button_only",
     label: "Only trust the talk button",
-    detail: "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
+    detail: "Hey Atlas still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
   },
 ]);
 
 /**
  * The owner's decision of 2026-09-28: under "Only trust the talk button",
  * an answer about the screen ("Look at this", "Watch with me") to a
- * question started with "Hey Jarvis" stays on screen, with this setting to
+ * question started with "Hey Atlas" stays on screen, with this setting to
  * allow reading it aloud even then. Keeping it on screen is the default and
  * applies at once; "Read aloud" is the looser choice - the voice card, and
  * held on a stale link. Under "Same as the talk button" it changes nothing
@@ -1017,7 +1017,7 @@ export const HANDS_FREE_SCREEN = Object.freeze([
     id: "screen_on_screen",
     label: "Keep on screen",
     recommended: true,
-    detail: "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.",
+    detail: "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Atlas\" gets a written answer only.",
   },
   {
     id: "screen_aloud",
@@ -1029,7 +1029,7 @@ export const HANDS_FREE_SCREEN = Object.freeze([
 /**
  * Jarvis Live under "Only trust the talk button" (the owner's answers of
  * 2026-09-28): a Live session is trusted like the talk button by default,
- * however it was started - the owner pressed Start, or said "Hey Jarvis,
+ * however it was started - the owner pressed Start, or said "Hey Atlas,
  * let's talk". Two stricter choices apply at once; each looser one is the
  * voice card, held on a stale link. The phone's StrictVoice.HANDS_FREE_LIVE
  * has the same words. Under "Same as the talk button" it changes nothing
@@ -1045,12 +1045,12 @@ export const HANDS_FREE_LIVE = Object.freeze([
   {
     id: "live_button_start_only",
     label: "Only when I start it with the button",
-    detail: "A Live you start with the button is trusted like the talk button. One started by saying \"Hey Jarvis, let's talk\" gets the \"Hey Jarvis\" caution.",
+    detail: "A Live you start with the button is trusted like the talk button. One started by saying \"Hey Atlas, let's talk\" gets the \"Hey Atlas\" caution.",
   },
   {
     id: "live_like_hey_jarvis",
-    label: "Be as careful as with \"Hey Jarvis\"",
-    detail: "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a card, and memory or private answers stay on screen.",
+    label: "Be as careful as with \"Hey Atlas\"",
+    detail: "Everything said in Jarvis Live gets the \"Hey Atlas\" caution: no facts learned without a card, and memory or private answers stay on screen.",
   },
 ]);
 
@@ -1121,7 +1121,7 @@ export const TALK_TO_TYPE = Object.freeze([
 
 /**
  * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md section
- * 80). A second "hey Jarvis" detector that must agree with the first. One
+ * 80). A second "hey Atlas" detector that must agree with the first. One
  * detector is the default (today's behaviour); two is the stricter choice
  * and applies at once; going back to one is the voice card. Two cannot be
  * chosen while the PC does not have the second detector (the PC's words
@@ -1132,12 +1132,12 @@ export const WAKE_CONFIRM = Object.freeze([
     id: "one",
     label: "One detector",
     isDefault: true,
-    detail: "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every time before anything is written down or done.",
+    detail: "One detector listens for \"hey Atlas\", as before. Your voice is still checked every time before anything is written down or done.",
   },
   {
     id: "both",
     label: "Two detectors must agree",
-    detail: "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
+    detail: "A second, differently built detector (microWakeWord) must also hear \"hey Atlas\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
   },
 ]);
 
@@ -1288,11 +1288,11 @@ export function settingsView(status) {
   const rawSensitive = s.sensitive_memory !== undefined ? s.sensitive_memory : gate.sensitive_memory;
   const sensitiveMemory = rawSensitive === "sensitive_on_screen" || rawSensitive === "sensitive_aloud"
     ? rawSensitive : "";
-  // The fifth, how far "Hey Jarvis" is trusted: `gate.settings.hands_free`
+  // The fifth, how far "Hey Atlas" is trusted: `gate.settings.hands_free`
   // (or `gate.hands_free`). "" from a PC that does not have it - not offered.
   const rawHandsFree = s.hands_free !== undefined ? s.hands_free : gate.hands_free;
   const handsFree = rawHandsFree === "same_as_button" || rawHandsFree === "button_only" ? rawHandsFree : "";
-  // The sixth, answers about the screen after "Hey Jarvis" (the owner's
+  // The sixth, answers about the screen after "Hey Atlas" (the owner's
   // decision of 2026-09-28): `gate.settings.hands_free_screen` (or
   // `gate.hands_free_screen`). "" from a PC that does not have it - not
   // offered.
@@ -1431,7 +1431,7 @@ export function measureLines(result) {
  * for word.
  */
 export const OTHER_SENTENCES = Object.freeze([
-  "Hey Jarvis, what time is it?",
+  "Hey Atlas, what time is it?",
   "Can you read me the news headlines?",
   "Turn the heating up a couple of degrees.",
 ]);

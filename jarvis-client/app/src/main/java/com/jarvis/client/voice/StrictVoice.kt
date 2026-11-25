@@ -34,15 +34,15 @@ import kotlin.math.roundToInt
  *   read aloud, and even
  *   under "voice check is enough" - or READ ALOUD. Offered only when the PC
  *   reports the setting.
- * - Hands-free ("Hey Jarvis") (the owner's decision, 2026-09-24): a question
- *   started with "Hey Jarvis" is trusted THE SAME AS THE TALK BUTTON by
+ * - Hands-free ("Hey Atlas") (the owner's decision, 2026-09-24): a question
+ *   started with "Hey Atlas" is trusted THE SAME AS THE TALK BUTTON by
  *   default, or ONLY THE TALK BUTTON is trusted - then a hands-free turn
  *   cannot teach Jarvis facts without a card, and memory, sensitive or
  *   private answers stay on screen. Offered only when the PC reports it.
  *
  * The same shape as every other switch that widens what Jarvis does:
  * LOOSENING (balanced, voice is enough, memories or sensitive facts read
- * aloud, "Hey Jarvis" trusted like the button again) raises one approval
+ * aloud, "Hey Atlas" trusted like the button again) raises one approval
  * card on the PC
  * and changes nothing until it is approved - so it is held on a stale link
  * (rule 4). TIGHTENING applies at once and always goes: it only narrows.
@@ -133,7 +133,7 @@ object StrictVoice {
     const val SENSITIVE_MEMORY_TITLE = "Answers that use sensitive saved facts"
 
     /**
-     * How far a question started with "Hey Jarvis" is trusted (the owner's
+     * How far a question started with "Hey Atlas" is trusted (the owner's
      * decision, 2026-09-24). The same as the talk button by default - marked
      * "(default)", not "(recommended)": it is the owner's choice, not the
      * safer one. "Only trust the talk button" is the stricter choice and
@@ -144,22 +144,22 @@ object StrictVoice {
         Choice(
             VoiceStrict.SAME_AS_BUTTON,
             "Same as the talk button (default)",
-            "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+            "A question started with \"Hey Atlas\" is trusted like one where you press the button.",
         ),
         Choice(
             VoiceStrict.BUTTON_ONLY,
             "Only trust the talk button",
-            "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or " +
+            "Hey Atlas still works, but it cannot teach Jarvis facts without a card, and memory or " +
                 "private answers stay on screen. Safer if a recording of your voice could be played " +
                 "near the microphone.",
         ),
     )
 
-    const val HANDS_FREE_TITLE = "Hands-free (\"Hey Jarvis\")"
+    const val HANDS_FREE_TITLE = "Hands-free (\"Hey Atlas\")"
 
     /**
      * Answers about the screen ("Look at this", "Watch with me") to a
-     * question started with "Hey Jarvis", under "Only trust the talk
+     * question started with "Hey Atlas", under "Only trust the talk
      * button" (the owner's decision, 2026-09-28): kept on screen by default;
      * reading them aloud even then is the looser choice and raises the voice
      * card. Under "Same as the talk button" it changes nothing
@@ -170,7 +170,7 @@ object StrictVoice {
             VoiceStrict.SCREEN_ON_SCREEN,
             "Keep on screen (recommended)",
             "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts " +
-                "with \"Hey Jarvis\" gets a written answer only.",
+                "with \"Hey Atlas\" gets a written answer only.",
         ),
         Choice(
             VoiceStrict.SCREEN_ALOUD,
@@ -180,7 +180,7 @@ object StrictVoice {
         ),
     )
 
-    const val HANDS_FREE_SCREEN_TITLE = "Answers about your screen or the camera after \"Hey Jarvis\""
+    const val HANDS_FREE_SCREEN_TITLE = "Answers about your screen or the camera after \"Hey Atlas\""
 
     /**
      * Jarvis Live under "Only trust the talk button" (the owner's answers,
@@ -200,12 +200,12 @@ object StrictVoice {
             VoiceStrict.LIVE_BUTTON_START_ONLY,
             "Only when I start it with the button",
             "A Live you start with the button is trusted like the talk button. One started by saying " +
-                "\"Hey Jarvis, let's talk\" gets the \"Hey Jarvis\" caution.",
+                "\"Hey Atlas, let's talk\" gets the \"Hey Atlas\" caution.",
         ),
         Choice(
             VoiceStrict.LIVE_LIKE_WAKE,
-            "Be as careful as with \"Hey Jarvis\"",
-            "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a " +
+            "Be as careful as with \"Hey Atlas\"",
+            "Everything said in Jarvis Live gets the \"Hey Atlas\" caution: no facts learned without a " +
                 "card, and memory or private answers stay on screen.",
         ),
     )
@@ -229,7 +229,7 @@ object StrictVoice {
             "talk button\", answers about your screen or the camera are read aloud already."
 
     /**
-     * "Better voice" (the owner's group, 2026-09-28): a second "hey Jarvis"
+     * "Better voice" (the owner's group, 2026-09-28): a second "hey Atlas"
      * detector on the PC that must agree with the first. One is the default
      * (today's behaviour, marked "(default)"); two is the stricter choice and
      * applies at once; going back to one asks first. It checks every "hey
@@ -241,19 +241,19 @@ object StrictVoice {
         Choice(
             VoiceStrict.WAKE_ONE,
             "One detector (default)",
-            "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every " +
+            "One detector listens for \"hey Atlas\", as before. Your voice is still checked every " +
                 "time before anything is written down or done.",
         ),
         Choice(
             VoiceStrict.WAKE_BOTH,
             "Two detectors must agree",
-            "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" " +
+            "A second, differently built detector (microWakeWord) must also hear \"hey Atlas\" " +
                 "within a second. Fewer false wake-ups; it may miss you a little more often. " +
                 "Measure it on your PC first (the backend README, \"Better voice\").",
         ),
     )
 
-    const val WAKE_CONFIRM_TITLE = "Second \"hey Jarvis\" check"
+    const val WAKE_CONFIRM_TITLE = "Second \"hey Atlas\" check"
 
     /**
      * Which stronger voice-ID model the PC uses (the same day). The measured
@@ -513,26 +513,26 @@ object StrictVoice {
      * `VoiceStrictTest` reads that file and fails if the two drift apart.
      */
     val MEASURE_SENTENCES: List<String> = listOf(
-        "Hey Jarvis, what time is my first meeting tomorrow?",
+        "Hey Atlas, what time is my first meeting tomorrow?",
         "Can you read me the last message from my brother?",
         "Add bread, eggs and coffee to the shopping list.",
-        "Hey Jarvis, how long until the next train into town?",
+        "Hey Atlas, how long until the next train into town?",
         "Remind me to water the plants on Saturday morning.",
         "What did I say I wanted to do this weekend?",
         "Turn the heating down by two degrees, please.",
-        "Hey Jarvis, set an alarm for half past six.",
+        "Hey Atlas, set an alarm for half past six.",
         "Find the notes I wrote about the garden last month.",
         "How much rain is forecast for the afternoon?",
-        "Hey Jarvis, pause the music for a moment.",
+        "Hey Atlas, pause the music for a moment.",
         "Put the dentist in my calendar for next Tuesday.",
         "What was the name of that film we talked about?",
-        "Hey Jarvis, tell me the headlines in one minute.",
+        "Hey Atlas, tell me the headlines in one minute.",
         "Send me a reminder when I get home tonight.",
         "Is there anything I need to do before Friday?",
-        "Hey Jarvis, start a timer for the pasta, eleven minutes.",
+        "Hey Atlas, start a timer for the pasta, eleven minutes.",
         "Read my calendar for the rest of the week, please.",
         "How far is it to the nearest petrol station?",
-        "Hey Jarvis, thank you, that is everything for now.",
+        "Hey Atlas, thank you, that is everything for now.",
     )
 
     /** What the guided test came to: the result in plain words, or why there is none. */

@@ -92,7 +92,7 @@ check("twelve balanced read phrases, and three free-speech prompts, exactly the 
 });
 
 check("the wake words are a separate fixed set, never training material", () => {
-  assert.deepEqual([...VT.WAKE_PHRASES], ["hey Jarvis"]);
+  assert.deepEqual([...VT.WAKE_PHRASES], ["hey Atlas"]);
   assert.deepEqual(VT.WAKE_PHRASES, PLAN.wake_phrases);
   for (const p of [...VT.READ_PHRASES, ...VT.FREE_SPEECH]) {
     assert.doesNotMatch(p.text.toLowerCase(), /hey jarvis/);
