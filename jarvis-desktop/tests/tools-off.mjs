@@ -131,9 +131,15 @@ check("Rust refuses ON only for a name the PC does not know, and sends every OFF
   const rust = read("src-tauri/src/asks_first.rs");
   assert.match(rust, /pub\(crate\) fn tool_body\(tool: &str, enabled: bool\)/);
   assert.match(rust, /if !plausible_tool_name\(tool\)/, "a malformed name is refused here");
+  // 2026-11-25: the guard grew from "the group switch is the one exception" to
+  // a named pair, so Full GitHub mode's own row is accepted ON too. It is still
+  // an ON-ONLY guard: every OFF is sent.
   assert.match(rust,
-    /if enabled && tool != GITHUB_TOOLS_GROUP && !TOOLS_SWITCHABLE\.contains\(&tool\)/,
+    /if enabled && !ROW_SWITCHES\.contains\(&tool\) && !TOOLS_SWITCHABLE\.contains\(&tool\)/,
     "only the ON direction is refused before it is sent");
+  assert.match(rust,
+    /const ROW_SWITCHES: \[&str; 2\] = \[GITHUB_TOOLS_GROUP, GITHUB_MODE\];/,
+    "the two row ids that are not model tools are named, not special-cased one at a time");
   assert.match(rust, /TOOLS_NO_SWITCH\.iter\(\)\.find/,
     "a known tool with no switch of its own gets its own sentence, not 'does not know'");
   assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 5\]/);
