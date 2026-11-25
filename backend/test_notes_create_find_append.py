@@ -578,8 +578,15 @@ def t_an_append_to_a_named_note_needs_no_my_or_the():
           name == "note_append" and fields == {"name": "groceries", "text": "milk"},
           (name, fields))
     name, fields = intent_of("add this to my notes")
-    check("append-natural: 'add this to my notes' is unchanged",
-          name == "note_append" and fields.get("name") == "notes", (name, fields))
+    # The guard this control exists for: a sentence that says "note" is still the
+    # append lane's. What changed on 2026-11-24 is the REPLY shape, not the
+    # guard: "this" names no words to add, so the lane now asks for them
+    # (`note_append_ask`) instead of appending the literal word "this". The row
+    # still pins the guard, and it now also pins that "this" is never the entry.
+    check("append-natural: 'add this to my notes' is still the append lane",
+          name in ("note_append", "note_append_ask")
+          and fields.get("name") == "notes"
+          and fields.get("text") != "this", (name, fields))
     name, _fields = intent_of("append to the shopping list: eggs")
     check("append-natural: a named LIST keeps its own door",
           name != "note_append", name)

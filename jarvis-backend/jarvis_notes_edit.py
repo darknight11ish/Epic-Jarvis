@@ -2545,47 +2545,118 @@ def _property_edit(text: str, action: str, key: str, value: str):
 ALIAS_KEY = "aliases"
 
 
-def _alias_read(front: list) -> list:
-    """Every alias already on the note, from an inline or a block list."""
-    out, taking = [], False
-    for line in front:
-        if re.match(r"^aliases\s*:", line, re.I):
-            taking = True
-            rest = line.split(":", 1)[1].strip()
-            if rest.startswith("[") and rest.endswith("]"):
-                out += [p.strip().strip("\"'") for p in rest[1:-1].split(",")
-                        if p.strip()]
-            elif rest:
-                out.append(rest.strip().strip("\"'"))
-            continue
-        if taking:
-            if re.match(r"^\s+-\s+", line):
-                out.append(line.split("-", 1)[1].strip().strip("\"'"))
-                continue
-            taking = False
-    return [a for a in out if a]
+def _alias_read(front: list):
+    """`(every alias already on the note, why)` - why non-empty means refuse.
+
+    Only the shape this writer can put back is accepted: one `aliases:` line and,
+    under it, nothing but `  - name` item lines; or one plain scalar on the
+    `aliases:` line itself. Everything else is refused in words rather than
+    rebuilt, because a rebuild of a shape this reader only half understands
+    corrupts the note (measured 2026-11-24 with PyYAML on valid originals):
+
+    * a comment line inside the list was left behind by the rebuild, which made
+      the whole frontmatter invalid YAML (ParserError);
+    * a blank line inside the list orphaned the items after it, so `title: x`
+      became `'x\\n- old2'` and the alias `old2` was silently dropped;
+    * a one-line flow list `aliases: ["Salt, Pepper", "Workout"]` was split on
+      the quoted comma into four aliases.
+
+    Read exactly as `jarvis_notes._frontmatter_aliases` reads, so the aliases the
+    resolver answers to and the aliases this writer keeps are the same list.
+    """
+    hits = [i for i, line in enumerate(front)
+            if re.match(r"^aliases\s*:", line, re.I)]
+    if not hits:
+        return [], ""
+    if len(hits) > 1:
+        return [], ("the note has more than one aliases: line, so it is not "
+                    "changed; change them in Obsidian first")
+    i = hits[0]
+    rest = front[i].split(":", 1)[1].strip()
+    if rest.startswith("["):
+        return [], ("the note's aliases are written on one line inside [ ], and "
+                    "this editor will not rebuild that line; change it in "
+                    "Obsidian first")
+    if rest.startswith("{"):
+        return [], ("the note's aliases are not a list, so this editor will not "
+                    "change them; change them in Obsidian first")
+    if rest:
+        return [rest.strip().strip("\"'")], ""
+    out, j = [], i + 1
+    while j < len(front):
+        line = front[j]
+        stripped = line.strip()
+        if stripped == "":
+            nxt = next((n for n in front[j + 1:] if n.strip()), "")
+            if re.match(r"^\s+-\s+", nxt):
+                return [], ("the note has a blank line inside its aliases: list, "
+                            "and this editor will not rebuild that; change it in "
+                            "Obsidian first")
+            break
+        if stripped.startswith("#"):
+            if line[:1] in (" ", "\t"):
+                return [], ("the note has a comment line inside its aliases: "
+                            "list, and this editor will not rebuild that; change "
+                            "it in Obsidian first")
+            break
+        item = re.fullmatch(r"\s+-\s+(.+?)\s*", line)
+        if not item:
+            break
+        out.append(item.group(1).strip().strip("\"'"))
+        j += 1
+    return [a for a in out if a], ""
 
 
-def _alias_add(text: str, alias: str):
+def _alias_add(text: str, alias: str, rel: str = ""):
     """`(new_text, said, preview, why)` - one more name in `aliases:`.
 
     The list is rebuilt from what the note already answers to, so an existing
     alias is kept, a repeated one changes nothing, and the note's other
     properties are untouched. One card, through handle_customize, like every
     other edit to an existing note.
+
+    Every value is written as a JSON-quoted YAML scalar (`json.dumps`), so a `*`,
+    a `&`, a leading `- `, a comma and a `#` are all just characters in one line
+    instead of YAML syntax. Measured 2026-11-24: `*gym*` made the file
+    unreadable (ScannerError), `&co` became `aliases: [null]`, and `- gym` became
+    a nested list.
     """
     name = " ".join(str(alias or "").split()).strip().strip("\"'").strip()
     if not name:
         return text, "", {}, "which name should the note answer to?"
-    if (len(name) > 64 or "\n" in name
-            or any(c in name for c in "[]{}:,|#")):
+    # Anything else is safe inside the JSON-quoted scalar written below, so the
+    # only names refused are the ones that could not be read back the same way:
+    # a quote or a backslash would be escaped there and read back escaped
+    # (`jarvis_notes._frontmatter_aliases` strips the outer quotes and nothing
+    # else), so the alias would answer to a name the owner never said.
+    if len(name) > 64 or any(ord(c) < 32 for c in name) or '"' in name or "\\" in name:
         return (text, "", {},
-                "a name for a note can use letters, numbers, spaces, dots and dashes")
+                "a name for a note can be up to 64 characters and cannot contain "
+                "a quote, a backslash or a line break")
     opened, front, body, why = _split_frontmatter(text)
     if why:
         return text, "", {}, why
+    # A name that already opens ANOTHER note can never win: the resolver reads a
+    # file's own name before any note's aliases list, so writing it would leave a
+    # promise the vault cannot keep. Measured 2026-11-24: with Workout.md in the
+    # vault, "call my Exercise note workout" wrote the alias and "read my workout
+    # note" still opened Workout.md, while the reply said "say workout ... and I
+    # will look for that note". Refused in words that name that other note.
+    if rel:
+        try:
+            _row, _why, _matches = find_name(name)
+        except Exception:                   # noqa: BLE001 - keep the words given
+            _row = None
+        if (_row and _row.get("path")
+                and str(_row["path"]).casefold() != str(rel).casefold()):
+            other = str(_row["path"]).rsplit("/", 1)[-1]
+            return (text, "", {},
+                    f"There is already a note called {other}, so saying "
+                    f"{name} would open that one")
     eol = _eol_of(text)
-    have = _alias_read(front)
+    have, why = _alias_read(front)
+    if why:
+        return text, "", {}, why
     if any(a.casefold() == name.casefold() for a in have):
         return text, f'The note already answers to "{name}".', {}, ""
     keep, skipping = [], False
@@ -2598,7 +2669,7 @@ def _alias_add(text: str, alias: str):
         skipping = False
         keep.append(line)
     new_front = keep + [f"{ALIAS_KEY}:{eol}"] + [
-        f"  - {a}{eol}" for a in have + [name]]
+        f"  - {json.dumps(a)}{eol}" for a in have + [name]]
     if not opened:
         fresh = "---" + eol + "".join(new_front) + "---" + eol + text
     else:
@@ -2780,7 +2851,7 @@ def handle_customize(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
         card = f'add a link to "{_split_clip(note_name)}" in'
     elif action == "add_alias":
         alias = str(body.get("alias") or "").strip()
-        new_text, said, preview, why = _alias_add(text, alias)
+        new_text, said, preview, why = _alias_add(text, alias, rel)
         card = f'add "{_split_clip(alias)}" as another name for'
     else:
         return _error(400, "unknown action.", state="refused")

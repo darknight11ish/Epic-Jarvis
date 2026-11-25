@@ -633,12 +633,28 @@ def t_a_count_or_a_list_without_the_word_note_still_deletes():
     check("... and its one card names both",
           "draft.md" in prompt and "Shopping.md" in prompt, prompt)
 
-    # A list that names no note is still nobody's note delete.
+    # A list that names no note is still nobody's note delete. Proved on a vault
+    # that HAS notes, and against the note lane's own matcher as well as the
+    # answer: this row used to run on an EMPTY vault and accepted
+    # note_delete_ask, note_delete_all and note_delete_refused, every one of
+    # which is the note lane claiming the sentence (2026-11-24).
     reset_all()
-    got = ask("delete my email and calendar")
-    check("a list that is not notes stays away from the note lane",
-          got is None or got.intent not in ("note_delete", "note_deleted"),
-          got.intent if got else "the model")
+    put("Shopping.md")
+    put("Ideas.md")
+    for text in ("delete my email and calendar",
+                 "delete my tax return and the invoice"):
+        GATE["calls"].clear()
+        got = ask(text)
+        check(f"{text!r} is not claimed by the note lane",
+              got is None or not str(getattr(got, "intent", "")).startswith("note_"),
+              got.intent if got else "the model")
+        check(f"... the note lane's own matcher releases it ({text!r})",
+              Q._note_asking(text, now=time.time()) is None,
+              Q._note_asking(text, now=time.time()))
+        check(f"... nothing was deleted ({text!r})",
+              here("Shopping.md") and here("Ideas.md"))
+        check(f"... and no card was raised ({text!r})",
+              GATE["calls"] == [], GATE["calls"])
 
 
 def t_the_lane_caps_a_batch_at_the_module_limit():

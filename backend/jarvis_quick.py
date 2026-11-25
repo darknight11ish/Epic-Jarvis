@@ -19098,7 +19098,13 @@ _DELETE_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
 #: A phrase that names a TOPIC rather than a note ("delete all notes about the
 #: trip"): answered by asking for names, never by guessing which notes match.
 _DELETE_TOPIC = re.compile(r"^(?:about|mentioning|containing|with|of)\b", re.I)
-_DELETE_SET = re.compile(r"\b(?:all|every|each|both|everything)\b", re.I)
+#: The word that makes a delete sentence ask for a SET, anchored at the START of
+#: what the sentence names (2026-11-24). Unanchored, it searched the whole
+#: sentence, so "delete my everything note" was read as a mass delete and a note
+#: literally called Everything could never be deleted, while the resolver was
+#: never even asked. Anchored, "all my notes", "every note", "everything" and
+#: "each note" still refuse, and "my everything note" reaches the resolver.
+_DELETE_SET = re.compile(r"^(?:all|every|each|both|everything)\b", re.I)
 #: The words a SET is made of once its titles are taken out: quantifiers,
 #: articles, the note word itself, and a bare count ("all 3 notes").
 _DELETE_SET_WORDS = re.compile(
@@ -19113,10 +19119,12 @@ def _delete_names_everything(rest: str) -> bool:
     "all the Alpha notes" - NO: Alpha is a title, so the ordinary resolver
     answers it (and says how many matched), never this refusal. Read on the
     sentence's own words because "every one of my notes" leaves "one of my"
-    after `_delete_phrases`, which would look like a note title.
+    after `_delete_phrases`, which would look like a note title. The set word
+    must OPEN the sentence's own words, so a title that happens to hold one
+    ("my everything note") is never read as a mass delete.
     """
     text = str(rest or "")
-    if not _DELETE_SET.search(text):
+    if not _DELETE_SET.match(text):
         return False
     return not _DELETE_SET_WORDS.sub(" ", text).strip(" ,.;:!?")
 #: The scheduler's own nouns. A sentence naming one of these is never claimed by
@@ -19498,8 +19506,8 @@ _NOTE_DATE_WORDS = re.compile(
     r"^(?P<bare>today|yesterday|tomorrow)$", re.I)
 #: A phrase that names a day without naming a date: "last Friday", "next Monday",
 #: "the 3rd of December". The weekday shapes are computed here (python-dateutil
-#: does not read "last Friday"); anything else is read by dateutil, already in
-#: the lock, and never guessed at.
+#: does not read "last Friday"); anything else that names a MONTH is read by
+#: dateutil, already in the lock, and never guessed at.
 _NOTE_WEEKDAY_REL = re.compile(
     r"^(?:(?P<when>last|next|this)\s+)?(?P<day>monday|tuesday|wednesday|"
     r"thursday|friday|saturday|sunday)(?:'s)?(?:\s+date)?$", re.I)
@@ -19508,6 +19516,16 @@ _NOTE_WEEKDAY = re.compile(
     r"date|of\s+\w+)\b", re.I)
 _NOTE_DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday",
               "saturday", "sunday")
+#: The month names dateutil can read. A dateutil answer is trusted ONLY when the
+#: owner's phrase names one of these. A bare number is a DAY OF THE MONTH to
+#: dateutil, so measured on Tuesday 2026-11-24: "friday at 5" computed 2026-11-05
+#: (a Wednesday in the past) and "friday at 10" computed 2026-11-10. Writing a
+#: date in the past is worse than writing the owner's own words, so a phrase with
+#: no month in it is not a date at all here.
+_NOTE_MONTH = re.compile(
+    r"\b(?:january|february|march|april|may|june|july|august|september|"
+    r"october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\b",
+    re.I)
 
 
 def _note_date_body(text: str, now: float):
@@ -19537,14 +19555,21 @@ def _note_date_body(text: str, now: float):
         elif when == "next":
             delta = delta or 7
         return (today + datetime.timedelta(days=delta)).isoformat()
-    if _NOTE_WEEKDAY.search(said):
+    if _NOTE_WEEKDAY.search(said) or _NOTE_MONTH.search(said):
+        # "the 3rd of december" is how the owner says it, and the leading "the"
+        # made dateutil return None - so "add the 3rd of december to my mood log"
+        # appended the literal words, the exact failure this feature exists to
+        # remove (measured 2026-11-24).
+        phrase = said[4:] if said.startswith("the ") else said
         try:
             from dateutil import parser as _dp
-            got = _dp.parse(said, default=datetime.datetime.fromtimestamp(now),
+            got = _dp.parse(phrase, default=datetime.datetime.fromtimestamp(now),
                             fuzzy=False)
-            return got.date().isoformat()
         except Exception:                   # noqa: BLE001 - unreadable phrase
             return None
+        if not _NOTE_MONTH.search(phrase):
+            return None                     # "friday at 5" is not a date
+        return got.date().isoformat()
     return None
 
 
@@ -20012,8 +20037,10 @@ _NOTE_REFERRAL = re.compile(
     re.I)
 #: Said when the owner tells me what a name means. It promises a LOOKUP by that
 #: name - which is what the resolver really does, in every chat - and not an
-#: `aliases:` line written for them: no chat path writes that frontmatter today,
-#: so claiming it would be the exact kind of invention this project forbids.
+#: `aliases:` line written for them: this sentence names no note, so there is no
+#: file to write that line into (the shapes that DO name one are `note_alias_set`
+#: below). Claiming a write here would be the exact kind of invention this
+#: project forbids.
 NOTE_REFERRAL_SAID = (
     'Understood: "{alias}" is what you call that note. I find notes by their '
     'name, so say "{alias}" in any chat and I will look for it.')
@@ -20025,6 +20052,17 @@ NOTE_REFERRAL_SAID = (
 #: File Guardian snapshot, and the resolver already reads tier 3 - so it works in
 #: every later chat and travels with the note. A referral with no note named in
 #: it ("this particular note") has no target and keeps NOTE_REFERRAL_SAID.
+#:
+#: The order the resolver reads is path, then the file's own name, then the
+#: aliases list (docs/JARVIS-API.md, section 170.13). So a name that already
+#: opens a DIFFERENT note can never win, and `jarvis_notes_edit._alias_add`
+#: refuses it in words naming that note instead of writing a name that would
+#: never be used - the reply below is therefore only said for a name the vault
+#: will really answer to.
+#:
+#: "call my ..." is also ordinary English ("call my sister about the note
+#: tomorrow"), so that one shape is claimed only when the note it names is
+#: really there - see `_note_asking`.
 _NOTE_ALIAS_MEAN = re.compile(
     r"(?:every time|whenever|any time|when|from now on when)\s+"
     r"i\s+(?:say|refer to|call it|call that|type|write)\s*"
@@ -20324,9 +20362,10 @@ def _run_note_referral(f: dict) -> Result:
 
     Nothing is written. The owner is telling me what a NAME means, and the
     resolver already looks a note up by exactly that name in every chat, so
-    saying it back in their own word is the whole job. The sentence promises a
-    LOOKUP and never an `aliases:` line, because no chat path writes that
-    frontmatter today - a promise there would be an invention.
+    saying it back in their own word is the whole job. The sentence names no
+    note, so there is no `aliases:` line to write: this answer promises a LOOKUP
+    and never a write. The shapes that DO name a note are `note_alias_set`,
+    written by `_run_note_alias` (2026-11-24).
     """
     alias = str((f or {}).get("alias") or "").strip()
     if not alias:
@@ -20858,7 +20897,20 @@ def _run_note_delete(f: dict) -> Result:
 def _run_note_customize(f: dict, action: str, card: str) -> Result:
     if _notes_write_hidden():
         return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
-    path, sha, why = _wave3_note(_note_name_clean(str(f.get("name") or "")))
+    # The name the owner said is tried FIRST, and the "note" taken off its end is
+    # only a fallback. "in my Ideas note" read the name as "Ideas note" and must
+    # still find Ideas.md; but a title that really ends in "notes" is a note too -
+    # "pin my release notes" cleaned to "release" and answered "I could not find a
+    # note called \"release\"" while Release notes.md sat in the vault (measured
+    # 2026-11-24, and the raw name is what main used, so this is the regression
+    # put back). Read/delete/rename resolve the raw name, so the same title now
+    # answers the same way in every lane.
+    raw = str(f.get("name") or "")
+    path, sha, why = _wave3_note(raw)
+    if path is None:
+        cleaned = _note_name_clean(raw)
+        if cleaned and cleaned != raw:
+            path, sha, why = _wave3_note(cleaned)
     if path is None:
         return Result(why, "note_customize_refused")
     body = {"path": path, "action": action, "expected_sha256": sha}
@@ -21250,6 +21302,15 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     "today"/"yesterday"/"tomorrow" become the note's own `date:` property.
     """
     now = time.time() if now is None else float(now)
+
+    def _named_note_exists(name: str) -> bool:
+        """True when the vault really has a note by this name (one resolver)."""
+        try:
+            path, _why, _title = _find_note(name)
+            return path is not None
+        except Exception:                   # noqa: BLE001 - older tree
+            return False
+
     # "move all my notion notes into obsidian" is the NOTION IMPORT
     # answer's sentence, not a note move (2026-10-28, one card, the
     # export tidied into a vault). Once the polite lead is stripped the
@@ -21266,8 +21327,19 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
             continue
         alias = (m.group("alias") or "").strip(" \"'")
         name = (m.group("name") or "").strip(" \"'")
-        if alias and name:
-            return Intent("note_alias_set", {"name": name, "alias": alias})
+        if not (alias and name):
+            continue
+        # "call my X note Y" is ORDINARY ENGLISH: "call my sister about the note
+        # tomorrow" is a phone call, and it was answered "I could not find a note
+        # called \"sister about the\"" (measured 2026-11-24). This one shape is
+        # therefore claimed only when the note it names is really in the vault -
+        # the same guard `_NOTE_READ_BARE` uses - so a "call my ..." sentence
+        # that names no note falls through exactly as it did before. The other
+        # two shapes say "another name" in so many words, so they keep their
+        # honest refusal for a note that is not there.
+        if rx is _NOTE_ALIAS_CALL and not _named_note_exists(name):
+            continue
+        return Intent("note_alias_set", {"name": name, "alias": alias})
     command, alias = _split_note_referral(s)
     if alias and not command:
         return Intent("note_referral", {"alias": alias})
@@ -21476,13 +21548,6 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     # to my focus session"), and those own their words. A named list keeps its
     # grammar too ("add milk to my shopping list").
     _says_note = re.search(r"\bnotes?\b", s, re.I) is not None
-
-    def _named_note_exists(name: str) -> bool:
-        try:
-            path, _why, _title = _find_note(name)
-            return path is not None
-        except Exception:                   # noqa: BLE001 - older tree
-            return False
 
     m = _NOTE_APPEND_TO_THAT.fullmatch(s)
     name = _note_append_name(m.group("name")) if m else ""
