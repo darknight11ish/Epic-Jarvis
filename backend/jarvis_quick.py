@@ -1362,6 +1362,103 @@ def _run_stop_everything() -> Result:
     return Result(said or SA.NOTHING, "stop_all")
 
 
+# ---- FLEXIBILITY: the same request in different words ----------------------
+#
+# The owner's flexibility audit (2026-11-24) drove 54 plausible sentences
+# through `match` and measured 26 reaching code. The misses were not
+# misunderstanding: "tell me what tools you have" and "what tools are
+# currently on" are the same question as "what tools do you have", and a set
+# of whole-sentence patterns cannot see it. This normaliser is retried ONLY
+# on a miss (see `match`), so no sentence that already reached an intent
+# changes its answer - the no-regression list in
+# `backend/test_chat_flexibility.py` pins that guarantee.
+_FLEX_PREFIXES = re.compile(
+    r"^(?:(?:please|hey|hi|ok|okay|so|um|well)[,\s]+"
+    r"|(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"|(?:tell|show)\s+me\s+"
+    r"|i(?:'d| would)?\s+(?:like|want)\s+to\s+know\s+"
+    r"|do\s+you\s+know\s+"
+    r"|i\s+want\s+to\s+see\s+)+")
+
+_FLEX_CONTRACTIONS = (
+    (r"\bwhat's\b|\bwhats\b", "what is"),
+    (r"\bwhere's\b", "where is"),
+    (r"\bhow's\b", "how is"),
+    (r"\bdon't\b", "do not"),
+    (r"\bdoesn't\b", "does not"),
+    (r"\bi'm\b", "i am"),
+    (r"\byou're\b", "you are"),
+    (r"\bcan't\b", "cannot"),
+    (r"\bwon't\b", "will not"),
+    (r"\bit's\b", "it is"),
+)
+
+#: phrase -> the canonical sentence it means. EVERY rule exists because the
+#: audit measured that exact phrase going to the model; none is speculative,
+#: and each one is named in the suite's "lifts" list.
+_FLEX_REWRITES = (
+    # "what tools are currently on" / "which tools are active"
+    (re.compile(r"^(?:which|what)(?: of your)? (?:tools|functions|abilities|skills|plugins) "
+                r"(?:are|is)(?: currently)?"
+                r"(?: on|active|enabled|available|switched(?: on)?)"
+                r"(?: right now| now)?$"),
+     "what tools do you have switched on"),
+    # "how many tools are switched on"
+    (re.compile(r"^how many (?:tools|functions|abilities)(?: are)?(?: there)?"
+                r"(?: switched on| on| active| enabled| available)?$"),
+     "how many tools do you have switched on"),
+    # "list every tool you have" / "list all of them"
+    (re.compile(r"^(?:list|show)(?: me)?(?: all| every)?(?: of(?: them| these| those)?)?"
+                r"(?: the| your)?(?: tools?| functions?| abilities?| skills?| plugins?)"
+                r"(?: (?:do )?(?:you|jarvis) (?:have|got))?$"),
+     "list tools"),
+    (re.compile(r"^(?:list|show)(?: me)? (?:all|every)(?: of)? (?:them|these|those)$"),
+     "list tools"),
+    # "what are your active tools" / "tell me what tools you have"
+    (re.compile(r"^(?:what|which)(?: are| is)?(?: all)?(?: the| your)?"
+                r"(?: active| available| enabled| current)?"
+                r"(?: tools| functions| abilities)"
+                r"(?: (?:do )?(?:you|jarvis) (?:have|got))?$"),
+     "what tools do you have"),
+    # "which tools need my approval"
+    (re.compile(r"^(?:which|what)(?: of your)?(?: tools| functions| abilities)"
+                r"(?: need| needs| require| requires)"
+                r"(?: my)?(?: approval| permission| asking| a card)$"),
+     "which of your tools ask first"),
+    # "what's hooked up"
+    (re.compile(r"^what is(?: currently)?(?: hooked up| connected)(?: right now)?$"),
+     "what is connected"),
+    # "clear all chat history except for any chat in the last week"
+    (re.compile(r"^(?:clear|delete|remove|purge)(?: all| of)?(?: my| the)? chat(?: history)?"
+                r"(?: except| apart from| other than| minus)(?: for)?(?: any chat)?(?: in)?"
+                r"(?: the)?(?: last| past)(?: week| seven days| 7 days)$"),
+     "clear chats older than 7 days"),
+    (re.compile(r"^(?:clear|delete|remove|purge)(?: all| of)?(?: my| the)? chat(?: history)?"
+                r"(?: except| apart from| other than| minus)(?: for)?(?: any chat)?(?: in)?"
+                r"(?: the)?(?: last| past) (\d+) days$"),
+     r"clear chats older than \1 days"),
+)
+
+
+def flex_normalise(text: str) -> str:
+    """The same request in plainer words, for a SECOND matching attempt only.
+
+    Called from `match` only after the verbatim sentence and its
+    meta-instruction retry both found nothing, so this can add a route but can
+    never take one away. Returns the text unchanged when no rule applies.
+    """
+    out = " ".join(str(text or "").lower().split())
+    out = out.rstrip("?.! ")
+    for pattern, repl in _FLEX_CONTRACTIONS:
+        out = re.sub(pattern, repl, out)
+    out = _FLEX_PREFIXES.sub("", out).strip()
+    for pattern, repl in _FLEX_REWRITES:
+        got = pattern.sub(repl, out)
+        if got != out:
+            return got
+    return out
+
+
 def match(text, now: Optional[float] = None,
           conversation: Optional[str] = None,
           said: Optional[str] = None) -> Optional[Intent]:
@@ -1390,6 +1487,16 @@ def match(text, now: Optional[float] = None,
         stripped = _strip_meta_instruction(text)
         if stripped is not None:
             got = _match(stripped, now, conversation, said)
+    if got is None:
+        # A POLITE OR NEARLY-WORDED request is still that request (2026-11-24,
+        # the owner's flexibility audit): "tell me what tools you have" and
+        # "what tools are currently on" mean "what tools do you have". Retried
+        # ONLY on a miss, the same shape as the meta-instruction above, so every
+        # sentence that already matched keeps the answer it had - the audit's
+        # no-regression list is pinned in backend/test_chat_flexibility.py.
+        flex = flex_normalise(text)
+        if flex and flex != text:
+            got = _match(flex, now, conversation, said)
     # THE ONE FAMILY-WIDE GATE (2026-11-22, the external review's ruling): a
     # capability explanation may answer only a QUESTION that names no concrete
     # target. A command - "merge #1472 ...", "comment on pull request 1471",
