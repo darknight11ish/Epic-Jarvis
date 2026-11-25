@@ -618,7 +618,7 @@ export const UPDATE_BOTH = {
   },
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, browserQr, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   // 2026-11-09: the one learning-fault banner's "Retry now". `answers` are
   // the PC's own replies in order (the last one repeats); `calls` records
@@ -791,6 +791,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const t = s.typedToken || s.envToken || s.backendFileToken || s.backendCmToken;
             if (!t) throw new Error("there is no token yet - start Jarvis once and it makes one for itself");
             return t;
+          }
+          case "browser_qr": {
+            // browser_qr.rs: the page gets the finished SVG and the address it
+            // points at, and no argument at all.
+            const answer = window.__browserQr;
+            if (!answer || answer.throws) {
+              throw new Error((answer && answer.throws)
+                || "Turn on Let my phone reach this first, and pick this PC's own "
+                 + "100.x address. Until then there is nothing for the phone to reach.");
+            }
+            return { svg: answer.svg, url: answer.url };
           }
           case "set_api_settings": {
             window.__calls.push(["__savedApiSettings", args]);
@@ -3814,6 +3825,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__apiSettings = { base: "http://127.0.0.1:4719", bindAddress: "",
                             typedToken: null, envToken: null, backendFileToken: "backend-made-token",
                             ...(apiSettings || {}) };
+  // browser_qr.rs (Settings -> Connection, 2026-11-13, landed 2026-11-25):
+  // `{ svg, url }`, or `{ throws }` for a scenario that wants the refusal in
+  // its own words. Unset is the PC with no "Let my phone reach this" address
+  // saved: the command gives the card's own sentence and draws no picture.
+  window.__browserQr = browserQr || null;
   window.__bindAddressRefuses = bindAddressRefuses || null;
   window.__tokenSaveRefuses = tokenSaveRefuses || null;
   window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;

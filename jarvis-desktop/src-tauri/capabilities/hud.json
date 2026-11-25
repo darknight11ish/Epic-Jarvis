@@ -33,6 +33,7 @@
     "reminder-open",
     "hud-faces",
     "hud-lane",
-    "hud-nav"
+    "hud-nav",
+    "hud-browser-qr"
   ]
 }

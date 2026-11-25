@@ -434,6 +434,14 @@ fn main() {
             "set_api_settings",
             // Settings' "Show the token for my phone". Settings window only.
             "reveal_pairing_token",
+            // Settings -> Connection: "Show a QR code for my phone's browser"
+            // (2026-11-13). ONE argument-less command: the bind address, the
+            // port and the token stay in Rust; the page gets the finished SVG
+            // and the address WITHOUT the sign-in part. Granted to the settings
+            // window and the HUD (`settings-surface` and `hud-browser-qr` in
+            // surfaces.toml): the HUD page will call the same command once the
+            // server half that mints the one-time key exists.
+            "browser_qr",
             // Settings' "Second graphics card": read what was found and the
             // switches, and turn ONE switch on or off. ON only raises an
             // approval card. Settings window only.

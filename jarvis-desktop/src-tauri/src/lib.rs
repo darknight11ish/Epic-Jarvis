@@ -44,6 +44,11 @@ pub mod backup;
 // multiple conversation windows open at once").
 pub mod brain;
 pub mod browser_engine;
+// Settings -> Connection: the phone's-browser QR code (2026-11-13). The
+// picture is drawn in Rust; the page gets the SVG and the address WITHOUT the
+// sign-in part. See the module's own doc comment - the sign-in half is not
+// wired yet and says so.
+pub mod browser_qr;
 pub mod chat_windows;
 pub mod chatbot_money;
 pub mod clipboard_privacy;
@@ -1424,6 +1429,14 @@ pub fn run() {
             commands::get_api_settings,
             commands::set_api_settings,
             commands::reveal_pairing_token,
+            // Settings -> Connection: "Show a QR code for my phone's browser"
+            // (2026-11-13). ONE argument-less command: it reads the bind
+            // address, the port and (when the sign-in half exists) the token
+            // in Rust, and returns the finished SVG plus the address WITHOUT
+            // the sign-in part. Callable from the settings window and the HUD
+            // (`settings-surface` / `hud-browser-qr` in surfaces.toml), because
+            // the HUD page will call the same command later.
+            browser_qr::browser_qr,
             commands::get_second_card,
             commands::set_second_card,
             commands::set_third_card,

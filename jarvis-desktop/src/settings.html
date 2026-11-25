@@ -556,6 +556,38 @@
           <code>my-pc.nord</code>), followed by <code>:4719</code>.
         </p>
 
+        <!-- The phone's browser (2026-11-13, landed 2026-11-25). The picture
+             is drawn in Rust (browser_qr.rs) from THIS PC's own private-network
+             address and nothing else: no token, no key, no query string, and
+             never a public tunnel. The page is handed the finished SVG and the
+             address it points at, so the code can never carry more than the
+             page already shows, and scanning it signs nothing in - it opens
+             Atlas's page, whose own pairing sheet explains the rest. -->
+        <div class="field" id="browser-qr">
+          <span class="label">Open Atlas in your phone's browser</span>
+          <div class="row">
+            <button class="btn ghost" id="show-browser-qr" type="button">Show a QR code for my phone's browser</button>
+          </div>
+          <p class="note">
+            Scan this with your phone's camera. It opens Atlas in the browser at
+            this computer's private address. The code carries no token or key,
+            so a photo of it signs nothing in. It hides itself after a minute.
+          </p>
+          <p class="state" id="browser-qr-note" role="status" hidden></p>
+          <div id="browser-qr-panel" hidden>
+            <img id="browser-qr-image" alt="QR code that opens Atlas at this computer's private address"
+                 width="220" height="220" />
+            <p class="note">
+              This code points at <strong id="browser-qr-url"></strong>. If Atlas
+              asks you to pair this browser, follow the steps on that page.
+            </p>
+            <div class="row">
+              <span class="state" id="browser-qr-countdown" role="timer"></span>
+              <button class="btn ghost small" id="hide-browser-qr" type="button">Hide now</button>
+            </div>
+          </div>
+        </div>
+
         <div class="row">
           <button class="btn" id="save-connection" type="button">Save connection</button>
           <button class="btn ghost" id="clear-token" type="button">Clear token</button>

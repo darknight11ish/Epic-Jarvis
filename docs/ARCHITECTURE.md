@@ -5661,6 +5661,28 @@ what is missing is only the Settings screen agreeing about who turned it off.
   General preset when you start") already sets the same file from either app.
   `tools/check_parity.py` therefore classifies the route `deliberate` with no
   `PENDING_CLIENTS` entry: the first client is the desktop's, and it has landed.
+
+- **The phone-browser QR code is the desktop's, and that is one-sided on
+  purpose** (2026-11-25; the owner's ask of 2026-11-13 to open Atlas's web page
+  on his phone without typing its address; `browser_qr.rs`, Settings ->
+  Connection). The other half is not the Android app at all: it is Atlas's own
+  web page, opened from a phone camera in the phone's browser, so there is no
+  phone control to build and `tools/check_parity.py` has no route to classify.
+  **The picture carries this PC's own private-network address and nothing
+  else** - `http://100.x.y.z:4719/`, the same string the page prints under the
+  code - so it can hold no token, no key and no query string, and it is never a
+  public tunnel (rule 2). It is drawn in Rust (`qrcodegen`, the same path as
+  phone pairing) and the page is handed the finished SVG and that address, so
+  the code can never carry more than the page shows. **Scanning it opens the
+  page; it does not sign the browser in.** A browser's pairing key is minted on
+  this PC at a terminal (`jarvis_devices.py --add-device`) and exchanged for the
+  `jarvis_token` cookie by `POST /api/devices/web-session` (JARVIS-API section
+  90); there is deliberately no route that mints one - a remote way to create
+  credentials is what the `pair_device` card gates - so this feature adds no
+  route, and the page's own pairing sheet says the rest. A blank, wildcard,
+  loopback or home-network address gets the card's plain "nothing for the phone
+  to reach" sentence and no picture.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

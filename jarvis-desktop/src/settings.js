@@ -134,6 +134,13 @@ const dom = {
   pairingToken: $("pairing-token"),
   pairingTokenDisplay: $("pairing-token-display"),
   hideToken: $("hide-token"),
+  showBrowserQr: $("show-browser-qr"),
+  browserQrPanel: $("browser-qr-panel"),
+  browserQrImage: $("browser-qr-image"),
+  browserQrUrl: $("browser-qr-url"),
+  browserQrCountdown: $("browser-qr-countdown"),
+  browserQrNote: $("browser-qr-note"),
+  hideBrowserQr: $("hide-browser-qr"),
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
   linkText: $("link-text"),
@@ -398,6 +405,9 @@ dom.saveConnection.addEventListener("click", () =>
     });
     dom.token.value = "";
     await loadConnection();
+    // A code showing the old address cannot be allowed to stay on screen
+    // beside the new one.
+    hideBrowserQr();
     // The stream is pointed at the old base until it reconnects.
     reconnect();
     return note ? `Saved. ${note} Reconnecting the event stream.`
@@ -460,6 +470,70 @@ dom.revealToken.addEventListener("click", () =>
 );
 
 dom.hideToken.addEventListener("click", hidePairingToken);
+
+/* The phone's browser (Settings -> Connection, 2026-11-13, landed 2026-11-25).
+ *
+ * The picture is drawn in Rust (`browser_qr.rs`) and arrives as finished SVG.
+ * It carries THIS PC's own private-network address and nothing else - no token,
+ * no key, no query string, never a public tunnel - and the page is handed the
+ * address it points at, so the code can never hold something the page does not
+ * also show. Scanning it opens Atlas's page; it signs nothing in.
+ *
+ * It is taken off the page after a minute, and the image source is removed
+ * rather than merely hidden, because a hidden <img> still holds it.
+ */
+const BROWSER_QR_SECONDS = 60;
+let browserQrTimer = null;
+let browserQrLeft = 0;
+
+function hideBrowserQr() {
+  clearInterval(browserQrTimer);
+  browserQrTimer = null;
+  browserQrLeft = 0;
+  dom.browserQrImage.removeAttribute("src");
+  dom.browserQrUrl.textContent = "";
+  dom.browserQrCountdown.textContent = "";
+  dom.browserQrPanel.hidden = true;
+}
+
+function paintBrowserQrCountdown() {
+  dom.browserQrCountdown.textContent = `Hides in ${browserQrLeft}s`;
+}
+
+dom.showBrowserQr.addEventListener("click", async () => {
+  hideBrowserQr();
+  dom.browserQrNote.hidden = true;
+  dom.showBrowserQr.disabled = true;
+  try {
+    // No arguments: the saved address and the configured port are read in
+    // Rust, so a page cannot point the code at an address of its choosing.
+    const answer = await invoke("browser_qr");
+    // btoa is safe here: the SVG is ASCII - digits, letters and punctuation.
+    dom.browserQrImage.src = `data:image/svg+xml;base64,${btoa(answer.svg)}`;
+    dom.browserQrUrl.textContent = answer.url;
+    dom.browserQrPanel.hidden = false;
+    browserQrLeft = BROWSER_QR_SECONDS;
+    paintBrowserQrCountdown();
+    browserQrTimer = setInterval(() => {
+      browserQrLeft -= 1;
+      if (browserQrLeft <= 0) {
+        hideBrowserQr();
+        return;
+      }
+      paintBrowserQrCountdown();
+    }, 1000);
+  } catch (error) {
+    // A blank or unreachable "Let my phone reach this" address: the sentence
+    // says what to do, and no picture is drawn - Rust refuses rather than
+    // returning an empty one.
+    report(dom.browserQrNote, problemWords(error), "bad");
+    dom.browserQrNote.hidden = false;
+  } finally {
+    dom.showBrowserQr.disabled = false;
+  }
+});
+
+dom.hideBrowserQr.addEventListener("click", hideBrowserQr);
 
 // No Copy button for the token (CONN-6). Anything copied on Windows is kept
 // in Clipboard History, and with cloud clipboard on it is sent to the
