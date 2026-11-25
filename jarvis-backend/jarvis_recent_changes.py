@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    'The phone can send several files to your PC in one go',
-    "Deleting Obsidian notes from chat, one to twenty at a time, into the vault's own trash folder",
-    'The Rust supply-chain check no longer goes red on an advisory that cannot reach a Windows build',
-    "The GitHub re-run tool's description fits the per-tool token ceiling again",
-    'The General preset loads by itself when Atlas starts, and you can set which preset that is',
+    "A finished update is answered from this PC's own stamps, never by the model",
+    "the startup line names the version that is installed, not the crate's 0.2.0",
+    'The defect register drops the rows the code already fixed, and files the update gaps it found',
+    'a date sentence writes a date, and a name sentence writes an alias',
+    'Full GitHub mode, slice 1: ONE PC-only card turns on the twenty GitHub tools, GitHub-only cloud forwarding, and a one-chat per-file approval',
 )
 
 
