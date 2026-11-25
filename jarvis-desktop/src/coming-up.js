@@ -39,7 +39,8 @@ export const TODO_TITLE = "To-do list";
 
 /** Nothing on a list. */
 export const EMPTY_JOBS =
-  "Nothing coming up. Say or type \"set a timer for 10 minutes\" or \"remind me at 6 to call Mum\".";
+  "Nothing coming up. Ask Atlas on the PC to set a timer or remind you. "
+  + "The box on the to-do list adds a to-do item.";
 export const EMPTY_TODO = "Nothing on your to-do list.";
 
 /** A PC without the scheduler (Rust answers `{available: false}`). */
