@@ -6534,6 +6534,22 @@ above. In a turn shaped by outside text (the same test as a note write -
 section 4) they set and change nothing, so a web page or an email cannot
 set Jarvis's alarms.
 
+**`cancel_scheduled` (2026-11-24)** is the sixth tool of that family and takes
+ONE of those things back: it calls the scheduler's own delete path
+(`jarvis_schedule.Scheduler.act(jid, "delete")`, the one
+`POST /api/schedule/act` uses - see 21.9), by the `id` `coming_up` now hands
+back or by the job's own words matched against the same live list. It needs
+no card, for the reason `todo_done` needs none: a delete only makes things
+quieter, and nothing leaves the PC. It deletes AT MOST one job - words that
+match nothing, or more than one, delete nothing and the answer says which -
+and a failed delete is corrected by the same receipt rule as a failed write
+("That was not cancelled: ..."). **It is the one tool of the family that does
+NOT start on:** it is a Tools-page switch (§43, "Timers, lists and plans")
+that starts off, so on a fresh install the model is offered it only after the
+owner turns it on. The fast lane cancels the everyday phrasings ("cancel
+that", "delete that reminder") without the model at all, so nothing here is
+the only way to take something back.
+
 ### 21.6 What is private, and where it stays
 
 A reminder's and a to-do item's words are the owner's own. They stay in
@@ -11534,7 +11550,9 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
 - **Timers, lists and plans:** `set_timer`, `set_reminder`, `todo_add`,
   `todo_done`, `coming_up` - all five SHIPPED ON since 2026-11-24, the only
-  switches that start on (section 21.5 says why).
+  switches that start on (section 21.5 says why) - and the sixth,
+  `cancel_scheduled`, which starts OFF and is on the page so an owner can turn
+  it on when they want the model, rather than the fast lane, to cancel one.
 - **Connected accounts & home:** `email_check`, `send_email`, `draft_email`,
   `tidy_inbox`, `home_read`, `home_control`, `my_spending`,
   `retirement_whatif`.

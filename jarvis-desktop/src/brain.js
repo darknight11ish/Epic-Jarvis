@@ -10540,7 +10540,7 @@ function paintComingUp() {
   if (dom.standbyIsSet) dom.standbyIsSet.hidden = !hasStandby;
   rows(box, v.jobs, scheduleRow, EMPTY_JOBS);
   if (upL.error) box.prepend(el("p", "empty failed", `Could not read it again: ${upL.error}`));
-  // Just went off (the last hour): Snooze and Delete (WENT_OFF_ACTIONS),
+  // Just went off (the last 24 hours): Snooze and Delete (WENT_OFF_ACTIONS),
   // ONE job per tap.
   if (dom.wentOffPart) dom.wentOffPart.hidden = !v.wentOff.length;
   if (dom.wentOff) rows(dom.wentOff, v.wentOff, wentOffRow, "");

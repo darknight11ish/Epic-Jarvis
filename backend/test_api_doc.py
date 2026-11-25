@@ -33,9 +33,9 @@ WHAT IT PROVES
   3. section 21.5 no longer marks a plain repeating reminder "(a card)", and the
      scheduler really does register only `alarm` and `reminder`
      `plain_repeat=True` - so the document and the card rule agree.
-  4. The two snooze windows in section 21.9 are the two constants: the route reaches
-     back a day (`FIRED_KEEP`), the list and the phrase one hour
-     (`WENT_OFF_SHOWN`).
+  4. The snooze windows in section 21.9 are the constants: the routes and the
+     list reach back a day (`FIRED_KEEP`, `WENT_OFF_SHOWN`), the spoken phrase
+     keeps its own hour (`SNOOZE_SHOWN`).
   5. section 123.1's count matches the rows in `jarvis_limits.LIMITS` written by hand,
      and names every one of them.
   6. No line says a module this repository holds is "not in this repository" -
@@ -51,6 +51,10 @@ WHAT IT PROVES
      `BOUNDED_PROOF_PHASES`' four names, in order, and the section says that
      changing one is a breaking change with the same treatment as a route
      change. The page is read against `tools/update_backend.py`'s own tuple.
+  9. The model's `cancel_scheduled` tool is named in section 21.5's own list of
+     the model's tools, and the shipped `[tools].enabled` line really does not
+     name it - so "it starts off while the five beside it start on" is a fact
+     about the tree, not only a sentence in the document.
 
 No network, no model.
 """
@@ -359,6 +363,44 @@ def t_the_two_snooze_windows_are_the_two_constants():
     src = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
     check("... and the phrase path says 'the last hour' in its own words",
           "went off in the last hour, so there is nothing to snooze." in src)
+
+
+# ------------------------------------------------- the model's cancel tool
+
+def t_the_cancel_tool_is_documented_and_really_starts_off():
+    """section 21.5's model-tools paragraph, and the shipped template.
+
+    2026-11-24: the model gained `cancel_scheduled` (it can set a timer, an
+    alarm, a reminder and a to-do, and until then could never take one back)
+    and the paragraph that lists the model's own tools did not name it - the
+    one new ability of that wave with no line in this document. The paragraph
+    also has to say it ships OFF: "the model can cancel a scheduled thing" is
+    true only after the owner turns that switch on, unlike the five beside it."""
+    import jarvis_agent as AGENT
+
+    block = section(text(), "**The model's own tools**", "### 21.6",
+                    "the model's own tools paragraph (section 21.5)")
+    check("the model really has a cancel_scheduled tool",
+          "cancel_scheduled" in AGENT.TOOLS, sorted(AGENT.TOOLS)[:6])
+    check("section 21.5 names it among the model's own tools",
+          "`cancel_scheduled`" in block)
+    check("... and says one call takes back AT MOST one job", "AT MOST one" in block)
+    check("... and says it is the one tool of the family that does NOT start on",
+          "NOT start on" in block)
+
+    tmpl = (REPO / "backend" / "rebuilt" / "jarvis-framework.toml").read_text(
+        encoding="utf-8")
+    m = re.search(r"^enabled = \[(.*?)\]", tmpl, re.S | re.M)
+    if m is None:
+        raise Anchor("backend/rebuilt/jarvis-framework.toml no longer has an "
+                     "`enabled = [...]` line")
+    enabled = m.group(1)
+    check("... and the shipped template really does NOT name it (it starts off)",
+          "cancel_scheduled" not in enabled)
+    check("... while that same line really names the five that start on",
+          all(f'"{name}"' in enabled
+              for name in ("set_timer", "set_reminder", "todo_add", "todo_done",
+                           "coming_up")))
 
 
 # ------------------------------------------------------- the limits table
@@ -866,6 +908,7 @@ def main():
                t_the_budget_phrases_are_in_the_grammar,
                t_a_plain_repeat_really_needs_no_card,
                t_the_two_snooze_windows_are_the_two_constants,
+               t_the_cancel_tool_is_documented_and_really_starts_off,
                t_the_limits_table_matches_the_code,
                t_the_pm4_routes_are_frozen_and_the_build_notes_point_at_them,
                t_the_pm4_plan_read_keys_are_the_codes_own,
