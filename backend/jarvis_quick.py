@@ -4569,9 +4569,14 @@ _PR = re.compile(
     + r"/pull/(?P<n2>\d{1,7})/?\s+" + _PR_MERGED
     + r"|(?:pr|pull\s+request)\s*#?(?P<n3>\d{1,7})\s+" + _PR_MERGED)
 #: Not a device - and not a sender: "tell me when it's done" is the model's.
+#: "my update" and "the update" are Jarvis's own two halves, not Home Assistant
+#: devices (2026-11-24): "tell me if my update is done" was claimed here as a
+#: device named "my update", so the finished-update answer never saw it.
 _NOT_A_THING = frozenset(("it", "this", "that", "they", "you", "he", "she", "we", "something",
                           "timer", "alarm", "reminder", "everything", "anything", "one",
-                          "things", "jarvis", "the timer", "my timer", "the alarm"))
+                          "things", "jarvis", "the timer", "my timer", "the alarm",
+                          "update", "my update", "the update",
+                          "upgrade", "my upgrade", "the upgrade"))
 _ANYONE = frozenset(("anyone", "anybody", "someone", "somebody", "everyone", "them", "him",
                      "her", "it", "people"))
 
@@ -17677,6 +17682,62 @@ _UPDATE_ASK = re.compile(
     r"|check\s+for\s+(?:an?\s+|any\s+)?(?:new\s+)?updates?"
     r"|have\s+i\s+got\s+the\s+latest\s+jarvis")
 
+#: "has my update finished?", "are both halves up to date?", "is Jarvis
+#: updated?" (2026-11-24, the owner's own question). A DIFFERENT question from
+#: `_UPDATE_ASK` above: that one asks whether a NEWER release is published;
+#: this one asks whether the two halves ON THIS PC are the same code.
+#:
+#: WHY THE FAST PATH MUST OWN IT. The owner asked whether his update had
+#: finished, and the 8B model answered with a summary it invented - "Jarvis
+#: Desktop is now 0.2.502 ... The backend half had already finished before the
+#: installer ran, so both halves are done. Backend at b0926662ec0b, app at
+#: 18ffc17611fe; they differ." The two halves cannot be done AND differ, and the
+#: model knows nothing about this machine, so it must not be the thing that
+#: answers this. `_run_update_state` reads the live folder and the app's own log.
+#:
+#: THE VERSION NUMBERS ARE NOT THE PROOF. VERSION is a CI run number, so the two
+#: halves can share it while holding different code: measured on 2026-11-24,
+#: both said 0.2.502 while the app was built from 18ffc17 and the backend from
+#: b092666. Only the COMMITS can say, so the words below may claim a match only
+#: when the commits prove one.
+#:
+#: Whole sentences only, like every block here. "is Jarvis up to date" is
+#: deliberately NOT here: `_UPDATE_ASK` already owns it and answers about the
+#: published release, and `test_update_chat.py` pins that answer.
+_UPDATE_STATE = re.compile(
+    r"(?:(?:whether|if)\s+)?(?:"
+    # "is/has/did my update finish(ed)", "is the update done yet"
+    r"(?:is|has|did)\s+(?:my|the|this|that|jarvis'?s?)\s+"
+    r"(?:desktop\s+|backend\s+|app\s+)?(?:update|upgrade)\s+"
+    r"(?:finished|finish|done|complete|completed|installed|install|applied|"
+    r"gone\s+through|go\s+through|through|succeeded)"
+    # "my update is/has finished"
+    r"|(?:my|the|this|that|jarvis'?s?)\s+(?:desktop\s+|backend\s+|app\s+)?"
+    r"(?:update|upgrade)\s+(?:is|has)\s+"
+    r"(?:finished|done|complete|completed|installed|applied|gone\s+through|"
+    r"succeeded)"
+    # "is Jarvis updated", "has Jarvis finished updating", "is the app updated"
+    r"|(?:is|has|did)\s+(?:jarvis|the\s+app|the\s+desktop(?:\s+app)?|"
+    r"the\s+backend)\s+"
+    r"(?:updated|update|finished|done|complete|finished\s+updating|"
+    r"done\s+updating)"
+    # "are both halves up to date?", "do the two halves match?"
+    r"|(?:are|do)\s+(?:both|the\s+two)\s+halves\s+"
+    r"(?:up\s+to\s+date|updated|in\s+sync|match|agree|"
+    r"the\s+same(?:\s+(?:code|build|commit|version))?|"
+    r"on\s+the\s+same\s+(?:code|build|commit|version))"
+    # "are the app and the backend the same?"
+    r"|(?:is|are)\s+(?:the\s+)?(?:app|desktop)\s+(?:and\s+the\s+)?"
+    r"(?:backend|app)\s+(?:the\s+same|in\s+sync|"
+    r"on\s+the\s+same\s+(?:code|build|commit))"
+    # "whether/if my update finished" - the form `flex_normalise` leaves after
+    # "can you tell me if my update finished"
+    r"|(?:whether|if)\s+(?:my|the|this|that)\s+"
+    r"(?:desktop\s+|backend\s+|app\s+)?(?:update|upgrade)\s+"
+    r"(?:finished|finish|done|complete|completed|installed|applied|"
+    r"gone\s+through)"
+    r")(?:\s+(?:yet|now|by\s+now))?")
+
 _UPDATE_NOTES = re.compile(
     r"what(?:'s|s| is)\s+new\s+in\s+(?:the\s+|this\s+)?(?:new\s+|latest\s+)?"
     r"(?:update|version|release)(?:\s+of\s+jarvis)?"
@@ -17704,13 +17765,20 @@ _UPDATE_START = re.compile(
 
 
 def _update(s: str) -> Optional[Intent]:
-    """"is there an update?", "what changed in the update?", "update Jarvis".
+    """"is there an update?", "what changed in the update?", "update Jarvis",
+    "has my update finished?".
 
     Exact, whole-sentence patterns like every other block here, and the
     near-misses are deliberate: "what's new" with no update/version/release in
     it, "how do I update Jarvis", "when is the next update", "did the update
     break anything" and "update my settings" all fall through to the model.
+
+    `_UPDATE_STATE` is checked FIRST because it is the more specific question -
+    did the update already finish, are the two halves the same code - and it
+    shares no sentence with the other three (see the table's own comment).
     """
+    if _UPDATE_STATE.fullmatch(s):
+        return Intent("update_state")
     if _UPDATE_NOTES.fullmatch(s):
         return Intent("update_notes")
     if _UPDATE_START.fullmatch(s):
@@ -17949,6 +18017,378 @@ def _update_card_thread(detail: dict, prompt: str, gate=None) -> None:
 
 def _run_update(intent: Intent, desktop) -> Result:
     return _update_answer(intent.name, desktop)
+
+
+# --------------------------------------------------------------------------
+#   "Has my update finished?" - are the two halves the same code? (2026-11-24)
+# --------------------------------------------------------------------------
+#
+# THE ONLY HONEST ANSWER TO THAT QUESTION IS A COMPARISON OF TWO COMMITS. The
+# desktop app says which commit it was BUILT from in its own start-up line
+# (`build.rs` puts it there at build time, `lib.rs` writes it on every start);
+# the live backend says which commit it was DEPLOYED from in `SOURCE-COMMIT`
+# beside `VERSION` (`tools/reconcile_live_backend.py` writes it). Both are read
+# here. Nothing is inferred from a version number, because VERSION is a CI run
+# number that two different trees can share - see `_UPDATE_STATE`.
+#
+# THE STATES, and each one's own words below:
+#   "same"              the app's commit and the backend's are the same commit;
+#   "backend-ahead"     the app's commit is an ANCESTOR of the backend's, so
+#                       the app half is one step behind. Benign: nothing is
+#                       missing and the next desktop update catches up;
+#   "app-ahead"         the backend's commit is an ancestor of the app's, so
+#                       the backend is behind;
+#   "different-unknown" the commits differ and this PC cannot prove which is
+#                       older (a folder or a commit is missing, git is absent,
+#                       or the two branches have diverged);
+#   "unreadable"        one read failed, and the reply NAMES it. A version
+#                       number is never used to fill the gap.
+#
+# THE ANCESTRY CHECK IS GIT'S, through `jarvis_review`'s read-only plumbing -
+# that module's whole job is reading a checkout and changing nothing, and it
+# runs git with `--no-optional-locks`. The two commit ids are values parsed out
+# of this PC's own files, passed in an argv LIST and never through a shell. A
+# folder that cannot be found, a commit this PC's copy does not hold, and a
+# missing git all end as "cannot be compared", never as a guessed direction.
+
+#: The two markers `tools/reconcile_live_backend.py` writes in the live folder.
+#: `VERSION` is the shared release number; `SOURCE-COMMIT` is the commit whose
+#: bytes the folder was deployed from, in the schema that tool writes.
+UPDATE_VERSION_NAME = "VERSION"
+UPDATE_SOURCE_COMMIT_NAME = "SOURCE-COMMIT"
+UPDATE_SOURCE_COMMIT_SCHEMA = "jarvis-source-commit/1"
+
+#: The desktop app's own log: Tauri's app log dir for the identifier in
+#: `tauri.conf.json`, which on Windows is
+#: `%LOCALAPPDATA%\com.jarvis.desktop\logs\jarvis-desktop.log`.
+UPDATE_DESKTOP_ID = "com.jarvis.desktop"
+UPDATE_DESKTOP_LOG = "jarvis-desktop.log"
+
+#: The start-up line `lib.rs` writes: the version, then - separately - the
+#: commit `build.rs` recorded at BUILD time. A build from a source copy with no
+#: `.git` says "unknown": the version is still real, and the commit is simply
+#: not there, which is "cannot tell" rather than "no log at all".
+_UPDATE_DESKTOP_START = re.compile(
+    r"^===== Jarvis Desktop (\S+) starting =====")
+_UPDATE_DESKTOP_COMMIT = re.compile(r"\(commit ([0-9a-fA-F]{7,40}),")
+
+#: A commit id, full or short. The desktop records twelve characters and a
+#: deploy records forty, so the two are compared as prefixes, never as strings.
+_UPDATE_COMMIT = re.compile(r"[0-9a-f]{7,40}")
+
+
+def _short_commit(commit) -> str:
+    """Seven characters - the length this repository's own checkers show."""
+    return str(commit or "").strip()[:7]
+
+
+def _same_commit(one, other) -> bool:
+    """True when two commit ids name the same commit; one side may be short."""
+    one = str(one or "").strip().lower()
+    other = str(other or "").strip().lower()
+    if not _UPDATE_COMMIT.fullmatch(one) or not _UPDATE_COMMIT.fullmatch(other):
+        return False
+    return one.startswith(other) or other.startswith(one)
+
+
+def _same_version(one, other) -> bool:
+    """True when two version strings are the same number (0.2.5 == 0.2.5.0)."""
+    a, b = _version_parts(one), _version_parts(other)
+    if a is not None and b is not None:
+        return a == b
+    one, other = str(one or "").strip(), str(other or "").strip()
+    return bool(one) and one == other
+
+
+def _read_backend_markers(folder=None) -> dict:
+    """{"version", "commit", "what", "why"} from the live backend folder.
+
+    `folder` is the tests' seam; by default `jarvis_update.backend_folder()` is
+    asked, which is the same folder the updater's `-BackendPath` decides - so
+    this answer and the updater cannot disagree about which copy is live.
+
+    A record is only believed while it still agrees with `VERSION`: a later
+    deploy can move the files (and `VERSION` with them) without touching the
+    record, and a stale commit read as the current one is exactly the invented
+    answer this lane exists to replace. That freshness rule is the same one
+    `selftest.py`'s preflight uses.
+    """
+    if folder is None:
+        try:
+            import jarvis_update as U
+            folder = U.backend_folder()
+        except Exception as exc:                # noqa: BLE001 - older PC
+            return {"version": "", "commit": "", "what": "the live backend folder",
+                    "why": (f"the update module that finds it is not on this PC "
+                            f"({type(exc).__name__})")}
+    if folder is None:
+        return {"version": "", "commit": "", "what": "the live backend folder",
+                "why": "no folder with jarvis_hud.py beside this copy could be found"}
+    folder = Path(folder)
+    try:
+        version = (folder / UPDATE_VERSION_NAME).read_text(
+            encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return {"version": "", "commit": "", "what": "the backend's VERSION file",
+                "why": f"there is no {UPDATE_VERSION_NAME} file beside the backend"}
+    path = folder / UPDATE_SOURCE_COMMIT_NAME
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return {"version": version, "commit": "",
+                "what": f"the backend's {UPDATE_SOURCE_COMMIT_NAME} file",
+                "why": f"there is no {UPDATE_SOURCE_COMMIT_NAME} beside VERSION"}
+    except ValueError:
+        return {"version": version, "commit": "",
+                "what": f"the backend's {UPDATE_SOURCE_COMMIT_NAME} file",
+                "why": "it is not readable JSON"}
+    if not isinstance(doc, dict):
+        return {"version": version, "commit": "",
+                "what": f"the backend's {UPDATE_SOURCE_COMMIT_NAME} file",
+                "why": "it is not a single record"}
+    schema = str(doc.get("schema") or "")
+    if schema != UPDATE_SOURCE_COMMIT_SCHEMA:
+        return {"version": version, "commit": "",
+                "what": f"the backend's {UPDATE_SOURCE_COMMIT_NAME} file",
+                "why": (f"it is in an unknown format "
+                        f"({schema or 'no schema'})")}
+    commit = str(doc.get("commit") or "").strip().lower()
+    if not _UPDATE_COMMIT.fullmatch(commit):
+        return {"version": version, "commit": "",
+                "what": f"the backend's {UPDATE_SOURCE_COMMIT_NAME} file",
+                "why": "it does not name a commit"}
+    recorded = str(doc.get("version") or "").strip()
+    if recorded and version and recorded != version:
+        return {"version": version, "commit": "",
+                "what": f"the backend's {UPDATE_SOURCE_COMMIT_NAME} file",
+                "why": (f"it was recorded for version {recorded}, but VERSION "
+                        f"says {version}, so the files have moved since")}
+    return {"version": version, "commit": commit, "what": "", "why": ""}
+
+
+def _read_installed(installed=None) -> dict:
+    """{"version", "why"} from the desktop app Windows has installed.
+
+    `installed` is the tests' seam. By default this asks
+    `jarvis_update.installed()`, which is the Windows uninstall list's own
+    reader - reused rather than copied, because a second registry read here
+    would be a second answer to "which version is installed".
+    """
+    if installed is None:
+        try:
+            import jarvis_update as U
+            installed = U.installed
+        except Exception as exc:                # noqa: BLE001 - older PC
+            return {"version": "", "why": (f"the update module is not on this PC "
+                                           f"({type(exc).__name__})")}
+    try:
+        data = installed() or {}
+    except Exception as exc:                    # noqa: BLE001 - said, never raised
+        return {"version": "", "why": (f"the Windows list could not be read "
+                                       f"({type(exc).__name__})")}
+    version = str((data or {}).get("version") or "").strip()
+    if version:
+        return {"version": version, "why": ""}
+    why = str((data or {}).get("why") or "no installed version is recorded")
+    why = re.sub(r"^cannot tell:\s*", "", why).strip()
+    return {"version": "", "why": why or "no installed version is recorded"}
+
+
+def _read_desktop_build(logs=None) -> dict:
+    """{"version", "commit", "what", "why"} from the app's last start-up line.
+
+    `logs` is the tests' seam (a folder). By default it is the app's own log
+    folder under `%LOCALAPPDATA%`. The LAST start-up line is the build that is
+    running now, and its commit is the one `build.rs` read at build time - the
+    commit that binary really came from, not whatever a checkout says today.
+    """
+    if logs is None:
+        base = os.environ.get("LOCALAPPDATA")
+        if not base:
+            return {"version": "", "commit": "", "what": "the app's own log",
+                    "why": "this PC does not say where the app keeps its log"}
+        logs = Path(base) / UPDATE_DESKTOP_ID / "logs"
+    try:
+        text = (Path(logs) / UPDATE_DESKTOP_LOG).read_text(
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return {"version": "", "commit": "", "what": "the app's own log",
+                "why": f"there is no {UPDATE_DESKTOP_LOG} on this PC"}
+    version, commit = "", ""
+    for line in text.splitlines():
+        found = _UPDATE_DESKTOP_START.match(line.strip())
+        if found:
+            version = found.group(1)
+            named = _UPDATE_DESKTOP_COMMIT.search(line)
+            commit = named.group(1).lower() if named else ""
+    if not version:
+        return {"version": "", "commit": "", "what": "the app's own log",
+                "why": (f"the {UPDATE_DESKTOP_LOG} on this PC holds no "
+                        f"start-up line")}
+    if not commit:
+        return {"version": version, "commit": "",
+                "what": "the app's build commit",
+                "why": ("its start-up line does not name one (a build from "
+                        "before 2026-11-15 cannot)")}
+    return {"version": version, "commit": commit, "what": "", "why": ""}
+
+
+def _is_ancestor(review, root, older: str, newer: str) -> tuple:
+    """(True|False|None, why). True when `older` is in `newer`'s history.
+
+    `jarvis_review._git` runs one read-only git command with
+    `--no-optional-locks`; its `_default_run` is the process seam. Exit 0 means
+    yes and exit 1 means no; anything else (a commit this copy does not hold,
+    a folder that is not a checkout) is "cannot compare", with the reason.
+    """
+    got = review._git(str(root), ["merge-base", "--is-ancestor", older, newer],
+                      review._default_run, timeout=6.0)
+    if not got.started:
+        return None, ("git could not be started"
+                      + (f" ({got.detail})" if got.detail else ""))
+    if got.timed_out:
+        return None, "git did not finish comparing the two commits"
+    if got.code == 0:
+        return True, ""
+    if got.code == 1:
+        return False, ""
+    if got.code in (128, 129):
+        return None, ("the two commits are not both in this PC's copy of the "
+                      "repository")
+    return None, f"git could not compare the two commits (exit {got.code})"
+
+
+def _compare_update_commits(app_commit, backend_commit, root=None) -> tuple:
+    """("same"|"backend-ahead"|"app-ahead"|"", why).
+
+    "backend-ahead" means the APP's commit is an ancestor of the backend's, so
+    the backend is the newer code. "app-ahead" is the other way round. `root`
+    is the tests' seam; by default `jarvis_update.repo_folder()` finds the
+    checkout the way the updater does, and nothing is fetched.
+    """
+    if _same_commit(app_commit, backend_commit):
+        return "same", ""
+    if root is None:
+        try:
+            import jarvis_update as U
+            root = U.repo_folder()
+        except Exception as exc:                # noqa: BLE001 - older PC
+            return "", (f"the local repository could not be worked out "
+                        f"({type(exc).__name__})")
+    if root is None:
+        return "", "the local repository could not be found"
+    try:
+        import jarvis_review as R
+    except Exception as exc:                    # noqa: BLE001 - older PC
+        return "", (f"the read-only git reader is not on this PC "
+                    f"({type(exc).__name__})")
+    try:
+        backward, why = _is_ancestor(R, root, app_commit, backend_commit)
+        if backward is None:
+            return "", why
+        if backward:
+            return "backend-ahead", ""
+        forward, why = _is_ancestor(R, root, backend_commit, app_commit)
+        if forward is None:
+            return "", why
+        if forward:
+            return "app-ahead", ""
+    except Exception as exc:                    # noqa: BLE001 - said, never raised
+        return "", f"the two commits could not be compared ({type(exc).__name__})"
+    return "", "neither commit is in the other's history"
+
+
+def _update_state_facts(*, folder=None, installed=None, logs=None,
+                        compare=None) -> dict:
+    """{"state": ..., ...} - the one place the answer's state is decided.
+
+    The reads happen in the order the answer needs them, and the FIRST one that
+    fails is the one the reply names: the backend's own markers, then the
+    installed app's version, then the app's start-up line. A state is never
+    guessed past a failed read.
+    """
+    backend = _read_backend_markers(folder)
+    if backend.get("why"):
+        return {"state": "unreadable", "what": backend.get("what"),
+                "why": backend.get("why")}
+    app = _read_installed(installed)
+    if app.get("why"):
+        return {"state": "unreadable", "what": "the installed app's version",
+                "why": app.get("why")}
+    build = _read_desktop_build(logs)
+    if build.get("why"):
+        return {"state": "unreadable", "what": build.get("what"),
+                "why": build.get("why")}
+    if not _same_version(build.get("version"), app.get("version")):
+        return {"state": "unreadable", "what": "the app's build commit",
+                "why": (f"the app's last start was version "
+                        f"{build.get('version')}, but Windows says "
+                        f"{app.get('version')} is installed, so the installed "
+                        f"build's commit is not recorded")}
+    relation, why = (compare or _compare_update_commits)(
+        build.get("commit") or "", backend.get("commit") or "")
+    if relation in ("same", "backend-ahead", "app-ahead"):
+        return {"state": relation,
+                "commit": build.get("commit") or backend.get("commit")}
+    return {"state": "different-unknown", "why": why}
+
+
+def _why_sentence(why: str) -> str:
+    """A reason as one plain sentence: capital first letter, full stop last."""
+    text = str(why or "").strip()
+    if not text:
+        return "Nothing here is guessed."
+    text = text[0].upper() + text[1:]
+    return text if text.endswith((".", "!", "?")) else text + "."
+
+
+def _update_state_words(facts: dict, kind: str) -> Result:
+    """The five states' words - short, because this is read aloud.
+
+    The success sentence is used ONLY for the "same" state, where the two
+    commits prove it. The "backend-ahead" wording may not read like a failure
+    (it is the benign case), and neither different-builds wording may say
+    "done" or "both halves" - the owner was told both halves were done while
+    the two commits differed, and that sentence is why this exists.
+    """
+    state = str(facts.get("state") or "")
+    if state == "unreadable":
+        what = str(facts.get("what") or "a release record")
+        return Result(
+            f"I cannot tell whether the update finished: {what} could not be "
+            f"read. {_why_sentence(facts.get('why'))}", kind)
+    if state == "same":
+        return Result(
+            "The update is done: both halves are on commit "
+            f"{_short_commit(facts.get('commit'))}.", kind)
+    if state == "backend-ahead":
+        return Result(
+            "The app half is one step behind: the backend is the newer code, "
+            "and nothing is missing. The next desktop update catches up.", kind)
+    if state == "app-ahead":
+        return Result(
+            "The two halves are different builds: the app is ahead, and the "
+            "backend is behind. Press Update everything in the app - Settings, "
+            "then Updates. That is the one action that fixes it.", kind)
+    why = str(facts.get("why") or "the two commits could not be compared")
+    return Result(
+        "The two halves are different builds, and I cannot prove which one is "
+        f"behind ({why}). Press Update everything in the app - Settings, then "
+        "Updates. That is the one action that fixes it.", kind)
+
+
+def _run_update_state(intent: Intent, *, folder=None, installed=None,
+                      logs=None, compare=None) -> Result:
+    """"Has my update finished?", "are both halves up to date?", "is Jarvis
+    updated?" - answered from this PC's own two commits, never the model.
+
+    Every read can be handed in (the tests do), and every one of them is
+    read-only: no card, no download, nothing written. `folder`, `installed`,
+    `logs` and `compare` are the same kind of seam `_run_update_start` uses.
+    """
+    facts = _update_state_facts(folder=folder, installed=installed,
+                                logs=logs, compare=compare)
+    return _update_state_words(facts, intent.name)
 
 
 def _run_update_start(desktop, *, fetch=None, tier_of=None, spawn=None) -> Result:
@@ -31714,6 +32154,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_price_radar(n, _price_radar_state())
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
+    if n == "update_state":
+        return _run_update_state(intent)
     if n in ("update_ask", "update_notes"):
         return _run_update(intent, desktop)
     if n == "update_start":
@@ -33203,14 +33645,16 @@ READ_ONLY_INTENTS = frozenset({
     "thinking_status", "thinking_when",
     "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
     "wellbeing_now", "where_put",
-    # Updates in chat (2026-10-26): these two only read the public release
-    # manifest and answer. "update_start" is deliberately NOT here: it raises a
-    # card, so "cancel that" must not reach back past it.
+    # Updates in chat (2026-10-26): these three only read - two read the public
+    # release manifest, and `update_state` reads this PC's own VERSION,
+    # SOURCE-COMMIT and the app's start-up line - and all three change nothing.
+    # "update_start" is deliberately NOT here: it raises a card, so "cancel
+    # that" must not reach back past it.
     # The routine that could not find a time (2026-11-03): it ASKS one question
     # and sets nothing up, so it must not take back what "cancel that" would
     # undo. `reminder_set` with parts - the routine that WAS made - is a write
     # and is deliberately not here.
-    "routine_no_time", "update_ask", "update_notes"})
+    "routine_no_time", "update_ask", "update_notes", "update_state"})
 
 
 def _settings_undone_recently(conversation, now: float) -> Optional[Result]:
