@@ -19260,6 +19260,15 @@ _FAVOURITE_PHRASE = re.compile(
     r"|(?:this|it)\s+is\s+(?:a\s+|an\s+)?(?:one\s+of\s+)?(?:my\s+)?"
     r"(?P<how2>unfavourite|unfavorite|favourite|favorite)(?:s|\s+notes?)?"
     r")\s*[.!?]?\s*$")
+#: The BARE word, with no "it" after it (2026-11-24). The owner wrote "Make a
+#: note called mood log and favorite." - and `_FAVOURITE_CLAUSE` above requires
+#: an OBJECT ("favourite it"), so the word fell through to the note's BODY and
+#: the note was created holding the single word "favorite" (measured: 8 bytes),
+#: not marked favourite. Only the whole remaining clause counts, so "favorite
+#: things" stays body text and exactly "and favorite" is the flag.
+_BARE_FLAG = re.compile(
+    r"^(?P<how>unfavourite|unfavorite|favourite|favorite|unpinned|pinned|unpin|pin)"
+    r"\s*[.!?]?\s*$", re.I)
 _FAVOURITE_KEY = "favorite"
 #: A date clause's lead word. "add"/"put"/"with" are also body verbs, so a
 #: date is taken only when a real date phrase follows - "add milk" stays body.
@@ -19498,6 +19507,15 @@ def _note_create_clauses(rest: str, now: float):
             said = m.group("how") or m.group("how2")
             favourite = said in ("favourite", "favorite")
             rest = rest[m.end():]
+            continue
+        m = _BARE_FLAG.match(rest)
+        if m:
+            how = m.group("how").lower()
+            if how in ("unpin", "pin", "pinned", "unpinned"):
+                pinned = how in ("pin", "pinned")
+            else:
+                favourite = how in ("favourite", "favorite")
+            rest = ""
             continue
         got = _note_date_clause(rest, now)
         if got is not None:
@@ -19751,6 +19769,30 @@ _NOTE_MOVE = re.compile(
 NOTE_WRITE_BATCH_SAID = (
     "I change one note at a time, so nothing was written: name ONE note, like "
     "\"add milk to my Shopping note\".")
+#: A STANDING INSTRUCTION ABOUT A NAME is not a batch of notes (2026-11-24).
+#: The owner wrote: "Make a note called mood log and favorite. And every time I
+#: refer to mood log, I'm referring to this particular note." - ONE note, one
+#: action, plus a sentence about what the name means. `_NOTE_WRITE_BATCH`'s
+#: `.*` reaches across the full stop, so the words "every" and "note" in the
+#: SECOND sentence made the whole turn read as "write to every note", and the
+#: note the owner asked for was never created. The clause is taken out before
+#: the batch test, so the command in front of it is judged on its own words.
+_NOTE_REFERRAL = re.compile(
+    r"(?:^|[.!?;]\s*|\s+and\s+)"
+    r"(?:every time|whenever|any time|when|from now on when)\s+"
+    r"i\s+(?:say|refer to|call it|call that|type|write)\s+"
+    r"(?P<alias>[^,.;]{1,60}?)\s*,?\s*"
+    r"i(?:'m| am)\s+(?:referring to|talking about|meaning|pointing at)\s+"
+    r"(?:this|that|the same|my)\s+(?:particular\s+|same\s+)?note",
+    re.I)
+#: Said when the owner tells me what a name means. It promises a LOOKUP by that
+#: name - which is what the resolver really does, in every chat - and not an
+#: `aliases:` line written for them: no chat path writes that frontmatter today,
+#: so claiming it would be the exact kind of invention this project forbids.
+NOTE_REFERRAL_SAID = (
+    'Understood: "{alias}" is what you call that note. I find notes by their '
+    'name, so say "{alias}" in any chat and I will look for it.')
+
 #: A LINE inside a note is still not deletable (2026-11-23): only a WHOLE note
 #: is, so "delete this line" and a delete that named nothing get two different
 #: true sentences, and neither may borrow the other's words.
@@ -19967,6 +20009,23 @@ def _run_note_location(f: dict, hidden: bool = False) -> Result:
     return Result(
         f"Your notes live in your Obsidian vault, at {vault_text}. Quick captures "
         "go into today's daily note inside it.", "note_location")
+
+
+def _run_note_referral(f: dict) -> Result:
+    """"Every time I refer to mood log, I'm referring to this particular note."
+
+    Nothing is written. The owner is telling me what a NAME means, and the
+    resolver already looks a note up by exactly that name in every chat, so
+    saying it back in their own word is the whole job. The sentence promises a
+    LOOKUP and never an `aliases:` line, because no chat path writes that
+    frontmatter today - a promise there would be an invention.
+    """
+    alias = str((f or {}).get("alias") or "").strip()
+    if not alias:
+        return Result(
+            "Tell me the name you mean - \"every time I say mood log, I mean "
+            "that note\" - and I will look it up by that name.", "note_referral")
+    return Result(NOTE_REFERRAL_SAID.format(alias=alias), "note_referral")
 
 
 def _run_note_create_capability() -> Result:
@@ -20846,6 +20905,27 @@ def _note_rename_move_asking(raw: str) -> Optional[Intent]:
     return None
 
 
+def _split_note_referral(text: str):
+    """`(command, alias)` - the sentence with its referral clause taken out.
+
+    "Make a note called mood log and favorite. And every time I refer to mood
+    log, I'm referring to this particular note." becomes the command the owner
+    actually gave plus the name they will use for it. `alias` is "" when the
+    sentence carries no such clause, and `command` is "" when the clause is all
+    there was - the two callers below treat those two cases apart, because a
+    turn that names a note must never be answered as if it also wrote one.
+    """
+    s = str(text or "")
+    m = _NOTE_REFERRAL.search(s)
+    if not m:
+        return s, ""
+    alias = (m.group("alias") or "").strip(" \"'`")
+    before = s[:m.start()].strip()
+    after = s[m.end():].strip()
+    command = (before + (" " + after if after else "")).strip(" .,;")
+    return command, alias
+
+
 def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours).
 
@@ -20860,6 +20940,13 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
     # offer (caught on the merged wave-8 branch, 2026-11-07).
     if "notion" in s.lower():
         return None
+    # A sentence about what a NAME means is not a request to write to every
+    # note: take it out first, then judge the command on its own words.
+    command, alias = _split_note_referral(s)
+    if alias and not command:
+        return Intent("note_referral", {"alias": alias})
+    if alias:
+        s = command
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
@@ -31627,6 +31714,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_replace(f)
     if n == "notes_batch_refused":
         return Result(NOTE_WRITE_BATCH_SAID, "notes_batch_refused")
+    if n == "note_referral":
+        return _run_note_referral(f)
     if n == "note_write_hidden":
         return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
     if n == "note_delete":
@@ -32693,6 +32782,12 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # nothing but this PC's own lists and writes nothing, so a private chat gets
     # it from local code too - the model has no list to read.
     "unknown_self_name",
+    # "has my update finished?" (2026-11-24): the two commits it reads live on
+    # THIS PC - the backend folder's SOURCE-COMMIT and the app's own start-up
+    # line - and a model cannot know either. The answer it invented ("both
+    # halves are done ... they differ") is why this lane exists, so a private
+    # chat gets the real comparison rather than the same guess.
+    "update_state",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
