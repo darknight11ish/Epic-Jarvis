@@ -72,6 +72,15 @@ require_shipped("jarvis_voice_enroll.py", "jarvis_speech.py", "rebuilt/jarvis_vo
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_speech as S  # noqa: E402
+# THE PHRASE IS PINNED, NOT READ (2026-11-25). This suite's sentences, clips
+# and expected reasons are written for "hey Jarvis"; the SHIPPED template now
+# says `hey_atlas`, so a phrase read from the machine would change this
+# suite's answers with whichever setting the PC happens to hold.
+# test_wakeword.py's t_two_phrases_one_front_end proves both phrases and the
+# shipped default; this suite pins the old one, exactly as that suite's own
+# Env does.
+import jarvis_wakeword as W  # noqa: E402
+W.phrase = lambda: "hey_jarvis"
 os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 FAILED, PASSED, SKIPPED = [], [], []

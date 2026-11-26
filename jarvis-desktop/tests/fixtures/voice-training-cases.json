@@ -1247,12 +1247,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -2066,12 +2066,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -2919,12 +2919,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -3744,12 +3744,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -4559,12 +4559,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -5388,12 +5388,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -6227,12 +6227,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -7059,12 +7059,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -7884,12 +7884,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -8719,12 +8719,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -9550,12 +9550,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -9922,7 +9922,7 @@
               "general",
               "close"
             ],
-            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/"
+            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "limits": {
             "max_clips": 12,
@@ -10395,12 +10395,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -10776,7 +10776,7 @@
               "close",
               "general"
             ],
-            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/"
+            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "limits": {
             "max_clips": 12,
@@ -11249,12 +11249,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -12068,12 +12068,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -12914,12 +12914,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -13742,12 +13742,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
@@ -14573,12 +14573,12 @@
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and C:/Users/pcadmin/Documents/Jarvis github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/backend/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
