@@ -42158,3 +42158,161 @@ ordinary "use the General preset" that must not match.
 engine's `load_coder`, and the unasked call staying byte-identical), and
 `backend/test_presets_owner_ui.py`'s "exactly three literal callers" pin names
 the start-up preload as the third, with its reason.
+
+## 233. The personal data removal tool: the mode dial, the tracker, and the cloud consent card (added 2026-11-26, PR 1 of 3)
+
+Personal-data discovery and data-broker removal, as the owner asked for it on
+2026-11-26: `backend/jarvis_privacy_removal.py`, Python standard library only,
+with **no route** in this slice and **no network call of any kind**.
+
+### The mode dial: `privacy-removal.json`
+
+One file in the settings folder, beside `manner.json` and `answer-style.json`,
+holding `{"mode": "local" | "optery_api" | "hybrid", "saved_at": "..."}`.
+**`local` is the default and the only mode that sends nothing anywhere.** A
+missing file, an unreadable one, and one holding a value this build does not
+know all read back as `local`, and the answer says which of those it was.
+
+`JARVIS_CONFIG_DIR` is read **first**, then `OPENJARVIS_CONFIG_DIR`, then the
+framework's `CONFIG_DIR`, then
+`~/.openjarvis` - so a suite that points `JARVIS_CONFIG_DIR` at a temporary
+folder can never touch the owner's real profile, which is the one bug this tool
+must not have. Every path the module builds follows it:
+
+| Path | What it is |
+|---|---|
+| `<config>/privacy-removal.json` | the mode dial |
+| `<config>/privacy/profile.json` | the owner's name, address, phone and email - **outside this repository, never logged** |
+| `<config>/privacy/tracker.db` | the SQLite tracker |
+
+### Changing the mode
+
+`privacy_set_mode` is not a route in this slice: the ONE changeable row is
+`jarvis_settings_registry.MODE_SETTINGS`' `data_removal`, whose setter calls
+`jarvis_privacy_removal.set_mode()`, and `jarvis_quick.py`'s
+`privacy_mode_change` intent calls that same setter. Two doors, one function.
+
+* `local` - applied at once, **no card**, and any waiting consent card is
+  withdrawn. Nothing leaves this PC, so nothing needs a yes.
+* `optery_api`, `hybrid` - **ONE consent card** under the existing
+  `change_own_config` action (tier `ask`). Its own words name the four kinds of
+  detail and the fact that they go to Optery over HTTPS:
+
+  > Switch personal data removal to Optery's cloud API? From then on, your
+  > name, home address, phone number and email address - the details in the
+  > removal profile on this PC - are sent over HTTPS to Optery's API at
+  > optery.com ...
+
+  `202` and `waiting: true` come back at once; the file is written only inside
+  the card's own decision, only on a person's `approved`. **Denied, timed out,
+  withdrawn and refused all leave the mode exactly as it was**, and the card's
+  record (`jarvis_privacy_removal.mode_card_state()`) says which happened, in
+  the owner's words. If the settings file has loosened `change_own_config`
+  below `ask`, the answer is `409` with the tier named, never a cardless
+  change.
+
+No gate row, no tier row and no settings key is added: `change_own_config`
+already carries the `ask` line, the route `jarvis_phone_apps.py` took on
+2026-11-02.
+
+### The tracker: `privacy/tracker.db`
+
+Created with `IF NOT EXISTS`, so a second open finds the rows already there and
+destroys nothing. The three tables are the ones the spec names:
+
+* `brokers` - `broker_id`, `name`, `category`, `method`
+  (`email` | `web_form` | `optery_api` | `official_portal`), `optout_url`,
+  `privacy_email`, `dead_url`, `last_updated`.
+* `requests` - `id`, `broker_id`, `engine` (`local_email` | `optery_api` |
+  `manual`), `status` (`queued`, `sent`, `needs_verify_click`,
+  `pending_window`, `removed`, `blocked_captcha`, `failed`), `request_ref`,
+  `listing_url`, `sent_at`, `verify_after`, `relist_check_at`, `notes`.
+* `official_portals` - the two free official portals, seeded once, each with
+  `done` and `last_checked` for the owner to tick.
+
+`counts()` always answers every status, as `0` when nothing is tracked, plus
+`total`, `brokers` and `manual_todo` (the brokers whose own method ends with
+**him** clicking something and which have no request row). An empty tracker
+answers honestly rather than with a missing key.
+
+### The two free official portals
+
+A guided checklist with the real link, never scraped and never filled in for
+him: **Google Results About You**
+(`https://myactivity.google.com/results-about-you`) removes the search RESULT,
+not the page behind it - the broker's own listing stays until that broker
+deletes it; and **California DROP** (`https://privacy.ca.gov/drop/`), one
+request to every broker registered in California, each of which must process a
+DROP request at least every 45 days. `mark_portal(portal_id, done=True)` ticks
+one and dates it.
+
+### The masked profile
+
+`privacy/profile.json` holds `name`, `address`, `phone`, `email`. Nothing in
+the module formats one of those values into a sentence: `mask_value()` is the
+only path and it keeps **a label and the last four characters** - an address
+masks to its postcode's last four digits, a phone to its last four digits, and
+an **email on its local part only**, never its domain. So a person, an answer
+and a card ever see `Primary address (...2704)`, and the suite searches every
+string the module can produce for the raw values and requires that none appears.
+
+### The self-explainer: `privacy_explain(topic)`
+
+Four topics - `overview`, `pros_cons`, `limits`, `official_portals` - every one
+built from the live state: the mode and where it was set, whether the **Gmail
+App Password** is set (read through `jarvis_email`'s own helpers, so it is the
+password the batch sender will really use), whether an **Optery API key** is set
+(presence only, through `jarvis_token_store.resolve_secret`), and the tracker's
+counts. An unknown topic names the four rather than refusing. `get_prompt_context()`
+is the same facts as a capability card for the model's own grounding - the five
+live facts and the four non-negotiable rules - with **zero raw PII** in it.
+
+### The sentences it claims, and what they are routed to
+
+`jarvis_quick.py` asks `jarvis_privacy_removal.prompt()` before the feature
+answers, and the grammar is whole-sentence, so nothing longer is swallowed:
+
+| Sentence | Intent | Topic |
+|---|---|---|
+| "what is the data removal tool" | `privacy_explain` | `overview` |
+| "how does your personal info removal work" | `privacy_explain` | `overview` |
+| "can you remove my personal info from the internet" | `privacy_explain` | `overview` |
+| "pros and cons of local vs optery" / "should I use local or optery" | `privacy_explain` | `pros_cons` |
+| "what can't the data removal tool do" / "how private is data removal" | `privacy_explain` | `limits` |
+| "what are the official portals for data removal" / "california drop" | `privacy_explain` | `official_portals` |
+| "switch data removal to local" | `privacy_mode_change` | - (`local`: at once, no card) |
+| "use hybrid data removal" | `privacy_mode_change` | - (ONE consent card) |
+
+`privacy_explain` is in `READ_ONLY_INTENTS` and in `_PRIVATE_DETERMINISTIC_READS`
+(it reads and writes nothing, so a private chat gets the real state);
+`privacy_mode_change` is deliberately in **neither** - it changes a setting and
+can raise the consent card.
+
+### What PR 1 deliberately does not do
+
+No email is sent, no broker directory is downloaded, no Optery call is made and
+no Optery key is stored; there is no route, no Settings page and no desktop or
+phone screen. The module is **not** in `_where.SHIPPED` (the owner's ruling:
+only the pull request that wires the live caller may register it), so it is
+named in `backend/test_shipped_modules.py`'s `NOT_SHIPPED` and in its
+`REPO_ONLY_IMPORTS` table with those reasons, and every import of it in
+`jarvis_quick.py` is a guarded `try`/`except` - which keeps the published base,
+which does not carry the module, importing and behaving exactly as before.
+PR 2 adds the directory, the carded batch sender (max 20 brokers per card, 250
+emails a day) and the reply scanner; PR 3 adds the Optery adapter, the
+Credential Manager key and the move into `SHIPPED`.
+
+**Proof.** `backend/test_privacy_removal.py` (174 checks, offline: its own
+temporary `JARVIS_CONFIG_DIR`, a stubbed gate, and the real
+`jarvis_quick.match()`): the default and an unknown value refused; the
+`JARVIS_CONFIG_DIR` order; the schema, its columns and a second open keeping
+every row; the masked profile with the raw values searched for and not found;
+each of the four topics answering from live state and following the tracker's
+real counts; the consent card for BOTH cloud modes, denied changing nothing and
+approved writing the mode, plus the loosened-tier refusal; all seven trigger
+sentences and the two portal ones reaching the intent, and eight neighbouring
+sentences still going where they went before; an empty tracker answering with
+zeros; and **two negative controls** that remove the new `Privacy` row from
+`jarvis_asks_first.TOOL_GROUPS` and the new `data_removal` row from
+`jarvis_settings_registry.MODE_SETTINGS` and require the checks naming them to
+fail.

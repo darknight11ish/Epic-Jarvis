@@ -755,6 +755,26 @@ NOT_BACKED_UP = {
     # be able to see that the name was considered: backing up somebody else's
     # browser key store is exactly what this archive must never do (2026-11-05).
     "key4.db": "not a Jarvis store - Firefox's own key database, named only as a credential target REA refuses",
+    # The personal data removal tool's tracker (2026-11-26, PR 1 of 3):
+    # <settings>/privacy/tracker.db. TWO reasons, and both are written down
+    # because the second one has an owner.
+    #
+    # FIRST, it is a SUBFOLDER: the archive copies `conf / name` as a flat
+    # file, so naming it in SOURCE_DBS today would put a database in the
+    # archive's list that the copy never found - "a backup that says it carries
+    # chats nothing can open" is the failure this module's CHAT_HISTORY_DB key
+    # check already refuses, one database over. `health.db` is the precedent
+    # for the fix: PR 2 gives it a `_medical_db()`-shaped reader and carries it
+    # under `db/privacy/tracker.db`.
+    #
+    # SECOND, and true today: NOTHING WRITES IT YET. PR 1 ships the schema and
+    # the reader; the broker directory and the carded batch sender that fill it
+    # are PR 2. So this exclusion loses nothing while it is in force, and PR 2
+    # - the pull request that starts writing rows the owner would miss - is the
+    # one that must either back it up properly or keep this line with its own
+    # reason. An exclusion with a name attached to it is a decision; a
+    # forgotten database is a bug.
+    "tracker.db": "the data removal tracker is a subfolder store (privacy/tracker.db) and nothing writes it until PR 2, which owns the decision to carry it",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT

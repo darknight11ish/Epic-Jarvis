@@ -1611,6 +1611,18 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if got is not None:
         return got
 
+    # --- the personal data removal tool (2026-11-26, PR 1 of 3) --------------
+    # The owner's own words about the removal tool, answered by intent and never
+    # by the model: what it is, its pros and cons, its honest limits and the two
+    # free official portals, all built from THIS PC's live state. The change
+    # sentences ("switch data removal to local") go through the settings
+    # registry's ONE row, which raises the cloud-PII consent card for the two
+    # cloud modes. Whole sentences only (see jarvis_privacy_removal.prompt), so
+    # nothing longer is swallowed.
+    got = _privacy_prompt(s, text)
+    if got is not None:
+        return got
+
     # --- the cloud/API honesty questions (2026-10-31) -----------------------
     # These come before the feature answers: the owner asked the local model
     # and got "I have no connection to any external API" while the Cloud
@@ -12809,6 +12821,76 @@ def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
         return Result("Nothing was changed.", "cloud_settings_change")
     return Result(CS.change_words(kind, status, body, provider=provider),
                   "cloud_settings_change")
+
+
+# --- the personal data removal tool (2026-11-26, PR 1 of 3) -----------------
+# ONE block for both jobs, and `jarvis_privacy_removal` is where the words and
+# the rules live:
+#
+#   * the QUESTIONS ("what is the data removal tool", "pros and cons of local vs
+#     optery", "what can't the data removal tool do", "how private is data
+#     removal") are answered by `privacy_explain` from the LIVE state of this PC
+#     - the active mode, whether the Gmail App Password is set, whether an
+#     Optery key is set, and what the tracker holds. No model, no guess, and an
+#     answer never says "I can't do that": the tool exists, and what it cannot
+#     do is a list of honest limits rather than a refusal.
+#   * the CHANGE ("switch data removal to local", "use hybrid data removal")
+#     goes through `jarvis_settings_registry.set_data_removal_mode`, the ONE
+#     registry row, which calls `jarvis_privacy_removal.set_mode`. `local` is
+#     instant and cardless; `optery_api` and `hybrid` raise the consent card
+#     that says the owner's name, address, phone number and email address would
+#     be sent to Optery over HTTPS, and a denied card changes nothing.
+#
+# The import is GUARDED on purpose (backend/test_shipped_modules.py's
+# REPO_ONLY_IMPORTS): the module is not in `_where.SHIPPED` yet - the owner's
+# ruling is that only the pull request which wires a live caller may ship it -
+# so a copy of this file in the published base, which does not carry it, must
+# still import and answer as it always did.
+
+def _privacy_prompt(s: str, text: str) -> Optional[Intent]:
+    """The data removal sentence, or None (see jarvis_privacy_removal)."""
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                                       # noqa: BLE001
+        return None
+    try:
+        got = PR.prompt(s, text)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if not got:
+        return None
+    fields = {k: v for k, v in got.items() if k != "intent"}
+    return Intent(str(got.get("intent") or "privacy_explain"), fields)
+
+
+def _run_privacy_explain(f: dict) -> Result:
+    """The fixed answer, read fresh from this PC. No card, no write, no model."""
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                                       # noqa: BLE001
+        return Result("The data removal tool is not set up on this PC, so there is "
+                      "nothing to read yet.", "privacy_explain")
+    return Result(PR.privacy_explain(str(f.get("topic") or "overview")),
+                  "privacy_explain")
+
+
+def _run_privacy_mode_change(f: dict, *, peer=None, local=None) -> Result:
+    """One mode change, through the registry's ONE row. Nothing before a yes.
+
+    The words are the setter's own `Outcome.said`, so a waiting consent card is
+    never reported as a change and a denied card never moves the mode.
+    """
+    mode_wanted = str(f.get("mode") or "")
+    if mode_wanted not in ("local", "optery_api", "hybrid"):
+        return Result("That is not a data removal mode, so nothing was changed.",
+                      "privacy_mode_change")
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                                       # noqa: BLE001
+        return Result("This PC's Jarvis does not have the settings registry, so "
+                      "nothing was changed.", "privacy_mode_change")
+    outcome = R.set_data_removal_mode(mode_wanted, peer=peer, local=local)
+    return Result(outcome.said, "privacy_mode_change")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -34225,6 +34307,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_settings(f)
     if n == "cloud_settings_change":
         return _run_cloud_settings_change(f, peer=peer, local=local)
+    # The personal data removal tool (2026-11-26, PR 1 of 3). The QUESTIONS read
+    # this PC's own mode, mail details, key presence and tracker (no model, no
+    # card, no write); the CHANGE goes through the settings registry's ONE mode
+    # row, which raises the cloud-PII consent card for `optery_api`/`hybrid`, so
+    # it is deliberately NOT in READ_ONLY_INTENTS - it can raise a card and can
+    # change a setting.
+    if n == "privacy_explain":
+        return _run_privacy_explain(f)
+    if n == "privacy_mode_change":
+        return _run_privacy_mode_change(f, peer=peer, local=local)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "jobs_priority":
@@ -35502,6 +35594,15 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # deliberately NOT here: it changes a setting or raises a card, and a
     # private chat refuses that like every action.
     "cloud_settings",
+    # The personal data removal tool's answers (2026-11-26, PR 1 of 3): each one
+    # is built from this PC's own state - the saved mode, whether the Gmail App
+    # Password and an Optery key are present, and the tracker's counts - with no
+    # secret, no model and no write, so a private chat gets the real state rather
+    # than a model's guess about a tool it cannot see. The CHANGE
+    # (`privacy_mode_change`) is deliberately NOT here: it can raise the cloud
+    # consent card and it changes the mode, and a private chat refuses that like
+    # every action.
+    "privacy_explain",
     # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
     # own hardware and answers in its module's fixed words - nothing written.
     "model_recommender",
@@ -35608,6 +35709,12 @@ READ_ONLY_INTENTS = frozenset({
     # The CHANGE (`cloud_settings_change`) is deliberately absent - it changes
     # a setting or raises a card.
     "cloud_settings",
+    # The data removal tool's answers (2026-11-26, PR 1 of 3): they read this
+    # PC's own mode file, key presence and tracker and change nothing, so none
+    # may take away what "cancel that" would undo. The CHANGE
+    # (`privacy_mode_change`) is deliberately absent - it changes the mode and
+    # can raise the cloud consent card.
+    "privacy_explain",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",

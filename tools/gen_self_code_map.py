@@ -571,6 +571,12 @@ SUBSYSTEMS = (
             "jarvis_protection", "jarvis_private_chat", "jarvis_private_view",
             "jarvis_source_independence", "jarvis_mail_mask", "jarvis_paste_guard",
             "jarvis_picture",
+            # The personal data removal tool (2026-11-26, PR 1 of 3): the mode
+            # dial, the tracker, the masked profile reader, the official-portal
+            # checklist and the self-explainer. It belongs here because its one
+            # non-negotiable is the same one this subsystem keeps - the owner's
+            # own details never leave this PC unless he says so, on a card.
+            "jarvis_privacy_removal",
         ),
         "paths": (),
         "key_modules": ("jarvis_egress_gate", "jarvis_scrub", "jarvis_injection",
@@ -578,7 +584,8 @@ SUBSYSTEMS = (
         "tests": ("backend/test_chatbot_api.py", "backend/test_scrub.py",
                   "backend/test_injection_table.py",
                   "backend/test_vault.py", "backend/test_private_chat.py",
-                  "backend/test_secrets.py"),
+                  "backend/test_secrets.py",
+                  "backend/test_privacy_removal.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/AT-REST-2026-10-18.md",
                  "docs/SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md"),
     },
