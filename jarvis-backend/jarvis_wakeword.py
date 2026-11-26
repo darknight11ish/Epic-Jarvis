@@ -54,6 +54,15 @@ phone's copy of openWakeWord's `hey_jarvis_v0.1.onnx` stays in the APK although
 no phone code loads it: it is this repository's only real copy of those bytes and
 the two wake-word suites build a fake PC model folder from it.
 
+THE OLD SPOKEN NAME IS A ONE-WAY ALIAS (2026-11-26). A PC configured
+`hey_atlas` also accepts a transcript that says "Hey Jarvis" - what the owner
+used to say stays a way to wake this product, with no expiry and no switch.
+It is one way only: a PC configured `hey_jarvis` runs the old acoustic model,
+so a transcript saying "Atlas" cannot be what it heard and is refused. An
+unknown phrase still accepts no name at all. Only this transcript check is
+widened; what any surface SAYS is still the PC's own configured phrase
+(`status()["title"]`, `phrase_title()`, and the sentences built from them).
+
 The pre-trained openWakeWord files are CC BY-NC-SA 4.0 (non-commercial,
 share-alike, attribution) - allowed by rule 5, recorded in
 THIRD-PARTY-NOTICES.txt. The trained `hey_atlas.onnx` is treated as the same
@@ -1029,17 +1038,28 @@ def build_verifier(clips, sample_rate: int = SAMPLE_RATE, mic: str = "") -> dict
 import re  # noqa: E402
 
 #: How speech-to-text writes the name after "hey"/"hi"/"okay". The check is
-#: per PHRASE: only the configured phrase's name counts, so a clip that hears
-#: "Hey Atlas" is not accepted because the transcript says "Jarvis" (or the
-#: other way round) - the two detectors hear different sounds and the words
-#: have to agree with the model that fired.
+#: per PHRASE: the words have to agree with the model that fired, so a PC
+#: configured for one name does not wake on the other's word.
 _NAME = re.compile(r"^(j[ae]r?v[iu]s|jarvis's|jervis)$")
 _NAME_ATLAS = re.compile(r"^(atlas|atlas's|atlass)$")
-_NAMES = {"hey_jarvis": _NAME, "hey_atlas": _NAME_ATLAS}
+#: The names each configured phrase accepts. A tuple, because one phrase
+#: accepts more than one: `hey_atlas` takes "atlas" AND the old spoken name,
+#: "jarvis" - a ONE-WAY LEGACY ALIAS (2026-11-26, the owner's ruling). One way
+#: on purpose: a PC configured `hey_jarvis` has the old acoustic model loaded,
+#: so a transcript saying "Atlas" is not something it can have heard, and
+#: accepting it would claim a hearing the PC does not have. There is no expiry
+#: and no switch - the old name stays accepted for the product's name.
+_NAMES = {"hey_jarvis": (_NAME,), "hey_atlas": (_NAME_ATLAS, _NAME)}
 #: A phrase this build does not know matches nothing (an unknown phrase must
 #: never wake on some other phrase's word).
 _NO_NAME = re.compile(r"(?!)")
 _CUES = {"hey", "hi", "hello", "ok", "okay", "yo", "oi", "hay", "a"}
+
+
+def _names() -> tuple:
+    """The name(s) this PC's configured phrase accepts (`_NAMES`). An unknown
+    phrase gets `_NO_NAME`, which matches no word."""
+    return _NAMES.get(phrase()) or (_NO_NAME,)
 
 
 def split_wake(text: str) -> tuple:
@@ -1052,13 +1072,15 @@ def split_wake(text: str) -> tuple:
     little audio from before the phrase, so the second rule matters.
 
     WHICH name counts is `[voice] wake_phrase` (2026-11-25): "atlas" for
-    "hey_atlas", "jarvis" for "hey_jarvis". A phrase this build does not know
-    accepts neither, so a typo in the config cannot wake on the wrong word."""
+    "hey_atlas", "jarvis" for "hey_jarvis" - and `hey_atlas` also accepts
+    "jarvis", the one-way legacy alias (2026-11-26, `_NAMES`). A phrase this
+    build does not know accepts neither, so a typo in the config cannot wake
+    on the wrong word."""
     text = text or ""
-    name = _NAMES.get(phrase()) or _NO_NAME
+    names = _names()
     words = list(re.finditer(r"[A-Za-z']+", text))
     for i, m in enumerate(words):
-        if not name.match(m.group(0).lower()):
+        if not any(n.match(m.group(0).lower()) for n in names):
             continue
         prev = words[i - 1].group(0).lower() if i else ""
         if i <= 1 or prev in _CUES:
