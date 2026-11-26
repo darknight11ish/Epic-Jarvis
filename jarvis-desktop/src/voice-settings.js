@@ -139,12 +139,12 @@ const SETTING_NAMES = {
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
-  hands_free: "how far \"Hey Jarvis\" is trusted",
-  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
+  hands_free: "how far \"Hey Atlas\" is trusted",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Atlas\"",
   hands_free_live: "how far Jarvis Live is trusted",
   live_end: "when Jarvis Live ends on this PC",
   talk_to_type: "talk-to-type",
-  wake_confirm: "the second \"hey Jarvis\" check",
+  wake_confirm: "the second \"hey Atlas\" check",
   voice_id_model: "the voice-ID model",
 };
 
@@ -195,12 +195,12 @@ export function lastTrainingLine(last, status) {
     case "enrolled": {
       const wake = String(l.wake_check || "");
       let suffix = "";
-      if (wake.startsWith("built")) suffix = " Its \"hey Jarvis\" check was built too.";
-      else if (wake.startsWith("kept")) suffix = " Its \"hey Jarvis\" check is the one you had.";
-      else if (wake.startsWith("being built")) suffix = " Its \"hey Jarvis\" check is being built from the same sentences.";
+      if (wake.startsWith("built")) suffix = " Its \"hey Atlas\" check was built too.";
+      else if (wake.startsWith("kept")) suffix = " Its \"hey Atlas\" check is the one you had.";
+      else if (wake.startsWith("being built")) suffix = " Its \"hey Atlas\" check is being built from the same sentences.";
       else if (wake.trim()) {
         const why = wake.replace(/^not built/, "").replace(/^[:\s]+/, "").replace(/\.$/, "");
-        suffix = ` Its "hey Jarvis" check was not built (${why}).`;
+        suffix = ` Its "hey Atlas" check was not built (${why}).`;
       }
       return `Last training was approved: ${plural(count(l.samples), "sample")} ${l.added === true ? "in the voice print now" : "saved"}.${suffix}`;
     }
@@ -239,7 +239,7 @@ export function talkLine(status) {
 }
 
 /**
- * The PC's "hey Jarvis" switch, as the phone's WakeWordCard shows it:
+ * The PC's "hey Atlas" switch, as the phone's WakeWordCard shows it:
  * `on`, `waiting` (a card to turn it on is up) or `off`. The state is the
  * one the server last reported, never the one just asked for.
  */
@@ -256,7 +256,7 @@ export function wakeInfo(status, approveWhere) {
     return {
       state: "on",
       word: "On",
-      text: `On. Your PC takes "hey Jarvis". It checks the phrase and your voice again before it writes down a word.${cannot}`,
+      text: `On. Your PC takes "hey Atlas". It checks the phrase and your voice again before it writes down a word.${cannot}`,
     };
   }
   if (waiting) {
@@ -274,8 +274,8 @@ export function wakeInfo(status, approveWhere) {
 }
 
 /**
- * The owner's own "hey Jarvis" check (`wake.verifier`): a small second
- * check, built from the "hey Jarvis" sentences of the owner's training,
+ * The owner's own "hey Atlas" check (`wake.verifier`): a small second
+ * check, built from the "hey Atlas" sentences of the owner's training,
  * that turns away other people saying the phrase. Null from a server that
  * does not report it.
  */
@@ -284,10 +284,10 @@ export function verifierLine(status) {
   if (!wake.verifier || typeof wake.verifier !== "object") return null;
   const v = obj(wake.verifier);
   if (yes(v.trained)) {
-    return { text: "Your own \"hey Jarvis\" check: built from your training, so other people saying the phrase are turned away.", tone: "ok" };
+    return { text: "Your own \"hey Atlas\" check: built from your training, so other people saying the phrase are turned away.", tone: "ok" };
   }
   const why = sentence(v.why);
-  return { text: `Your own "hey Jarvis" check: not built.${why ? ` ${why}` : ""}`, tone: "" };
+  return { text: `Your own "hey Atlas" check: not built.${why ? ` ${why}` : ""}`, tone: "" };
 }
 
 /** Saying "stop" while Jarvis talks (`wake.stop_word`). */
@@ -303,16 +303,16 @@ export function stopWordLine(status) {
 }
 
 /**
- * The second "hey Jarvis" detector (`wake.confirm`, "Better voice",
+ * The second "hey Atlas" detector (`wake.confirm`, "Better voice",
  * 2026-09-28): whether the PC has it, and whether it is in use. Null from a
  * PC that does not report it. The choice itself is in the settings below.
  */
 export function wakeConfirmLine(status) {
   const c = obj(obj(status.wake).confirm);
   if (!Object.keys(c).length) return null;
-  const what = "Second \"hey Jarvis\" check (microWakeWord)";
+  const what = "Second \"hey Atlas\" check (microWakeWord)";
   if (yes(c.active)) {
-    return { text: `${what}: on. Both detectors must hear "hey Jarvis" before Jarvis wakes.`, tone: "ok" };
+    return { text: `${what}: on. Both detectors must hear "hey Atlas" before Jarvis wakes.`, tone: "ok" };
   }
   const note = sentence(c.note);
   if (note) return { text: `${what}: ${note}`, tone: "warn" };

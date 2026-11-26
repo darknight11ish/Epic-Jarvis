@@ -1,0 +1,23 @@
+ok    envelope attack matches speech.envelope.attack_s
+ok    envelope release matches speech.envelope.release_s
+ok    gate matches speech.envelope.gate
+ok    scale matches speech.scale
+ok    brightness lift matches speech.brightness_lift
+ok    speak floor matches speech.speak_floor
+ok    the mic envelope matches listening_uses_same_path
+ok    the fallback matches speech.fallback
+ok    a syllable is ~63% up after one attack constant
+ok    a syllable is essentially up after four attack constants
+ok    release is slower than attack, by the spec's ratio
+ok    the gate holds hiss at the floor
+ok    a speaking face never falls below the floor
+ok    a listening face falls to nothing, and invents no level
+ok    the microphone releases more slowly than the voice
+ok    the fallback rests for 220ms every 2.3s
+ok    the fallback is never below the floor and never above one
+ok    the fallback actually reaches a loud syllable
+ok    CONTROL: the reactor consumes the envelope
+ok    CONTROL: something sets the mode from the link
+ok    CONTROL: reduced motion silences the push
+
+all voice checks passed

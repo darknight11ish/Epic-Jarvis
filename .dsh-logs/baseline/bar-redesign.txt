@@ -1,0 +1,29 @@
+(node:29024) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/pcadmin/Documents/Jarvis%20github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/jarvis-desktop/src/private-chat.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\.dsh-scratch\wave32\wt-wake-coherence\jarvis-desktop\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ok    the bar's mark is #reactor holding the real face frame, not an orb
+ok    the face slot is clipped to a circle, and the frame is still square
+ok    the mini-core glow follows the bar's one state source
+FAIL  each primary mode is one icon plus one visible word
+      #voice-auto's visible word is "Hey Atlas", not "Hey Jarvis"
++ actual - expected
+
++ 'Hey Atlas'
+- 'Hey Jarvis'
+       ^
+
+ok    the mode row is flat 3px plates with mono, uppercase, tracked labels
+ok    every chip glyph is a stroke, at the HUD's rendered line weight
+FAIL  the mode ids and their names are the ones the suites know
+      the wake-word chip must say what it listens for
+ok    a pressed mode is ice-coloured with an ice border, never red and never a glow
+ok    the compound pill is both original nodes, joined only when a preset exists
+ok    the window utilities are one group, close last, with no badge and Esc still hiding
+ok    the submit keycap sits on the input row and Enter still submits
+ok    the bar is still 80px tall with its two rows, under the 720px shell clamp
+ok    the redesign survives the deep-space theme
+ok    the redesign survives the paper theme
+ok    the redesign survives the high-contrast theme
+
+2 failed: each primary mode is one icon plus one visible word, the mode ids and their names are the ones the suites know

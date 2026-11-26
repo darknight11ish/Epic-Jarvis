@@ -146,12 +146,17 @@ notification, the restart notice) say "Hey Atlas" and are true now. The
 sentences that said "hey jarvis" **on purpose** while the phone's model was
 openWakeWord's are gone; if one comes back the copy is lying again.
 `docs/ARCHITECTURE.md` section 8 records the change and what it does not prove.
-Two things still decide the phrase, and neither has moved: the **PC's** default
-`[voice] wake_phrase` is still `"hey_jarvis"` in the shipped template, so an
-update never re-points a working PC - "Hey Atlas" is switched on with
-`wake_phrase = "hey_atlas"`, and **the PC must agree with the phone**, because
-the PC re-reads every clip and refuses one whose transcript does not start with
-its own configured phrase. **Do not claim the 0.1 false-accepts-per-hour bar is
+**Since the same evening the PC ships it too:** `[voice] wake_phrase` is
+`"hey_atlas"` in the shipped `jarvis-framework.toml`, so a fresh install wakes on
+the product's own name and the sentences the PC generates about the phrase say
+it (`decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md`). `hey_jarvis`
+is still a phrase this build knows, and **an existing PC is never re-pointed** -
+the installer does not overwrite `jarvis-framework.toml`, so a PC left on
+`wake_phrase = "hey_jarvis"` keeps waking and says so in its own sentences; moving
+it is that one line. **The PC must agree with the phone**, because the PC re-reads
+every clip and refuses one whose transcript does not start with its own configured
+phrase - so a PC still on the old phrase refuses a phone wake on Atlas until the
+line is changed. **Do not claim the 0.1 false-accepts-per-hour bar is
 met** - it is unmeasured, and **no phone microphone has been driven**: the phone
 half is proven by tests (the asset, the constant, the copy), not by a device
 field test.

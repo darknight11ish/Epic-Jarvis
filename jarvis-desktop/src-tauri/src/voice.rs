@@ -27,7 +27,7 @@
 //!
 //! TWO LISTENING MODES, MUTUALLY EXCLUSIVE
 //! Push-to-talk (`start_voice_capture`/`stop_voice_capture`) records exactly
-//! what is held down and sends it once, on release. "Hey Jarvis" listening
+//! what is held down and sends it once, on release. "Hey Atlas" listening
 //! (`start_automatic_listening`/`stop_automatic_listening` - the old names,
 //! kept so the command surface and its permissions do not change) opens the
 //! microphone once and keeps it open, cutting it into utterances and sending
@@ -39,7 +39,7 @@
 //! The Jarvis server on this same PC owns every speech model, so it also owns
 //! the wake-word spotter (`backend/jarvis_wakeword.py`). Each utterance cut
 //! here goes to it over loopback; it runs ONLY the spotter first, and a clip
-//! without "hey Jarvis" in it is dropped there - not owner-checked, not
+//! without "hey Atlas" in it is dropped there - not owner-checked, not
 //! transcribed, not kept. That is why this mode refuses to start unless the
 //! server address is loopback (`is_loopback_base`): a desktop pointed at a
 //! server elsewhere would be sending every sentence spoken in the room over
@@ -80,7 +80,7 @@
 //! before. See `pause_step` and backend/jarvis_turn.py.
 //!
 //! INTERRUPTING JARVIS: "STOP", AND WINDOWS' ECHO CANCELLING
-//! While Jarvis speaks, this listener keeps listening. Saying "hey Jarvis"
+//! While Jarvis speaks, this listener keeps listening. Saying "hey Atlas"
 //! already cut a reply off; saying "stop" now does too, and does nothing
 //! else. The server spots it (`jarvis_wakeword.spot_stop`: a small
 //! stop-word model on the same sound fingerprint as the wake word) in a
@@ -630,7 +630,7 @@ struct HeardRaw {
     #[serde(default)]
     sensitive_aloud: bool,
     /// May an answer about the SCREEN (`read_screen`) be read aloud? False
-    /// for "Hey Jarvis" under "Only trust the talk button" unless the owner
+    /// for "Hey Atlas" under "Only trust the talk button" unless the owner
     /// allowed it (the owner's decision, 2026-09-28). Missing (an older PC)
     /// is read as `false`.
     #[serde(default)]
@@ -658,7 +658,7 @@ struct HeardRaw {
     /// owner - say a bit more) or "other" (counted as another voice).
     #[serde(default)]
     live_short: String,
-    /// "Hey Jarvis" here while Live is on the OTHER device: which one
+    /// "Hey Atlas" here while Live is on the OTHER device: which one
     /// ("phone"), so the bar offers to move Live here. Nothing was answered.
     #[serde(default)]
     live_elsewhere: String,
@@ -680,11 +680,11 @@ pub struct HeardReply {
     pub available: bool,
     pub source: String,
     pub reason: String,
-    /// `source=wake_word` only: "hey Jarvis" was heard in this clip, from
+    /// `source=wake_word` only: "hey Atlas" was heard in this clip, from
     /// the owner. False on a wake-word clip means it was not addressed to
     /// Jarvis and is dropped without a word.
     pub wake_heard: bool,
-    /// The clip was "hey Jarvis" and nothing else: the server is listening
+    /// The clip was "hey Atlas" and nothing else: the server is listening
     /// for the next clip without the phrase, for `awake_seconds`.
     pub awake: bool,
     pub awake_seconds: f64,
@@ -1309,7 +1309,7 @@ pub fn stop_push_to_talk(app: &AppHandle) {
 }
 
 // ---------------------------------------------------------------------------
-// "Hey Jarvis" listening: a loudness trigger here, the spotter on the server
+// "Hey Atlas" listening: a loudness trigger here, the spotter on the server
 // ---------------------------------------------------------------------------
 
 /// The floor under the adaptive threshold: below this RMS nothing counts as
@@ -1528,7 +1528,7 @@ pub(crate) fn wake_audio_refusal(base: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "\"Hey Jarvis\" listening only works with the Jarvis server on this PC. \
+        "\"Hey Atlas\" listening only works with the Jarvis server on this PC. \
          It is set to {base}, and every sentence said in the room would be sent \
          there before the wake word was heard."
     ))
@@ -1539,10 +1539,10 @@ pub(crate) fn wake_audio_refusal(base: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// While Jarvis Live is on on THIS PC, the listener sends every sentence as
-/// `source=live` - no "hey Jarvis" needed, and the PC still checks the voice
+/// `source=live` - no "hey Atlas" needed, and the PC still checks the voice
 /// before any words exist. Set by live.rs only.
 pub(crate) static LIVE_MODE: AtomicBool = AtomicBool::new(false);
-/// "Hey Jarvis" listening was on when Live took the microphone, or was
+/// "Hey Atlas" listening was on when Live took the microphone, or was
 /// switched on during Live: it comes back when Live ends.
 static WAKE_WAS_ON: AtomicBool = AtomicBool::new(false);
 /// Whether Smart Turn may be asked, read when Live opened the microphone -
@@ -1591,7 +1591,7 @@ pub(crate) fn live_pause_step(
     step
 }
 
-/// Why Live's audio may NOT go to `base` - the same rule as "hey Jarvis":
+/// Why Live's audio may NOT go to `base` - the same rule as "hey Atlas":
 /// every sentence said in the room goes to the server before any voice is
 /// checked, so only to a server on this PC.
 pub(crate) fn live_audio_refusal(base: &str) -> Option<String> {
@@ -1630,8 +1630,8 @@ fn listener_open(app: &AppHandle) -> bool {
 }
 
 /// Opens the microphone for Jarvis Live. Live owns it while it runs: a
-/// "hey Jarvis" listener already open is closed first (and comes back when
-/// Live ends). Needs no "hey Jarvis" switch and no card: Live is the owner's
+/// "hey Atlas" listener already open is closed first (and comes back when
+/// Live ends). Needs no "hey Atlas" switch and no card: Live is the owner's
 /// own act (docs/LIVE-DESIGN.md section 2). Audio goes only to a server on
 /// this PC.
 pub(crate) async fn open_for_live(app: &AppHandle) -> Result<ListenInfo, String> {
@@ -1639,10 +1639,10 @@ pub(crate) async fn open_for_live(app: &AppHandle) -> Result<ListenInfo, String>
     if let Some(why) = live_audio_refusal(&base) {
         return Err(why);
     }
-    // Only a "hey Jarvis" listener counts as one to bring back later: a
+    // Only a "hey Atlas" listener counts as one to bring back later: a
     // second start while Live already holds the microphone (a double click,
     // the tray and the bar at once) must not record the LIVE listener as a
-    // wake one, or ending Live would switch "hey Jarvis" on unasked (the
+    // wake one, or ending Live would switch "hey Atlas" on unasked (the
     // review's bug 6).
     let already_live = LIVE_MODE.load(Ordering::SeqCst);
     let took_wake = !already_live && take_listener(app);
@@ -1663,7 +1663,7 @@ pub(crate) async fn open_for_live(app: &AppHandle) -> Result<ListenInfo, String>
         Ok(info) => Ok(info),
         Err(why) => {
             LIVE_MODE.store(false, Ordering::SeqCst);
-            // The Live microphone would not open: "hey Jarvis" listening,
+            // The Live microphone would not open: "hey Atlas" listening,
             // taken for it a moment ago, comes back (it used to be left dead).
             if took_wake {
                 WAKE_WAS_ON.store(false, Ordering::SeqCst);
@@ -1709,7 +1709,7 @@ pub(crate) fn resume_for_live(app: &AppHandle) -> Result<(), String> {
     open_live_listener(app).map(|_| ())
 }
 
-/// Live ended: its microphone closes, and "hey Jarvis" listening comes back
+/// Live ended: its microphone closes, and "hey Atlas" listening comes back
 /// if it was on - only if the PC's wake word is still on; never by raising
 /// a card.
 pub(crate) async fn close_for_live(app: &AppHandle) {
@@ -1729,11 +1729,11 @@ pub(crate) async fn close_for_live(app: &AppHandle) {
             None => false,
         };
         if !reopened {
-            // The bar's "hey Jarvis" button goes off, and says why once.
+            // The bar's "hey Atlas" button goes off, and says why once.
             let _ = app.emit(
                 VOICE_HEARD,
                 HeardReply::unavailable(
-                    "Jarvis Live ended, and \"hey Jarvis\" listening could not start again. \
+                    "Jarvis Live ended, and \"hey Atlas\" listening could not start again. \
                      Turn it on again with the button next to the microphone."
                         .to_string(),
                 ),
@@ -1807,7 +1807,7 @@ pub(crate) enum WakeReadiness {
 pub(crate) fn wake_readiness(status: &serde_json::Value) -> WakeReadiness {
     let Some(wake) = status.get("wake").filter(|w| w.is_object()) else {
         return WakeReadiness::Cannot(
-            "The Jarvis server on this PC is too old for \"hey Jarvis\". Run \
+            "The Jarvis server on this PC is too old for \"hey Atlas\". Run \
              scripts\\apply-patches.ps1 to update it."
                 .to_string(),
         );
@@ -1828,7 +1828,7 @@ pub(crate) fn wake_readiness(status: &serde_json::Value) -> WakeReadiness {
             .filter(|w| !w.is_empty())
             .unwrap_or("its wake-word model is not installed");
         return WakeReadiness::Cannot(format!(
-            "This PC cannot listen for \"hey Jarvis\" yet: {why}."
+            "This PC cannot listen for \"hey Atlas\" yet: {why}."
         ));
     }
     WakeReadiness::Ready
@@ -1864,7 +1864,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
         WakeReadiness::Ready => Ok(turn_usable(&status)),
         WakeReadiness::Cannot(why) => Err(why),
         WakeReadiness::Waiting => Err(
-            "Waiting for you to approve turning on \"hey Jarvis\". Approve the card \
+            "Waiting for you to approve turning on \"hey Atlas\". Approve the card \
              in the Atlas bar, on the widget, or on your phone's Home screen, \
              then turn this on again."
                 .to_string(),
@@ -1876,7 +1876,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
             // listening never comes here and is never held.
             if app.state::<crate::stream::StreamState>().link().stale {
                 return Err(
-                    "\"Hey Jarvis\" is off, and turning it on needs your approval. The \
+                    "\"Hey Atlas\" is off, and turning it on needs your approval. The \
                      connection to Jarvis is catching up, so that is held until it does - \
                      try again in a moment."
                         .to_string(),
@@ -1897,7 +1897,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
             }
             if reply.get("pending").and_then(|b| b.as_bool()) == Some(true) {
                 return Err(
-                    "\"Hey Jarvis\" is off. Jarvis has asked for your approval to turn it \
+                    "\"Hey Atlas\" is off. Jarvis has asked for your approval to turn it \
                      on - approve the card in the Atlas bar, on the widget, or on your \
                      phone's Home screen, then turn this on again."
                         .to_string(),
@@ -1918,7 +1918,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
 pub struct AutoListenState(Mutex<Option<AutoListenHandle>>);
 
 impl AutoListenState {
-    /// "Hey Jarvis" listening holds the microphone right now. Read by
+    /// "Hey Atlas" listening holds the microphone right now. Read by
     /// talk-to-type (talk_type.rs), which must not open a second capture.
     pub(crate) fn busy(&self) -> bool {
         self.0
@@ -2005,7 +2005,7 @@ fn busy_error(auto: bool, manual: bool) -> Option<String> {
 #[serde(rename_all = "camelCase")]
 pub struct ListenInfo {
     /// The microphone is open through Windows' echo cancelling, so "stop"
-    /// and "hey Jarvis" can be heard over Jarvis's own voice.
+    /// and "hey Atlas" can be heard over Jarvis's own voice.
     pub echo_cancelling: bool,
     /// Windows' name for the microphone being listened to, when it gave
     /// one - both paths open the default microphone (aec.rs, "WHICH
@@ -2089,7 +2089,7 @@ fn continue_without_echo_cancelling(
             app,
             format!(
                 "The microphone stopped ({why}), and it could not be opened again ({e}). \
-                 Listening for \"hey Jarvis\" is off."
+                 Listening for \"hey Atlas\" is off."
             ),
         ),
     }
@@ -2151,7 +2151,7 @@ fn start_echo_cancelled(
     }
 }
 
-/// Starts listening for "hey Jarvis": checks with the server first (see
+/// Starts listening for "hey Atlas": checks with the server first (see
 /// `ensure_wake_ready` - off means an approval card, not a microphone), then
 /// opens the microphone and keeps it open, cutting and sending one utterance
 /// at a time. Refuses while a push-to-talk recording owns the microphone.
@@ -2163,14 +2163,14 @@ pub async fn start_automatic_listening(
     training: State<'_, crate::voice_training::SampleState>,
 ) -> Result<ListenInfo, String> {
     if LIVE_MODE.load(Ordering::SeqCst) {
-        // Jarvis Live has the microphone: "hey Jarvis" comes back on its own
+        // Jarvis Live has the microphone: "hey Atlas" comes back on its own
         // when Live ends (if the PC's wake word is on then).
         WAKE_WAS_ON.store(true, Ordering::SeqCst);
         return Ok(ListenInfo {
             echo_cancelling: false,
             microphone: default_microphone_name(),
             note: Some(
-                "Jarvis Live is using the microphone now. Listening for \"hey Jarvis\" \
+                "Jarvis Live is using the microphone now. Listening for \"hey Atlas\" \
                  starts when Live ends."
                     .to_string(),
             ),
@@ -2194,7 +2194,7 @@ pub async fn start_automatic_listening(
     open_listener(&app, &state, &manual, &training, use_turn)
 }
 
-/// Opens the microphone and starts the listening loop - for "hey Jarvis"
+/// Opens the microphone and starts the listening loop - for "hey Atlas"
 /// (after `ensure_wake_ready`) or for Jarvis Live (`open_for_live`).
 fn open_listener(
     app: &AppHandle,
@@ -2366,7 +2366,7 @@ fn run_vad_loop(
                     // fires on the TV, on other people, and on Jarvis's own
                     // voice from the speakers - stopping a reply for every
                     // one of those would stop every reply. A reply is cut
-                    // off when "hey Jarvis" is actually heard (below), or -
+                    // off when "hey Atlas" is actually heard (below), or -
                     // since 2026-09-25 - paused after half a second of
                     // speech and stopped only when the PC says it was the
                     // owner (voice_flow.rs, in the Speaking arm below).
@@ -2517,7 +2517,7 @@ fn run_vad_loop(
                         stop_listening_because(app, why);
                         return VadEnd::Refused;
                     }
-                    // Jarvis Live (live.rs): no "hey Jarvis" between turns -
+                    // Jarvis Live (live.rs): no "hey Atlas" between turns -
                     // but held while a card waits, on a stale link, or while
                     // the PC paused it. A held sentence is dropped HERE and
                     // never sent, so a spoken "yes" cannot even reach the PC.
@@ -2584,7 +2584,7 @@ fn run_vad_loop(
                             // Every Live reply goes to the bar - a refusal
                             // too (the hint, the short line, the end): it
                             // decides with live-rules.js. The owner's words
-                            // over a reply stop it, as "hey Jarvis" does.
+                            // over a reply stop it, as "hey Atlas" does.
                             let heard =
                                 reply.is_owner && reply.available && !reply.text.trim().is_empty();
                             if heard {
@@ -2616,7 +2616,7 @@ fn run_vad_loop(
                             crate::live::adopt(&app);
                         }
                         Ok(reply) if reply.wake_heard => {
-                            // Barge-in: "hey Jarvis" stops a reply that is
+                            // Barge-in: "hey Atlas" stops a reply that is
                             // still being spoken.
                             let _ = app.emit(VOICE_SPEECH_STARTED, ());
                             // Watch with me: a question is starting, so ONE
@@ -2633,7 +2633,7 @@ fn run_vad_loop(
                             let _ = app.emit(VOICE_HEARD, reply);
                         }
                         Ok(reply) if !reply.live_elsewhere.is_empty() => {
-                            // "Hey Jarvis" here while Jarvis Live is on the
+                            // "Hey Atlas" here while Jarvis Live is on the
                             // other device: nothing was answered, and the
                             // bar offers to move Live here.
                             let _ = app.emit(VOICE_HEARD, reply);
@@ -2662,7 +2662,7 @@ fn run_vad_loop(
 #[tauri::command]
 pub fn stop_automatic_listening(state: State<AutoListenState>) -> Result<(), String> {
     if LIVE_MODE.load(Ordering::SeqCst) {
-        // Jarvis Live owns the microphone: only "hey Jarvis" coming back
+        // Jarvis Live owns the microphone: only "hey Atlas" coming back
         // after Live is cancelled.
         WAKE_WAS_ON.store(false, Ordering::SeqCst);
         return Ok(());
@@ -2673,7 +2673,7 @@ pub fn stop_automatic_listening(state: State<AutoListenState>) -> Result<(), Str
     Ok(())
 }
 
-/// Stops "hey Jarvis" listening from this side - the listener's own thread,
+/// Stops "hey Atlas" listening from this side - the listener's own thread,
 /// or a Settings change - and tells the quickbar why, through the same
 /// "not available" `VOICE_HEARD` it already handles by saying the reason
 /// once and switching its button off. Does nothing when nothing is
@@ -2703,12 +2703,12 @@ pub(crate) fn stop_listening_because(app: &AppHandle, why: String) {
 }
 
 // ---------------------------------------------------------------------------
-// Settings -> Voice: what the server says, and the "hey Jarvis" switch
+// Settings -> Voice: what the server says, and the "hey Atlas" switch
 // ---------------------------------------------------------------------------
 //
 // The same facts the phone's Checks -> "Your voice" and wake-word cards show
 // (VoiceModels.kt reads the same JSON): whether each microphone's voice print
-// is trained, which voice check is installed, the owner's own "hey Jarvis"
+// is trained, which voice check is installed, the owner's own "hey Atlas"
 // check, the wake word, the stop word, Smart Turn and the talk button. READ
 // here; training stays on the phone for now. The one write is the wake-word
 // switch: OFF at once and never held, ON only an approval card.
@@ -2779,7 +2779,7 @@ pub(crate) fn wake_change_answer(status: u16, body: &str) -> Result<serde_json::
 }
 
 /// The words for turning ON while the event stream is stale.
-pub(crate) const WAKE_ON_HELD: &str = "The connection to Jarvis is catching up, so \"hey Jarvis\" \
+pub(crate) const WAKE_ON_HELD: &str = "The connection to Jarvis is catching up, so \"hey Atlas\" \
      cannot be turned on until it does. Turning it off still works.";
 
 /// What the PC's voice settings are: `GET /api/voice/status`
@@ -2803,10 +2803,10 @@ pub async fn get_voice_status(app: AppHandle) -> Result<serde_json::Value, Strin
     voice_status_answer(status, &body)
 }
 
-/// The PC's "hey Jarvis" switch: `POST /api/voice/wake` with `{"enabled"}`.
+/// The PC's "hey Atlas" switch: `POST /api/voice/wake` with `{"enabled"}`.
 ///
 /// OFF is immediate and is never held, not even on a stale link: it only
-/// narrows what listens. It also stops this PC's own "hey Jarvis" listening
+/// narrows what listens. It also stops this PC's own "hey Atlas" listening
 /// first, before the request, so the microphone closes even if the server
 /// cannot be reached. ON approves nothing: the server raises ONE approval
 /// card and answers `pending: true`, and ON is held while the event stream
@@ -2821,7 +2821,7 @@ pub async fn set_wake_word(app: AppHandle, enabled: bool) -> Result<serde_json::
     } else {
         stop_listening_because(
             &app,
-            "\"Hey Jarvis\" was turned off in Settings, so this PC stopped listening for it."
+            "\"Hey Atlas\" was turned off in Settings, so this PC stopped listening for it."
                 .to_string(),
         );
     }

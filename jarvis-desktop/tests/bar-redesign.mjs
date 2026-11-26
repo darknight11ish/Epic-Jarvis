@@ -153,7 +153,7 @@ await check("each primary mode is one icon plus one visible word", async () => {
   assert.ok(rows, "there is no .mode-strip holding the modes");
   const want = [
     ["mic", "Voice"],
-    ["voice-auto", "Hey Jarvis"],
+    ["voice-auto", "Hey Atlas"],
     ["jarvis-live-toggle", "Live"],
     ["watch-toggle", "Watch"],
     ["private", "Incognito"],
@@ -268,7 +268,7 @@ await check("the mode ids and their names are the ones the suites know", async (
     "the one chip's tooltip must say what its name says");
   assert.doesNotMatch(got.incognitoTitle, /private/i,
     "the one chip's tooltip still says \"private chat\" beside the word Incognito");
-  assert.match(got.voiceTitle, /hey Jarvis/i, "the wake-word chip must say what it listens for");
+  assert.match(got.voiceTitle, /hey Atlas/i, "the wake-word chip must say what it listens for");
   assert.equal(got.voicePressed, "false");
   assert.equal(got.temporary, null, "the #temporary button is still in the DOM (owner, 2026-10-27)");
   assert.equal(got.sayable, null, "the \"?\" primer door is still in the DOM");

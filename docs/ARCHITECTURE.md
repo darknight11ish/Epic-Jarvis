@@ -5695,8 +5695,12 @@ what is missing is only the Settings screen agreeing about who turned it off.
   the custom Hey Atlas model passes local false-accept testing, swap the string
   in one PR"*). The owner's trained head ships in this repository at
   `backend/wakeword/hey_atlas.onnx` (215,964 bytes, SHA-256 `0DBE0AA5…`) and the
-  patcher puts it beside `jarvis_wakeword.py`, so **the PC can hear "Hey Atlas"**
-  once `[voice] wake_phrase = "hey_atlas"` is set. **The phone carries the same
+  patcher puts it beside `jarvis_wakeword.py`, so **the PC hears "Hey Atlas"**:
+  since 2026-11-25 `[voice] wake_phrase = "hey_atlas"` is what the shipped
+  `jarvis-framework.toml` sets
+  (`decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md`), and
+  `hey_jarvis` stays a phrase this build knows, so a PC whose own file still
+  says it keeps waking exactly as before. **The phone carries the same
   bytes:** `jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx`,
   identical SHA-256, is what `OrtWakeModels.WAKE_FILE` names, and
   `WakeWordService` loads the assets by that constant - so the phone's own
@@ -5711,8 +5715,10 @@ what is missing is only the Settings screen agreeing about who turned it off.
   **Two things are deliberately not "finished" by this:** (1) the two devices
   must agree on the phrase, because `jarvis_speech.hear()` requires the
   transcript to start with the configured phrase's name, so a PC still on
-  `wake_phrase = "hey_jarvis"` refuses a clip the phone woke on - the PC's
-  shipped default stays `hey_jarvis` on purpose and the owner switches it; (2)
+  `wake_phrase = "hey_jarvis"` refuses a clip the phone woke on - a fresh
+  install now gets `hey_atlas`, but **an existing PC is never re-pointed**
+  (`scripts/apply-patches.ps1` does not overwrite `jarvis-framework.toml`), so
+  that one line is still changed by hand; (2)
   the phone's copy of openWakeWord's `hey_jarvis_v0.1.onnx` stays in the APK
   although no phone code loads it - it is this repository's only real copy of
   those bytes and the two wake-word suites build a fake PC model folder from it.

@@ -117,8 +117,8 @@ await check("the toggle names the wake word, not 'automatic'", async () => {
   await page.waitForTimeout(150);
   const micTitle = await page.locator("#mic").getAttribute("title");
   await page.close();
-  assert.ok(title.includes("hey Jarvis"), title);
-  assert.ok(micTitle.includes("hey Jarvis"), micTitle);
+  assert.ok(title.includes("hey Atlas"), title);
+  assert.ok(micTitle.includes("hey Atlas"), micTitle);
 });
 
 await check("an unavailable engine turns automatic listening off and sends nothing", async () => {
@@ -219,9 +219,9 @@ await check("the listening line names the microphone, and says when echo cancell
   const after = await spoken(page);
   const pressed = await page.locator("#voice-auto").getAttribute("aria-pressed");
   await page.close();
-  assert.match(first, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\. Say "stop"/);
+  assert.match(first, /Listening for "hey Atlas" on Microphone \(USB Headset\)\. Say "stop"/);
   assert.match(after, /Echo cancelling stopped working/);
-  assert.match(after, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\.(?! Say)/);
+  assert.match(after, /Listening for "hey Atlas" on Microphone \(USB Headset\)\.(?! Say)/);
   assert.equal(pressed, "true", "still listening - through the ordinary microphone");
 });
 

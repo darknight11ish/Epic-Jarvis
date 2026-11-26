@@ -32,23 +32,23 @@ object VoiceTraining {
      * Chosen to cover different sounds rather than to mean anything: a
      * pangram (every letter), requests in an ordinary voice, questions (the
      * voice rises at the end), a run of "s" and "th" sounds, numbers and
-     * colours. Four start with "Hey Jarvis": the PC learns from those how
-     * the owner says the wake word (its "hey Jarvis" check), and the rest
+     * colours. Four start with "Hey Atlas": the PC learns from those how
+     * the owner says the wake word (its "hey Atlas" check), and the rest
      * teach it what the owner sounds like saying anything else. More, and
      * more varied, sentences than the old five give the voice print a
      * steadier middle and the PC more to measure the owner's own spread by.
      */
     val SENTENCES: List<String> = listOf(
-        "Hey Jarvis, what's on my calendar today?",
+        "Hey Atlas, what's on my calendar today?",
         "The quick brown fox jumps over the lazy dog.",
         "Please remind me to call my sister on Thursday.",
-        "Hey Jarvis, turn the lights down a little.",
+        "Hey Atlas, turn the lights down a little.",
         "What is the weather going to be like this weekend?",
         "Six thick thistle sticks stood by the gate.",
-        "Hey Jarvis, play some quiet music.",
+        "Hey Atlas, play some quiet music.",
         "I'd like a cup of tea with milk, no sugar.",
         "How long will it take to drive into town?",
-        "Hey Jarvis, set a timer for ten minutes.",
+        "Hey Atlas, set a timer for ten minutes.",
         "My favourite colours are red, green and blue.",
         "Good morning, it's nice to hear your voice again.",
     )
@@ -61,7 +61,7 @@ object VoiceTraining {
      * read, so the PC can see how close a different voice gets.
      */
     val OTHER_SENTENCES: List<String> = listOf(
-        "Hey Jarvis, what time is it?",
+        "Hey Atlas, what time is it?",
         "Can you read me the news headlines?",
         "Turn the heating up a couple of degrees.",
     )
@@ -83,7 +83,7 @@ object VoiceTraining {
     /** The first screen, word for word. */
     const val INTRO =
         "Jarvis only listens to your voice. Read these 12 short sentences so it learns what you " +
-            "sound like, and how you say \"hey Jarvis\". It takes about two minutes."
+            "sound like, and how you say \"hey Atlas\". It takes about two minutes."
 
     const val INTRO_DETAIL =
         "Find a quiet spot and speak normally, at the distance you usually hold the phone. " +
@@ -259,7 +259,7 @@ object VoiceTraining {
     /** What the ONE card does, in the owner's words. */
     const val CLEAR_WHAT_IT_DOES =
         "Deletes every saved voice print on your PC (one per microphone you trained), " +
-            "the \"hey Jarvis\" check built from those recordings, and the small notes it " +
+            "the \"hey Atlas\" check built from those recordings, and the small notes it " +
             "kept from learning your voice in Live. It does not delete your custom speaking " +
             "voices, your chat history or your phone pairing. ONE card approves it: nothing " +
             "is deleted until you say yes, and voice commands and Jarvis Live are refused " +
@@ -371,8 +371,8 @@ object VoiceTraining {
 
     private fun wakeCheckSuffix(wakeCheck: String): String = when {
         wakeCheck.isBlank() -> ""
-        wakeCheck.startsWith("built") -> " Its \"hey Jarvis\" check was built too."
-        else -> " Its \"hey Jarvis\" check was not built (" +
+        wakeCheck.startsWith("built") -> " Its \"hey Atlas\" check was built too."
+        else -> " Its \"hey Atlas\" check was not built (" +
             wakeCheck.removePrefix("not built").trimStart(':', ' ').trimEnd('.') + ")."
     }
 

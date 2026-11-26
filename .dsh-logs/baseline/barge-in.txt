@@ -1,0 +1,15 @@
+(node:7640) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/pcadmin/Documents/Jarvis%20github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/jarvis-desktop/src/barge-in.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\.dsh-scratch\wave32\wt-wake-coherence\jarvis-desktop\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ok    the setting: on unless saved off, and on when storage cannot be read
+ok    Settings: ONE Interrupting Jarvis setting, three choices, by voice by default, and a choice is saved
+ok    Settings: an old switch turned off carries over as Don't interrupt
+ok    Settings: the setting works even when Jarvis could not be asked about voice
+ok    ON (the default): "stop" or "hey Jarvis" still cuts a reply off, as before
+ok    OFF: "stop" or "hey Jarvis" heard while Jarvis talks is ignored, and the reply plays to the end
+ok    OFF: a "hey Jarvis" question heard while Jarvis talks is not sent
+ok    OFF: once Jarvis has finished, "hey Jarvis" works as before
+ok    OFF: the listening line says what is heard over a reply is ignored, instead of promising "stop"
+
+"Interrupt Jarvis while it talks" holds

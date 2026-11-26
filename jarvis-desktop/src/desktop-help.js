@@ -85,7 +85,7 @@ export const DESKTOP_FAQ = Object.freeze([
     id: "jarvis-live",
     q: "What is Jarvis Live, and how do I end it?",
     a: "A back-and-forth voice conversation. Click Live in the Atlas bar (or say " +
-      "\"Hey Jarvis, let's talk\") and just talk: no \"Hey Jarvis\" before each " +
+      "\"Hey Jarvis, let's talk\") and just talk: no \"Hey Atlas\" before each " +
       "sentence. Your voice is checked once for the Live session on this PC - one " +
       "full sentence verifies you - and after that this session is not checked " +
       "sentence by sentence; ending Live ends that trust. A card that comes up still " +
@@ -146,7 +146,7 @@ export const DESKTOP_FAQ = Object.freeze([
       "button in the big HUD window opens the Atlas bar with its microphone ready, " +
       "so both lead to the same place. The recording is made on this computer and " +
       "goes only to Jarvis on this computer - never to Microsoft, Google or anyone " +
-      "else. Listening for \"hey Jarvis\", the button next to the microphone, is off " +
+      "else. Listening for \"hey Atlas\", the button next to the microphone, is off " +
       "until you turn it on; the first time, it shows you an approval card instead " +
       "of listening. While it is on, what the microphone hears goes only to Jarvis " +
       "on this computer, which ignores anything that does not start with \"hey " +

@@ -1,0 +1,6 @@
+ok    every user-facing copy file is readable (235 files)
+ok    no user-facing copy promises a phrase in training or states the old one
+ok    Settings states the wake phrase as the ruling's factual sentence
+ok    the bar's wake-word control names the phrase that ships
+
+The wake-phrase copy tells the truth

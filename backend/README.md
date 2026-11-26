@@ -6107,9 +6107,13 @@ downloaded (2026-11-25).** It ships in this repository at
 copies it beside `jarvis_wakeword.py`. The module reads it from its own folder
 when `[voice] wake_phrase = "hey_atlas"`, and it **refuses to use the file at
 all** if its SHA-256 is not the one above, so a half-copied model says so
-instead of scoring nonsense. Setting `wake_phrase = "hey_jarvis"` keeps the old
-model and the old phrase working, which is what the shipped template still
-sets: nothing re-points itself without your word.
+instead of scoring nonsense. **`wake_phrase = "hey_atlas"` is what the shipped
+template sets since 2026-11-25**, so a fresh install hears the product's own
+name with nothing to change. Setting `wake_phrase = "hey_jarvis"` keeps the old
+model and the old phrase working, and **an update never re-points a PC**: the
+installer does not overwrite your `jarvis-framework.toml`, so a PC still on the
+old phrase keeps waking with it and its own sentences say "Hey Jarvis". Moving
+a PC between the two is that one line, and it is the per-PC switch.
 
 **The phone carries the same file too (2026-11-25):**
 `jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx` is byte for byte
@@ -6119,8 +6123,8 @@ Atlas" and `backend/test_voice_upgrades.py` checks both copies against one
 SHA-256. **The two devices must agree on the phrase:** the PC re-reads every
 clip, `jarvis_speech.hear()` requires the transcript to start with the
 configured phrase's name, so a PC still on `wake_phrase = "hey_jarvis"` will
-refuse a clip the phone woke on. Switch the PC to `wake_phrase = "hey_atlas"`
-when the phone is updated. The phone keeps openWakeWord's `hey_jarvis_v0.1.onnx`
+refuse a clip the phone woke on. A fresh install already sets
+`wake_phrase = "hey_atlas"`; on an existing PC it is that one line. The phone keeps openWakeWord's `hey_jarvis_v0.1.onnx`
 in its assets although no phone code loads it: it is this repository's only real
 copy of those bytes and the two wake-word suites build a fake PC model folder
 from it.

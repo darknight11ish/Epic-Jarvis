@@ -1,0 +1,32 @@
+(node:34048) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/pcadmin/Documents/Jarvis%20github/Epic-Jarvis-main/.dsh-scratch/wave32/wt-wake-coherence/jarvis-desktop/src/jarvis-link.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\.dsh-scratch\wave32\wt-wake-coherence\jarvis-desktop\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# Subtest: the PC says OFF: the box is unticked
+ok 1 - the PC says OFF: the box is unticked
+  ---
+  duration_ms: 113.1518
+  type: 'test'
+  ...
+# Subtest: a card still waiting after the 20 s call is WAITING and unconfirmed - never 'restart Ollama'
+ok 2 - a card still waiting after the 20 s call is WAITING and unconfirmed - never 'restart Ollama'
+  ---
+  duration_ms: 234.114
+  type: 'test'
+  ...
+# Subtest: when the card is answered the row repaints by itself - the PC's ON reaches the box
+ok 3 - when the card is answered the row repaints by itself - the PC's ON reaches the box
+  ---
+  duration_ms: 374.7374
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 728.607

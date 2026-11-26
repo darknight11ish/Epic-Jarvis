@@ -4734,7 +4734,7 @@ loadBigModel();
    are drawn by voice-panel.js from the same status (and, for the voices,
    GET /api/voice/voices).
 
-   The one thing it changes is the PC's "hey Jarvis" switch (`set_wake_word`,
+   The one thing it changes is the PC's "hey Atlas" switch (`set_wake_word`,
    POST /api/voice/wake), as the phone's wake-word card does. Turning it OFF
    is immediate, is never held, and stops this PC's own listening too.
    Turning it ON approves nothing: the server raises ONE approval card, and
@@ -4866,7 +4866,7 @@ async function loadVoice() {
   vcPaint(answer);
 }
 
-/** The PC's "hey Jarvis" switch: one request, one direction. */
+/** The PC's "hey Atlas" switch: one request, one direction. */
 async function vcSetWake(enabled) {
   if (vcBusy) return;
   vcBusy = true;
@@ -4882,7 +4882,7 @@ async function vcSetWake(enabled) {
     } else if (out && typeof out.message === "string" && out.message) {
       report(vc.wakeStatus, out.message, "ok");
     } else {
-      report(vc.wakeStatus, enabled ? "\"Hey Jarvis\" is on." : "\"Hey Jarvis\" is off.", "ok");
+      report(vc.wakeStatus, enabled ? "\"Hey Atlas\" is on." : "\"Hey Atlas\" is off.", "ok");
     }
     announce(vc.wakeStatus.textContent);
   } catch (error) {

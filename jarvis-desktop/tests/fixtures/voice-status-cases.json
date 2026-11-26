@@ -261,7 +261,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -553,7 +553,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -679,7 +681,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -823,26 +825,26 @@
         },
         "enabled": false,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     },
     "not_trained": {
@@ -1079,7 +1081,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -1371,7 +1373,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -1492,7 +1496,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -1636,26 +1640,26 @@
         },
         "enabled": false,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     },
     "older_single_print": {
@@ -1897,7 +1901,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -2189,7 +2193,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -2315,7 +2321,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -2459,26 +2465,26 @@
         },
         "enabled": false,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     },
     "phone_trained": {
@@ -2720,7 +2726,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -3012,7 +3018,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -3138,7 +3146,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -3282,26 +3290,26 @@
         },
         "enabled": false,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     },
     "ready_wake_on": {
@@ -3548,7 +3556,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -3840,7 +3848,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -3971,7 +3981,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -4115,7 +4125,7 @@
         },
         "enabled": true,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": true,
           "engine": "openWakeWord (ONNX Runtime)",
@@ -4134,7 +4144,7 @@
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": true
     },
     "trained_by_card": {
@@ -4376,7 +4386,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -4486,7 +4496,7 @@
             "subprints": [
               "close"
             ],
-            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "limits": {
             "max_clips": 12,
@@ -4679,7 +4689,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -4805,7 +4817,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -4949,26 +4961,26 @@
         },
         "enabled": false,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     },
     "wake_off_after_waiting": {
@@ -5210,7 +5222,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -5502,7 +5514,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -5628,7 +5642,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -5772,26 +5786,26 @@
         },
         "enabled": false,
         "pending": false,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     },
     "wake_waiting": {
@@ -6033,7 +6047,7 @@
         "settings": {
           "blocked": {
             "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-            "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
           },
           "changed": 0.0,
           "choices": {
@@ -6325,7 +6339,9 @@
               }
             ],
             "version": 1,
-            "wake_phrases": [ "hey Jarvis" ],
+            "wake_phrases": [
+              "hey Atlas"
+            ],
             "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
           }
         },
@@ -6451,7 +6467,7 @@
       "settings": {
         "blocked": {
           "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
-          "wake_confirm": "the second \"hey Atlas\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
         },
         "changed": 0.0,
         "choices": {
@@ -6596,26 +6612,26 @@
         "enabled": false,
         "expires_in": 170,
         "pending": true,
-        "phrase": "hey_jarvis",
+        "phrase": "hey_atlas",
         "spotter": {
           "available": false,
           "engine": "openWakeWord (ONNX Runtime)",
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "stop_word": {
           "available": false,
           "threshold": 0.5,
-          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
         },
         "threshold": 0.5,
         "verifier": {
           "positives": 0,
           "trained": false,
-          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Atlas\""
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
         }
       },
       "wake_confirm": "one",
-      "wake_phrase": "hey_jarvis",
+      "wake_phrase": "hey_atlas",
       "wake_word_enabled": false
     }
   }

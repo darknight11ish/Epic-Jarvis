@@ -38,11 +38,14 @@ negatives 0 clips fire. Those numbers are the evidence recorded in
 measure them.
 
 The model file ships beside this module (`backend/wakeword/hey_atlas.onnx`,
-215,964 bytes, SHA-256 0DBE0AA5...), so a PC that sets `wake_phrase = "hey_atlas"`
-wakes with the new phrase without downloading anything. `hey_jarvis` is NOT
-removed: a PC that still has `hey_jarvis_v0.1.onnx` and the old phrase set keeps
-waking exactly as before, and the shipped default stays `hey_jarvis` so nothing
-re-points itself without the owner's word. **The phone hears it too (2026-11-25):**
+215,964 bytes, SHA-256 0DBE0AA5...), so the phrase it is trained for needs no
+download. **`hey_atlas` is the shipped default since 2026-11-25** (the owner's
+ruling that the product is Atlas): a fresh install, and a config with no
+`wake_phrase` line, listens for it. `hey_jarvis` is NOT removed: a PC that still
+has `hey_jarvis_v0.1.onnx` and `wake_phrase = "hey_jarvis"` keeps waking exactly
+as before, so an update cannot break a working PC - the installer never rewrites
+`jarvis-framework.toml`, and moving a PC between the two phrases is that one
+line (decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md). **The phone hears it too (2026-11-25):**
 `jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx` is the same bytes,
 `OrtWakeModels.WAKE_FILE` names it, and the phone's own spotter runs the same
 front end on it, so both surfaces carry the same file and the same hash -
@@ -192,9 +195,11 @@ PC_PHRASES = ("hey_atlas", "hey_jarvis")
 #: docs/ARCHITECTURE.md section 8 records it, and test_voice_upgrades.py
 #: asserts every pinned file is in the phone's assets with the pinned hash.
 PHONE_PHRASES = ("hey_atlas", "hey_jarvis")
-#: The phrase the shipped framework template sets. Unchanged on purpose
-#: (2026-11-25): a new phrase is switched on by the owner, never by an update.
-DEFAULT_PHRASE = "hey_jarvis"
+#: The phrase the shipped framework template sets, and the fallback for a
+#: config with no `wake_phrase` line. `hey_atlas` since 2026-11-25: the model
+#: ships, so a fresh PC wakes on the product's own name. `hey_jarvis` is still
+#: a first-class phrase (`PHRASE_MODELS`, `PC_PHRASES`) - no PC is re-pointed.
+DEFAULT_PHRASE = "hey_atlas"
 
 #: Every wake-word file Jarvis ships, with its SHA-256, publisher, version
 #: and licence. The SAME files are in the phone's APK

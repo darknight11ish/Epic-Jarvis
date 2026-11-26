@@ -1,0 +1,23 @@
+ok    four conditions, in the PC's order and words
+ok    twelve balanced read phrases, and three free-speech prompts, exactly the PC's
+ok    the wake words are a separate fixed set, never training material
+ok    the plan is read from the PC, and a PC without one is refused, not guessed
+ok    four rounds exist; all four are wired; every phrase and prompt is used once within them
+ok    the page says four rounds, nineteen recordings, and no unwired condition
+ok    the first screen names the phrases, the prompts and the one card
+ok    carrying on leaves out the rounds the PC already holds
+ok    the left-out recordings map onto the new material, are topped up to 3, and the fourth condition is now offered
+ok    a round's answer is ONE card, and a bad clip says which round
+ok    very strict and voice-check-is-enough keep their existing words and rule
+ok    the Live-additions count and caps are the PC's own
+ok    a count, a re-anchor and a reset are read from the PC, never invented
+ok    resetting the count is wired through the desktop command
+ok    the real measure answer's held-out report, in the PC's own words
+ok    the reduced report the status keeps still says 'not enough', never a number
+ok    a condition with enough rows becomes FRR/FAR/EER in plain counts
+ok    no report at all reads as null, not as a zero
+ok    the guided test sends the condition it read from the plan
+ok    the Settings page has the Live-additions and held-out blocks
+ok    the third wire is honest: the Rust sender is still the limit, not the page
+
+The voice-training plan holds

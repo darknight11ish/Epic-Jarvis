@@ -69,7 +69,7 @@ await check("the setting: on unless saved off, and on when storage cannot be rea
   assert.equal(B.ignoreWhileTalking(false, true), true);
   // The words say what happens on a PC: "ignored", never "not listening".
   assert.match(B.describeBargeIn(true), /^On: while Jarvis talks, this PC keeps listening\. Say "stop"/);
-  assert.match(B.describeBargeIn(false), /^Off: while Jarvis talks, what this PC hears is ignored, even "stop" and "hey Jarvis"\./);
+  assert.match(B.describeBargeIn(false), /^Off: while Jarvis talks, what this PC hears is ignored, even "stop" and "hey Atlas"\./);
   assert.match(B.describeBargeIn(false), /press Esc in the Jarvis bar/);
   assert.doesNotMatch(B.describeBargeIn(false), /not listen/);
 });
@@ -182,7 +182,7 @@ await check("OFF: the listening line says what is heard over a reply is ignored,
   const line = await spoken(page);
   const errors = page.__errors;
   await page.close();
-  assert.match(line, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\. While Jarvis talks, what it hears is ignored/);
+  assert.match(line, /Listening for "hey Atlas" on Microphone \(USB Headset\)\. While Jarvis talks, what it hears is ignored/);
   assert.doesNotMatch(line, /Say "stop"/);
   assert.deepEqual(errors, []);
 });

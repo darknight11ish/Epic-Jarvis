@@ -628,7 +628,7 @@ function paintTrain() {
             id: "vt-clear",
             disabled: train.clearing || (gate.training || {}).pending === true,
           }));
-          nodes.push(line(VT.CLEAR_WHAT_IT_DOES, "", "note"));
+          nodes.push(line(VT.clearWhatItDoes(VT.phraseOf(status)), "", "note"));
         }
         nodes.push(row);
       }
@@ -700,6 +700,10 @@ let settingBusy = false;
 
 function paintSettings() {
   const view = VT.settingsView(status);
+  // Every sentence below that names the wake phrase says the one THIS PC
+  // reports (`phraseOf`), never a fixed word: an existing PC keeps its own
+  // `wake_phrase` and the installer never rewrites it (2026-11-25).
+  const phrase = VT.phraseOf(status);
   const wrap = $("vt-settings");
   if (!wrap) return;
   wrap.hidden = !view;
@@ -747,7 +751,7 @@ function paintSettings() {
       say($("vt-sensitive-note"), sensitiveNote);
     }
   }
-  // The fifth: how far "Hey Jarvis" is trusted (the owner's decision,
+  // The fifth: how far "Hey Atlas" is trusted (the owner's decision,
   // 2026-09-24). Offered only when the PC reports it. "Only trust the talk
   // button" applies at once; "Same as the talk button" is the looser one,
   // held on a stale link (changeSetting, VT.loosens).
@@ -755,11 +759,12 @@ function paintSettings() {
   if (handsBox) {
     handsBox.hidden = !view.handsFree;
     if (view.handsFree) {
-      group($("vt-handsfree"), VT.HANDS_FREE, view.handsFree, "hands_free");
-      say($("vt-handsfree-note"), VT.HANDS_FREE.find((c) => c.id === view.handsFree).detail);
+      const hands = VT.handsFree(phrase);
+      group($("vt-handsfree"), hands, view.handsFree, "hands_free");
+      say($("vt-handsfree-note"), hands.find((c) => c.id === view.handsFree).detail);
     }
   }
-  // The sixth: answers about the screen after "Hey Jarvis" (the owner's
+  // The sixth: answers about the screen after "Hey Atlas" (the owner's
   // decision, 2026-09-28). Offered only when the PC reports it. It matters
   // only under "Only trust the talk button", and says so otherwise - the
   // choices stay usable. "Read aloud" is the looser one, held on a stale
@@ -768,8 +773,9 @@ function paintSettings() {
   if (screenBox) {
     screenBox.hidden = !view.handsFreeScreen;
     if (view.handsFreeScreen) {
-      group($("vt-screen"), VT.HANDS_FREE_SCREEN, view.handsFreeScreen, "hands_free_screen");
-      let screenNote = VT.HANDS_FREE_SCREEN.find((c) => c.id === view.handsFreeScreen).detail;
+      const screen = VT.handsFreeScreen(phrase);
+      group($("vt-screen"), screen, view.handsFreeScreen, "hands_free_screen");
+      let screenNote = screen.find((c) => c.id === view.handsFreeScreen).detail;
       if (VT.screenCovered(view)) screenNote += ` ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`;
       say($("vt-screen-note"), screenNote);
     }
@@ -781,8 +787,9 @@ function paintSettings() {
   if (liveBox) {
     liveBox.hidden = !view.handsFreeLive;
     if (view.handsFreeLive) {
-      group($("vt-live"), VT.HANDS_FREE_LIVE, view.handsFreeLive, "hands_free_live");
-      let liveNote = VT.HANDS_FREE_LIVE.find((c) => c.id === view.handsFreeLive).detail;
+      const live = VT.handsFreeLive(phrase);
+      group($("vt-live"), live, view.handsFreeLive, "hands_free_live");
+      let liveNote = live.find((c) => c.id === view.handsFreeLive).detail;
       if (VT.liveCovered(view)) liveNote += ` ${VT.LIVE_ONLY_WHEN_STRICT_NOTE}`;
       say($("vt-live-note"), liveNote);
     }
@@ -810,13 +817,13 @@ function paintSettings() {
       say($("vt-talktype-note"), VT.TALK_TO_TYPE.find((c) => c.id === view.talkToType).detail);
     }
   }
-  // "Better voice" (2026-09-28): the second "hey Jarvis" check and the
+  // "Better voice" (2026-09-28): the second "hey Atlas" check and the
   // voice-ID model. Offered only when the PC reports them. A choice that
   // needs something the PC does not have is greyed out, with the PC's own
   // words saying why (VT.blockedWhy); the looser choice of each is held on
   // a stale link (changeSetting, VT.loosens).
   const better = [
-    ["vt-wakeconfirm", VT.WAKE_CONFIRM, view.wakeConfirm, "wake_confirm"],
+    ["vt-wakeconfirm", VT.wakeConfirmChoices(phrase), view.wakeConfirm, "wake_confirm"],
     ["vt-voiceid", VT.VOICE_ID_MODEL, view.voiceIdModel, "voice_id_model"],
   ];
   for (const [id, list, chosen, setting] of better) {
@@ -829,7 +836,7 @@ function paintSettings() {
     const detail = list.find((c) => c.id === chosen).detail;
     say($(`${id}-note`), blocked ? `${detail} ${blocked}` : detail);
   }
-  const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
+  const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE, phrase);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;
   w.textContent = waiting || "";
@@ -956,7 +963,7 @@ function paintTest() {
 function startTest() {
   test.view = "reading";
   const max = VT.limits(status).measureMax;
-  const items = VT.TEST_SENTENCES.slice(0, max).map((text, i) => ({ slot: `m${i}`, text }));
+  const items = VT.testSentences(VT.phraseOf(status)).slice(0, max).map((text, i) => ({ slot: `m${i}`, text }));
   makeReader($("vt-test"), {
     items,
     head: "The guided test",
@@ -1058,7 +1065,7 @@ function startOthers() {
     paintOthers();
   };
   makeReader(box, {
-    items: VT.OTHER_SENTENCES.map((text, i) => ({ slot: `o${i}`, text })),
+    items: VT.otherSentences(VT.phraseOf(status)).map((text, i) => ({ slot: `o${i}`, text })),
     head: "Someone else's voice: ask them to read these",
     maxSeconds: VT.limits(status).maxSeconds - 0.2,
     sendLabel: "Compare them",
@@ -1576,7 +1583,7 @@ async function sendAnimal(face, args) {
  *  - `voice-capture-started`: the talk button just opened the microphone
  *    (voice.rs `start_voice_capture`; the Rust also refuses "Try it" while
  *    the talk button records);
- *  - `voice-speech-started` / `voice-heard`: "hey Jarvis" heard a question;
+ *  - `voice-speech-started` / `voice-heard`: "hey Atlas" heard a question;
  *  - `stop-everything`: the hotkey - every sound stops;
  *  - the link's `activity` (listening, thinking, working, speaking): a
  *    question is being answered - not trusted on a stale link, where it is

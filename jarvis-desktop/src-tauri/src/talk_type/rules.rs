@@ -63,7 +63,7 @@ pub(crate) const LOCKED: &str = "Jarvis is locked, so it did not listen. Open th
      and unlock it with Windows Hello, then try again.";
 pub(crate) const NOT_THIS_PC: &str = "Talk-to-type works only when Jarvis runs on this PC, so \
      your voice never leaves it. Settings, Connection points Jarvis somewhere else.";
-pub(crate) const MIC_WAKE: &str = "Jarvis is listening for \"hey Jarvis\", and both cannot use \
+pub(crate) const MIC_WAKE: &str = "Jarvis is listening for \"hey Atlas\", and both cannot use \
      the microphone at once. Turn listening off in the Jarvis bar, then try again.";
 /// Jarvis Live has the microphone - also while it is closed for a pause, so
 /// a pause ending never finds talk-to-type holding it (the 2026-09-28 audit).

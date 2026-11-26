@@ -211,7 +211,7 @@ export const KIND_TAGS = Object.freeze({
 export const SNOOZED_TAG = "snoozed";
 
 /** What the desktop says aloud when a timer goes off while hands-free
- *  listening ("Hey Jarvis") is on. Never the timer's own words: the room
+ *  listening ("Hey Atlas") is on. Never the timer's own words: the room
  *  may not be private. */
 export const TIMER_ALOUD = "Your timer is done.";
 
