@@ -575,7 +575,7 @@ check("the Markdown export keeps every turn's words, in order", () => {
   assert.ok(md.indexOf("What did we decide?") < md.indexOf("We ship on Friday."),
     "the export reorders the turns");
   assert.match(md, /\*\*You:\*\*/);
-  assert.match(md, /\*\*Jarvis:\*\*/);
+  assert.match(md, /\*\*Atlas:\*\*/);
   assert.doesNotMatch(md, /<[a-z!/]/i, "the export wraps the words in HTML");
 });
 
