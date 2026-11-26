@@ -9934,6 +9934,7 @@ def _run_adding_howto(name: str) -> Result:
 # --------------------------------------------------------------------------
 
 PLUGIN_CATALOGUE = (
+    ('answer-style', 'how a TYPED answer is laid out: GET/POST /api/answer-style, so the Settings picker and chat read and change the one value - bullet points when an answer has several parts, always bullets, or plain paragraphs. Never a spoken answer, and no card either way.'),
     ('android-builder', 'Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for th...'),
     ('antislop', "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buz..."),
     ('auto-router', 'estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and a...'),
