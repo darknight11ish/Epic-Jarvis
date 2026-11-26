@@ -3254,7 +3254,7 @@
       "name": "Create and customize your notes",
       "group": "Notes and files",
       "surface": "both",
-      "where": "The PC's Brain → Memory → Notes; the phone's Brain → What Jarvis knows about you → Notes. The create, customize, rename and move sentences work in chat on either app.",
+      "where": "The PC's Brain → Memory → Notes; the phone's Brain → What Jarvis knows about you → Notes. The create, customize, rename, move, delete and duplicate-finding sentences work in chat on either app.",
       "control": {
         "type": "refused",
         "setting_keys": [],
