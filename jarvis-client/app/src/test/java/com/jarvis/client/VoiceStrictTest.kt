@@ -1211,7 +1211,7 @@ class VoiceStrictTest {
 
     @Test
     fun `better voice - the plates use the agreed words, the same as the desktop's, and the screen shows them`() {
-        assertEquals("Second \"hey Atlas\" check", StrictVoice.WAKE_CONFIRM_TITLE)
+        assertEquals("Second \"Hey Atlas\" check", StrictVoice.WAKE_CONFIRM_TITLE)
         assertEquals("Voice-ID model", StrictVoice.VOICE_ID_MODEL_TITLE)
         for (c in StrictVoice.VOICE_ID_MODEL) {
             assertTrue(c.detail, c.detail.contains("cannot tell your voice from a recording or a copy"))
