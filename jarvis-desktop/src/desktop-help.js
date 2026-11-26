@@ -84,8 +84,8 @@ export const DESKTOP_FAQ = Object.freeze([
   {
     id: "jarvis-live",
     q: "What is Jarvis Live, and how do I end it?",
-    a: "A back-and-forth voice conversation. Click Live in the Atlas bar (or say " +
-      "\"Hey Jarvis, let's talk\") and just talk: no \"Hey Atlas\" before each " +
+    a: "A back-and-forth voice conversation. Click Live in the Atlas bar (or say your " +
+      "wake phrase, then \"let's talk\") and just talk: no wake phrase before each " +
       "sentence. Your voice is checked once for the Live session on this PC - one " +
       "full sentence verifies you - and after that this session is not checked " +
       "sentence by sentence; ending Live ends that trust. A card that comes up still " +

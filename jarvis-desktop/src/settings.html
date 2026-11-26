@@ -1040,12 +1040,12 @@
               <p class="note" id="vt-sensitive-note"></p>
             </div>
             <div id="vt-handsfree-box" hidden>
-              <h3 class="subhead">Hands-free ("Hey Atlas")</h3>
+              <h3 class="subhead" id="vt-handsfree-title">Hands-free ("Hey Atlas")</h3>
               <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Atlas is trusted"></div>
               <p class="note" id="vt-handsfree-note"></p>
             </div>
             <div id="vt-screen-box" hidden>
-              <h3 class="subhead">Answers about your screen or the camera after "Hey Atlas"</h3>
+              <h3 class="subhead" id="vt-screen-title">Answers about your screen or the camera after "Hey Atlas"</h3>
               <div class="choices" id="vt-screen" role="group" aria-label="Answers about your screen or the camera after Hey Atlas, under Only trust the talk button"></div>
               <p class="note" id="vt-screen-note"></p>
             </div>
@@ -1071,14 +1071,14 @@
               <div class="choices" id="vt-talktype" role="group" aria-label="Talk-to-type: hold a key, speak, and Jarvis types what you said"></div>
               <p class="note" id="vt-talktype-note"></p>
               <p class="note">
-                It cannot share the microphone with "hey Atlas" listening:
+                It cannot share the microphone with hands-free listening:
                 turn that off in the Jarvis bar first. Stop everything ends
                 it at once.
               </p>
             </div>
             <!-- "Better voice" (docs/JARVIS-API.md section 80): both apps. -->
             <div id="vt-wakeconfirm-box" hidden>
-              <h3 class="subhead">Second "hey Atlas" check</h3>
+              <h3 class="subhead" id="vt-wakeconfirm-title">Second "Hey Atlas" check</h3>
               <div class="choices" id="vt-wakeconfirm" role="group" aria-label="Second hey Atlas check: one detector, or two that must agree"></div>
               <p class="note" id="vt-wakeconfirm-note"></p>
             </div>
@@ -1152,7 +1152,7 @@
         <p class="note" id="voice-interrupt-note"></p>
         <p class="note">
           This PC only; your phone has its own. It matters while this PC
-          listens for "hey Atlas", and in Jarvis Live. No card either way:
+          listens for its wake phrase, and in Jarvis Live. No card either way:
           it only changes when this PC listens.
         </p>
 

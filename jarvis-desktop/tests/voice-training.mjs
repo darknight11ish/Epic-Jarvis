@@ -49,6 +49,10 @@ const T = K.TRAINING;
 const S = T.statuses;
 const A = (name) => K.TRAINING.answer(T.enroll[name]);
 const WHERE = "in the Atlas bar, on the widget, or on your phone's Home screen";
+/** The phrase THIS PC reports (`phraseOf`), which every sentence naming it
+ *  must use - never a fixed word (the ruling of 2026-11-25). The real status
+ *  below reports `hey_atlas`, so this is "Hey Atlas". */
+const PHRASE = VT.phraseOf(S.strong_ready);
 /** An older PC: today's status without the flags 2026-09-24 added. */
 const older = (st) => {
   const c = JSON.parse(JSON.stringify(st));
@@ -255,7 +259,7 @@ await check("\"asked you to repeat\" and the guided test, in plain words", async
     "2 of them were too short for very strict, which needs about 2 seconds of speech. Saying a little more helps.",
   ]);
   assert.deepEqual(VT.measureReply(A("measure")).lines, lines);
-  assert.equal(VT.TEST_SENTENCES.length, S.strong_ready.gate.training.limits.measure_max_clips);
+  assert.equal(VT.testSentences(PHRASE).length, S.strong_ready.gate.training.limits.measure_max_clips);
 });
 
 await check("the voice-ID model: the stronger one, only the small one, or none - with the README step", async () => {
@@ -691,10 +695,10 @@ const withHandsFree = (st, value, where = "settings") => {
 };
 
 await check("hands-free (\"Hey Atlas\"): same as the talk button by default, the agreed words, and only when the PC has it", async () => {
-  assert.deepEqual(VT.HANDS_FREE.map(VT.choiceText), ["Same as the talk button (default)", "Only trust the talk button"]);
-  assert.equal(VT.HANDS_FREE[0].detail,
+  assert.deepEqual(VT.handsFree(PHRASE).map(VT.choiceText), ["Same as the talk button (default)", "Only trust the talk button"]);
+  assert.equal(VT.handsFree(PHRASE)[0].detail,
     "A question started with \"Hey Atlas\" is trusted like one where you press the button.");
-  assert.equal(VT.HANDS_FREE[1].detail,
+  assert.equal(VT.handsFree(PHRASE)[1].detail,
     "Hey Atlas still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.");
   assert.equal(VT.loosens("hands_free", "same_as_button"), true);
   assert.equal(VT.loosens("hands_free", "button_only"), false);
@@ -717,7 +721,7 @@ await check("hands-free (\"Hey Atlas\"): same as the talk button by default, the
   assert.equal(got.title, "Hands-free (\"Hey Atlas\")");
   assert.deepEqual(got.labels, ["Same as the talk button (default)", "Only trust the talk button"]);
   assert.equal(got.pressed, "same_as_button");
-  assert.equal(note, VT.HANDS_FREE[0].detail);
+  assert.equal(note, VT.handsFree(PHRASE)[0].detail);
   // A PC without it: not offered at all.
   const old = await open(withHandsFree(S.strong_ready));
   const hidden = await old.evaluate(() => document.getElementById("vt-handsfree-box").hidden);
@@ -744,7 +748,7 @@ await check("hands-free: \"only trust the talk button\" is at once; going back a
   await held.close();
   assert.deepEqual(none, []);
   assert.match(said, /catching up/);
-  assert.equal(note, VT.HANDS_FREE[1].detail);
+  assert.equal(note, VT.handsFree(PHRASE)[1].detail);
   // On a live link it is sent - the PC answers with the card.
   const live = await open(strict);
   await live.click('#vt-handsfree button[data-value="same_as_button"]');
@@ -785,10 +789,10 @@ const withScreen = (st, value, where = "settings") => {
 };
 
 await check("answers about your screen or the camera after \"Hey Atlas\": on screen by default, the agreed words, and only when the PC has it", async () => {
-  assert.deepEqual(VT.HANDS_FREE_SCREEN.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
-  assert.equal(VT.HANDS_FREE_SCREEN[0].detail,
+  assert.deepEqual(VT.handsFreeScreen(PHRASE).map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
+  assert.equal(VT.handsFreeScreen(PHRASE)[0].detail,
     "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Atlas\" gets a written answer only.");
-  assert.equal(VT.HANDS_FREE_SCREEN[1].detail,
+  assert.equal(VT.handsFreeScreen(PHRASE)[1].detail,
     "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.");
   assert.equal(VT.SCREEN_ONLY_WHEN_STRICT_NOTE,
     "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen or the camera are read aloud already.");
@@ -818,13 +822,13 @@ await check("answers about your screen or the camera after \"Hey Atlas\": on scr
   assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(got.pressed, "screen_on_screen");
   assert.deepEqual(got.disabled, [false, false]);
-  assert.equal(note, `${VT.HANDS_FREE_SCREEN[0].detail} ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`);
+  assert.equal(note, `${VT.handsFreeScreen(PHRASE)[0].detail} ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`);
   assert.equal(VT.screenCovered(VT.settingsView(S.strong_ready)), true);
   // Under "Only trust the talk button": no such note - this is where it matters.
   const strict = await open(withHandsFree(S.strong_ready, "button_only"));
   const strictNote = await text(strict, "vt-screen-note");
   await strict.close();
-  assert.equal(strictNote, VT.HANDS_FREE_SCREEN[0].detail);
+  assert.equal(strictNote, VT.handsFreeScreen(PHRASE)[0].detail);
   assert.equal(VT.screenCovered(VT.settingsView(withHandsFree(S.strong_ready, "button_only"))), false);
   // A PC without it: not offered at all.
   const old = await open(withScreen(S.strong_ready));
@@ -958,7 +962,7 @@ const withBetter = (st, setting, value, blocked = "") => {
 };
 
 await check("better voice: two detectors at once, back to one is a card; the newer model is a card; both greyed out with the PC's words until installed", async () => {
-  assert.deepEqual(VT.WAKE_CONFIRM.map(VT.choiceText), ["One detector (default)", "Two detectors must agree"]);
+  assert.deepEqual(VT.wakeConfirmChoices(PHRASE).map(VT.choiceText), ["One detector (default)", "Two detectors must agree"]);
   assert.deepEqual(VT.VOICE_ID_MODEL.map(VT.choiceText),
     ["The stronger one (measured) (recommended)", "The newer one (not measured yet)"]);
   for (const c of VT.VOICE_ID_MODEL) assert.match(c.detail, /cannot tell your voice from a recording or a copy/);
@@ -988,7 +992,7 @@ await check("better voice: two detectors at once, back to one is a card; the new
     oneOn: document.querySelector('#vt-wakeconfirm button[data-value="one"]').getAttribute("aria-pressed"),
   }));
   assert.equal(got.shown, true);
-  assert.deepEqual(got.titles, ["Second \"hey Atlas\" check", "Voice-ID model"]);
+  assert.deepEqual(got.titles, ["Second \"Hey Atlas\" check", "Voice-ID model"]);
   assert.equal(got.bothOff, true);
   assert.equal(got.resnetOff, true);
   assert.equal(got.oneOn, "true");
@@ -1203,7 +1207,7 @@ await check("the \"someone else\" check in words, from the PC's real answers", a
   // The phone's three sentences and intro, word for word ("this phone" made "this PC's microphone").
   const phone = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/VoiceTraining.kt");
   const kotlin = phone.slice(phone.indexOf("val OTHER_SENTENCES"), phone.indexOf(")", phone.indexOf("val OTHER_SENTENCES")));
-  assert.deepEqual([...kotlin.matchAll(/"([^"]+)"/g)].map((m) => m[1]), [...VT.OTHER_SENTENCES]);
+  assert.deepEqual([...kotlin.matchAll(/"([^"]+)"/g)].map((m) => m[1]), [...VT.otherSentences(PHRASE)]);
 });
 
 const othersPage = (status, extra = {}) =>
@@ -1260,13 +1264,13 @@ await check("an older PC is not offered the check at all", async () => {
 });
 
 await check("the guided test's 20 sentences are ONE list: the phone's is this one, word for word", async () => {
-  assert.equal(VT.TEST_SENTENCES.length, 20);
-  assert.equal(new Set(VT.TEST_SENTENCES).size, 20);
+  assert.equal(VT.testSentences(PHRASE).length, 20);
+  assert.equal(new Set(VT.testSentences(PHRASE)).size, 20);
   const phone = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/StrictVoice.kt");
   const at = phone.indexOf("val MEASURE_SENTENCES");
   assert.ok(at > -1, "StrictVoice.MEASURE_SENTENCES is gone");
   const kotlin = phone.slice(at, phone.indexOf(")", at));
-  assert.deepEqual([...kotlin.matchAll(/"([^"]+)"/g)].map((m) => m[1]), [...VT.TEST_SENTENCES],
+  assert.deepEqual([...kotlin.matchAll(/"([^"]+)"/g)].map((m) => m[1]), [...VT.testSentences(PHRASE)],
     "the phone's guided test reads other sentences (jarvis-client voice/StrictVoice.kt)");
 });
 

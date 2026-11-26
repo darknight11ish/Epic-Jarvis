@@ -103,6 +103,20 @@ class OrtWakeModels private constructor(
          */
         const val WAKE_FILE = "hey_atlas.onnx"
 
+        /**
+         * The phrase [WAKE_FILE] answers to - the ONE source every phone plate
+         * binds to, so the sentence a person reads and the model the phone
+         * loads cannot drift apart (the owner's ruling of 2026-11-25).
+         *
+         * It is a constant, and NOT the PC's reported phrase: the phone owns
+         * its own model, and [WAKE_FILE] is fixed. The PC's phrase is a
+         * separate fact on `/api/voice/status` (`wake.phrase`), because an
+         * existing PC keeps its own `wake_phrase` and is never re-pointed by
+         * an update. `WakePhraseCopyTest` holds this constant, [WAKE_FILE] and
+         * the plates to each other.
+         */
+        const val WAKE_PHRASE = "Hey Atlas"
+
         /** Throws if a model will not load; the caller says so and stops. */
         fun load(mel: ByteArray, emb: ByteArray, wake: ByteArray): OrtWakeModels {
             val env = OrtEnvironment.getEnvironment()

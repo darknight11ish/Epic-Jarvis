@@ -92,8 +92,16 @@ check("twelve balanced read phrases, and three free-speech prompts, exactly the 
 });
 
 check("the wake words are a separate fixed set, never training material", () => {
-  assert.deepEqual([...VT.WAKE_PHRASES], ["hey Atlas"]);
-  assert.deepEqual(VT.WAKE_PHRASES, PLAN.wake_phrases);
+  const wakes = VT.wakePhrasesOf(S.strong_ready);
+  assert.deepEqual([...wakes], ["hey Atlas"]);
+  assert.deepEqual(wakes, PLAN.wake_phrases);
+  // The one default used only before the first status answer, and the two
+  // phrases a PC can report (2026-11-25): the copy renders both, and the
+  // shipped default is the phrase the shipped model hears.
+  assert.equal(VT.DEFAULT_WAKE_PHRASE, "Hey Atlas");
+  assert.equal(VT.phraseTitle("hey_atlas"), "Hey Atlas");
+  assert.equal(VT.phraseTitle("hey_jarvis"), "Hey Jarvis");
+  assert.equal(VT.phraseTitle("Hey Atlas"), "Hey Atlas");
   for (const p of [...VT.READ_PHRASES, ...VT.FREE_SPEECH]) {
     assert.doesNotMatch(p.text.toLowerCase(), /hey (jarvis|atlas)/);
   }

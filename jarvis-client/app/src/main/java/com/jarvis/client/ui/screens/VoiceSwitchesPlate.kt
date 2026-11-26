@@ -23,6 +23,7 @@ import com.jarvis.client.voice.HeardSound
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.MicBargeIn
 import com.jarvis.client.voice.OneMoment
+import com.jarvis.client.voice.OrtWakeModels
 
 /**
  * "Hey Atlas": the desktop's switch, and this phone's own listening.
@@ -99,9 +100,11 @@ internal fun WakeWordSwitchesCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dot(tint)
             Spacer(Modifier.width(10.dp))
-            // The owner's ruling of 2026-11-21 (decisions.d/2026-11-21-wake-copy-hey-jarvis.md):
-            // the copy is simple and factual, with no promise about an unshipped model.
-            Text("Wake phrase: Hey Atlas.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            // The owner's ruling of 2026-11-25: the phrase is read from the ONE
+            // constant beside WAKE_FILE (OrtWakeModels.WAKE_PHRASE), never
+            // typed here, so the plate cannot promise a phrase the phone's
+            // own model does not hear.
+            Text("Wake phrase: ${OrtWakeModels.WAKE_PHRASE}.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
             Spacer(Modifier.weight(1f))
             Text(
                 when {
@@ -118,7 +121,7 @@ internal fun WakeWordSwitchesCard(
         Text(
             when {
                 state == WakeWord.ON ->
-                    "Your desktop takes \"hey Atlas\". It checks the phrase and your voice " +
+                    "Your desktop takes \"${OrtWakeModels.WAKE_PHRASE}\". It checks the phrase and your voice " +
                         "again before it writes down a word."
                 state == WakeWord.OFF && pending ->
                     "A card to turn it on is waiting. ${com.jarvis.client.net.Approvals.WHERE} " +
@@ -146,8 +149,8 @@ internal fun WakeWordSwitchesCard(
                 WakeListen.Listening ->
                     "This phone is listening. The microphone stays open - Android shows its " +
                         "microphone dot and a notification the whole time - but nothing leaves " +
-                        "the phone until it hears \"Hey Atlas\". It also uses some battery."
-                WakeListen.Heard -> "Heard \"Hey Atlas\" - listening to what you say next."
+                        "the phone until it hears \"${OrtWakeModels.WAKE_PHRASE}\". It also uses some battery."
+                WakeListen.Heard -> "Heard \"${OrtWakeModels.WAKE_PHRASE}\" - listening to what you say next."
                 WakeListen.Paused -> "Paused while the talk button has the microphone."
                 is WakeListen.Failed -> "This phone stopped listening: ${phone.why}"
             },
@@ -434,7 +437,7 @@ internal fun WakeWordSwitchesCard(
         if (state == WakeWord.OFF && !pending && onTurnOn != null) {
             Gap(12)
             Primary(
-                text = if (busy) "Asking…" else "Turn on \"hey Atlas\"",
+                text = if (busy) "Asking…" else "Turn on \"${OrtWakeModels.WAKE_PHRASE}\"",
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onTurnOn,

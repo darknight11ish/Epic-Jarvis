@@ -760,6 +760,9 @@ function paintSettings() {
     handsBox.hidden = !view.handsFree;
     if (view.handsFree) {
       const hands = VT.handsFree(phrase);
+      say($("vt-handsfree-title"), `Hands-free ("${phrase}")`);
+      $("vt-handsfree").setAttribute("aria-label",
+        `Hands-free: how far a question started with ${phrase} is trusted`);
       group($("vt-handsfree"), hands, view.handsFree, "hands_free");
       say($("vt-handsfree-note"), hands.find((c) => c.id === view.handsFree).detail);
     }
@@ -774,6 +777,9 @@ function paintSettings() {
     screenBox.hidden = !view.handsFreeScreen;
     if (view.handsFreeScreen) {
       const screen = VT.handsFreeScreen(phrase);
+      say($("vt-screen-title"), `Answers about your screen or the camera after "${phrase}"`);
+      $("vt-screen").setAttribute("aria-label",
+        `Answers about your screen or the camera after ${phrase}, under Only trust the talk button`);
       group($("vt-screen"), screen, view.handsFreeScreen, "hands_free_screen");
       let screenNote = screen.find((c) => c.id === view.handsFreeScreen).detail;
       if (VT.screenCovered(view)) screenNote += ` ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`;
@@ -831,6 +837,11 @@ function paintSettings() {
     if (!box) continue;
     box.hidden = !chosen;
     if (!chosen) continue;
+    if (id === "vt-wakeconfirm") {
+      say($("vt-wakeconfirm-title"), `Second "${phrase}" check`);
+      $("vt-wakeconfirm").setAttribute("aria-label",
+        `Second ${phrase} check: one detector, or two that must agree`);
+    }
     group($(id), list, chosen, setting, (c) => Boolean(VT.blockedWhy(status, setting, c.id)));
     const blocked = list.map((c) => VT.blockedWhy(status, setting, c.id)).find(Boolean);
     const detail = list.find((c) => c.id === chosen).detail;

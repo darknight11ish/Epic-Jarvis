@@ -51,20 +51,47 @@ class WakePhraseCopyTest {
 
     private fun xmlText(raw: String): String = raw.replace(Regex("<!--[\\s\\S]*?-->"), "")
 
+    /**
+     * The ONE constant every phone plate binds to, read from its declaration
+     * beside `WAKE_FILE` (`OrtWakeModels.WAKE_PHRASE`). The tests below use
+     * the value, so a plate that types the words again cannot pass by
+     * accident: it would have to type the constant's own value, and the
+     * `contains("OrtWakeModels.WAKE_PHRASE")` checks would still fail.
+     */
+    private fun wakePhrase(): String {
+        val models = code(text("voice/OrtWakeModels.kt"))
+        val m = Regex("WAKE_PHRASE\\s*=\\s*\"([^\"]+)\"").find(models)
+        assertTrue(
+            "OrtWakeModels.WAKE_PHRASE is gone - the plates have no phrase to bind to",
+            m != null,
+        )
+        return m!!.groupValues[1]
+    }
+
     /* ── The sentence where the phrase is shown ─────────────────────────── */
 
     @Test
-    fun `Settings and Platform checks state the wake phrase as the ruling's factual sentence`() {
+    fun `Settings and Platform checks state the wake phrase the phone's model hears`() {
+        val phrase = wakePhrase()
+        assertEquals("WAKE_PHRASE no longer names the phrase the shipped head answers to",
+            "Hey Atlas", phrase)
+        for ((name, rel) in listOf(
+            "Settings" to "ui/screens/VoiceSwitchesPlate.kt",
+            "Platform checks" to "ui/screens/ReadinessScreen.kt",
+        )) {
+            val shown = code(text(rel))
+            assertTrue(
+                "$name no longer binds its wake-phrase sentence to OrtWakeModels.WAKE_PHRASE",
+                shown.contains("OrtWakeModels.WAKE_PHRASE"),
+            )
+            assertFalse(
+                "$name types the phrase again instead of binding it",
+                shown.contains("\"Wake phrase: $phrase.\""),
+            )
+            assertTrue("$name no longer says \"Wake phrase: ...\"", shown.contains("Wake phrase: "))
+        }
         val settings = code(text("ui/screens/VoiceSwitchesPlate.kt"))
         val checks = code(text("ui/screens/ReadinessScreen.kt"))
-        assertTrue(
-            "Settings no longer says \"Wake phrase: Hey Atlas.\"",
-            settings.contains("\"Wake phrase: Hey Atlas.\""),
-        )
-        assertTrue(
-            "Platform checks no longer says \"Wake phrase: Hey Atlas.\"",
-            checks.contains("\"Wake phrase: Hey Atlas.\""),
-        )
         assertFalse("Settings still carries the old wake-word title", settings.contains("Wake word - "))
         assertFalse("Platform checks still carries the old wake-word title", checks.contains("Wake word - "))
     }

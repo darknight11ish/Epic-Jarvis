@@ -48,6 +48,7 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.voice.OrtWakeModels
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.delay
@@ -580,7 +581,7 @@ private fun WakeWordSummaryCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dot(tint)
             Spacer(Modifier.width(10.dp))
-            Text("Wake phrase: Hey Atlas.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Text("Wake phrase: ${OrtWakeModels.WAKE_PHRASE}.", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
             Spacer(Modifier.weight(1f))
             Text(
                 when {
@@ -595,7 +596,7 @@ private fun WakeWordSummaryCard(
         }
         Gap(6)
         val desktopLine = when {
-            state == WakeWord.ON -> "Your desktop takes \"hey Atlas\"."
+            state == WakeWord.ON -> "Your desktop takes \"${OrtWakeModels.WAKE_PHRASE}\"."
             state == WakeWord.OFF && pending -> "A card to turn it on is waiting on your PC."
             state == WakeWord.OFF -> "Off. Nothing can wake Jarvis by speaking a phrase; the talk button still works."
             else -> "The desktop has not answered, so this is not known."

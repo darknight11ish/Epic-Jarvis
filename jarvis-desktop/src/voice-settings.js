@@ -21,7 +21,7 @@
  * @module voice-settings
  */
 
-import { currentSetting, settingLabel } from "./voice-training.js";
+import { currentSetting, phraseOf, settingLabel, settingName } from "./voice-training.js";
 
 const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 const yes = (v) => v === true;
@@ -133,20 +133,10 @@ export function checkLine(status) {
   };
 }
 
-/** The eight settings a card can loosen, as a sentence names them. */
-const SETTING_NAMES = {
-  strictness: "how strict the voice check is",
-  privacy: "private answers",
-  memory: "answers that use what Jarvis remembers",
-  sensitive_memory: "answers that use sensitive saved facts",
-  hands_free: "how far \"Hey Atlas\" is trusted",
-  hands_free_screen: "answers about your screen or the camera after \"Hey Atlas\"",
-  hands_free_live: "how far Jarvis Live is trusted",
-  live_end: "when Jarvis Live ends on this PC",
-  talk_to_type: "talk-to-type",
-  wake_confirm: "the second \"hey Atlas\" check",
-  voice_id_model: "the voice-ID model",
-};
+/* The setting names live in voice-training.js (`settingName`), because the
+ * two that quote the wake phrase must say the phrase THIS PC reports - never a
+ * fixed word (2026-11-25). This module used to keep a second copy of that
+ * table, and on a PC left on `hey_jarvis` it named "Hey Atlas" instead. */
 
 /**
  * How the last training - or the last card to change a voice setting -
@@ -162,7 +152,7 @@ export function lastTrainingLine(last, status) {
   const outcome = String(l.outcome || "");
   const reason = String(l.reason || "").trim().replace(/\.$/, "");
   const because = reason ? `: ${reason}.` : ".";
-  const setting = SETTING_NAMES[l.setting];
+  const setting = settingName(l.setting, phraseOf(status));
   if (setting && outcome) {
     switch (outcome) {
       case "setting_changed": {
@@ -246,6 +236,10 @@ export function talkLine(status) {
 export function wakeInfo(status, approveWhere) {
   const listening = obj(status.listening);
   const wake = obj(status.wake);
+  // The phrase THIS PC reports (`wake.title`, else `wake.phrase`), never a
+  // fixed word: an existing PC keeps its own `wake_phrase` and the installer
+  // never rewrites it (2026-11-25).
+  const phrase = phraseOf(status);
   const on = status.available !== false && yes(listening.wake_word);
   const waiting = !on && (yes(listening.wake_word_pending) || yes(wake.pending));
   if (on) {
@@ -256,7 +250,7 @@ export function wakeInfo(status, approveWhere) {
     return {
       state: "on",
       word: "On",
-      text: `On. Your PC takes "hey Atlas". It checks the phrase and your voice again before it writes down a word.${cannot}`,
+      text: `On. Your PC takes "${phrase}". It checks the phrase and your voice again before it writes down a word.${cannot}`,
     };
   }
   if (waiting) {
@@ -283,11 +277,12 @@ export function verifierLine(status) {
   const wake = obj(status.wake);
   if (!wake.verifier || typeof wake.verifier !== "object") return null;
   const v = obj(wake.verifier);
+  const phrase = phraseOf(status);
   if (yes(v.trained)) {
-    return { text: "Your own \"hey Atlas\" check: built from your training, so other people saying the phrase are turned away.", tone: "ok" };
+    return { text: `Your own "${phrase}" check: built from your training, so other people saying the phrase are turned away.`, tone: "ok" };
   }
   const why = sentence(v.why);
-  return { text: `Your own "hey Atlas" check: not built.${why ? ` ${why}` : ""}`, tone: "" };
+  return { text: `Your own "${phrase}" check: not built.${why ? ` ${why}` : ""}`, tone: "" };
 }
 
 /** Saying "stop" while Jarvis talks (`wake.stop_word`). */
@@ -310,9 +305,10 @@ export function stopWordLine(status) {
 export function wakeConfirmLine(status) {
   const c = obj(obj(status.wake).confirm);
   if (!Object.keys(c).length) return null;
-  const what = "Second \"hey Atlas\" check (microWakeWord)";
+  const phrase = phraseOf(status);
+  const what = `Second "${phrase}" check (microWakeWord)`;
   if (yes(c.active)) {
-    return { text: `${what}: on. Both detectors must hear "hey Atlas" before Jarvis wakes.`, tone: "ok" };
+    return { text: `${what}: on. Both detectors must hear "${phrase}" before Jarvis wakes.`, tone: "ok" };
   }
   const note = sentence(c.note);
   if (note) return { text: `${what}: ${note}`, tone: "warn" };

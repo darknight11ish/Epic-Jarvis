@@ -325,8 +325,9 @@ BESIDE_BINARY = (
     # beside the server, so a repository checkout and a live install both
     # find it. 215,964 bytes, SHA-256 0DBE0AA5... - `KNOWN_FILES` in
     # jarvis_wakeword.py pins it, and that module refuses a file whose hash
-    # differs. The phone does NOT ship it: docs/ARCHITECTURE.md section 8
-    # says why (its assets and its spotter would have to be rebuilt together).
+    # differs. The phone ships the same bytes in its own assets
+    # (`OrtWakeModels.WAKE_FILE`), so one model is on both surfaces;
+    # docs/ARCHITECTURE.md section 8 records the change.
     ("hey_atlas.onnx", "{repo}/backend/wakeword/hey_atlas.onnx",
      "the owner's trained \"Hey Atlas\" wake-word head; read beside jarvis_wakeword.py"),
 )

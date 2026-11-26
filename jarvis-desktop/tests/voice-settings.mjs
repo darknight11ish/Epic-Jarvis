@@ -123,7 +123,7 @@ await check("both microphones trained, everything installed, wake word on", asyn
   assert.equal(pc.text, "trained, from 4 samples.");
   assert.equal(W.talkLine(st).text, "Talk button (hold to talk): ready.");
   assert.equal(W.wakeInfo(st, WHERE).state, "on");
-  assert.match(W.wakeInfo(st, WHERE).text, /^On\. Your PC takes "hey Atlas"\./);
+  assert.match(W.wakeInfo(st, WHERE).text, /^On\. Your PC takes "Hey Atlas"\./);
   assert.doesNotMatch(W.wakeInfo(st, WHERE).text, /cannot hear/);
   assert.match(W.verifierLine(st).text, /built from your training/);
   assert.match(W.stopWordLine(st).text, /this PC can hear it/);
@@ -182,10 +182,34 @@ await check("the wake phrase is stated as a fact, and nothing promises a phrase 
   const s = await section(page);
   await page.close();
   assert.equal(s.wakeTitle, "Wake phrase: Hey Atlas.");
-  assert.match(s.all, /Your PC takes "hey Atlas"\./,
+  assert.match(s.all, /Your PC takes "Hey Atlas"\./,
     "the status sentence and the heading must name the same phrase");
+  assert.match(s.buttons.join(" "), /Turn on "Hey Atlas"/,
+    "the switch must name the phrase the PC reports");
   assert.doesNotMatch(s.all, /\bin training\b|\bbeing trained\b/i,
     "Settings promises a wake phrase that is still being trained");
+});
+
+await check("a PC left on hey_jarvis reads \"Hey Jarvis\" everywhere, not Atlas", async () => {
+  // The ruling's other half (2026-11-25): an existing PC keeps its own
+  // `wake_phrase` - the installer never rewrites `jarvis-framework.toml` - so
+  // the copy must follow what THIS PC reports. Only the phrase field differs;
+  // every other field is the backend's own real answer.
+  const oldPc = JSON.parse(JSON.stringify(C.ready_wake_on));
+  oldPc.wake.phrase = "hey_jarvis";
+  delete oldPc.wake.title;
+  const page = await open({ status: oldPc });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.wakeTitle, "Wake phrase: Hey Jarvis.");
+  assert.match(s.all, /Your PC takes "Hey Jarvis"\./);
+  assert.match(s.buttons.join(" "), /Turn on "Hey Jarvis"/);
+  assert.doesNotMatch(s.all, /Hey Atlas/,
+    "a PC that reports hey_jarvis must not be told to say \"Hey Atlas\"");
+  // The words, without a page.
+  assert.match(W.wakeInfo(oldPc, WHERE).text, /^On\. Your PC takes "Hey Jarvis"\./);
+  assert.match(W.verifierLine(oldPc).text, /"Hey Jarvis" check/);
+  assert.match(W.wakeConfirmLine(oldPc).text, /Second "Hey Jarvis" check/);
 });
 
 await check("the section shows the real status, and offers training on this PC", async () => {

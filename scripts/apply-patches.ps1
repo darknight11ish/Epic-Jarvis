@@ -2715,8 +2715,10 @@ $SHIPPED = @(
     # time (`shipped_model_dir()`), so it has to sit beside the server for a
     # PC to hear "Hey Atlas" without downloading anything. Flattened to its
     # leaf name like the static files, which is the name the module reads.
-    # `[voice] wake_phrase = "hey_atlas"` is what makes the PC use it; the
-    # default stays "hey_jarvis", so an update never re-points a working PC.
+    # `[voice] wake_phrase = "hey_atlas"` is the shipped default in
+    # `rebuilt/jarvis-framework.toml`, so a fresh install uses it. An existing
+    # PC's own file is never overwritten (step 4 above), so an update never
+    # re-points a working PC; moving it is that one line, by hand.
     'wakeword/hey_atlas.onnx'
     # --- The five the base carried but this list did not (2026-10-07) ---
     # All five were already in jarvis-backend/ and a SHIPPED module imports each,

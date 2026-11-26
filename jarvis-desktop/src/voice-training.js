@@ -1084,7 +1084,7 @@ const HANDS_FREE_TEMPLATES = Object.freeze([
   {
     id: "button_only",
     label: "Only trust the talk button",
-    detail: "\"{p}\" still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
+    detail: "{p} still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
   },
 ]);
 

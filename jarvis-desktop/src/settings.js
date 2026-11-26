@@ -83,6 +83,7 @@ import {
   wakeInfo,
 } from "./voice-settings.js";
 import { paintVoicePanel, startVoicePanel } from "./voice-panel.js";
+import { phraseOf } from "./voice-training.js";
 import {
   APPROVAL_CHOICES,
   appLockDetail,
@@ -4765,6 +4766,7 @@ const vc = {
   wakeOn: $("voice-wake-on"),
   wakeOnNote: $("voice-wake-on-note"),
   wakeStatus: $("voice-wake-status"),
+  wakeTitle: $("voice-wake-title"),
 };
 
 const VC_UPDATE =
@@ -4772,6 +4774,10 @@ const VC_UPDATE =
 
 let vcReadSeq = 0;
 let vcBusy = false;
+/** The phrase the PC last reported, for the switch's own on/off line. It is
+ *  the PC's (`wake.title` / `wake.phrase`), never a fixed word, and reads as
+ *  the shipped phrase only before the first answer (2026-11-25). */
+let vcPhrase = phraseOf(null);
 /** A voice card (the wake word's, or a training) was waiting at the last read. */
 let vcWaiting = false;
 
@@ -4820,6 +4826,14 @@ function vcPaint(status) {
   vcLine(vc.talk, voiceTalkLine(status));
 
   const wake = wakeInfo(status, APPROVE_WHERE);
+  // The heading, the button and the status sentence all say the phrase THIS
+  // PC reports. An existing PC keeps its own `wake_phrase` (the installer
+  // never rewrites `jarvis-framework.toml`), so on one left on `hey_jarvis`
+  // this section says "Hey Jarvis" - the phrase its spotter can hear - and
+  // moving it is the explicit switch in Settings (2026-11-25).
+  vcPhrase = phraseOf(status);
+  if (vc.wakeTitle) vc.wakeTitle.textContent = `Wake phrase: ${vcPhrase}.`;
+  if (vc.wakeOn) vc.wakeOn.textContent = `Turn on "${vcPhrase}"`;
   vc.card.dataset.wake = wake.state;
   vcLine(vc.wake, { text: wake.text, tone: wake.state === "waiting" ? "warn" : "" });
   // The phone's buttons: off while it is on, on while it is off and no card
@@ -4866,7 +4880,7 @@ async function loadVoice() {
   vcPaint(answer);
 }
 
-/** The PC's "hey Atlas" switch: one request, one direction. */
+/** The PC's wake-word switch: one request, one direction. */
 async function vcSetWake(enabled) {
   if (vcBusy) return;
   vcBusy = true;
@@ -4882,7 +4896,7 @@ async function vcSetWake(enabled) {
     } else if (out && typeof out.message === "string" && out.message) {
       report(vc.wakeStatus, out.message, "ok");
     } else {
-      report(vc.wakeStatus, enabled ? "\"Hey Atlas\" is on." : "\"Hey Atlas\" is off.", "ok");
+      report(vc.wakeStatus, enabled ? `"${vcPhrase}" is on.` : `"${vcPhrase}" is off.`, "ok");
     }
     announce(vc.wakeStatus.textContent);
   } catch (error) {
