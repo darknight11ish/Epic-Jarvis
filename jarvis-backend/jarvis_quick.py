@@ -10096,10 +10096,12 @@ def _plugin_name_is_one_plug_in(words: str) -> bool:
     2026-11-07 - and this lane runs BEFORE that one, so without this guard it
     would swallow them as a plug-in called "list tool". A name that ENDS in the
     word "tool" is that lane's: nothing in the live registry is called one (the
-    real names are read in `_plugin_lookup`), and the tool switch is the
     established owner of the shape. Measured, not assumed: `test_live_settings_
     parity.py` and `test_self_awareness.py` both failed on that collision before
-    this guard (2026-11-26).
+    this guard (2026-11-26). A plug-in folder that really ended in the word
+    "tool" would lose this fast-path sentence - and would still be switchable
+    through the model's own `plugin_switch` tool, whose grammar is a JSON call
+    and has no such collision.
     """
     name = _plugin_spoken_name(words)
     return bool(name) and name not in ("tool", "tools") \
