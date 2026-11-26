@@ -129,7 +129,13 @@ chunk loop - and no earlier patch writes any of them. Its other two hunks (the
 patches already wrote and cost nothing. Honest rather than drift: the owner's
 file is the only place those four blocks exist, and the patch is what stops a
 finished chat turn leaving the benchmark refusing for hours. The pin
-below records all THIRTY - those thirteen, plus private-chat.patch at position 152, added
+below records all TWENTY-SEVEN, not the THIRTY this paragraph grew to: on
+2026-11-26 `no-expiry-cards.patch`, `no-deadline-cards.patch` and
+`show-card-timer.patch` were retired into the published base and left this
+walk with their 9 + 8 + 1 hunks, so every position in the prose below after 35
+is three higher than the stack has today. The prose is kept as the dated record
+of why each remaining patch was pinned, not as a description of the current
+list - `PIN` is that. So: those thirteen, plus private-chat.patch at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -337,51 +343,19 @@ PIN = {
     # of the live jarvis_hud.py.
     "hud-origin-module.patch":                 (2, 73),    # position 144
     "hud-exclusive-bind.patch":                (1, 7),     # position 145
-    # 2026-10-23, rescue #4 narrowed by the owner's ruling Q1: only pairing a
-    # device, an approval key and a restore may have no deadline. ALL NINE of
-    # its hunks read text only the owner's PC holds - the module docstring, the
-    # APPROVAL_TIMEOUT block, `_init()`'s stale-row sweep (touched by no patch
-    # at all), `check()`'s deadline and wait loop, `pending()`'s expires_in
-    # block, and `withdraw()`'s insertion point before `history()`. Honest
-    # rather than drift, and checked the other way by
-    # backend/test_gate_no_expiry.py, which applies the patch to the published
-    # base with `git apply` (no fuzz), compiles the result and drives it. Its
-    # three jarvis_owner_check.py/devices.py halves are shipped modules, not
-    # patches, so they do not cost this walk anything.
-    # 2026-10-28 (the owner's "approval cards that are expired" on his phone):
-    # the NINTH hunk is `pending()`'s own opening - `_init()` and the SELECT -
-    # where the read-time sweep is called, and it reads 7 more lines of text
-    # only the owner's PC holds for the same reason as the rest: no patch in
-    # this walk writes that opening. It is not drift. The other direction is
-    # checked by backend/test_pending_expiry_on_read.py, which applies this
-    # patch to the published base and proves an overdue card leaves the list
-    # while a live one does not.
-    "no-expiry-cards.patch":                   (9, 69),     # position 36
-    # 2026-10-28, no-deadline-cards.patch (the owner's ruling: "if there
-    # doesn't need to be a time limit don't have one"). It is the patch
-    # no-expiry-cards.patch is written against, so its context on THAT patch's
-    # own lines costs this walk nothing (8 of its 16 hunks). The other EIGHT
-    # read text only the owner's PC holds, and every one is honest rather than
-    # drift - no patch in this walk writes it:
-    #   * `_pending_card_id()`'s SELECT and its loop, which the owner's gate
-    #     already had (`gate-touches.patch` added the digest column around it,
-    #     not the row read);
-    #   * `check()`'s ask branch: the `reused = False` line, the INSERT's
-    #     column list and its bound values - the owner's own queue write, which
-    #     the digest hunk of `gate-touches.patch` sits inside but does not
-    #     replace;
-    #   * `check()`'s late-answer block after the wait (the owner's UPDATE and
-    #     its four honour-the-late-decision returns) - that block is not
-    #     touched by any earlier patch, including `gate-outcome.patch`, whose
-    #     hunks stop at the audit line's neighbourhood;
-    #   * `pending()`'s opening (`_init()` and the SELECT);
-    #   * `decide()`'s body, and the insertion point of `still_waiting()`
-    #     before `withdraw()`;
-    #   * `withdraw()`'s docstring, which this patch rewrites.
-    # Checked the other way by backend/test_gate_no_deadline.py, which applies
-    # BOTH patches to the published base with `git apply` (no fuzz), compiles
-    # the result and drives the card's whole life.
-    "no-deadline-cards.patch":                 (8, 133),    # position 37
+    # RETIRED 2026-11-26: `no-expiry-cards.patch`, `no-deadline-cards.patch`
+    # and `show-card-timer.patch` were the three request-bounding patches
+    # (2026-10-23 rescue #4, the 2026-10-28 no-deadline ruling and the
+    # 2026-10-30 timer). Their content is now the published base's
+    # (`jarvis-backend/jarvis_gate.py`), so they left `$PATCHES` and this walk
+    # and their 9 + 8 + 1 invented hunks left with them - the walk prints 27,
+    # not the 30 this file's own history describes. Their pins are gone; the
+    # suites that used to apply them now drive the base that carries them
+    # (`backend/test_gate_no_expiry.py`, `backend/test_gate_no_deadline.py`,
+    # `backend/test_gate_card_timer.py`, `backend/test_pending_expiry_on_read.py`).
+    # The longer notes those pins carried are in this file's git history and in
+    # `backend/_stack.py`'s RATCHET comments.
+
     # 2026-10-30, unknown-risk-approvable.patch (Gemini's ruling Q2: an action
     # with no risk row is approvable with maximum friction). FIVE of its six
     # hunks read text only the owner's PC holds, and every one is honest rather
@@ -558,25 +532,9 @@ PIN = {
     # (no fuzz), compiles the result and reverses it byte for byte.
     "cloud-honesty.patch":                     (1, 7),     # position 155
 
-    # 2026-10-30, show-card-timer.patch (the owner's ruling: "if there is a card
-    # with a limited time of any kind, be sure to put the timer on it"). ONE of
-    # its three hunks reads text only the owner's PC holds, and it is honest
-    # rather than drift - no patch in this walk writes it:
-    #   * `pending()`'s own SELECT line, which the owner's gate already had.
-    #     `approval-notice.patch`, `approval-expiry.patch`,
-    #     `no-expiry-cards.patch` and `no-deadline-cards.patch` all add lines
-    #     AFTER that SELECT (the notice, the field, the sweep's call) and none
-    #     of them rewrites it - the same reason no-expiry-cards.patch is pinned
-    #     at 9/69 for `pending()`'s opening. The hunk adds `waited_until` to
-    #     that column list, so the SELECT and the three lines either side are
-    #     the owner's own text (7 lines).
-    # Its other two hunks rewrite docstrings `no-deadline-cards.patch` writes
-    # and cost nothing. Checked the other way by
-    # backend/test_gate_card_timer.py, which applies the WHOLE three-patch stack
-    # to the published base with `git apply` (no fuzz), imports the result and
-    # drives the field and its three absences - and whose `built()` fails if
-    # `git apply` refuses any of them.
-    "show-card-timer.patch":                   (1, 7),     # position 38
+    # (show-card-timer.patch's pin used to sit here; retired 2026-11-26 into
+    # the published base - see the retirement note above
+    # unknown-risk-approvable.patch.)
 
     # 2026-10-30, jobs-routes.patch (Long Fuse's way in and out: POST /api/jobs
     # and POST /api/jobs/answer). ALL FOUR of its hunks read the owner's

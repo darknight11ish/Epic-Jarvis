@@ -43,6 +43,14 @@ WHAT THIS PROVES
      A raised routine card carries `expires_in` inside its request's window; the
      number is the request's own seconds left, and it goes DOWN as the clock
      moves.
+  2b. t_the_timer_counts_from_the_request_moment_not_from_created
+     The formula, distinguished: a caller-bounded request (`timeout=120`) has
+     `waited_until` 780 seconds earlier than `created` + the action's 900, and
+     the timer follows `waited_until`, not `created`.
+  2c. t_a_stopped_request_shows_no_grace_on_the_card
+     The 60-second grace is not counted down: a card whose request has ended is
+     still pending inside it and carries no timer, and the read after the grace
+     takes it off.
   3. t_a_ceremony_card_and_an_ended_request_carry_no_timer
      The four ceremonies carry none; a row whose request has ended carries none
      (while it is still inside the grace); an unreadable `waited_until` carries
@@ -421,6 +429,109 @@ def t_a_waiting_routine_card_counts_the_request_down():
 
 
 # ---------------------------------------------------------------------------
+# 2b. WHICH MOMENT THE TIMER COUNTS FROM, AND THE GRACE IT MUST NOT SHOW
+# ---------------------------------------------------------------------------
+
+def t_the_timer_counts_from_the_request_moment_not_from_created():
+    """Test A: a caller-bounded request, where the two formulas disagree.
+
+    `check()` writes `created` and `waited_until` from the same clock reading,
+    so a request whose wait is the action's own 900 has
+    `waited_until == created + 900` - and a timer that counted from `created`
+    would print the same number. That is why the ordinary seed cannot tell the
+    two formulas apart.
+
+    A caller that passes its OWN `timeout=` is the real, producible case where
+    the two moments differ: `waited = timeout`, so
+    `waited_until == created + timeout` while
+    `created + the action's window` is still 900. The gate cannot make a
+    request "start waiting late" - the moment is written at the INSERT and the
+    wait begins there - so this is the closest real card the harness can
+    raise, and nothing is written into the database by hand.
+
+    The shipped timer must read `waited_until`. Counting from `created`
+    instead would answer ~900 here, which is what makes this test bite.
+    """
+    d, why = built()
+    if d is None:
+        return skip(why)
+    G = load_module("jarvis_gate", d)
+    with simulated_clock(G) as clock:
+        box = {}
+        t = ask(G, "send_email", box, timeout=120)
+        row = wait_for_row(G, box)
+        if row is None:
+            return check("the caller-bounded card was raised", False,
+                         box.get("no_row", "no pending row"))
+        with closing(G._connect()) as c:
+            r = c.execute("SELECT created,waited_until FROM approvals WHERE id=?",
+                          (row["id"],)).fetchone()
+        created, waited = float(r["created"]), float(r["waited_until"])
+        check("the card's request is bounded at 120, not the action's 900",
+              round(waited - created) == 120, (created, waited))
+        shipped = row.get("expires_in")
+        from_waited = ceil_seconds(waited - clock.now)
+        from_created = ceil_seconds(created + WINDOW - clock.now)
+        check("the timer counts the request's own 120 seconds left",
+              shipped == from_waited and shipped <= 120, (shipped, from_waited))
+        check("... and NOT the 900 a `created` + action-window count would give",
+              isinstance(shipped, int) and abs(from_created - shipped) > 600,
+              (shipped, from_created))
+        clock.advance(60)
+        later = row_of(G, row["id"])
+        check("... and it still follows `waited_until` a minute later",
+              later is not None
+              and later.get("expires_in") == ceil_seconds(waited - clock.now),
+              None if later is None else (later.get("expires_in"),
+                                          waited - clock.now))
+        clock.advance(61)                 # past the caller's own bound
+        t.join(timeout=10)
+
+
+def t_a_stopped_request_shows_no_grace_on_the_card():
+    """Test B: the 60-second grace is never counted down.
+
+    A routine card whose request has ENDED is still 'pending' for the sweep's
+    grace (the 2026-10-28 rule), but no request can act on it any more. If the
+    timer added the grace to the seconds it shows, the card would promise time
+    the gate refuses. The field must be ABSENT there - both apps read 0 as
+    "expired now" - and the next read after the grace must take the card off
+    the queue. A grace-carrying implementation would show ~59 seconds above.
+    """
+    d, why = built()
+    if d is None:
+        return skip(why)
+    G = load_module("jarvis_gate", d)
+    with simulated_clock(G) as clock:
+        box = {}
+        t = ask(G, "send_email", box)
+        row = wait_for_row(G, box)
+        if row is None:
+            return check("the routine card was raised", False, "no row")
+        with closing(G._connect()) as c:
+            waited = float(c.execute(
+                "SELECT waited_until FROM approvals WHERE id=?",
+                (row["id"],)).fetchone()["waited_until"])
+        clock.advance(WINDOW + 1)         # the request stops waiting
+        t.join(timeout=10)
+        inside = row_of(G, row["id"])
+        check("inside the grace the card is still pending (setup)",
+              inside is not None and state_of(G, row["id"]) == "pending",
+              None if inside is None else state_of(G, row["id"]))
+        grace_if_shown = ceil_seconds(waited + 60 - clock.now)
+        check("... the grace is still running, so a grace-carrying timer would show it",
+              grace_if_shown >= 1, grace_if_shown)
+        check("... and the card carries NO timer: the grace is not counted down",
+              inside is not None and "expires_in" not in inside,
+              None if inside is None else sorted(inside))
+        clock.advance(62)
+        gone = row_of(G, row["id"])
+        check("... and after the 60-second grace the read sweep takes it off",
+              gone is None and state_of(G, row["id"]) == "expired",
+              (gone, state_of(G, row["id"])))
+
+
+# ---------------------------------------------------------------------------
 # 3. Who carries no timer at all
 # ---------------------------------------------------------------------------
 
@@ -669,6 +780,8 @@ def t_the_timer_is_in_the_base_and_not_an_earlier_layer():
 if __name__ == "__main__":
     for fn in (t_the_base_carries_the_timer,
                t_a_waiting_routine_card_counts_the_request_down,
+               t_the_timer_counts_from_the_request_moment_not_from_created,
+               t_a_stopped_request_shows_no_grace_on_the_card,
                t_a_ceremony_card_and_an_ended_request_carry_no_timer,
                t_the_field_is_never_zero_or_negative,
                t_nothing_expires_or_is_refused_because_of_the_field,

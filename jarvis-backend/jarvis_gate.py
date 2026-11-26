@@ -3117,14 +3117,16 @@ def pending() -> list[dict]:
         # hidden bytes and padding in its text (Hermes borrow #1), and what it
         # costs when it can spend money (borrow #7). Both sit HERE, after the
         # `raised` block and before the row is returned, rather than next to
-        # `expires_in` where they were first written - and the position is not
-        # taste. Three later patches in the stack (no-expiry-cards,
-        # no-deadline-cards and show-card-timer) rewrite the lines directly
-        # above and each hunk ENDS on the "# Why this is being asked" comment;
-        # a block inserted between that comment and the `expires_in` lines
-        # breaks all three when their own suites apply them to this base with
-        # `git apply`. Nothing above changes `detail` or `prompt`, so the order
-        # the fields are attached in makes no difference to what a card says.
+        # `expires_in` where they were first written. That position was forced
+        # while the 2026-10-28/30 changes were patch-carried: three patches in
+        # the stack rewrite the lines directly above, and each hunk ENDS on the
+        # "# Why this is being asked" comment, so a block inserted between that
+        # comment and the `expires_in` lines broke all three. Since 2026-11-26
+        # those patches are this base's own content and left the stack, so the
+        # constraint is history; the position is kept because it is still the
+        # end of the timer block, and moving it would only churn the file.
+        # Nothing above changes `detail` or `prompt`, so the order the fields
+        # are attached in makes no difference to what a card says.
         #
         # HIDDEN BYTES. A card's text can quote a name from a file, an email, a
         # web page or a `.zip` - text the owner did not write. Unicode's
@@ -3462,8 +3464,9 @@ def review(days: int = 7) -> int:
 # It anchors on the owner's own text - the end of `review()` and the opening of
 # the `if __name__` block, which no patch writes - so backend/_stack.py's walk
 # materialises those five lines instead of reading them. That is the honest case
-# its RATCHET records, and `no-expiry-cards.patch`, `no-deadline-cards.patch` and
-# `unknown-risk-approvable.patch` pay exactly the same one.
+# its RATCHET records; `unknown-risk-approvable.patch` pays the same one per
+# patch. (`no-expiry-cards.patch` and `no-deadline-cards.patch` used to be named
+# here too; they were retired into this base on 2026-11-26.)
 #
 # Both `.update` calls run at import, before any `check()`.
 #

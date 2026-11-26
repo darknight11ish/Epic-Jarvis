@@ -124,9 +124,6 @@ EXEMPT = {
     "retrieve-count.patch":
         "not in the published base; its hunks read the owner's own HUD "
         "retrieval lines, so a probe would be a guess",
-    "show-card-timer.patch":
-        "not in the published base; its hunk reads the owner's own gate and "
-        "the card's timer text, which this repository does not hold",
 }
 
 
