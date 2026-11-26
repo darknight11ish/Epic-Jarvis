@@ -225,12 +225,37 @@ def t_ollama_dying_mid_answer_is_said_plainly():
 
 
 def t_only_real_tools_are_offered():
-    check("names the agent does not have are not offered",
-          AG.offered_tools({"image_gen", "ha_mcp", "calculator"}) == ["calculator"])
-    opener, calls = opener_for([("content", "ok"), ("done", "stop")])
-    turn(opener, enabled_tools={"image_gen", "something_else"})
-    check("a config listing only unknown tools sends no `tools` at all",
-          "tools" not in calls[0], repr(calls[0].keys()))
+    # The sandbox tool (`run_data_script`) is not a line in `[tools].enabled`:
+    # `offered_tools` adds it whenever the owner's own sandbox switch is ON, so
+    # the expected list below depends on a setting that lives OUTSIDE this repo.
+    # On the owner's PC that switch is on, and this check then failed at the desk
+    # while passing in CI (2026-11-26) - a red that reads like a broken change and
+    # is not one. The switch is pinned OFF for this check, which is the state the
+    # expectation was written for; `t_the_sandbox_switch_is_its_own_rule` below
+    # proves the ON behaviour separately.
+    real = AG._sandbox_offered
+    AG._sandbox_offered = lambda: False
+    try:
+        check("names the agent does not have are not offered",
+              AG.offered_tools({"image_gen", "ha_mcp", "calculator"}) == ["calculator"])
+        opener, calls = opener_for([("content", "ok"), ("done", "stop")])
+        turn(opener, enabled_tools={"image_gen", "something_else"})
+        check("a config listing only unknown tools sends no `tools` at all",
+              "tools" not in calls[0], repr(calls[0].keys()))
+    finally:
+        AG._sandbox_offered = real
+    # Both states, pinned in this test rather than read from the PC.
+    AG._sandbox_offered = lambda: True
+    try:
+        check("the owner's switch ON offers the sandbox tool, named or not",
+              "run_data_script" in AG.offered_tools({"calculator"}))
+    finally:
+        AG._sandbox_offered = lambda: False
+    try:
+        check("and OFF never offers it, even when the list names it",
+              AG.offered_tools({"run_data_script", "calculator"}) == ["calculator"])
+    finally:
+        AG._sandbox_offered = real
 
 
 # --------------------------------------------------------------------------
@@ -357,7 +382,13 @@ def t_an_approved_tool_does_not_run_for_an_app_that_left():
 
 def t_an_app_leaving_mid_answer_stops_ollama():
     aborted = []
-    opener, _ = opener_for([("content", "one "), ("content", "two "), ("content", "three"),
+    # The answer has sentence ends on purpose (2026-11-26). The false-Done gate
+    # holds only the CURRENT sentence, so the app's failed write lands on the
+    # first one while the model is still streaming - and `_read_stream` is what
+    # notices `out.gone` and raises ClientGone, the only path that calls
+    # `abort`. A punctuation-free answer is flushed after the stream ends, when
+    # there is nothing left to abort (and nothing was ever shown to nobody).
+    opener, _ = opener_for([("content", "One. "), ("content", "Two. "), ("content", "Three."),
                             ("done", "stop")])
 
     def gone(data):
@@ -368,6 +399,19 @@ def t_an_app_leaving_mid_answer_stops_ollama():
                           keepalive_seconds=1000)
     check("the request to Ollama is aborted, so the GPU stops", len(aborted) == 1, repr(aborted))
     check("and the turn reports the app gone", s["client_gone"] is True)
+
+
+def t_a_short_answer_with_no_full_stop_is_still_delivered():
+    """The false-Done gate holds the CURRENT sentence, so an answer with no full
+    stop, question mark or newline leaves in one piece when the stream ends -
+    and every word of it must still reach the owner (2026-11-26)."""
+    opener, _ = opener_for([("content", "one "), ("content", "two "),
+                            ("content", "three"), ("done", "stop")])
+    body, _ = turn(opener)
+    check("a short answer with no full stop arrives whole, in order",
+          text_of(body).strip() == "one two three", repr(text_of(body)))
+    check("and nothing was added under it",
+          "nothing was actually done" not in text_of(body).lower(), repr(text_of(body)))
 
 
 # --------------------------------------------------------------------------
@@ -567,6 +611,7 @@ if __name__ == "__main__":
                t_a_gate_that_answers_at_once_never_says_waiting,
                t_an_approved_tool_does_not_run_for_an_app_that_left,
                t_an_app_leaving_mid_answer_stops_ollama,
+               t_a_short_answer_with_no_full_stop_is_still_delivered,
                t_thinking_is_switched_off_and_never_shown,
                t_an_old_ollama_that_refuses_none_is_asked_again_without_it,
                t_a_cut_off_answer_says_length, t_every_window_gets_the_same_answer_length,

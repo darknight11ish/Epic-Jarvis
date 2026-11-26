@@ -18606,6 +18606,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # The model's own words this answer, without the lines Jarvis itself
     # adds (tell_owner) - what the "I've done it" check reads.
     model_words: list = []
+    # ONE ANSWER, ONE TRUTH (2026-11-26): the rounds whose own words claimed an
+    # action this turn did not take. Those sentences were DROPPED before the
+    # owner saw them (see _ClaimGate), and this is what says so at the end of
+    # the turn - the truth line and the `claimed_undone` receipt, never a
+    # footer under the claim. Empty on an honest turn.
+    replaced_claims: list = []
     # The Anti-Slop filter (2026-10-28): its prose/code scrub for THIS turn, or
     # None when the owner has it off (or is in `after` mode, where an audit may
     # quote what it reports). When it is None not one extra call is made.
@@ -18859,6 +18865,23 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         dropping = ((watch.retirement_result is not None and not watch.retirement_done)
                     or (watch.product_result is not None and not watch.product_done))
 
+        # ONE ANSWER, ONE TRUTH (2026-11-26): while nothing in this answer has
+        # succeeded, the model's words are held ONE SENTENCE at a time and a
+        # sentence claiming an action nobody took is DROPPED before the owner
+        # sees it - never sent and then corrected by a footer (see _ClaimGate).
+        # A turn with a real action behind it is not gated at all, so a true
+        # "Done" streams exactly as it always has.
+        claim_gate = None
+        if not holding and not dropping:
+            try:
+                import jarvis_claims as _JC
+                if not _JC.action_succeeded(steps):
+                    claim_gate = _ClaimGate(
+                        steps, spoken=watch.spoken,
+                        owner_bare_yes=_JC.bare_yes(watch.newest_own_words))
+            except Exception:
+                claim_gate = None
+
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
             if slop_filter is not None:
@@ -18871,15 +18894,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 # Kept per round too: a round that then asks for a tool goes
                 # back to the model with the words it wrote before asking.
                 rnd.text.append(clean)
-                if not dropping:
-                    model_words.append(clean)
                 if first["text"]:
                     first["text"] = False
                     out.set_status(None)
                     say_step("answer")
                 if holding:
+                    if not dropping:
+                        model_words.append(clean)
                     held.append(clean)
+                elif claim_gate is not None:
+                    for _safe in claim_gate.take(clean):
+                        model_words.append(_safe)
+                        emit(_safe)
                 else:
+                    if not dropping:
+                        model_words.append(clean)
                     emit(clean)
 
         # F2 (2026-11-09), immediately before the dispatch: on the pooled lane
@@ -18954,15 +18983,31 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         tail = stripper.flush()
         if tail:
             rnd.text.append(tail)
-            if not dropping:
-                model_words.append(tail)
             if first["text"]:
                 first["text"] = False
                 say_step("answer")
             if holding:
+                if not dropping:
+                    model_words.append(tail)
                 held.append(tail)
+            elif claim_gate is not None:
+                for _safe in claim_gate.take(tail):
+                    model_words.append(_safe)
+                    emit(_safe)
             else:
+                if not dropping:
+                    model_words.append(tail)
                 emit(tail)
+        if claim_gate is not None:
+            # The answer's last sentence has no full stop before the stream
+            # ends, so it is judged here. What the gate dropped is recorded on
+            # the turn: one true line at the end, and the `claimed_undone`
+            # receipt - never a footer under the claim.
+            for _safe in claim_gate.flush():
+                model_words.append(_safe)
+                emit(_safe)
+            if claim_gate.dropped:
+                replaced_claims.append(claim_gate)
         if holding and not rnd.tool_calls():
             # The round that answers: the table and its checked sentence go out.
             # (A round that asks for another tool sends nothing of its words.)
@@ -19098,7 +19143,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         words are treated as a claim rather than risked, the same fail-closed
         direction the private-chat gate uses. The tool's error is always the
         tool's own; nothing here invents a reason.
+
+        `claimed_undone` is set on the receipt when words were dropped (2026-
+        11-26): the fact that a false completion was removed belongs on the
+        turn's record, not in the prose - the owner reads the tool's own error,
+        and the receipt keeps the evidence.
         """
+        nonlocal claimed_undone
         watch.schedule_failed_done = True
         try:
             import jarvis_claims
@@ -19110,6 +19161,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             if text.strip():
                 emit(text)
             return
+        claimed_undone = True
         failed = watch.schedule_failed if isinstance(watch.schedule_failed, dict) else {}
         tool = str(failed.get("tool") or "")
         why = str(failed.get("why") or "").strip()
@@ -19519,6 +19571,29 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # the stream like any other - so both apps show it and a voice turn
         # says it - and before the crisis help, which stays last.
         #
+        # ONE ANSWER, ONE TRUTH (2026-11-26): a claim the gate above DROPPED is
+        # said here instead, ONCE - never as a footer under the claim it
+        # contradicts. The owner's transcript held "Done. I have added ..." and
+        # "nothing was actually done" in one answer; this is what ends that.
+        # The bare-yes line says the sharper true thing: nothing was waiting,
+        # because a yes in chat approves nothing (rule 4) and a prose proposal
+        # was never a card.
+        if replaced_claims:
+            # ...and only when the turn really did nothing. A claim dropped
+            # from a round that then called a tool which WENT THROUGH is not a
+            # lie to correct: the action ran, and the turn must not say
+            # otherwise (the same fail-closed direction as everywhere else -
+            # never a wrong "nothing was done" after something really was).
+            try:
+                import jarvis_claims as _JC_end
+                _backed_now = _JC_end.action_succeeded(steps)
+            except Exception:
+                _backed_now = True       # unknown is never "nothing ran"
+            if not _backed_now:
+                claimed_undone = True
+                _truth = replaced_claims[0].truth_line()
+                if _truth:
+                    tell_owner(_truth)
         # EVERY one of these corrections now comes from `postscript_lines`
         # (2026-10-27 audit, H1), which is also what jarvis_hud.py's cloud
         # relay asks for - so a cloud answer and a local one are corrected by
@@ -19528,6 +19603,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # live campaign of 2026-10-25: a search, the feature guide's contents,
         # a calculation, or a setting the owner named being "not available"),
         # and the crisis help line last of all.
+        #
+        # The nothing-done half can no longer fire here: a claiming sentence
+        # never reaches `model_words`, so `unbacked_claim` over it is False by
+        # construction. It is left in the list because the CLOUD relay gets the
+        # same function and has no step list of its own to gate on.
         for _kind, _line in postscript_lines(
                 "".join(model_words), steps, watch=watch,
                 crisis=watch.crisis, crisis_repeat=crisis_repeat,
@@ -19756,6 +19836,103 @@ def _nothing_done_line(text: str, steps: list, *, spoken: bool = False) -> str:
     except Exception:
         pass
     return ""
+
+
+#: Where a streamed buffer's last COMPLETE sentence ends: a run of . ! ? that
+#: is followed by whitespace, or a line break. A decimal point ("3.5"), an
+#: abbreviation in the middle of a word and the very last "." of a buffer are
+#: not boundaries - the last one is judged by `_ClaimGate.flush`, so its own
+#: separator can never be lost between two pieces.
+_CLAIM_BOUNDARY = re.compile(r"[.!?]+(?=\s)|\n")
+
+
+def _claim_release_point(buf: str) -> int:
+    """How much of `buf` is safe to judge as whole sentences, in characters."""
+    best = 0
+    for m in _CLAIM_BOUNDARY.finditer(buf):
+        best = m.end()
+    return best
+
+
+class _ClaimGate:
+    """Holds the model's words one sentence at a time and DROPS a sentence that
+    claims an action this answer did not take (2026-11-26).
+
+    THE OWNER'S TRANSCRIPT: Jarvis said "Done. I have added management classes
+    to your to-do list." and the turn's own footer said "nothing was actually
+    done - no action ran in this answer". The owner read both in one turn. The
+    footer was right; the sentence above it was not, and an annotation under a
+    false completion does not undo it.
+
+    WHY A GATE AND NOT A FOOTER. The words are streamed as they arrive, so a
+    sentence already sent cannot be unsaid, and holding the whole answer would
+    make the owner wait for the last word before the first - the one thing the
+    streaming path exists to avoid. So only the CURRENT sentence is held: as
+    soon as it ends, `jarvis_claims.strip_false_completion` decides, on the same
+    rule the old footer read. An unbacked claim is dropped and never sent;
+    every other sentence goes out exactly as the model wrote it, so the cost is
+    one sentence of delay on a turn that has no action behind it yet. A round
+    with an action already behind it is not gated at all, so a true "Done"
+    streams untouched.
+
+    `dropped` is the count; the turn says the truth ONCE at the end, never over
+    each claim - and only if nothing succeeded later in the turn. A sentence
+    dropped before a tool call that then WENT THROUGH is not a lie to correct
+    at the end: the action really ran, so the turn must not say nothing did.
+    A missing or broken jarvis_claims.py lets every word through: a broken
+    checker must cost the correction, never the answer.
+    """
+
+    def __init__(self, steps, *, spoken: bool = False, owner_bare_yes: bool = False):
+        self.steps = steps
+        self.spoken = bool(spoken)
+        self.owner_bare_yes = bool(owner_bare_yes)
+        self.buf = ""
+        self.dropped = 0
+        self.said_any = False
+
+    def take(self, piece: str) -> list:
+        """The text safe to send now, after `piece` arrived - usually [] until
+        a sentence ends. Never raises."""
+        self.buf += str(piece or "")
+        cut = _claim_release_point(self.buf)
+        if cut <= 0:
+            return []
+        chunk, self.buf = self.buf[:cut], self.buf[cut:]
+        return self._decide(chunk)
+
+    def flush(self) -> list:
+        """The last, unterminated sentence - judged by the same rule."""
+        chunk, self.buf = self.buf, ""
+        return self._decide(chunk)
+
+    def _decide(self, chunk: str) -> list:
+        if not chunk or not chunk.strip():
+            return []
+        try:
+            import jarvis_claims
+            kept, dropped = jarvis_claims.strip_false_completion(chunk, self.steps)
+        except Exception:
+            kept, dropped = chunk, 0
+        self.dropped += dropped
+        if not kept or not kept.strip():
+            return []
+        if not self.said_any:
+            kept = kept.lstrip()          # an answer never opens with a space
+            if not kept:
+                return []
+        self.said_any = True
+        return [kept]
+
+    def truth_line(self) -> str:
+        """The one true line this turn says in place of what was dropped."""
+        try:
+            import jarvis_claims
+            if self.owner_bare_yes:
+                return jarvis_claims.bare_yes_nothing_line(self.spoken)
+            return jarvis_claims.nothing_done_line(self.spoken)
+        except Exception:
+            return ""
 
 
 def _schedule_refusal_line(text: str, steps: list) -> str:
