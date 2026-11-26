@@ -61,16 +61,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Listens for "hey Jarvis" on this phone, while - and only while - the owner
+ * Listens for "Hey Atlas" on this phone, while - and only while - the owner
  * has switched it on.
  *
  * WHAT IT DOES. The microphone stays open; every 80 ms the last two seconds go
- * through [WakeSpotter] (openWakeWord's "hey jarvis" model, on this phone,
- * through ONNX Runtime). Nothing is recorded to disk, nothing is sent, and no
- * words are recognised while it waits: the spotter produces one number, "how
- * much did that sound like hey Jarvis". When that number passes the desktop's
- * own threshold, the last [WakeClip.PREROLL_SECONDS] (which hold the phrase)
- * plus everything said after it until a pause become ONE clip, posted to
+ * through [WakeSpotter] (the owner's trained "Hey Atlas" head on openWakeWord's
+ * front end, on this phone, through ONNX Runtime). Nothing is recorded to disk,
+ * nothing is sent, and no words are recognised while it waits: the spotter
+ * produces one number, "how much did that sound like "Hey Atlas"". When that
+ * number passes the desktop's own threshold, the last
+ * [WakeClip.PREROLL_SECONDS] (which hold the phrase) plus everything said after
+ * it until a pause become ONE clip, posted to
  * `/api/voice/utterance?source=wake_word` - the same route and path as the
  * talk button. The desktop checks the phrase again, checks the voice is the
  * owner's, and only then turns it into words (docs/WAKE-WORD.md).
@@ -98,9 +99,9 @@ import kotlinx.coroutines.launch
  * Then, while Jarvis speaks, it listens through Android's echo canceller
  * (the voice-call microphone, with the reply played as a voice call so the
  * canceller can take it back out) for three things only: "stop", which
- * silences the reply and does nothing else; "hey Jarvis", which silences
+ * silences the reply and does nothing else; "Hey Atlas", which silences
  * it and records what follows - sent to the PC and checked exactly like any
- * other "hey Jarvis"; and, since 2026-09-25, half a second of any speech,
+ * other "Hey Atlas"; and, since 2026-09-25, half a second of any speech,
  * which PAUSES the reply and sends about two seconds of it to the PC as
  * `source=barge_in` - "was that the owner?", never transcribed - to stop it
  * for good or carry on (voice/VoiceFlow.kt). After an answer that ends with
@@ -275,7 +276,7 @@ class WakeWordService : Service() {
                             if (cutIn == null && verdict != null &&
                                 WakeRules.verdict(verdict) == WakeRules.Verdict.AWAKE
                             ) {
-                                // "Hey Jarvis." and a pause: the next sentence.
+                                // "Hey Atlas." and a pause: the next sentence.
                                 rec.startRecording()
                                 val next = recordUntilPause(
                                     rec,
@@ -290,13 +291,13 @@ class WakeWordService : Service() {
                                 cutIn = answered.second
                             }
                             if (verdict != null && WakeRules.verdict(verdict) == WakeRules.Verdict.STOP) {
-                                return fail(verdict.reason.ifBlank { "The desktop stopped taking \"hey Jarvis\"." })
+                                return fail(verdict.reason.ifBlank { "The desktop stopped taking \"Hey Atlas\"." })
                             }
                             // Jarvis ended its answer with a question: the
-                            // owner's reply needs no "hey Jarvis" (the PC
+                            // owner's reply needs no "Hey Atlas" (the PC
                             // opened the same window when it made that
                             // sentence's sound; its owner check still runs).
-                            // Recorded like the sentence after "Hey Jarvis."
+                            // Recorded like the sentence after "Hey Atlas."
                             // alone, and sent only if it holds speech.
                             if (cutIn == null && running && voice.askedBack()) {
                                 rec.startRecording()
@@ -313,7 +314,7 @@ class WakeWordService : Service() {
                                     continue
                                 }
                             }
-                            // "Hey Jarvis" said over the reply: that sentence
+                            // "Hey Atlas" said over the reply: that sentence
                             // is the next clip, through every check again.
                             clip = cutIn
                         }
@@ -329,7 +330,7 @@ class WakeWordService : Service() {
                 }
                 // A voice turn may still be finishing (the talk button's, say);
                 // wait for it before listening again - listening for "stop"
-                // and "hey Jarvis" meanwhile when barge-in is on.
+                // and "Hey Atlas" meanwhile when barge-in is on.
                 val answering = {
                     voice.phase.value != VoiceSession.Phase.OFF &&
                         voice.phase.value != VoiceSession.Phase.CAPTURING
@@ -339,7 +340,7 @@ class WakeWordService : Service() {
                         // Voice-call mode starts inside listenWhileAnswering,
                         // once Jarvis actually speaks; ended here either way.
                         var cutIn = listenWhileAnswering(answering, models, stopHead, turnModel)
-                        // Short after a "hey Jarvis" cut-in: that cancelled the
+                        // Short after a "Hey Atlas" cut-in: that cancelled the
                         // old turn. After a "stop", the rest of the answer is
                         // still arriving on screen, silently.
                         while (running && answering()) delay(50)
@@ -365,7 +366,7 @@ class WakeWordService : Service() {
 
     /**
      * Reads until the owner stops talking. [prefix] is the audio from before
-     * the spotter fired, so the clip starts with "hey Jarvis" itself.
+     * the spotter fired, so the clip starts with "Hey Atlas" itself.
      *
      * When the sentence has ended is [TurnEnd]'s call: with Smart Turn
      * ([turnModel], and the PC's `turn.enabled`), a short pause asks the
@@ -432,8 +433,8 @@ class WakeWordService : Service() {
     /**
      * Sends [clip] as a wake-word clip and waits for the answer. With
      * barge-in on, listens meanwhile (see [listenWhileAnswering]) and
-     * returns, as the second value, what the owner said after "hey Jarvis"
-     * over the reply - or null. A "hey Jarvis" cancels the old turn
+     * returns, as the second value, what the owner said after "Hey Atlas"
+     * over the reply - or null. A "Hey Atlas" cancels the old turn
      * ([VoiceSession.interruptForWake]), so the wait for it ends as soon as
      * the owner's next sentence is recorded, not when the old answer would
      * have finished.
@@ -446,7 +447,7 @@ class WakeWordService : Service() {
     ): Pair<Heard?, ShortArray?> = coroutineScope {
         val voice = JarvisRuntime.voice
         // Rule 4, checked before EVERY post, not only the first clip. The
-        // follow-up sentence after "Hey Jarvis." and a sentence cut in over
+        // follow-up sentence after "Hey Atlas." and a sentence cut in over
         // a reply both come through here too, and each can be recorded many
         // seconds after the first check - long enough for the link to drop.
         // Nothing is sent; the listener says why and carries on.
@@ -477,7 +478,7 @@ class WakeWordService : Service() {
      * While [answering] and Jarvis is SPEAKING: the echo-cancelled
      * microphone, the wake spotter and the stop head on every 80 ms step.
      * "Stop" silences the reply ([VoiceSession.stopSpeaking]) and nothing
-     * else. "Hey Jarvis" ends the old turn ([VoiceSession.interruptForWake])
+     * else. "Hey Atlas" ends the old turn ([VoiceSession.interruptForWake])
      * and returns the clip of what follows, recorded until the owner's
      * pause. Nothing is sent from here.
      */
@@ -497,14 +498,14 @@ class WakeWordService : Service() {
         // needs. The caller ends it in its `finally`.
         voice.speaker.beginVoiceCall()
         // NOT CHANGED - needs a real-phone test first (audit T10). The
-        // sentence after a "hey Jarvis" cut-in is recorded here, on
+        // sentence after a "Hey Atlas" cut-in is recorded here, on
         // VOICE_COMMUNICATION: the path Android's echo canceller works on,
         // which is why it is used. But the owner's phone voice print was
         // trained on VOICE_RECOGNITION clips (Recorder.kt, the talk button
         // and "Train my voice"), and the call path adds its own processing -
         // echo cancelling, noise suppression, automatic gain - that the
         // training clips never had. So the PC's voice check may score these
-        // sentences lower than an ordinary "hey Jarvis" and refuse more of
+        // sentences lower than an ordinary "Hey Atlas" and refuse more of
         // them. That fails safe (a refusal, never a false pass), and it is a
         // guess until measured: say the same sentence both ways on a real
         // phone and compare the scores the PC reports, before changing the
@@ -527,7 +528,7 @@ class WakeWordService : Service() {
             // second of speech pauses the reply (when VoiceSession allows it)
             // and about two seconds of it, from where it began, go to the PC
             // to ask "was that the owner?". Never turned into words here or
-            // there. "Stop" and "hey Jarvis" below work exactly as before.
+            // there. "Stop" and "Hey Atlas" below work exactly as before.
             val speech = SpeechRun()
             var judging: Long? = null
             var heard: ShortArray? = null
@@ -616,7 +617,7 @@ class WakeWordService : Service() {
 
     /**
      * "Floating Jarvis: Bubble" (data/FloatingAvatar.kt): turns this same
-     * "hey Jarvis" listening notification into a chat bubble - the floating
+     * "Hey Atlas" listening notification into a chat bubble - the floating
      * circle Android draws over other apps - rather than posting a second
      * one.
      *
@@ -661,7 +662,7 @@ class WakeWordService : Service() {
      * SAME conversation-requirements page also requires the notification to
      * use `NotificationCompat.MessagingStyle`, unconditionally, not only for
      * apps that look like messaging apps. This notification does not use
-     * it - it is a persistent status line ("listening for hey Jarvis..."),
+     * it - it is a persistent status line ("listening for Hey Atlas..."),
      * not a chat message - and switching it to `MessagingStyle` is a real
      * redesign of what it looks like at all times, on or off Bubble mode,
      * which is outside this narrowly-scoped fix. So even with the shortcut
@@ -883,7 +884,7 @@ class WakeWordService : Service() {
         /** Smart Turn's model: `assets/turn/`. */
         private const val TURN_DIR = "turn"
         private const val RATE = WakeSpotter.SAMPLE_RATE
-        /** How long to wait for words after "hey Jarvis" before sending the phrase alone. */
+        /** How long to wait for words after "Hey Atlas" before sending the phrase alone. */
         private const val GRACE_SECONDS = 3f
         /** The clip's cap, under the desktop's 30 s. */
         private const val MAX_SECONDS = 17f
@@ -964,12 +965,12 @@ class WakeWordService : Service() {
     }
 }
 
-/** What the phone's "hey Jarvis" listener is doing. */
+/** What the phone's "Hey Atlas" listener is doing. */
 sealed interface WakeListen {
     data object Off : WakeListen
     data object Starting : WakeListen
     data object Listening : WakeListen
-    /** It heard "hey Jarvis" and is recording or sending the sentence. */
+    /** It heard "Hey Atlas" and is recording or sending the sentence. */
     data object Heard : WakeListen
     /** The talk button has the microphone. */
     data object Paused : WakeListen

@@ -1753,7 +1753,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -2028,26 +2028,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "cancelled": {
@@ -2601,7 +2601,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -2867,26 +2867,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "failed_outliers": {
@@ -3688,7 +3688,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -3954,26 +3954,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "hands_free_back_approved": {
@@ -4735,7 +4735,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -5006,26 +5006,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "hands_free_back_denied": {
@@ -5787,7 +5787,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -6058,26 +6058,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "hands_free_button_only": {
@@ -6819,7 +6819,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -7090,26 +7090,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "live_button_start_only": {
@@ -7871,7 +7871,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -8142,26 +8142,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "live_caution": {
@@ -8923,7 +8923,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -9194,26 +9194,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "live_default": {
@@ -9975,7 +9975,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -10246,26 +10246,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "live_trusted": {
@@ -11027,7 +11027,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -11298,26 +11298,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "live_trusted_denied": {
@@ -12079,7 +12079,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -12350,26 +12350,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "loosen_denied": {
@@ -12934,7 +12934,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -13209,26 +13209,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "measured": {
@@ -13827,7 +13827,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -14102,26 +14102,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "no_model": {
@@ -14651,7 +14651,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -14917,26 +14917,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "round_held": {
@@ -15500,7 +15500,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -15766,26 +15766,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "screen_aloud": {
@@ -16547,7 +16547,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -16818,26 +16818,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "screen_aloud_denied": {
@@ -17599,7 +17599,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -17870,26 +17870,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "screen_back_on_screen": {
@@ -18651,7 +18651,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -18922,26 +18922,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "sensitive_aloud": {
@@ -19643,7 +19643,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -19914,26 +19914,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "setting_waiting": {
@@ -20539,7 +20539,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -20814,26 +20814,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "small_model_only": {
@@ -21389,7 +21389,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -21660,26 +21660,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "strong_untrained": {
@@ -22229,7 +22229,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -22495,26 +22495,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "trained_more": {
@@ -23085,7 +23085,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -23360,26 +23360,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "trained_three_rounds": {
@@ -23955,7 +23955,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -24230,26 +24230,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "training_card_waiting": {
@@ -25023,7 +25023,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -25289,26 +25289,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       },
       "voice_is_enough": {
@@ -25873,7 +25873,7 @@
               ],
               "version": 1,
               "wake_phrases": [
-                "hey Jarvis"
+                "hey Atlas"
               ],
               "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
             }
@@ -26148,26 +26148,26 @@
           },
           "enabled": false,
           "pending": false,
-          "phrase": "hey_jarvis",
+          "phrase": "hey_atlas",
           "spotter": {
             "available": false,
             "engine": "openWakeWord (ONNX Runtime)",
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "stop_word": {
             "available": false,
             "threshold": 0.5,
-            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword and ~/.openjarvis/wakeword)"
           },
           "threshold": 0.5,
           "verifier": {
             "positives": 0,
             "trained": false,
-            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"Hey Atlas\""
           }
         },
         "wake_confirm": "one",
-        "wake_phrase": "hey_jarvis",
+        "wake_phrase": "hey_atlas",
         "wake_word_enabled": false
       }
     }

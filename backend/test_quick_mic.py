@@ -314,6 +314,9 @@ def t_the_phone_wake_word_is_still_checked():
                     mock.patch.object(S, "_question_open", return_value=False), \
                     mock.patch.object(W, "spot",
                                       return_value=W.Spot(True, heard=True, score=0.9)):
+                # This suite imports test_voice_strict, whose module-level pin
+                # (2026-11-25) keeps the phrase these fixtures are written for
+                # - "hey Jarvis" - so the clip's words stay in that phrase.
                 w.words = "Hey Jarvis, what time is it"
                 h = S.hear(T._clip("owner", 2.5), source="wake_word",
                            mic="phone").as_dict()

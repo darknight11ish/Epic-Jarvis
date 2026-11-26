@@ -1468,9 +1468,13 @@ it afterwards does nothing). What `jarvis_hud.py`'s route does with this dict
 is not visible here; the module used to return `{"ok": true, "enabled": ...}`
 for both. Re-read `/api/voice/status` to learn the truth:
 `listening.wake_word`, `listening.wake_word_pending`, and a `wake` block -
-`{enabled, pending, expires_in?, last?, phrase, threshold, awake_seconds,
-spotter: {available, engine, why}}` (`spotter` says whether this PC can hear
-"hey Jarvis" in a clip, which the desktop app's listening needs).
+`{enabled, pending, expires_in?, last?, phrase, title, threshold, awake_seconds,
+spotter: {available, engine, why}}` (`phrase` is the per-PC name, `"hey_atlas"`
+or `"hey_jarvis"`; `title` is the same as words, `"Hey Atlas"` / `"Hey Jarvis"`,
+so a client shows the phrase THIS PC reports rather than a fixed one - the
+desktop's Settings -> Voice does exactly that since 2026-11-25. `spotter` says
+whether this PC can hear its configured phrase in a clip, which the desktop
+app's listening needs).
 
 **`source=wake_word`.** The server refuses it while the wake word is off
 (`available: false`). Otherwise it runs, in order: Silero VAD (no speech ->

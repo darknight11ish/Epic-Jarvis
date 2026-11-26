@@ -1097,7 +1097,7 @@ pub async fn set_api_settings(
         },
         restore,
     )?;
-    // "Hey Jarvis" listening sends room audio to the server address, and was
+    // "Hey Atlas" listening sends room audio to the server address, and was
     // started against the old one. It stops, and says so; turning it on
     // again checks the new address from scratch (voice.rs
     // wake_audio_refusal - which also runs before every clip, so this is
@@ -1108,7 +1108,7 @@ pub async fn set_api_settings(
             &app,
             format!(
                 "The Jarvis server address changed to {base_after}, so listening for \
-                 \"hey Jarvis\" stopped. Turn it on again to listen with the new address."
+                 \"hey Atlas\" stopped. Turn it on again to listen with the new address."
             ),
         );
     }

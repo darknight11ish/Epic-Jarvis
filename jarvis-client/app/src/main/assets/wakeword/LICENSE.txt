@@ -1,5 +1,5 @@
-The three .onnx files in this folder are openWakeWord's pre-trained models,
-release v0.5.1, by David Scripka: https://github.com/dscripka/openWakeWord
+The three openWakeWord .onnx files in this folder are openWakeWord's pre-trained
+models, release v0.5.1, by David Scripka: https://github.com/dscripka/openWakeWord
 
   melspectrogram.onnx   SHA-256 BA2B0E0F8B7B875369A2C89CB13360FF53BAC436F2895CCED9F479FA65EB176F
   embedding_model.onnx  SHA-256 70D164290C1D095D1D4EE149BC5E00543250A7316B59F31D056CFF7BD3075C1F
@@ -9,11 +9,24 @@ They are unmodified and licensed under Creative Commons
 Attribution-NonCommercial-ShareAlike 4.0 International:
 https://creativecommons.org/licenses/by-nc-sa/4.0/
 
+hey_atlas.onnx is NOT openWakeWord's (added 2026-11-25). It is the owner's own
+"Hey Atlas" model, trained on this PC with openWakeWord's openwakeword/train.py
+v0.6.0 on openWakeWord's front end; the phone's spotter scores it instead of
+hey_jarvis_v0.1.onnx. 215,964 bytes, SHA-256
+0DBE0AA5DAF88538A4D368B5DF1654CDAED7CB9AEF8110A600735F6389CE2FBD - the same
+bytes the PC holds at backend/wakeword/hey_atlas.onnx. It is treated as
+CC BY-NC-SA 4.0 too, because its negative features derive from the
+davidscripka/openwakeword_features dataset released under that licence (the
+training folder's REPORT.md section 4 records the reasoning).
+
 NON-COMMERCIAL. This app is a non-commercial, sideloaded build (rule 5), and
 these files are the reason it has to stay that way while they are in it.
 
-The same three files are what the PC uses (voice-models\wakeword), so the
-phone and the PC give the same score for the same sound.
+The same files are what the PC uses (voice-models\wakeword), so the
+phone and the PC give the same score for the same sound. hey_jarvis_v0.1.onnx
+stays here although no code on the phone loads it any more: it is this
+repository's only real copy of openWakeWord's bytes, and the two backend
+wake-word suites build a fake PC model folder from it.
 
 stop_head.bin is not openWakeWord's. It is Jarvis's own small "stop" model
 (tools/train_stopword.py), trained on openWakeWord embeddings of synthetic

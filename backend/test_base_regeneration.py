@@ -143,7 +143,11 @@ def t_the_rule_is_the_readme_s_rule():
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",
                      "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
                      "ibm-plex-sans-400.woff2",
-                     "jarvis-180.png", "jarvis-192.png", "jarvis-512.png"],
+                     "jarvis-180.png", "jarvis-192.png", "jarvis-512.png",
+                     # ... and the owner's own "Hey Atlas" wake-word head
+                     # (2026-11-25), which jarvis_wakeword.py reads from its
+                     # own folder like the static files above
+                     "hey_atlas.onnx"],
           str(beside))
     srcs = {n: w for n, w, _y in G.BESIDE}
     check("... and the settings file comes from backend/rebuilt/, never from the source folder",
@@ -154,14 +158,16 @@ def t_the_rule_is_the_readme_s_rule():
           srcs["jarvis-visual-spec.json"].startswith("{source}"),
           srcs["jarvis-visual-spec.json"])
     binary = [n for n, _w, _y in G.BESIDE_BINARY]
-    check("... and the seven woff2 faces, the three PWA icons and the app builder's two "
-          "Gradle wrapper files are the BYTE half of the rule (copied, never decoded)",
+    check("... and the seven woff2 faces, the three PWA icons, the app builder's two "
+          "Gradle wrapper files and the wake-word model are the BYTE half of the rule "
+          "(copied, never decoded)",
           binary == ["jarvis-android-gradlew.bat", "jarvis-android-wrapper.jar",
                      "chakra-petch-400.woff2", "chakra-petch-500.woff2",
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",
                      "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
                      "ibm-plex-sans-400.woff2",
-                     "jarvis-180.png", "jarvis-192.png", "jarvis-512.png"]
+                     "jarvis-180.png", "jarvis-192.png", "jarvis-512.png",
+                     "hey_atlas.onnx"]
           and all(w.startswith("{repo}/backend/")
                   for _n, w, _y in G.BESIDE_BINARY)
           and not ({n for n, _w, _y in G.BESIDE} & set(binary)),

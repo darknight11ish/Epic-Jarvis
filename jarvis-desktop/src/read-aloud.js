@@ -18,7 +18,7 @@
  *   1. A TYPED question is never read automatically ("if i write it with my
  *      keyboard I would like it not to be read out loud by Default"), so the
  *      switch is about VOICE answers - the quickbar's push-to-talk, Jarvis
- *      Live, "hey Jarvis".
+ *      Live, "hey Atlas".
  *   2. A private answer always stays on screen, whatever the switch says
  *      (private-speech.js); the one-answer speaker and "Read out loud" items
  *      are the owner's own taps.
@@ -146,7 +146,7 @@ export const MISSING =
 export function describeReadAloud(on) {
   return on
     ? "On: a voice answer - the quickbar's push-to-talk, Jarvis Live, " +
-        '"hey Jarvis" - is read aloud in Jarvis\'s voice. A typed question is ' +
+        '"hey Atlas" - is read aloud in Jarvis\'s voice. A typed question is ' +
         "never read automatically: use the speaker beside an answer, or " +
         '"Read out loud" in its menu. A private answer always stays on screen.'
     : "Off: no voice answer is read aloud automatically. The speaker beside an " +

@@ -11,7 +11,7 @@
  * - each microphone's voice print is shown, trained or not, and an untrained
  *   PC microphone is said to use the phone's print;
  * - which voice check is installed, in the phone's words for the basic one;
- * - the owner's own "hey Jarvis" check, the wake word, "stop", Smart Turn and
+ * - the owner's own "hey Atlas" check, the wake word, "stop", Smart Turn and
  *   the talk button, each in words;
  * - training is offered here too, for THIS PC's microphone (its words and
  *   its page are tested in voice-training.mjs);
@@ -123,7 +123,7 @@ await check("both microphones trained, everything installed, wake word on", asyn
   assert.equal(pc.text, "trained, from 4 samples.");
   assert.equal(W.talkLine(st).text, "Talk button (hold to talk): ready.");
   assert.equal(W.wakeInfo(st, WHERE).state, "on");
-  assert.match(W.wakeInfo(st, WHERE).text, /^On\. Your PC takes "hey Jarvis"\./);
+  assert.match(W.wakeInfo(st, WHERE).text, /^On\. Your PC takes "Hey Atlas"\./);
   assert.doesNotMatch(W.wakeInfo(st, WHERE).text, /cannot hear/);
   assert.match(W.verifierLine(st).text, /built from your training/);
   assert.match(W.stopWordLine(st).text, /this PC can hear it/);
@@ -148,11 +148,12 @@ await check("a print made with another voice check: train again, here or on the 
   assert.equal(general.tone, "warn");
 });
 
-await check("a training approved on its card: how it ended, with the PC's reason for the \"hey Jarvis\" check", async () => {
+await check("a training approved on its card: how it ended, with the PC's reason for the \"hey Atlas\" check", async () => {
   const last = C.trained_by_card.gate.training.last;
   assert.equal(W.lastTrainingLine(last),
-    "Last training was approved: 3 samples saved. Its \"hey Jarvis\" check was not built " +
-    "(the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)).");
+    "Last training was approved: 3 samples saved. Its \"Hey Atlas\" check was not built " +
+    "(the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword " +
+    "and ~/.openjarvis/wakeword)).");
   // The phone's other outcomes, word for word.
   assert.equal(W.lastTrainingLine({ outcome: "denied" }), "Last training was denied on the card. Nothing changed.");
   assert.equal(W.lastTrainingLine({ outcome: "timed_out" }),
@@ -170,18 +171,45 @@ await check("a card to turn the wake word on is waiting: said, with where to app
 
 /* ── The page ───────────────────────────────────────────────────────────── */
 
-await check("the wake phrase is stated as a fact, and nothing promises an unshipped model", async () => {
-  // The owner's ruling of 2026-11-21 (decisions.d/2026-11-21-wake-copy-hey-jarvis.md):
-  // the copy is simple and factual - "Wake phrase: Hey Jarvis." - and the
-  // unshipped model is not named to the owner. wake-copy.mjs is the tree-wide
-  // guard; this one pins the sentence on the page the owner actually reads.
+await check("the wake phrase is stated as a fact, and nothing promises a phrase still in training", async () => {
+  // The owner's ruling of 2026-11-25 (decisions.d/2026-11-25-hey-atlas-wake-model-ships.md,
+  // and decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md for the
+  // default): the model ships, so the copy is simple and factual -
+  // "Wake phrase: Hey Atlas." - and the PC it describes says the same phrase.
+  // wake-copy.mjs is the tree-wide guard; this one pins the section the owner
+  // actually reads, status and all.
   const page = await open({ status: C.ready_wake_on });
   const s = await section(page);
   await page.close();
-  assert.equal(s.wakeTitle, "Wake phrase: Hey Jarvis.");
-  assert.doesNotMatch(s.all, /Hey Atlas/i, "Settings names an unshipped wake phrase");
+  assert.equal(s.wakeTitle, "Wake phrase: Hey Atlas.");
+  assert.match(s.all, /Your PC takes "Hey Atlas"\./,
+    "the status sentence and the heading must name the same phrase");
+  assert.match(s.buttons.join(" "), /Turn on "Hey Atlas"/,
+    "the switch must name the phrase the PC reports");
   assert.doesNotMatch(s.all, /\bin training\b|\bbeing trained\b/i,
     "Settings promises a wake phrase that is still being trained");
+});
+
+await check("a PC left on hey_jarvis reads \"Hey Jarvis\" everywhere, not Atlas", async () => {
+  // The ruling's other half (2026-11-25): an existing PC keeps its own
+  // `wake_phrase` - the installer never rewrites `jarvis-framework.toml` - so
+  // the copy must follow what THIS PC reports. Only the phrase field differs;
+  // every other field is the backend's own real answer.
+  const oldPc = JSON.parse(JSON.stringify(C.ready_wake_on));
+  oldPc.wake.phrase = "hey_jarvis";
+  delete oldPc.wake.title;
+  const page = await open({ status: oldPc });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.wakeTitle, "Wake phrase: Hey Jarvis.");
+  assert.match(s.all, /Your PC takes "Hey Jarvis"\./);
+  assert.match(s.buttons.join(" "), /Turn on "Hey Jarvis"/);
+  assert.doesNotMatch(s.all, /Hey Atlas/,
+    "a PC that reports hey_jarvis must not be told to say \"Hey Atlas\"");
+  // The words, without a page.
+  assert.match(W.wakeInfo(oldPc, WHERE).text, /^On\. Your PC takes "Hey Jarvis"\./);
+  assert.match(W.verifierLine(oldPc).text, /"Hey Jarvis" check/);
+  assert.match(W.wakeConfirmLine(oldPc).text, /Second "Hey Jarvis" check/);
 });
 
 await check("the section shows the real status, and offers training on this PC", async () => {
@@ -212,7 +240,7 @@ await check("the section shows the real status, and offers training on this PC",
   noRaw(s.all);
 });
 
-await check("everything ready: the PC's own print, the \"hey Jarvis\" check, stop and Smart Turn", async () => {
+await check("everything ready: the PC's own print, the \"hey Atlas\" check, stop and Smart Turn", async () => {
   const page = await open({ status: C.ready_wake_on });
   const s = await section(page);
   await page.close();

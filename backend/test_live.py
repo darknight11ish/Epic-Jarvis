@@ -83,6 +83,13 @@ import jarvis_live_photo_test as P  # noqa: E402
 import jarvis_stop_all as SA  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_speech as S  # noqa: E402
+# THE PHRASE IS PINNED, NOT READ (2026-11-25). Every sentence and expected
+# reason below is written for "hey Jarvis"; the SHIPPED template now says
+# `hey_atlas`, so reading the machine's phrase would change this suite's
+# answers. test_wakeword.py proves both phrases and the shipped default; this
+# suite pins the old one, exactly as that suite's own Env does.
+import jarvis_wakeword as W  # noqa: E402
+W.phrase = lambda: "hey_jarvis"
 import test_voice_strict as T  # noqa: E402  (its Table stand-in, clips and Temp folder)
 
 PASSED, FAILED = [], []
