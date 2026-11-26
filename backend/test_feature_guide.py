@@ -2514,7 +2514,10 @@ def t_a_named_choice_answers_state_and_how_to():
     before importing them.
     """
     real = tuple(R.CHOICE_SETTINGS)
-    check("ten named-choice settings to answer", len(real) == 10, len(real))
+    # 2026-11-25: `answer_style` joined CHOICE_SETTINGS (the typed answer's
+    # layout dial beside the manner pair), so ten -> eleven. Measured from the
+    # registry, not chosen.
+    check("eleven named-choice settings to answer", len(real) == 11, len(real))
     # 1. The real rows are RESOLVED by their own key and their own name - no
     #    module is read for this half.
     for choice in real:

@@ -1799,7 +1799,7 @@ def t_every_setting_reads_back_and_never_guesses():
 
     patched = _private_config_dirs()
     try:
-        check("ten named-choice settings", len(R.CHOICE_SETTINGS) == 10,
+        check("eleven named-choice settings", len(R.CHOICE_SETTINGS) == 11,
               len(R.CHOICE_SETTINGS))
         check("one number setting", len(R.NUMBER_SETTINGS) == 1,
               len(R.NUMBER_SETTINGS))

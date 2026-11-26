@@ -469,6 +469,14 @@ SHIPPED = (
     # install(), called by plugins/ready/antislop - no patch of its own. A
     # cardless preference either way, like the prompt coach.
     "jarvis_antislop.py",
+    # The typed answer's layout (2026-11-25): auto / bullets / prose in one
+    # file beside manner.json, changed from the desktop's Settings picker or
+    # from a chat sentence, and a note jarvis_agent.py puts just before the
+    # newest question on a TYPED turn (never a spoken one, whose note forbids
+    # lists). GET/POST /api/answer-style come from its own install(), called by
+    # the ready plug-in plugins/ready/answer-style - no patch of its own, the
+    # same shape the read-aloud switch took. A cardless preference either way.
+    "jarvis_answer_style.py",
     # The automatic read-aloud switch (2026-11-07): ON by default, so the big
     # HUD window reads finished answers aloud exactly as before; OFF at once,
     # by the Settings switch or by saying "stop reading your replies out loud"

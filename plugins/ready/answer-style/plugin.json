@@ -1,0 +1,7 @@
+{
+  "name": "answer-style",
+  "summary": "how a TYPED answer is laid out: GET/POST /api/answer-style, so the Settings picker and chat read and change the one value - bullet points when an answer has several parts, always bullets, or plain paragraphs. Never a spoken answer, and no card either way.",
+  "module": "jarvis_answer_style",
+  "install": "handler",
+  "stack_order": 192
+}

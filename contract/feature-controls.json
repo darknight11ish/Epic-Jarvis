@@ -14457,6 +14457,32 @@
       "handler": "jarvis_settings_registry.set_todo_carryover",
       "status": "enforced",
       "proof": "backend/test_todo_carryover.py: the sentences \"set the to-do list mode to day by day\", \"set the to-do carry-over to full daily rollover\" and \"set the to-do list mode to each day separately\" each resolve through jarvis_quick.match() to the settings_choice intent naming todo_carryover with its own value, the registry setter really moves the ONE value the scheduler reads (jarvis_schedule.set_todo_mode_here -> Scheduler.todo_mode), and the same method is what POST /api/schedule/act {\"do\": \"todo_mode\"} calls - so a phrase, the route and either app Settings switch cannot disagree."
+    },
+    {
+      "key": "answer_style",
+      "names": [
+        "the answer layout",
+        "the answer style",
+        "how answers are laid out",
+        "the layout"
+      ],
+      "section": "manner",
+      "options": {
+        "Bullet points when it helps (default)": "auto",
+        "Always bullet points for a list": "bullets",
+        "Plain paragraphs, never bullets": "prose",
+        "auto": "auto",
+        "bullets": "bullets",
+        "prose": "prose",
+        "bullet points": "bullets",
+        "bullets when it helps": "auto",
+        "plain paragraphs": "prose"
+      },
+      "desktop_found": true,
+      "phone_found": false,
+      "handler": "jarvis_settings_registry.set_answer_style",
+      "status": "enforced",
+      "proof": "backend/test_answer_style.py: 'use bullet points' and 'no bullet points' resolve through jarvis_quick.match() to the answer_style_set intent and jarvis_answer_style.current() really reads the chosen value back (t_chat_sentences_set_the_style); 'prose' adds no system message at all, so the request bytes are what they were before the module existed (t_the_note_itself); POST /api/answer-style is driven through the module's own handler and a made-up value is refused, never silently defaulted (t_the_route_both_apps_read); backend/test_settings_registry.py resolves this row by its own key and name and the setter is the same function the route calls."
     }
   ],
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",

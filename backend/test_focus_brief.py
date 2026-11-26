@@ -57,6 +57,10 @@ import jarvis_agent as AG  # noqa: E402
 # unfinished - correct to send, but not inside a test that pins the request
 # word for word. test_setup_quiz.py proves that line and its placing.
 AG.setup_state_note = lambda: None
+# The typed answer's layout (jarvis_answer_style.py, 2026-11-25) has its own
+# suite, test_answer_style.py; this one pins the request word for word, so the
+# note is left out here.
+AG.answer_style_message = lambda: None
 import _ollama_wire as W  # noqa: E402
 
 PASSED, FAILED = [], []

@@ -1456,9 +1456,9 @@ def t_undo_nothing_says_nothing_is_mine_to_take_back():
 # --------------------------------------------------------------------------
 
 class _Owners:
-    """The nine modules the ten named-choice rows own, kept in memory.
+    """The ten modules the eleven named-choice rows own, kept in memory.
 
-    WHY A STAND-IN AND NOT THE REAL MODULES. Two of the ten cannot run at a
+    WHY A STAND-IN AND NOT THE REAL MODULES. Two of the eleven cannot run at a
     test desk at all: `focus_preset` really applies a preset and raises a
     model-switch card, and the face needs the running server's appearance
     patch. The rest would need a voices pack, a Manner contract and a schedule
@@ -1503,6 +1503,9 @@ class _Owners:
             "antislop_mode": "during",
             "small_approvals": False,      # jarvis_owner_check.MODE_SMALL
             "todo_carryover": "day",
+            # 2026-11-25: the typed answer's layout joined the named-choice
+            # rows; its stand-in keeps the module's own three values.
+            "answer_style": "auto",
         }
         self.calls = []
         self._saved = {}
@@ -1546,6 +1549,23 @@ class _Owners:
             raise ValueError('The Anti-Slop mode is "during" or "after".')
         self.state["antislop_mode"] = mode
         return {"ok": True, "said": f"Anti-Slop mode: {mode}."}
+
+    def _answer_style(self, body):
+        """`jarvis_answer_style.handle_set`'s own contract: (ok, now, said).
+
+        The real module refuses a made-up style with a ValueError; this
+        stand-in refuses by returning ok=False, which is the shape
+        `set_answer_style` turns into a refusal, so the display word can never
+        pass for the VALUE here either.
+        """
+        value = str((body or {}).get("style") or "")
+        self.calls.append(("answer_style", value))
+        if value not in ("auto", "bullets", "prose"):
+            return False, self.state["answer_style"], (
+                "Choose bullet points when it helps, always bullet points, or "
+                "plain paragraphs.")
+        self.state["answer_style"] = value
+        return True, value, f"Answer layout: {value}."
 
     def _face(self, face_id):
         self.calls.append(("face", face_id))
@@ -1630,6 +1650,22 @@ class _Owners:
         av.get_state = lambda: {"mode": self.state["antislop_mode"]}
         av.set_mode = self._antislop_mode
         out["jarvis_antislop"] = av
+
+        # The typed answer's layout (2026-11-25): read through the module's own
+        # `current()` and written through its own `handle_set`, exactly the two
+        # functions the registry's row and its setter call.
+        asty = types.ModuleType("jarvis_answer_style")
+        # The module's own constants, because the row's `choices` callable is
+        # `_answer_style_choices()` and maps these labels to the ids. Without
+        # them the callable raises and `options()` comes back empty.
+        asty.AUTO, asty.BULLETS, asty.PROSE = "auto", "bullets", "prose"
+        asty.STYLES = ("auto", "bullets", "prose")
+        asty.LABEL = {"auto": "Bullet points when it helps (default)",
+                      "bullets": "Always bullet points for a list",
+                      "prose": "Plain paragraphs, never bullets"}
+        asty.current = lambda: self.state["answer_style"]
+        asty.handle_set = self._answer_style
+        out["jarvis_answer_style"] = asty
 
         oc = types.ModuleType("jarvis_owner_check")
         oc.MODE_SMALL, oc.MODE_RISKY, oc.MODE_EVERY = "small", "risky", "every"
