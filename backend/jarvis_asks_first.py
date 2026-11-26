@@ -720,6 +720,27 @@ except Exception:                            # noqa: BLE001 - a damaged drop-in 
     _storage_health = None                   # not take the ask-first page down
 if _storage_health is not None:
     TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
+
+# The data removal tool's own category row (2026-11-26, PR 1 of 3), in the same
+# shape and the same guarded way: a PC whose install predates
+# `jarvis_privacy_removal.py` keeps exactly the groups it had, and nothing here
+# errors. The row is what the OTHER work on categories can find - the owner's
+# spec asks for one canonical `Privacy` category rather than a set of
+# uncategorised tools - and it names only the tools that really exist in this
+# slice: `privacy_explain`, which is read-only and raises no card, so
+# `_app_can_switch` filters it out of SWITCHABLE_GROUPS (there is nothing to
+# switch) and the Settings page draws no empty group. PR 2 and PR 3 add
+# `privacy_status`, the batch sender and the Optery action to this same row,
+# each as it becomes real; none of them is claimed here.
+_privacy_removal = None
+try:
+    import jarvis_privacy_removal as _privacy_removal
+except ImportError:                          # an install before 2026-11-26
+    _privacy_removal = None
+except Exception:                            # noqa: BLE001 - a damaged drop-in must
+    _privacy_removal = None                   # not take the ask-first page down
+if _privacy_removal is not None:
+    TOOL_GROUPS = TOOL_GROUPS + tuple(_privacy_removal.TOOL_ROWS)
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
@@ -1497,7 +1518,21 @@ GROUPS = (
                             # app switch (it is not on LOOSE), so the honest note is
                             # NOTE_FILE - loosening this one is a hand edit, not an
                             # app setting.
-                            "delete_vault_notes"]),
+                            "delete_vault_notes",
+                            # Emptying the vault's own .trash folder
+                            # (jarvis_notes_edit.py, 2026-11-25; the owner's "full
+                            # control ... with deletions requiring a card of
+                            # approval"). This is the ONE note action that really
+                            # destroys bytes - the files are unlinked, no Undo, no
+                            # File Guardian copy (the trash IS the copy) - so its
+                            # risk row is ("no", "local") and its own card lists
+                            # every file with its age before anything goes. Its
+                            # tier is the shipped "ask" line, and it is NOT in
+                            # MUST_ASK for the same reason as the two rows above:
+                            # the module raises its card through jarvis_gate.check
+                            # and does not refuse a looser tier itself. No app
+                            # switch either, so the honest note is NOTE_FILE.
+                            "empty_vault_trash"]),
     ("Timers and reminders", ["fixed:timers", "todo_add", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",
                               # reminder-actions.patch (2026-10-27): a reminder

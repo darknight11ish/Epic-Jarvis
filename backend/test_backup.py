@@ -681,11 +681,18 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # backend module that nobody accounted for is exactly the silence this pair
     # of checks exists to close - and backing up somebody else's browser key
     # store is the one thing this archive must never do.
+    # 21 + 12 since 2026-11-26: `tracker.db` joined the EXCLUSIONS with the
+    # personal data removal tool's first slice. It is a SUBFOLDER store
+    # (`<settings>/privacy/tracker.db`), so naming it in SOURCE_DBS before the
+    # archive learns to read that folder would claim a database the copy never
+    # found - and nothing writes it until PR 2, which owns the decision to
+    # carry it under `db/privacy/` the way `health.db` is carried under
+    # `db/medical/`. `jarvis_backup.py`'s own entry has the full reason.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases this program names, split 21 + 11, are all accounted for",
-          len(B.SOURCE_DBS) == 21 and len(B.NOT_BACKED_UP) == 11,
+    check("the databases this program names, split 21 + 12, are all accounted for",
+          len(B.SOURCE_DBS) == 21 and len(B.NOT_BACKED_UP) == 12,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

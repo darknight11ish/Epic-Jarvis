@@ -118,6 +118,28 @@ can invent an ability:
   graphics cards; ask "are you using both cards" for the cards.
 - "What tools do you have?" - the registered tool count and the tools switched
   on in your own settings file (`[tools].enabled`), with their plain names.
+- "Can you list all of your tools?" / "name every tool" - the complete
+  inventory instead of the count: every tool the program has built in, one per
+  line, grouped by area and marked on or off against your own settings file.
+  The count question keeps its short answer, so the long list cannot bury the
+  count; if a name really cannot be read, the answer says which part is
+  missing rather than printing a shorter list.
+- "Which GitHub tools do you have?" / "What note tools are there?" / "show me
+  the email tools" - one group of tools, in the same one-line-per-tool form as
+  the full list, with that group's own count and each tool's on or off mark.
+  The words "vault", "repo", "PR", "mail", "gmail", "diary", "folder",
+  "photo", "browser", "facts" and "config" are understood too, and a group with
+  no tool in it says so plainly instead of guessing.
+- "Which tools are switched off?" - the other side of the switch: every tool
+  your settings file does not name, with the count, because that is the
+  question you ask when something is missing.
+- "What can the files tools do?" / "which tools work on notes" - the same
+  group answer, asked as a capability question or through a verb.
+- "What tools can change my settings?" - the settings group, split into the
+  tools whose own name says they can change one and the tools whose name marks
+  them read-only.
+- "What groups of tools do you have?" / "list your tools by category" - every
+  group, how many tools it holds and how many of those are switched on.
 - "Which of your tools ask before they act?" - the "What asks first" page's own
   rows whose words say they ask you first, with the count.
 - "refresh your abilities" - re-reads the inventory above and says in one

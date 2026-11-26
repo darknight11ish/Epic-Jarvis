@@ -290,6 +290,23 @@ it quotes the venue back with the padded window and the sentence to say, and
 is only taken when it follows a locative word, so "what is a parking minimum"
 stays the model's.
 
+TURNING A PLUG-IN ON OR OFF BY TALKING (2026-11-26, the owner's "full
+manipulation of every tool and plug in"). "turn on plugin <name>", "enable the
+<name> plugin", "turn off plugin <name>", "disable the <name> plugin", "which
+plugins are switched off" and "is plugin <name> on" are answered here now.
+Listing and adding a plug-in already were; the switch had no fast-path sentence
+at all, so with the model busy it had no answer. The action is the AGENT'S OWN,
+not a second switch: `jarvis_agent._prepare_plugin_switch`, then its own
+`jarvis_gate` card under the existing `modify_own_code` tier, then
+`_execute_plugin_switch` (ON) or `_plugin_apply` (OFF) - so the card, its words,
+its tier and the audit record are the ones that already exist, and nothing here
+writes a marker itself. ON is ONE card (the project's rule for code that runs at
+start-up); OFF is immediate and cardless, its own recorded rule for every
+switch. Both change nothing until the next start, and every answer says so. A
+name is looked up in the LIVE registry `plugin_list` reads; an unknown one is
+refused and both the words asked for and the real names are named. The two reads
+are in READ_ONLY_INTENTS and answer from that same registry.
+
 ITS OWN MEASURED FACTS, AND ITS HARD SAFETY RULES (2026-11-06, the pass-2
 self-awareness test: 135 questions, 54 PASS / 32 PARTIAL / 49 FAIL). Two
 families failed because the LOCAL MODEL answered them from imagination while
@@ -1524,6 +1541,19 @@ def match(text, now: Optional[float] = None,
     for key in ("name", "tname", "folder", "new", "old", "target", "tag", "title"):
         if got is not None and got.f.get(key):
             got.f[key] = _restore(text, got.f[key])
+    # The 2026-11-25 FULL NOTE CONTROL verbs keep names in three more keys: the
+    # section a delete removes (`heading`), the survivor a merge keeps (`into`),
+    # and the title a copy is given (`as`). They were NOT restored, so the card
+    # read 'delete the "warm-up" section' and a copy asked for as "Groceries"
+    # landed as groceries.md - the matching form, not the owner's capitals
+    # (measured 2026-11-25). A merge's names ride in `tries`, a list of name
+    # lists, so each one is restored too.
+    for key in ("heading", "into", "as"):
+        if got is not None and isinstance(got.f.get(key), str) and got.f.get(key):
+            got.f[key] = _restore(text, got.f[key])
+    if got is not None and isinstance(got.f.get("tries"), list):
+        got.f["tries"] = [[_restore(text, one) for one in names]
+                          for names in got.f["tries"] if isinstance(names, list)]
     # The template's own name is the LAST match in its sentence ("save my
     # workout log as a template called My workout" has two); the first
     # occurrence is the source note, not the new template.
@@ -1598,6 +1628,18 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if got is not None:
         return got
 
+    # --- the personal data removal tool (2026-11-26, PR 1 of 3) --------------
+    # The owner's own words about the removal tool, answered by intent and never
+    # by the model: what it is, its pros and cons, its honest limits and the two
+    # free official portals, all built from THIS PC's live state. The change
+    # sentences ("switch data removal to local") go through the settings
+    # registry's ONE row, which raises the cloud-PII consent card for the two
+    # cloud modes. Whole sentences only (see jarvis_privacy_removal.prompt), so
+    # nothing longer is swallowed.
+    got = _privacy_prompt(s, text)
+    if got is not None:
+        return got
+
     # --- the cloud/API honesty questions (2026-10-31) -----------------------
     # These come before the feature answers: the owner asked the local model
     # and got "I have no connection to any external API" while the Cloud
@@ -1668,6 +1710,14 @@ def _match(text, now: float, conversation: Optional[str] = None,
     # exact, read-only shapes and must win over the generic capability lane.
     if _NOTE_CREATE_CAPABILITY.fullmatch(s):
         return Intent("note_create_capability")
+    # "can you delete my notes?" and "can you find duplicates?" (DEF-095,
+    # 2026-11-25): read from the RAW sentence, because `normalize_spoken_command`
+    # strips the leading "can you" and "delete my notes" would then be the
+    # delete REQUEST - answered by asking which note, not by the capability
+    # sentence. Answered from what the code really does: both exist.
+    got = _note_capability_question(text)
+    if got is not None:
+        return got
     if _NOTE_LOCATION_LAST.fullmatch(s):
         return Intent("note_location", {"context": "last"})
     if _NOTE_LOCATION_VAULT.fullmatch(s):
@@ -1748,7 +1798,13 @@ def _match(text, now: float, conversation: Optional[str] = None,
     # --- plug-ins, before the reminder capability family (2026-10-31): "how
     # do I add a plugin" is a plug-in question, not "how do I ask for a
     # reminder".
-    got = _plugins_question(text)
+    # The SWITCH sentences run FIRST and by `s` (the tidied sentence), because
+    # `_plugins_question` reads the raw wording and must keep its own answers:
+    # "which plugins are switched off" used to reach it and come back as the
+    # whole list (2026-11-26).
+    got = _plugin_switch_intent(s)
+    if got is None:
+        got = _plugins_question(text)
     if got is not None:
         return got
     # The Skills menu question (2026-11-09): before the reminder family, which
@@ -2249,6 +2305,18 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if got is not None:
         return got
     got = _self_accounts(s)
+    if got is not None:
+        return got
+    # --- one category of tools, the group list, and the other side of the
+    # switch (2026-11-26) --------------------------------------------------
+    # The owner drove "which github tools do you have", "what note tools are
+    # there", "show me the email tools", "what groups of tools do you have",
+    # "list your tools by category" and "which tools are switched off" at the
+    # live app and every one fell to the model, which has no registry to read.
+    # AFTER the GitHub self-answers on purpose: "what github tools do you have"
+    # already has its own answer there (with the cards), and "which github tools
+    # do you have" does not, so the word order decides which owner answers.
+    got = _self_tools_categories(s)
     if got is not None:
         return got
     # --- the two pre-push review gates (2026-11-10, wave 16E) ----------------
@@ -10024,6 +10092,144 @@ def _plugin_installed_sentence(name: str, installed) -> str:
             ", ".join(near) + ".")
 
 
+# --------------------------------------------------------------------------
+#   Switching ONE plug-in on or off by talking (2026-11-26)
+# --------------------------------------------------------------------------
+# THE OWNER'S ASK: "full manipulation of every tool and plug in". Listing the
+# plug-ins and adding one were already answered here (`plugin_list`,
+# `plugin_install`); TURNING ONE ON OR OFF had no fast-path sentence at all -
+# the switch guard below handed every "turn on/off ... plugin" sentence to the
+# model, which is no answer at all when the model is slow, unloaded or asleep.
+# These are whole-sentence shapes and nothing else is claimed:
+#
+#   "turn on plugin <name>" / "enable the <name> plugin"   -> plugin_on
+#   "turn off plugin <name>" / "disable the <name> plugin"  -> plugin_off
+#   "which plugins are switched off"                        -> plugin_off_list
+#   "is plugin <name> on"                                   -> plugin_on_state
+#
+# THE ACTION IS THE AGENT'S OWN, not a second switch. `_run_plugin_switch` calls
+# `jarvis_agent._prepare_plugin_switch`, then the agent's own `_gate_check`
+# under the SAME `modify_own_code` action the model's `plugin_switch` tool uses,
+# then `jarvis_agent._execute_plugin_switch` (ON) or `_plugin_apply` (OFF). The
+# card, its words, its tier and the gate's audit record are therefore exactly
+# the ones that already exist (jarvis_agent.py's plugin block, 2026-11-02, and
+# docs/JARVIS-API.md section 181): nothing here writes a marker itself, and
+# nothing here approves anything.
+#
+# ON IS CARDED, OFF IS IMMEDIATE AND CARDLESS - the project's own on/off rule,
+# recorded for 2026-11-02 in docs/DECISIONS.md. ON waits on its ONE card in a
+# worker thread and this lane answers "one approval card is waiting" without
+# holding the chat request open, the same shape the carded settings use; a
+# denial, a timeout or a loosened tier changes nothing.
+#
+# THE NAME IS THE REGISTRY'S, NEVER A GUESS. `_plugin_lookup` looks the owner's
+# words up in the LIVE registry `jarvis_agent._plugin_rows` reads (the same
+# `jarvis_plugins` folders `plugin_list` shows) - exact name first, then the one
+# alias the catalogue answers already use (spaces for hyphens). A miss is
+# refused and the answer names both the words it looked for and the real names.
+# The reads (`plugin_off_list`, `plugin_on_state`) answer from that same
+# registry and are in READ_ONLY_INTENTS: no card, no write, no model.
+_PLUGIN_SPOKEN_NAME = r"(?P<name>[a-z0-9][a-z0-9 _-]{0,63}?)"
+
+#: The word for one of these folders, spelled the way the owner may type or say
+#: it: "plugin" and "plug-in" are the same thing here.
+_PLUGIN_WORD = r"plug-?in"
+
+#: ON, in the owner's own five shapes.
+_PLUGIN_ON_PATTERNS = (
+    re.compile(rf"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+"
+               rf"{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}"),
+    re.compile(rf"(?:turn|switch)\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}\s+on"),
+    re.compile(rf"enable\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"enable\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+{_PLUGIN_WORD}"),
+)
+#: OFF, the same five shapes the other way.
+_PLUGIN_OFF_PATTERNS = (
+    re.compile(rf"(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+"
+               rf"{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}"),
+    re.compile(rf"(?:turn|switch)\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}\s+off"),
+    re.compile(rf"disable\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"disable\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+{_PLUGIN_WORD}"),
+)
+#: "which plug-ins are switched off" - the complement, with a count. It must be
+#: read BEFORE `_plugins_question`, whose generic "what/which plug-ins" shape
+#: used to answer it with the whole list (measured before this change).
+_PLUGIN_OFF_LIST = re.compile(
+    r"(?:which|what)\s+plug-?ins?\s+(?:are|is|were|have\s+been)\s+"
+    r"(?:currently\s+|now\s+)?(?:"
+    r"(?:switched|turned)\s+off"
+    r"|disabled"
+    r"|off"
+    r")\b")
+#: "is plug-in <name> on" - the true state, read from the registry. Two
+#: patterns rather than one alternation: `re` refuses the same group name twice
+#: in one expression.
+_PLUGIN_ON_STATE_PATTERNS = (
+    re.compile(rf"is\s+(?:the\s+)?{_PLUGIN_WORD}\s+{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"(?:on|switched\s+on|running)\b"),
+    re.compile(rf"is\s+(?:the\s+)?{_PLUGIN_SPOKEN_NAME}\s+{_PLUGIN_WORD}\s+"
+               rf"(?:on|switched\s+on|running)\b"),
+)
+
+
+def _plugin_spoken_name(words: str) -> str:
+    """The owner's own words for one plug-in, tidied to a name to look up."""
+    return " ".join(str(words or "").strip().lower().split())
+
+
+def _plugin_name_is_one_plug_in(words: str) -> bool:
+    """Is this captured name a plug-in, or the TOOL-switch lane's sentence?
+
+    "turn on the plugin list tool" and "turn off the plugin switch tool" are
+    the Tools page's own two switches (`plugin_list` and `plugin_switch`), which
+    `_TOOL_SWITCH` / `find_tool_target` in `_settings_adjust` have answered since
+    2026-11-07 - and this lane runs BEFORE that one, so without this guard it
+    would swallow them as a plug-in called "list tool". A name that ENDS in the
+    word "tool" is that lane's: nothing in the live registry is called one (the
+    established owner of the shape. Measured, not assumed: `test_live_settings_
+    parity.py` and `test_self_awareness.py` both failed on that collision before
+    this guard (2026-11-26). A plug-in folder that really ended in the word
+    "tool" would lose this fast-path sentence - and would still be switchable
+    through the model's own `plugin_switch` tool, whose grammar is a JSON call
+    and has no such collision.
+    """
+    name = _plugin_spoken_name(words)
+    return bool(name) and name not in ("tool", "tools") \
+        and not name.endswith((" tool", " tools"))
+
+
+def _plugin_switch_intent(s: str) -> Optional[Intent]:
+    """The intent for one plug-in switch/read sentence, or None.
+
+    `s` is the sentence as `normalize_spoken_command` leaves it (lower-cased,
+    polite lead-ins and trailing punctuation gone). WHOLE sentences only, by
+    `fullmatch`, so an ordinary sentence that merely mentions a plug-in keeps
+    `_plugins_question`'s own answer (and the model's, before it).
+    """
+    for pattern in _PLUGIN_ON_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m and _plugin_name_is_one_plug_in(m.group("name")):
+            return Intent("plugin_on", {"name": _plugin_spoken_name(m.group("name"))})
+    for pattern in _PLUGIN_OFF_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m and _plugin_name_is_one_plug_in(m.group("name")):
+            return Intent("plugin_off", {"name": _plugin_spoken_name(m.group("name"))})
+    if _PLUGIN_OFF_LIST.fullmatch(s):
+        return Intent("plugin_off_list")
+    for pattern in _PLUGIN_ON_STATE_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m and _plugin_name_is_one_plug_in(m.group("name")):
+            return Intent("plugin_on_state",
+                          {"name": _plugin_spoken_name(m.group("name"))})
+    return None
+
+
 def _plugins_question(raw) -> Optional[Intent]:
     """Plug-in capability questions, from the RAW sentence (2026-10-31)."""
     text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
@@ -10140,6 +10346,15 @@ def _skills_menu_question(raw) -> Optional[Intent]:
 
 
 def _run_plugins(name: str, f: dict, surface: str) -> "Result":
+    # The four sentences of 2026-11-26 run FIRST: each reads the LIVE registry
+    # through the agent (`_plugin_registry_rows`), so reading the catalogue's
+    # installed names for them would be a second, needless look at the folder.
+    if name in ("plugin_on", "plugin_off"):
+        return _run_plugin_switch(name, str(f.get("name") or ""))
+    if name == "plugin_off_list":
+        return _run_plugin_off_list()
+    if name == "plugin_on_state":
+        return _run_plugin_on_state(str(f.get("name") or ""))
     installed = _plugin_installed_names(_plugin_entries())
     if name == "plugin_list":
         if surface == "phone":
@@ -10161,6 +10376,297 @@ def _run_plugins(name: str, f: dict, surface: str) -> "Result":
     if name == "plugin_install":
         return Result(_plugin_install_sentence(), "plugin_install")
     return Result(_plugin_list_sentence(installed), "plugin_list")
+
+
+#: How long the fast path waits for a carded plug-in switch before it answers
+#: "one approval card is waiting". The gate blocks on a person, so a chat
+#: request must not: the same shape `jarvis_note_capture.capture(wait_s=...)`
+#: uses, and long enough for the card row to exist before the app reads the
+#: pending list.
+PLUGIN_SWITCH_WAIT_S = 1.5
+
+#: The answer after the ONE ON card has been raised and is still waiting. It
+#: says the same moment the agent's own answers do: a plug-in is loaded at
+#: start-up, so neither direction is live in the process that is already running.
+PLUGIN_ON_WAITING = (
+    "One approval card is waiting for your yes: switching the {name!r} plug-in on. "
+    "Nothing has changed yet. If you approve it, the plug-in loads the next time "
+    "Jarvis starts - I cannot restart Jarvis for you. If you say no, nothing "
+    "changes.")
+
+#: The plain answer when this PC's backend has no `jarvis_agent.py` to ask.
+PLUGIN_SWITCH_MISSING = (
+    "Your PC's Jarvis cannot switch plug-ins yet - run apply-patches.ps1 on the PC.")
+
+
+def _plugin_agent():
+    """`jarvis_agent`, or None - the module that OWNS the plug-in switch."""
+    try:
+        import jarvis_agent
+        return jarvis_agent
+    except Exception:                        # noqa: BLE001 - module absent
+        return None
+
+
+def _plugin_gate():
+    """The agent's own fail-closed gate, or None.
+
+    ONE seam, so a suite can stand in for the real card exactly as the agent's
+    own suites do (`jarvis_agent._one_call(checker=...)`); the shipped path
+    always reads `jarvis_agent._gate_check`, never a second wrapper.
+    """
+    AG = _plugin_agent()
+    return getattr(AG, "_gate_check", None) if AG is not None else None
+
+
+def _plugin_registry_rows() -> dict:
+    """The LIVE plug-in registry, as the agent's own `plugin_list` reads it.
+
+    `jarvis_agent._plugin_rows` is the one reader: it discovers the folders
+    with `jarvis_plugins` and folds in the loader's own `status()`, so a
+    plug-in's state and the reason it is off can never disagree between the
+    list tool and this fast path. READ ONLY: it imports nothing and writes
+    nothing.
+    """
+    AG = _plugin_agent()
+    if AG is None:
+        return {"ok": False, "error": PLUGIN_SWITCH_MISSING}
+    try:
+        rows = AG._plugin_rows()
+    except Exception as exc:                 # noqa: BLE001 - the registry
+        return {"ok": False,
+                "error": (f"I cannot read the plug-in folder on this PC just now "
+                          f"({type(exc).__name__}).")}
+    if not isinstance(rows, dict) or not rows.get("ok"):
+        said = ""
+        if isinstance(rows, dict):
+            said = str(rows.get("error") or "").strip()
+        return {"ok": False,
+                "error": said or "I cannot read the plug-in folder on this PC just now."}
+    return rows
+
+
+def _plugin_rows_by_name(rows: dict) -> dict:
+    """{name: row} from one registry answer, in the registry's own names."""
+    out = {}
+    for row in (rows.get("plugins") or []):
+        if isinstance(row, dict) and row.get("name"):
+            out[str(row["name"])] = row
+    return out
+
+
+def _plugin_lookup(words: str, rows: dict) -> tuple:
+    """(the registry's own name for what the owner said, "") or ("", why not).
+
+    Exact name first, any case (what the agent's own `_plugin_check` accepts),
+    then the ONE alias the catalogue answers already use: the same words with
+    spaces where the folder has hyphens (or hyphens where it has spaces). A
+    miss is a refusal, never a nearest-match guess, and it names the words it
+    looked for - the same rule `jarvis_agent._plugin_check` holds itself to.
+    """
+    asked = _plugin_spoken_name(words)
+    if not asked:
+        return "", ("Which plug-in? Name the one you mean, exactly as "
+                    "\"plugin list\" shows it.")
+    by_name = _plugin_rows_by_name(rows)
+    if not by_name:
+        return "", ("There are no plug-in folders on this PC, so there is no "
+                    "plug-in to name.")
+    hits = [name for name in by_name if name.lower() == asked]
+    if len(hits) == 1:
+        return hits[0], ""
+    if len(hits) > 1:
+        return "", (f"more than one plug-in folder is called {asked!r} (they differ "
+                    f"only in capitals), so I cannot tell which one you mean")
+    variants = {asked.replace(" ", "-"), asked.replace("-", " ")}
+    hits = sorted(name for name in by_name if name.lower() in variants)
+    if len(hits) == 1:
+        return hits[0], ""
+    if len(hits) > 1:
+        return "", (f"more than one plug-in matches {asked!r} ({', '.join(hits)}), "
+                    f"so I cannot tell which one you mean")
+    return "", (f"There is no plug-in called {asked!r} on this PC. The plug-ins "
+                f"here are: {', '.join(sorted(by_name))}.")
+
+
+def _plugin_said(result) -> str:
+    """The plain answer for one finished switch: the agent's own message, or
+    its own refusal as a sentence that says nothing was changed."""
+    result = result if isinstance(result, dict) else {}
+    said = str(result.get("message") or "").strip()
+    if said:
+        return said
+    problem = " ".join(str(result.get("error") or "").split())
+    if not problem:
+        return "Nothing was changed - the plug-in switch gave no answer."
+    problem = problem[:1].upper() + problem[1:]
+    if not problem.endswith((".", "!", "?")):
+        problem += "."
+    low = problem.lower()
+    if "nothing was changed" in low or "nobody was asked" in low:
+        return problem
+    return problem + " Nothing was changed."
+
+
+def _plugin_denied_said(verdict) -> str:
+    """The answer when the gate did not allow the card - in the gate's own
+    outcome words, never a claim that something happened."""
+    outcome = str(getattr(verdict, "outcome", None) or "")
+    reason = " ".join(str(getattr(verdict, "reason", "") or "").split())
+    if outcome == "denied":
+        return ("Nothing was changed - you said no to the card, so the plug-in "
+                "stays off.")
+    if outcome == "timed_out":
+        return ("Nothing was changed - nobody answered the card before it timed "
+                "out, so the plug-in stays off.")
+    said = "Nothing was changed - the card was not approved"
+    return said + (f" ({reason})." if reason else ".")
+
+
+def _plugin_switch_ask(AG, gate, args: dict, state, plan_text: str,
+                       box: dict) -> None:
+    """The worker behind a carded ON: the agent's OWN gate, then its OWN write.
+
+    `state` and `plan_text` are exactly what `_prepare_plugin_switch` produced
+    before the card existed, so the write lands on the plugin and folder the
+    card named. A person's yes is the only thing that reaches `execute`: a
+    denial, a timeout, or a loosened tier with nobody asked leaves the disk
+    untouched.
+    """
+    try:
+        prompt = AG._gate_prompt(AG.PLUGIN_SWITCH_TOOL, args)
+        verdict = gate(AG.PLUGIN_TOGGLE_ACTION, {"text": plan_text}, prompt)
+        if not getattr(verdict, "allowed", False):
+            box["result"] = {"ok": False, "message": _plugin_denied_said(verdict)}
+        elif not AG._a_person_said_yes(verdict):
+            # EVERY carded write is in NEEDS_A_PERSON; this is the belt that
+            # still refuses when a settings file loosens `modify_own_code`.
+            vtier = getattr(verdict, "tier", None) or "unknown"
+            vaction = getattr(verdict, "action", None) or AG.PLUGIN_TOGGLE_ACTION
+            why = (AG.NEEDS_A_PERSON.get(AG.PLUGIN_SWITCH_TOOL)
+                   or getattr(AG, "OUTSIDE_PROGRAM_WHY", ""))
+            box["result"] = {
+                "ok": False,
+                "message": "I did not switch the plug-in on. " + AG.NOBODY_ASKED_WORDS.format(
+                    name=AG.PLUGIN_SWITCH_TOOL, why=why, action=vaction),
+                "gate": AG.NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
+        else:
+            box["result"] = AG._execute_plugin_switch(args, state)
+    except Exception as exc:                 # noqa: BLE001 - said, never hidden
+        box["result"] = {"ok": False,
+                         "error": (f"the plug-in switch raised "
+                                   f"{type(exc).__name__}: {exc}")}
+    finally:
+        box["done"] = True
+
+
+def _run_plugin_switch(intent: str, plugin: str) -> "Result":
+    """ONE named plug-in on or off, through the AGENT'S prepare -> gate ->
+    execute path - never a second switch mechanism.
+
+    OFF is immediate and cardless (the project's own on/off rule), ON raises the
+    ONE existing `modify_own_code` card in a worker thread and this lane answers
+    "waiting" instead of holding the chat request open. Nothing is written
+    before a person says yes, and a denial changes nothing.
+    """
+    AG = _plugin_agent()
+    gate = _plugin_gate()
+    if AG is None or gate is None:
+        return Result(PLUGIN_SWITCH_MISSING, intent)
+    rows = _plugin_registry_rows()
+    if not rows.get("ok"):
+        return Result(str(rows.get("error") or PLUGIN_SWITCH_MISSING), intent)
+    real, _why = _plugin_lookup(plugin, rows)
+    action = "on" if intent == "plugin_on" else "off"
+    args = {"plugin": real or _plugin_spoken_name(plugin), "action": action}
+    try:
+        state, plan_text = AG._prepare_plugin_switch(args)
+    except Exception as exc:                 # noqa: BLE001 - said, never hidden
+        return Result(f"The plug-in switch could not be prepared "
+                      f"({type(exc).__name__}), so nothing was changed.", intent)
+    if isinstance(state, AG._PluginRefused):
+        return Result(_plugin_said({"ok": False, "error": state.problem}), intent)
+    if isinstance(state, AG._PluginNoChange):
+        return Result(_plugin_said(dict(state.listed)), intent)
+    if isinstance(state, AG._PluginOffNow):
+        # OFF: the agent's own writer, at once - the owner's rule for every
+        # switch ("turning it off is immediate"). No card exists for this half.
+        try:
+            written = AG._plugin_apply(state.state)
+        except Exception as exc:             # noqa: BLE001 - said, never hidden
+            return Result(f"The plug-in could not be switched off "
+                          f"({type(exc).__name__}), so nothing was changed.", intent)
+        return Result(_plugin_said(written), intent)
+    # ON: the plan became the ONE card. It waits for a person in a worker so the
+    # chat request is not held open; an approval applies the SAME plan.
+    box: dict = {}
+    worker = threading.Thread(target=_plugin_switch_ask,
+                              args=(AG, gate, args, state, plan_text, box),
+                              name="jarvis-plugin-switch", daemon=True)
+    try:
+        worker.start()
+    except Exception:                        # noqa: BLE001 - the thread
+        return Result("I could not raise the approval card, so nothing was "
+                      "changed.", intent)
+    worker.join(timeout=PLUGIN_SWITCH_WAIT_S)
+    if box.get("done"):
+        return Result(_plugin_said(box.get("result")), intent)
+    return Result(PLUGIN_ON_WAITING.format(name=args["plugin"]), intent)
+
+
+def _run_plugin_off_list() -> "Result":
+    """"which plug-ins are switched off" - the complement, with a count."""
+    rows = _plugin_registry_rows()
+    if not rows.get("ok"):
+        return Result(str(rows.get("error") or PLUGIN_SWITCH_MISSING),
+                      "plugin_off_list")
+    plugins = [p for p in (rows.get("plugins") or []) if isinstance(p, dict)]
+    folder = str(rows.get("folder") or "")
+    if rows.get("folder_exists") is False:
+        return Result(f"There is no plug-in folder at {folder}, so no plug-in is "
+                      f"installed and none is switched off.", "plugin_off_list")
+    if not plugins:
+        return Result("There are no plug-ins on this PC, so none is switched off.",
+                      "plugin_off_list")
+    off = sorted(str(p.get("name")) for p in plugins if not p.get("on"))
+    total = len(plugins)
+    if not off:
+        return Result(f"None - all {total} plug-ins on this PC are switched on.",
+                      "plugin_off_list")
+    head = (f"{len(off)} of the {total} plug-ins on this PC are switched off: "
+            f"{', '.join(off)}.")
+    return Result(head + " Say \"turn on plugin <name>\" to switch one back on.",
+                  "plugin_off_list")
+
+
+def _run_plugin_on_state(plugin: str) -> "Result":
+    """"is plug-in <name> on" - the TRUE state, from the live registry."""
+    rows = _plugin_registry_rows()
+    if not rows.get("ok"):
+        return Result(str(rows.get("error") or PLUGIN_SWITCH_MISSING),
+                      "plugin_on_state")
+    real, why = _plugin_lookup(plugin, rows)
+    if not real:
+        said = why[:1].upper() + why[1:] if why else "Which plug-in?"
+        return Result(said, "plugin_on_state")
+    row = _plugin_rows_by_name(rows).get(real) or {}
+    label = f"the {real!r} plug-in"
+    reason = str(row.get("why") or "").strip().rstrip(".")
+    if row.get("on"):
+        if reason:
+            # Still running, but something about it is not healthy any more
+            # (its folder has gone since start-up): the loader's own sentence.
+            return Result(f"Yes - {label} is switched on. "
+                          f"{reason[:1].upper() + reason[1:]}.", "plugin_on_state")
+        return Result(f"Yes - {label} is switched on: it loaded when Jarvis "
+                      f"started.", "plugin_on_state")
+    if reason[:1].isupper():
+        # The loader's own sentence ("Jarvis has not run its plugin loader ...")
+        # reads as its own sentence, not as the tail of ours.
+        return Result(f"No - {label} is not on. {reason}.", "plugin_on_state")
+    if reason:
+        return Result(f"No - {label} is not on: it is {reason}.", "plugin_on_state")
+    return Result(f"No - {label} is not on in this process.", "plugin_on_state")
 
 
 
@@ -10312,8 +10818,17 @@ def _tool_profile(s: str) -> Optional[Intent]:
 
     None on every other sentence - which is every sentence this path did not
     answer before it existed - so the model keeps the turn.
+
+    A CATEGORY question is not one tool's dossier (2026-11-26): "what can the
+    files tools do" was read here as a question about `my_files` (the word
+    "files" is in its name), so the group question never got the group answer.
+    `_self_tools_categories` is asked first; when it claims the sentence this
+    lane declines and the later category answer owns it. The singular "what does
+    the calculator tool do" matches neither category shape and keeps this lane.
     """
     if not _TOOL_SAID.search(s or ""):
+        return None
+    if _self_tools_categories(s) is not None:
         return None
     subject = _tool_ask(s)
     if subject is None:
@@ -12828,6 +13343,76 @@ def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
                   "cloud_settings_change")
 
 
+# --- the personal data removal tool (2026-11-26, PR 1 of 3) -----------------
+# ONE block for both jobs, and `jarvis_privacy_removal` is where the words and
+# the rules live:
+#
+#   * the QUESTIONS ("what is the data removal tool", "pros and cons of local vs
+#     optery", "what can't the data removal tool do", "how private is data
+#     removal") are answered by `privacy_explain` from the LIVE state of this PC
+#     - the active mode, whether the Gmail App Password is set, whether an
+#     Optery key is set, and what the tracker holds. No model, no guess, and an
+#     answer never says "I can't do that": the tool exists, and what it cannot
+#     do is a list of honest limits rather than a refusal.
+#   * the CHANGE ("switch data removal to local", "use hybrid data removal")
+#     goes through `jarvis_settings_registry.set_data_removal_mode`, the ONE
+#     registry row, which calls `jarvis_privacy_removal.set_mode`. `local` is
+#     instant and cardless; `optery_api` and `hybrid` raise the consent card
+#     that says the owner's name, address, phone number and email address would
+#     be sent to Optery over HTTPS, and a denied card changes nothing.
+#
+# The import is GUARDED on purpose (backend/test_shipped_modules.py's
+# REPO_ONLY_IMPORTS): the module is not in `_where.SHIPPED` yet - the owner's
+# ruling is that only the pull request which wires a live caller may ship it -
+# so a copy of this file in the published base, which does not carry it, must
+# still import and answer as it always did.
+
+def _privacy_prompt(s: str, text: str) -> Optional[Intent]:
+    """The data removal sentence, or None (see jarvis_privacy_removal)."""
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                                       # noqa: BLE001
+        return None
+    try:
+        got = PR.prompt(s, text)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if not got:
+        return None
+    fields = {k: v for k, v in got.items() if k != "intent"}
+    return Intent(str(got.get("intent") or "privacy_explain"), fields)
+
+
+def _run_privacy_explain(f: dict) -> Result:
+    """The fixed answer, read fresh from this PC. No card, no write, no model."""
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                                       # noqa: BLE001
+        return Result("The data removal tool is not set up on this PC, so there is "
+                      "nothing to read yet.", "privacy_explain")
+    return Result(PR.privacy_explain(str(f.get("topic") or "overview")),
+                  "privacy_explain")
+
+
+def _run_privacy_mode_change(f: dict, *, peer=None, local=None) -> Result:
+    """One mode change, through the registry's ONE row. Nothing before a yes.
+
+    The words are the setter's own `Outcome.said`, so a waiting consent card is
+    never reported as a change and a denied card never moves the mode.
+    """
+    mode_wanted = str(f.get("mode") or "")
+    if mode_wanted not in ("local", "optery_api", "hybrid"):
+        return Result("That is not a data removal mode, so nothing was changed.",
+                      "privacy_mode_change")
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                                       # noqa: BLE001
+        return Result("This PC's Jarvis does not have the settings registry, so "
+                      "nothing was changed.", "privacy_mode_change")
+    outcome = R.set_data_removal_mode(mode_wanted, peer=peer, local=local)
+    return Result(outcome.said, "privacy_mode_change")
+
+
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
     """One fixed, honest intent for off / app-only / unbuilt abilities.
 
@@ -15306,6 +15891,43 @@ _SELF_TOOLS = re.compile(
     r"(?:have|got|use|using|offered|switched\s+on|enabled|active)\b.*"
     r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?tools\s*\??$")
 
+#: THE QUESTION THAT ASKS FOR THE WHOLE INVENTORY (2026-11-25). "Can you list
+#: all of your tools?" was answered by `_SELF_TOOLS` above, which is the COUNT
+#: answer: with the owner's live settings file naming 47 tools that night, it
+#: named 30 and said "and 17 more". He asked for the complete list - every
+#: built-in tool, each marked on or off. This shape is checked BEFORE
+#: `_SELF_TOOLS`, and its answer has no cap (`_run_tools_list_all`), while
+#: "what tools do you have" / "how many tools" keep the count-and-flavour
+#: sentence exactly as it was.
+#:
+#: WHOLE sentences only: "list all the tools for painting" is a request about
+#: something else and must keep its path to the model, so the shape ends after
+#: the tool noun and an optional "you have".
+_SELF_TOOLS_ALL = re.compile(
+    # "list all of your tools" / "show me all your tools" / "name every tool"
+    # / "list all 90 tools" / "list every tool you have" / "every one of them"
+    r"(?:(?:list|show|name|give|tell)(?:\s+me)?|"
+    r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:list|show|name|give|tell)(?:\s+me)?))\s+"
+    r"(?:all|every|each)\s+(?:(?:one|single)\s+)?(?:of\s+)?"
+    r"(?:(?:your|the|jarvis'?s?)\s+)?(?:\d+\s+)?"
+    r"(?:tools?|functions?|abilities?)"
+    r"(?:\s+(?:that\s+)?(?:you|jarvis)\s+(?:have|got|use|using|offer))?\s*\??$"
+    # "list the full list of tools" / "give me the complete list of your tools"
+    r"|(?:list|show|give|name)(?:\s+me)?\s+(?:the\s+|a\s+)?"
+    r"(?:full|complete|whole|entire)\s+(?:list\s+(?:of\s+)?)?"
+    r"(?:(?:your|the|jarvis'?s?)\s+)?(?:tools?|functions?|abilities?)"
+    r"(?:\s+(?:that\s+)?(?:you|jarvis)\s+(?:have|got))?\s*\??$"
+    # "what are all of your tools" / "which are all the tools"
+    r"|(?:what|which)\s+(?:are\s+)?all\s+(?:of\s+)?"
+    r"(?:(?:your|the|jarvis'?s?)\s+)?(?:tools?|functions?|abilities?)\s*\??$"
+    # The polite lead-in is stripped before the SECOND matching attempt, so
+    # "show me all your tools" can arrive here as "all your tools" (the
+    # verbatim attempt normally claims it first). A bare "all tools" is the
+    # same request.
+    r"|all\s+(?:(?:your|the|jarvis'?s?)\s+)?(?:tools?|functions?|abilities?)\s*\??$"
+)
+
 _SELF_TOOLS_ASK = re.compile(
     r"(?:which|what)\s+(?:of\s+)?(?:your|the|jarvis'?s?)\s+tools\s+"
     r"(?:ask|asks|need|needs)\b.*"
@@ -15483,6 +16105,11 @@ def _self_answers(s: str) -> Optional[Intent]:
     """
     if _SELF_TOOLS_ASK.fullmatch(s):
         return Intent("tools_asking")
+    # BEFORE the count answer (2026-11-25): "list all of your tools" and "name
+    # every tool" get the complete inventory; "what tools do you have" and
+    # "how many tools" keep the count-and-flavour summary below.
+    if _SELF_TOOLS_ALL.fullmatch(s):
+        return Intent("tools_list_all")
     if _SELF_TOOLS.fullmatch(s):
         return Intent("tools_inventory")
     if _SELF_CONNECTED.fullmatch(s):
@@ -17459,14 +18086,25 @@ def _self_notes_words(sources: Optional[dict] = None) -> str:
     count = data.get("count")
     if isinstance(count, int) and not isinstance(count, bool):
         if count == 0:
-            return "You have no notes in your vault yet."
-        if data.get("truncated"):
+            # An EMPTY vault can still hold a huge trash (everything was deleted
+            # and never emptied), so the one quiet line belongs here too - the
+            # answer would otherwise hide it exactly when it matters most.
+            said = "You have no notes in your vault yet."
+            tail = ""
+        elif data.get("truncated"):
             said = ("You have at least " + f"{count:,}" + " notes in your vault (the "
                     "list stops at " + f"{count:,}" + ")")
+            tail = ". Brain, Notes lists them."
         else:
             said = ("You have " + f"{count:,}" + " note"
                     + ("" if count == 1 else "s") + " in your vault")
-        return said + ". Brain, Notes lists them."
+            tail = ". Brain, Notes lists them."
+        # The ONE quiet line about a trash that has grown worth emptying (the
+        # owner's ruling of 2026-11-25): it is passive, it names the carded
+        # command, it is silent on a small trash, and this is the note-STATUS
+        # answer, so it is never said twice in one reply.
+        line = _trash_nudge_line()
+        return said + tail + (" " + line if line else "")
     why = str(data.get("why") or "").strip()
     return ("I cannot read your notes right now"
             + (f" ({why})" if why else "")
@@ -19721,9 +20359,12 @@ _DAILY_NOTE_ADD = re.compile(
     r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+"
     r"(?:my\s+|today'?s\s+|todays\s+|the\s+)?(?:obsidian\s+)?"
     r"(?:daily\s+|today'?s\s+)?note\s*(?:[:,-]\s*|\s+)(?P<text>.+)$")
-#: Create/rename/delete of a note are NOT built (the notes editor's own honest
-#: limit, and the catalogue row says so). These shapes get one plain refusal
-#: instead of the model's promise.
+#: A create-shaped sentence this lane could not read a NAME out of. The old note
+#: here said "create/rename/delete of a note are NOT built", which was true when
+#: it was written and is not any more: creating, renaming, moving and deleting a
+#: note all exist (delete since 2026-11-23), so this is only the fallback that
+#: asks for the name and names the doors - see NOTE_CHANGE_REFUSAL. It never
+#: denies an ability the PC has.
 _NOTE_CREATE_REFUSED = re.compile(
     r"(?:create|make|start|add)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?"
     r"(?:new\s+|brand\s+new\s+)?note\b"
@@ -19841,12 +20482,13 @@ def _delete_phrases(rest: str) -> list:
     if len(parts) > 1 and all(parts):
         return [whole, parts]
     return [whole]
-#: Asking chat to READ or SEARCH a note: chat does not read note text today.
-#: The audit measured the model claiming "I have located your notes" with no
-#: tool run. These shapes get the true door in plain words instead - the Notes
-#: plate can search/read/save, chat cannot - and it never names a note title, so
-#: the hidden-lists rule is kept too. (The honesty lane's own duplicate
-#: note_door matcher is retired; this is the one door for note reading.)
+#: Asking chat to READ or SEARCH a note. The comment that used to sit here said
+#: "chat does not read note text today ... the Notes plate can search/read/save,
+#: chat cannot". That was true when it was written (2026-10-31) and is not now:
+#: `_notes_chat` above answers `note_read`, `note_search`, `note_list` and
+#: `note_open` from the same vault files the editor routes read, and every one of
+#: these patterns routes to those REAL readers. It still never guesses a title:
+#: a name that matches nothing answers in words.
 _NOTE_READ_PATTERNS = (
     re.compile(r"what\s+(?:does|do)\s+(?:my\s+|the\s+|a\s+|an\s+)?"
                r"(?P<name>.+?)\s+notes?\s+say\b.*"),
@@ -19973,6 +20615,62 @@ _NOTE_CREATE_CAPABILITY = re.compile(
     r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
     r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s*\??$"
     r"|(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note\s*\??$")
+
+#: "CAN YOU DELETE MY NOTES?" and "CAN YOU FIND DUPLICATES?" (DEF-095,
+#: 2026-11-25). Both are answered from the real capability because both exist:
+#: deleting a note shipped on 2026-11-23 (`delete_vault_notes`, one card naming
+#: every path, into .trash) and the duplicate scan is `jarvis_notes_edit
+#: .chat_find_duplicates`. The owner measured the model answering "I cannot
+#: delete your notes. My access to your Obsidian or Joplin files is strictly
+#: read-only", which was false twice - so these two shapes are claimed on the
+#: RAW sentence, BEFORE the normaliser strips "can you": without that, "can you
+#: delete my notes" arrives as "delete my notes" and the delete lane rightly
+#: asks which note, which is not the question.
+#:
+#: Both are anchored at the END, so a sentence that NAMES a note - "can you
+#: delete my Shopping note?" - is still a delete REQUEST with its one card, and
+#: one that names a topic - "can you find duplicate notes about the boiler" -
+#: is still the model's. Only the bare capability question is claimed.
+_NOTE_DELETE_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:delete|remove|erase|trash|get\s+rid\s+of)\s+"
+    r"(?:(?:my|the|any|all|some|of)\s+)*(?:obsidian\s+)?notes?"
+    r"(?:\s+(?:in|from|inside)\s+(?:my|the)\s+(?:obsidian\s+)?vault)?\s*\??$"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:delete|remove|erase|trash)\s+"
+    r"(?:my\s+|the\s+)?notes?\s*\??$"
+    r"|do\s+you\s+have\s+(?:a\s+)?(?:way|ability|permission|access)\s+to\s+"
+    r"(?:delete|remove|erase|trash)\s+(?:my\s+|the\s+)?notes?\s*\??$"
+    r"|(?:is|are)\s+there\s+(?:a\s+)?way\s+to\s+(?:delete|remove)\s+"
+    r"(?:my\s+|the\s+)?notes?\s*\??$")
+
+_NOTE_DUPLICATES_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:find|look\s+for|search\s+for|spot|detect|identify|check\s+for)\s+"
+    r"(?:(?:my|the|any|all|some|of)\s+)*"
+    r"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies)"
+    r"(?:\s+(?:in|inside)\s+(?:my|the)\s+(?:obsidian\s+)?(?:vault|notes?))?\s*\??$"
+    r"|(?:can|could)\s+you\s+(?:find|look\s+for|search\s+for|spot|detect)\s+"
+    r"(?:any\s+)?duplicates?\s*\??$"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:find|spot|detect)\s+"
+    r"(?:duplicate|duplicated|identical)\s+notes?\s*\??$"
+    r"|do\s+you\s+have\s+(?:a\s+)?(?:way|ability)\s+to\s+(?:find|spot|detect)\s+"
+    r"(?:duplicate|duplicated)\s+notes?\s*\??$")
+
+
+def _note_capability_question(raw) -> Optional[Intent]:
+    """The two bare note-capability questions, read from the RAW sentence.
+
+    Deliberately not `normalize_spoken_command`: that is what strips "can you",
+    and the whole point of this lane is to tell the QUESTION from the command
+    that follows it. Case, spacing and a trailing question mark are the only
+    normalising done.
+    """
+    text = " ".join(str(raw or "").strip().casefold().split())
+    if _NOTE_DUPLICATES_CAPABILITY.fullmatch(text):
+        return Intent("note_duplicates_capability")
+    if _NOTE_DELETE_CAPABILITY.fullmatch(text):
+        return Intent("note_delete_capability")
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -20756,6 +21454,159 @@ _NOTE_MOVE = re.compile(
 NOTE_WRITE_BATCH_SAID = (
     "I change one note at a time, so nothing was written: name ONE note, like "
     "\"add milk to my Shopping note\".")
+
+
+# ---------------------------------------------------------------------------
+#   FULL NOTE CONTROL (2026-11-25) - the verbs that had no sentence
+# ---------------------------------------------------------------------------
+# The owner's words: "i want atlas to have full control and full ability to
+# manipulate and change any of my notes, with deletions requiring a card of
+# approval". Every verb here is answered by the notes editor's OWN route (one
+# card, one File Guardian copy, one Undo where an undo exists); this block only
+# turns a sentence into the right route call. Nothing here writes a file itself.
+#
+# NO NAME IS EVER GUESSED. Each runner resolves the note through `_find_note`
+# (the editor's ONE resolver) and REFUSES, naming what it looked for, when there
+# is no such note. That is the difference between "full control" and "writes to
+# whatever file has a similar name".
+#
+# NOTHING HERE TREATS `untitled` NOTES SPECIALLY. That is a separate feature
+# (the vault organizer's), ruled out of this change on 2026-11-25, so a note
+# called "Untitled 3" is merged, copied or renamed by exactly the same code as
+# any other note.
+#
+# ONE CARD PER DESTRUCTIVE ACT, AND THE CARD IS THE WHOLE TRUTH:
+#   rewrite  -> edit_vault_note, and the card says how many body lines it replaces
+#   section  -> edit_vault_note, and the card names the section and its line count
+#   merge    -> delete_vault_notes, because a note leaves the vault (to .trash)
+#   copy     -> no card for a direct owner write (a new note is additive), else one
+#   trash    -> empty_vault_trash, which lists every file and its age
+
+#: The words that make a sentence about MERGING A PULL REQUEST rather than a
+#: note. `can you merge two notes` was answered by the GitHub lane ("ONE approval
+#: card per merge, and merge commit only") before this guard existed (measured
+#: 2026-11-25). Both directions are pinned by test: a note-merge sentence never
+#: reaches the GitHub lane, and a pull-request sentence never reaches this one.
+_GITHUB_MERGE_NOUN = re.compile(
+    r"\b(?:pull\s+request|pull\s+req|pr|prs|merge\s+commit|squash|rebase|"
+    r"branch|repo|repository|github|ci|checks?|review)\b|#\d", re.I)
+_NOTE_MERGE_VERB = re.compile(r"\bmerg(?:e|es|ing)\b", re.I)
+_NOTE_MERGE_INTO = re.compile(
+    r"merge\s+(?:my\s+|the\s+)?(?P<names>.+?)\s+notes?\s+(?:in)?to\s+"
+    r"(?:my\s+|the\s+)?(?P<into>.+?)(?:\s+note)?\s*[.!?]?$", re.I)
+_NOTE_MERGE_LIST = re.compile(
+    r"merge\s+(?:my\s+|the\s+)?(?P<names>.+?)\s+notes?\s*[.!?]?$", re.I)
+_NOTE_MERGE_ASK = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?merge\s+"
+    r"(?:(?:my|the|two|2|some|any)\s+)*(?:notes?|note\s+files?)\b.*"
+    r"|merge\s+(?:(?:my|the|two|2|some|any)\s+)*notes?\s*[.!?]?$", re.I)
+#: A count in front of a note name in a merge sentence ("my two Newsletter
+#: notes") is a count, not part of the title.
+_NOTE_MERGE_COUNT = re.compile(
+    r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|both|all|some)\s+",
+    re.I)
+#: The words a merge sentence uses to POINT AT its notes instead of naming them.
+#: "merge my notes" names no note, and "merge two notes" is a question about the
+#: verb - both used to reach the resolver and answer 'I could not find a note
+#: called "my"' / '"two"' (measured 2026-11-25, after `normalise()` had already
+#: taken "can you " off the front). A name in this set is never a note.
+_NOTE_MERGE_FILLER = frozenset({
+    "my", "the", "a", "an", "your", "our", "their", "both", "all", "some", "any",
+    "these", "those", "them", "one", "two", "2", "three", "four", "five", "six",
+    "seven", "eight", "nine", "ten", "note", "notes", "note file", "note files",
+})
+#: The sentence's own noun on the end of a name: "my Workout note" names Workout.
+#: It is the same strip `_note_merge_names` already does to a whole phrase, kept
+#: in ONE place so every new lane strips exactly the same thing (2026-11-25: the
+#: section lane looked for a note literally called "Workout note").
+_NOTE_NAME_TAIL = re.compile(r"\s+notes?$", re.I)
+_NOTE_MERGE_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
+#: A merge splits on "and" but a TITLE may hold one ("Salt and Pepper"), so the
+#: whole phrase is tried first and the split list is the fallback - the same
+#: order `_delete_phrases` keeps.
+
+_NOTE_REWRITE = re.compile(
+    r"(?:rewrite|reword)\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note\s+"
+    r"(?:to\s+say|saying|so\s+it\s+says|with|as)\s+(?P<text>.+)$"
+    r"|replace\s+the\s+(?:text|body|contents?)\s+of\s+(?:my\s+|the\s+)?"
+    r"(?P<name2>.+?)\s+note\s+(?:with|to)\s+(?P<text2>.+)$", re.I)
+
+_NOTE_COPY = re.compile(
+    r"(?:copy|duplicate|clone)\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note"
+    r"(?:\s+(?:to|as|into|called|named)\s+(?P<alias>.+?))?\s*[.!?]?$", re.I)
+
+_NOTE_SECTION_DELETE = re.compile(
+    r"(?:delete|remove|cut|drop|take)\s+(?:out\s+)?(?:the\s+|my\s+)?"
+    r"(?P<head>.+?)\s+section\s+(?:from|out\s+of|in)\s+(?:my\s+|the\s+)?"
+    r"(?P<name>.+?)\s*[.!?]?$", re.I)
+
+#: "add this to the top of my Shopping note" and its family. The POSITION is the
+#: verb's, never part of the note's name: before this pattern existed the append
+#: reader took the whole tail as the name and asked "What should I add to \"top
+#: of my Shopping\"?" (measured 2026-11-25).
+_NOTE_INSERT_TOP = re.compile(
+    r"(?:add|put|insert|write)\s+(?P<text>.+?)\s+(?:at|to|in)\s+the\s+"
+    r"(?P<where>top|start|beginning|bottom|end)\s+of\s+(?:my\s+|the\s+)?"
+    r"(?P<name>.+?)\s*[.!?]?$", re.I)
+#: "add this to the top of my Shopping note" names no words to add - "this"
+#: points at something the chat does not have. The position is understood, so the
+#: sentence asks WHAT to add to the right note instead of inserting the pronoun
+#: as if it were the text (2026-11-25).
+_NOTE_PRONOUN_PAYLOAD = frozenset({"this", "that", "it", "these", "those",
+                                   "them", "something"})
+
+_NOTE_TRASH_EMPTY = re.compile(
+    r"(?:empty|clear(?:\s+out)?|clean\s+out|purge|wipe(?:\s+out)?)\s+"
+    r"(?:out\s+)?(?:the\s+|my\s+)?(?:vault'?s?\s+|obsidian\s+)?"
+    r"(?:trash|\.trash|deleted\s+notes)(?:\s+(?:folder|bin|out))?"
+    r"\s*[.!?]?$", re.I)
+_NOTE_TRASH_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:empty|clear(?:\s+out)?|"
+    r"purge)\s+(?:the\s+|my\s+)?(?:vault'?s?\s+|obsidian\s+)?"
+    r"(?:trash|\.trash|deleted\s+notes)(?:\s+(?:folder|bin))?\s*\??$", re.I)
+
+#: Listing what is PINNED, in the four ways the owner says it (2026-11-25).
+#: `pinned` is its own frontmatter property (a note can be pinned and not a
+#: favourite), so this reads that flag and nothing else; it is a READ: no card,
+#: no write, and with the lists hidden it names nothing.
+_NOTE_PINNED_LIST = re.compile(
+    r"(?:which|what)\s+notes?\s+(?:did\s+i\s+pin|are\s+pinned|have\s+i\s+pinned|"
+    r"do\s+i\s+have\s+pinned)\b.*"
+    r"|what\s+did\s+i\s+pin\b.*"
+    r"|(?:my|the|all)\s+pinned\s+notes?\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|my\s+|all\s+)?pinned\s+notes?\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?notes?\s+(?:that\s+)?i\s+pinned\b.*",
+    re.I)
+
+#: A merge sentence names notes; with no "into", the FIRST one named survives
+#: and the rest are folded in. Said once so the card and the reply agree.
+NOTE_MERGE_ASK_SAID = (
+    'Name the notes to merge, like "merge my Ideas note into my Shopping note", '
+    "and I will show you on one card which note survives before anything "
+    "changes.")
+#: A merge is a delete for one of the notes, so its card needs a person. Said
+#: while the card waits, the same way a delete's waiting line does.
+NOTE_MERGE_WAITING_SAID = (
+    "Waiting for your yes on the approval card: it is confirmed with Windows "
+    "Hello, or with your phone's own fingerprint. {said}")
+NOTE_COPY_DONE_SAID = "Copied it. You can undo it."
+NOTE_REWRITE_ASK_SAID = (
+    'Say it as "rewrite my Shopping note to say ..." and I will show you the new '
+    "text on one card before anything is written.")
+NOTE_SECTION_ASK_SAID = (
+    'Name the section and the note, like "delete the Warm-up section from my '
+    'workout log", and I will show you exactly what goes on one card.')
+NOTE_TRASH_EMPTY_ASK_SAID = (
+    "Yes - say \"empty the vault trash\" and I will list every file in your "
+    "vault's .trash folder on one card, with its age, before anything is "
+    "deleted. Emptying it cannot be undone.")
+NOTE_PINNED_NONE_SAID = (
+    "No notes in your vault are pinned right now, so there is nothing to list.")
+NOTE_PINNED_HIDDEN_SAID = (
+    "Your lists are hidden on this PC, so I will not list which notes are "
+    "pinned. Tap Show and confirm it is you, then ask again.")
+NOTE_TRASH_EMPTY_SAID = "The vault's trash folder is already empty."
+
 #: A STANDING INSTRUCTION ABOUT A NAME is not a batch of notes (2026-11-24).
 #: The owner wrote: "Make a note called mood log and favorite. And every time I
 #: refer to mood log, I'm referring to this particular note." - ONE note, one
@@ -21007,7 +21858,24 @@ def _filed_location(vault) -> str:
     return str(_LAST_FILED.get("file") or "")
 
 
-def _run_note_location(f: dict, hidden: bool = False) -> Result:
+def _trash_nudge_line() -> str:
+    """ONE quiet line about a trash worth emptying, or "" - never a card.
+
+    The owner's ruling of 2026-11-25: the empty-trash card gains a PASSIVE
+    nudge only. `jarvis_notes_edit.trash_state` owns the three thresholds
+    (50 MB, 100 files, a file older than 90 days) and answers "" below every one
+    of them, so a small trash says nothing at all; this function never empties,
+    never raises a card and never runs twice in one reply (it is appended once,
+    at the one call site).
+    """
+    try:
+        import jarvis_notes_edit as E
+        return str(E.trash_nudge() or "").strip()
+    except Exception:                       # noqa: BLE001 - a nicety, never a rule
+        return ""
+
+
+def _note_location_words(f: dict, hidden: bool = False) -> Result:
     """Where the vault is, and where the last filed note went. Read-only, no card.
 
     The system KNOWS the configured vault root and the path it just wrote, so it
@@ -21052,6 +21920,15 @@ def _run_note_location(f: dict, hidden: bool = False) -> Result:
     return Result(
         f"Your notes live in your Obsidian vault, at {vault_text}. Quick captures "
         "go into today's daily note inside it.", "note_location")
+
+
+def _run_note_location(f: dict, hidden: bool = False) -> Result:
+    """The vault answer, plus the ONE passive trash line when it has earned it."""
+    got = _note_location_words(f, hidden)
+    line = _trash_nudge_line()
+    if line:
+        got.reply = got.reply + " " + line
+    return got
 
 
 def _run_note_alias(f: dict) -> Result:
@@ -21265,6 +22142,362 @@ def _run_note_tag(f: dict) -> Result:
         said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
         return Result(said, "note_tag_refused")
     return _note_write_result(body, "note_tagged", "note_tag_waiting", "note_tag_refused")
+
+
+def _note_merge_names(raw: str) -> list:
+    """Every way one merge sentence could name its notes, most literal first."""
+    text = str(raw or "").strip().rstrip(".!?").strip()
+    text = re.sub(r"^(?:the|my|a|an|those|these|both|all|some)\s+", "", text, flags=re.I)
+    text = _NOTE_MERGE_COUNT.sub("", text).strip()
+    text = _NOTE_NAME_TAIL.sub("", text).strip()
+    if not text:
+        return []
+    whole = [text.strip().strip('"').strip("'")]
+    parts = [p.strip().strip('"').strip("'") for p in _NOTE_MERGE_SPLIT.split(text)]
+    parts = [re.sub(r"^(?:the|my|a|an)\s+", "", p, flags=re.I).strip()
+             for p in parts if p.strip()]
+    # "Shopping note and my Ideas note" splits to "Shopping note" / "Ideas note":
+    # the noun belongs to the sentence, not to the second name.
+    parts = [(_NOTE_NAME_TAIL.sub("", p).strip() or p) for p in parts]
+    if len(parts) > 1 and all(parts):
+        return [whole, parts]
+    return [whole]
+
+
+def _note_name_only(raw: str) -> str:
+    """A note name with the sentence's own "note"/"notes" noun taken off the end.
+
+    "the top of my Shopping note" names Shopping; "delete the Warm-up section
+    from my Workout note" names Workout. A name that is ONLY that noun ("my
+    notes") is left exactly as written, so nothing is invented here.
+    """
+    text = str(raw or "").strip().strip('"').strip("'").strip()
+    bare = _NOTE_NAME_TAIL.sub("", text).strip()
+    return bare or text
+
+
+def _note_merge_tries(raw: str, at_least: int = 2) -> list:
+    """The name lists a merge sentence really names, filler words dropped.
+
+    Empty when the sentence names fewer than `at_least` notes - which is the
+    honest reading of "merge my notes" and of "merge two notes" (a question about
+    the verb, after `normalise()` has taken "can you " off the front). Returning
+    [] makes the caller ASK which notes, instead of looking for a note called
+    "my". `at_least=1` is for the "... into X" form, where ONE source note is a
+    complete request because X is the survivor.
+    """
+    out = []
+    for names in _note_merge_names(raw):
+        kept = [n for n in names if n and n.casefold() not in _NOTE_MERGE_FILLER]
+        if len(kept) >= at_least and kept not in out:
+            out.append(kept)
+    return out
+
+
+def _note_control_asking(s: str) -> Optional[Intent]:
+    """The five verbs of 2026-11-25 that had no sentence, or None.
+
+    Read BEFORE the append lane (which used to swallow "add this to the top of
+    my Shopping note" as a note called "top of my Shopping"), before the delete
+    lane (which swallowed "delete the Warm-up section from my workout log" as a
+    note called "workout section from my workout") and before the GitHub merge
+    lane (which answered "can you merge two notes" with pull-request words).
+    """
+    # --- emptying the vault's trash ---------------------------------------
+    if _NOTE_TRASH_CAPABILITY.fullmatch(s):
+        return Intent("note_empty_trash", {"ask": True})
+    if _NOTE_TRASH_EMPTY.fullmatch(s):
+        return Intent("note_empty_trash", {"ask": False})
+    # --- merging notes (never a pull request) ------------------------------
+    if _NOTE_MERGE_VERB.search(s) and not _GITHUB_MERGE_NOUN.search(s):
+        m = _NOTE_MERGE_INTO.fullmatch(s)
+        if m:
+            tries = _note_merge_tries(m.group("names"), at_least=1)
+            if tries:
+                return Intent("note_merge", {"tries": tries,
+                                             "into": _note_name_only(m.group("into"))})
+            return Intent("note_merge_ask")
+        m = _NOTE_MERGE_LIST.fullmatch(s)
+        if m:
+            tries = _note_merge_tries(m.group("names"))
+            if tries:
+                return Intent("note_merge", {"tries": tries, "into": ""})
+        # "merge my notes" and "merge two notes" name no note: ask which ones,
+        # in the note lane's own words, and never look up a note called "my".
+        if _NOTE_MERGE_ASK.fullmatch(s) or _NOTE_MERGE_INTO.fullmatch(s) \
+                or _NOTE_MERGE_LIST.fullmatch(s):
+            return Intent("note_merge_ask")
+    # --- rewriting a note's whole body -------------------------------------
+    m = _NOTE_REWRITE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        text = (m.group("text") or m.group("text2") or "").strip()
+        if name and text:
+            return Intent("note_rewrite", {"name": name, "text": text})
+    # --- copying a note ----------------------------------------------------
+    m = _NOTE_COPY.fullmatch(s)
+    if m:
+        name = m.group("name").strip()
+        if name and name.casefold() not in _NOTE_NAME_EMPTY:
+            return Intent("note_copy", {"name": name,
+                                        "as": (m.group("alias") or "").strip()})
+    # --- deleting ONE section of a note ------------------------------------
+    m = _NOTE_SECTION_DELETE.fullmatch(s)
+    if m:
+        head = m.group("head").strip()
+        name = _note_name_only(m.group("name"))
+        if head and name:
+            return Intent("note_section_delete", {"name": name, "heading": head})
+    # --- adding a line at a POSITION ---------------------------------------
+    m = _NOTE_INSERT_TOP.fullmatch(s)
+    if m:
+        text = m.group("text").strip()
+        # The position words are the VERB's, never the note's name: "the top of
+        # my Shopping note" names Shopping (2026-11-25, measured as the append
+        # lane asking "What should I add to \"top of my Shopping\"?").
+        name = _note_name_only(m.group("name"))
+        where = m.group("where").strip().lower()
+        if text and name:
+            # "bottom"/"end" is the append lane's own promise (words added at the
+            # end of the note), so it keeps that route; the front of the note is
+            # the insert route's new `top` mode.
+            if where in ("bottom", "end"):
+                return None
+            # "add this to the top of my note" has no words of its own to add:
+            # ask for them, naming the note and not the position.
+            if text.casefold() in _NOTE_PRONOUN_PAYLOAD:
+                return Intent("note_append_ask", {"name": name})
+            return Intent("note_insert", {"name": name, "mode": "top",
+                                          "target": "top", "text": text})
+    return None
+
+
+def _run_note_rewrite(f: dict) -> Result:
+    """\"rewrite my X note to say ...\" - one card, the old body's lines named."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    text = str(f.get("text") or "").strip()
+    if not name or not text:
+        return Result(NOTE_REWRITE_ASK_SAID, "note_rewrite_refused")
+    path, why, _title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_rewrite_refused")
+        return Result(why, "note_rewrite_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_rewrite_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_save({"path": path, "text": text,
+                                    "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be rewritten ({type(exc).__name__}), so "
+                      "nothing was written.", "note_rewrite_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was written.") if isinstance(body, dict) else "Nothing was written."
+        return Result(said, "note_rewrite_refused")
+    return _note_write_result(body, "note_rewritten", "note_rewrite_waiting",
+                              "note_rewrite_refused")
+
+
+def _run_note_section_delete(f: dict) -> Result:
+    """\"delete the Warm-up section from my workout log\" - one card, lines named."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    heading = str(f.get("heading") or "").strip()
+    if not name or not heading:
+        return Result(NOTE_SECTION_ASK_SAID, "note_section_refused")
+    path, why, _title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_section_refused")
+        return Result(why, "note_section_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_section_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_customize(
+            {"path": path, "action": "remove_section", "heading": heading,
+             "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The section could not be deleted ({type(exc).__name__}), so "
+                      "nothing was changed.", "note_section_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_section_refused")
+    return _note_write_result(body, "note_section_deleted", "note_section_waiting",
+                              "note_section_refused")
+
+
+def _run_note_copy(f: dict) -> Result:
+    """\"copy my X note\" - additive, so a direct owner write needs no card."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    if not name:
+        return Result('Say it as "copy my Shopping note", and I will duplicate it.',
+                      "note_copy_refused")
+    path, why, _title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_copy_refused")
+        return Result(why, "note_copy_refused")
+    # A copy makes a NEW note, but the owner's brief for this wave asks for it
+    # CARDED, so the chat path is not "the owner writing directly in the
+    # editor": `client` says "chat", which keeps the ONE `edit_vault_note` card
+    # (its words name both files). The editor's own POST route still decides for
+    # itself - only a direct HUD write there is card-free, exactly as create is.
+    request = {"path": path, "provenance": "typed", "client": "chat"}
+    alias = str(f.get("as") or "").strip()
+    if alias:
+        request["as"] = alias
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_copy(request, by="chat", wait_s=1.5,
+                                   provenance="typed", client="chat")
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be copied ({type(exc).__name__}), so "
+                      "nothing was written.", "note_copy_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was written.") if isinstance(body, dict) else "Nothing was written."
+        return Result(said, "note_copy_refused")
+    return _note_write_result(body, "note_copied", "note_copy_waiting",
+                              "note_copy_refused")
+
+
+def _run_note_merge(f: dict) -> Result:
+    """\"merge my two Newsletter notes\" - ONE card naming the survivor and the rest."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    tries = [t for t in (f.get("tries") or []) if isinstance(t, list) and t]
+    if not tries:
+        return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+    into = str(f.get("into") or "").strip()
+    first_why = ""
+    for names in tries:
+        paths, why = [], ""
+        for name in names:
+            path, bad, _title = _find_note(str(name or ""))
+            if path is None:
+                if bad == "not_found":
+                    why = NOTE_NOT_FOUND_SAID.format(name=name).replace(
+                        "Nothing was written", "Nothing was merged")
+                else:
+                    why = str(bad or "").replace("so nothing was changed",
+                                                 "so nothing was merged")
+                    if "nothing was merged" not in why:
+                        why = (why.strip() + " Nothing was merged.").strip()
+                break
+            if path not in paths:
+                paths.append(path)
+        if why:
+            first_why = first_why or why
+            continue
+        # "... into my Shopping note" names the survivor, so ONE source note is
+        # a complete request; only a list with no survivor needs two names
+        # (2026-11-25: this counted the survivor's own note as a missing name,
+        # so "merge my Ideas note into my Shopping note" asked for two notes).
+        if len(paths) < 2 and not into:
+            return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+        if len(paths) - 1 > _notes_delete_max():
+            return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+        survivor = ""
+        if into:
+            survivor, bad, _title = _find_note(into)
+            if survivor is None:
+                return Result(
+                    (NOTE_NOT_FOUND_SAID.format(name=into)
+                     if bad == "not_found" else str(bad)).replace(
+                        "Nothing was written", "Nothing was merged"),
+                    "note_merge_refused")
+        if not survivor:
+            survivor = paths[0]
+        sources = [p for p in paths if p != survivor]
+        if not sources:
+            return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+        try:
+            import jarvis_notes_edit as E
+            code, out = E.handle_merge({"into": survivor, "paths": sources},
+                                       by="chat", wait_s=1.5)
+        except Exception as exc:            # noqa: BLE001
+            return Result(f"The notes could not be merged "
+                          f"({type(exc).__name__}), so nothing was merged.",
+                          "note_merge_refused")
+        if code not in (200, 202):
+            said = str((out or {}).get("error") or "Nothing was merged.") if isinstance(out, dict) else "Nothing was merged."
+            return Result(said, "note_merge_refused")
+        result = _note_write_result(out, "note_merged", "note_merge_waiting",
+                                    "note_merge_refused")
+        if getattr(result, "intent", "") == "note_merge_waiting":
+            return Result(NOTE_MERGE_WAITING_SAID.format(said=result.reply),
+                          "note_merge_waiting")
+        return result
+    return Result(first_why or NOTE_MERGE_ASK_SAID, "note_merge_refused")
+
+
+def _run_note_empty_trash(f: dict) -> Result:
+    """\"empty the vault trash\" - ONE card listing every file and its age."""
+    if f.get("ask"):
+        return Result(NOTE_TRASH_EMPTY_ASK_SAID, "note_empty_trash_ask")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_empty_trash(by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The trash could not be emptied ({type(exc).__name__}), so "
+                      "nothing was deleted.", "note_empty_trash_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was deleted.") if isinstance(body, dict) else "Nothing was deleted."
+        return Result(said, "note_empty_trash_refused")
+    if str((body or {}).get("state") or "") == "empty":
+        return Result(NOTE_TRASH_EMPTY_SAID, "note_empty_trash_empty")
+    result = _note_write_result(body, "note_trash_emptied", "note_trash_waiting",
+                                "note_empty_trash_refused")
+    if getattr(result, "intent", "") == "note_trash_waiting":
+        return Result(NOTE_MERGE_WAITING_SAID.format(said=result.reply),
+                      "note_trash_waiting")
+    return result
+
+
+def _run_note_pinned(_f: Optional[dict] = None) -> Result:
+    """Which notes carry `pinned: true` - read-only, cardless, names the notes.
+
+    `pinned` is its own frontmatter property in this project (a note can be
+    pinned and not a favourite), so this reads that flag and nothing else. It
+    reuses `jarvis_notes`' own listing machinery - `_vault_notes` applies the
+    editor's hidden-folder / "Protected from Jarvis" / in-vault rules, and
+    `_frontmatter_is_true` is the closed-YAML reader `_favourite_notes` uses -
+    and reads only each note's FIRST BYTES, never its body words. No new
+    storage, no card, no write.
+    """
+    if _notes_hidden():
+        return Result(NOTE_PINNED_HIDDEN_SAID, "note_pinned_hidden")
+    titles = []
+    try:
+        import jarvis_notes as N
+        root, why = N.vault_root()
+        if root is None:
+            return Result("The notes could not be read on this PC"
+                          + (f" ({why})" if why else "") + ".", "note_pinned")
+        rows = N._vault_notes(root)
+        for row in rows:
+            try:
+                with open(row["full"], "rb") as fh:
+                    head = fh.read(N.RESOLVE_HEAD_BYTES)
+            except OSError:                  # one unreadable note, never the list
+                continue
+            if N._frontmatter_is_true(head.decode("utf-8", "replace"),
+                                      ("pinned",)):
+                titles.append(str(row.get("title") or ""))
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result("The notes could not be read on this PC.", "note_pinned")
+    if not titles:
+        return Result(NOTE_PINNED_NONE_SAID, "note_pinned")
+    return Result("You have {0} pinned note(s): {1}.".format(
+        len(titles), "; ".join('"' + t + '"' for t in titles)), "note_pinned")
 
 
 def _run_note_rename(f: dict) -> Result:
@@ -22082,6 +23315,17 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
         return Intent("note_referral", {"alias": alias})
     if alias:
         s = command
+    # FULL NOTE CONTROL (2026-11-25): the verbs that had no sentence - rewrite a
+    # whole body, copy a note, delete one section, merge two notes, empty the
+    # vault's trash - and a POSITION phrase that must not become part of a
+    # note's name. Read HERE, before the batch/delete/append lanes below and
+    # before the GitHub lane, because each of those used to swallow one of these
+    # sentences first ("can you merge two notes" was answered in pull-request
+    # words; "add this to the top of my Shopping note" asked what to add to a
+    # note called "top of my Shopping").
+    got = _note_control_asking(s)
+    if got is not None:
+        return got
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
@@ -22942,6 +24186,70 @@ _NOTE_LIST_SHAPES = (
     re.compile(r"(?:search|look)\s+(?:through\s+|in\s+|at\s+)?(?:my|the)\s+notes?\s*"),
 )
 
+#: FINDING DUPLICATE NOTES (DEF-095, 2026-11-25). The owner's own sentences -
+#: "look for notes that have copies", "find duplicate notes", "do I have any
+#: duplicate notes", "find my notes with copies", "any duplicate notes", "which
+#: notes are duplicated" - measured on the live install reaching NO intent at
+#: all, so the model improvised. Every shape ends where the question ends: an
+#: optional "in my vault" and nothing else. That is the rule that keeps a
+#: sentence naming a real search term in the search lane - "find duplicate
+#: notes about the boiler" is not claimed here, and "search my notes for milk"
+#: never was. A note TITLE is not read out of any of them; the scan reads the
+#: whole vault and asks which group to act on.
+_DUP_TAIL = (r"(?:\s+(?:in|inside|from)\s+(?:my|the)\s+(?:obsidian\s+)?"
+             r"(?:vault|notes?))?"
+             r"(?:\s+(?:right\s+now|for\s+me|please))?")
+
+_DUPLICATES_ASKING = re.compile(
+    # "find duplicate notes", "show me duplicated notes", "list any copies"
+    rf"(?:find|look\s+for|search\s+for|search|show\s+me|show|list|get|"
+    rf"check\s+for|check|give\s+me)\s+(?:me\s+)?"
+    rf"(?:all\s+|any\s+|the\s+|my\s+)?"
+    rf"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies){_DUP_TAIL}"
+    # "find my notes with copies", "look for notes that have copies"
+    rf"|(?:find|look\s+for|search\s+for|search|show\s+me|show|list|check|get)\s+"
+    rf"(?:me\s+)?(?:all\s+|any\s+|the\s+|my\s+)?notes?\s+"
+    rf"(?:that\s+(?:have|are)\s+copies|with\s+copies|"
+    rf"that\s+are\s+duplicated|which\s+are\s+duplicated){_DUP_TAIL}"
+    # "do I have any duplicate notes", "do we have copies"
+    rf"|(?:do|does)\s+(?:i|we)\s+have\s+(?:any\s+|some\s+|a\s+)?"
+    rf"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies){_DUP_TAIL}"
+    rf"|(?:do|does)\s+(?:i|we)\s+have\s+(?:any\s+|some\s+)?(?:duplicates?|copies){_DUP_TAIL}"
+    # "are there any duplicate notes", "is there a duplicate"
+    rf"|(?:is|are)\s+there\s+(?:any\s+|some\s+)?"
+    rf"(?:duplicate|duplicated|identical)\s+(?:notes?|copies){_DUP_TAIL}"
+    rf"|(?:is|are)\s+there\s+(?:any\s+|some\s+)?duplicates?{_DUP_TAIL}"
+    # "any duplicate notes" (the bare question)
+    rf"|(?:any|all)\s+(?:duplicate|duplicated|identical)\s+notes?{_DUP_TAIL}"
+    # "which notes are duplicated"
+    rf"|which\s+(?:of\s+)?(?:my\s+|the\s+)?notes?\s+(?:are|is)\s+"
+    rf"(?:duplicated|duplicates|identical|the\s+same|copies|a\s+copy){_DUP_TAIL}"
+    # "check my notes for duplicates"
+    rf"|check\s+(?:my\s+|the\s+)?notes?\s+for\s+"
+    rf"(?:duplicates?|copies|near[- ]duplicates?){_DUP_TAIL}"
+    # "find duplicates", "look for copies"
+    rf"|(?:find|look\s+for|search\s+for|search|show\s+me|show|list)\s+"
+    rf"(?:me\s+)?(?:any\s+|all\s+|the\s+|my\s+)?(?:duplicates?|copies){_DUP_TAIL}"
+    # THE OWNER'S OWN SENTENCE (2026-11-24): "delete any copy or almost identical
+    # copy ... delete any duplicates". It asks for the removal before naming what
+    # to remove, so it gets the scan's list and the one offer - NOT a guess and
+    # NOT a card. Nothing is deleted by any of these.
+    rf"|(?:delete|remove|erase|trash)\s+(?:any\s+|all\s+|the\s+|my\s+)?"
+    rf"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies){_DUP_TAIL}"
+    rf"|(?:delete|remove|erase|trash)\s+(?:the\s+|any\s+|all\s+)?"
+    rf"(?:duplicates?|copies){_DUP_TAIL}"
+)
+
+_DUPLICATES_DELETE_SHAPE = re.compile(r"^(?:delete|remove|erase|trash)\b", re.I)
+
+
+def _note_duplicates_asking(s: str) -> Optional[Intent]:
+    """The duplicate-finding sentences, or None - answered by the scan, no model."""
+    if not _DUPLICATES_ASKING.fullmatch(s):
+        return None
+    return Intent("note_duplicates",
+                  {"asked_delete": bool(_DUPLICATES_DELETE_SHAPE.match(s))})
+
 
 def _notes_chat(s: str) -> Optional[Intent]:
     """The note questions this file answers without a model.
@@ -22950,7 +24258,27 @@ def _notes_chat(s: str) -> Optional[Intent]:
     `chat_*` helpers, which read the SAME vault files the editor routes read.
     The content questions come first, so "what do my notes say about milk" is a
     search rather than a note called "say about milk".
+
+    The duplicate-finding sentences come FIRST (DEF-095, 2026-11-25): "find my
+    notes with copies" used to be read as the LIST shape below and answered with
+    a note at random, which is the other half of why the owner never got a
+    duplicate answer. Their own grammar names no title, so nothing below wants
+    their words.
     """
+    # Both halves of 2026-11-25 appended here, and BOTH are kept: the
+    # duplicate-finding sentences first (main's DEF-095), then the pinned-note
+    # flag read. They claim disjoint sentences - one names copies, the other
+    # names a pin - so the order between them changes nothing, and neither one
+    # may be dropped to make the merge smaller.
+    got = _note_duplicates_asking(s)
+    if got is not None:
+        return got
+    # Which notes are PINNED, asked four ways (2026-11-25). It runs before every
+    # read shape below, because "show me the notes I pinned" was being read as
+    # "show me the notes [called what?]" and answered as a note read. It is a
+    # flag read: no card, no write, and with the lists hidden it names nothing.
+    if _NOTE_PINNED_LIST.fullmatch(s):
+        return Intent("note_pinned")
     m = _NOTE_WROTE.fullmatch(s) or _NOTE_SAY_ABOUT.fullmatch(s)
     if m:
         return Intent("note_read_about", {"needle": m.group(1).strip(" \"'")})
@@ -23100,7 +24428,7 @@ def _run_note_read_about(needle: str) -> Result:
     than one note. "find my notes about X" stays a SEARCH (titles only), so the
     two questions keep the two answers the product already gives them.
     """
-    want = str(needle or "").strip()
+    want = _note_search_needle(needle)
     if not want:
         return Result('What should I look for? Say "what did I write about milk".',
                       "note_read_about")
@@ -23127,7 +24455,27 @@ def _run_note_read_about(needle: str) -> Result:
     return Result(said, "note_read_about")
 
 
+#: The words a search sentence uses to POINT AT its subject instead of naming
+#: it: "find my notes about the garden" is a search for "garden", not for the
+#: literal five characters "the garden". Only the FIRST one is dropped, and only
+#: one of them, so "the day after tomorrow" searches "day after tomorrow" and a
+#: phrase that really starts with a second "the" keeps it (2026-11-25:
+#: `chat_search_notes` is a substring match, so the article made it find nothing).
+_NOTE_SEARCH_LEAD = re.compile(r"^(?:the|a|an|my|our|their)\s+", re.I)
+
+
+def _note_search_needle(raw: str) -> str:
+    """The words to search for: one leading article/possessive removed, nothing else."""
+    text = " ".join(str(raw or "").replace("\u2019", "'").split()).strip(' "')
+    text = text.strip("'").strip()
+    if not text:
+        return ""
+    stripped = _NOTE_SEARCH_LEAD.sub("", text, count=1).strip()
+    return stripped or text
+
+
 def _run_note_search(needle: str) -> Result:
+    needle = _note_search_needle(needle)
     if not str(needle or "").strip():
         return Result('What should I search your notes for? Say "search my notes '
                       'for milk".', "note_search")
@@ -23170,6 +24518,219 @@ def _run_note_open(title: str) -> Result:
     said = ('Opening the Brain on this PC. Your notes are under Notes - look for '
             '"{0}" there.'.format(body["title"]))
     return Result(said, "note_open", open_brain="brain")
+
+
+# --------------------------------------------------------------------------
+#   Finding duplicate notes, and the two note-capability answers (DEF-095,
+#   2026-11-25)
+# --------------------------------------------------------------------------
+# The owner's words of 2026-11-24: "i would like you to go through my notes and
+# delete any copy or almost identical copy. leave at least one copy, delete any
+# duplicates" - and the answer was "I cannot delete your notes. My access to your
+# Obsidian or Joplin files is strictly read-only", false twice over. So:
+#
+#   * the finding sentences get a real, read-only scan
+#     (`jarvis_notes_edit.chat_find_duplicates`) and a plain list;
+#   * "can you delete my notes?" and "can you find duplicates?" are answered
+#     from what the code does, on the RAW sentence, before the normaliser turns
+#     the question into a command;
+#   * the list offers ONE next step - say which to remove - and the removal is
+#     the EXISTING `delete_vault_notes` card in `_run_note_delete`: one card
+#     naming every path, nothing moved before the yes. This block adds no delete
+#     path, no card and no write of its own.
+DUP_NO_NOTES_SAID = ("Your Obsidian vault has no notes in it yet, so there are none "
+                     "to compare.")
+DUP_SCAN_FAILED_SAID = ("The notes could not be scanned on this PC, so nothing was "
+                        "compared and nothing was changed.")
+#: The one keep-one rule this answer offers, stated in words and fixed in
+#: `jarvis_notes_edit._dup_group` so the two cannot disagree.
+DUP_KEEP_RULE_SAID = ("Where I say which I would keep, it is the oldest copy; a tie "
+                      "goes to the shorter path.")
+DUP_OFFER_SAID = ('Say which to remove - like "delete notes Alpha and Beta" - and I '
+                  "will list every one of them on one card before anything moves. "
+                  "I delete up to {most} notes at a time.")
+#: The kind labels the scan's three questions are reported under.
+DUP_KIND_SAID = {"identical": "identical copies",
+                 "same_name": "the same name in two different folders",
+                 "near": "near copies"}
+
+
+def _dup_when(stamp) -> str:
+    """One note's mtime as a plain local day, never a time of day."""
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(float(stamp or 0)))
+    except (OverflowError, OSError, ValueError):
+        return "an unknown date"
+
+
+def _dup_group_said(index: int, group: dict) -> str:
+    """One group: its members, which is largest/newest, and which to keep."""
+    kind = str(group.get("kind") or "")
+    label = DUP_KIND_SAID.get(kind, "copies")
+    if kind == "near":
+        label += " (at least {0}% the same words)".format(
+            int(round(float(group.get("similarity") or 0.0) * 100)))
+    titles = [str(t) for t in (group.get("titles") or [])]
+    paths = [str(p) for p in (group.get("paths") or [])]
+    members = ['"{0}" ({1})'.format(title, path)
+               for title, path in zip(titles, paths)]
+    sizes = [int(s) for s in (group.get("sizes") or [])]
+    mtimes = [float(t) for t in (group.get("mtimes") or [])]
+    largest = str(group.get("largest") or "")
+    newest = str(group.get("newest") or "")
+    keep = str(group.get("keep") or "")
+    said = "{0}. {1}: {2}.".format(index, label, ", ".join(members))
+    if sizes and len(set(sizes)) == 1:
+        said += " {0} {1} byte{2}.".format(
+            "Both are" if len(sizes) == 2 else "All {0} are".format(len(sizes)),
+            sizes[0], "" if sizes[0] == 1 else "s")
+    elif sizes:
+        biggest = sizes[paths.index(largest)] if largest in paths else 0
+        said += " The largest is {0} ({1} byte{2}).".format(
+            largest, biggest, "" if biggest == 1 else "s")
+    if mtimes and len(set(mtimes)) == 1:
+        said += " They share the date {0}; I would keep {1} (the shorter path).".format(
+            _dup_when(mtimes[0]), keep)
+    elif mtimes:
+        said += (" The newest is {0} ({1}); the oldest, which I would keep, is {2} "
+                 "({3}).".format(newest, _dup_when(mtimes[paths.index(newest)]
+                                                   if newest in paths else mtimes[0]),
+                                 keep, _dup_when(mtimes[paths.index(keep)]
+                                                 if keep in paths else mtimes[0])))
+    return said
+
+
+def _duplicates_said(body: dict) -> str:
+    """The scan's own words: what it covered, the threshold, the groups, the offer.
+
+    Every number comes from the scan's own answer - the cap, the counts, the
+    threshold, the groups - so the sentence cannot claim a coverage the scan did
+    not make. It never says "no copies" without naming what was NOT read.
+    """
+    body = body if isinstance(body, dict) else {}
+    total = int(body.get("total") or 0)
+    candidates = int(body.get("candidates") or 0)
+    opened = int(body.get("opened") or 0)
+    scanned = int(body.get("scanned") or 0)
+    skipped = int(body.get("skipped") or 0)
+    unreadable = int(body.get("unreadable") or 0)
+    cap = int(body.get("cap") or 0)
+    if candidates <= 0:
+        said = "Your vault has no notes I can compare for copies."
+    elif not skipped and not unreadable:
+        said = ("I scanned all {0} notes I could compare in your vault - {1} is the "
+                "most I read in one pass, so that was all of them.".format(
+                    candidates, cap))
+    else:
+        said = ("I scanned {0} of the {1} notes I could compare in your vault, "
+                "newest first - {2} is the most I read in one pass.".format(
+                    scanned, candidates, cap))
+        if skipped:
+            said += " {0} older note{1} {2} not read.".format(
+                skipped, "" if skipped == 1 else "s",
+                "was" if skipped == 1 else "were")
+        if unreadable:
+            said += " {0} of the {1} I opened could not be read.".format(
+                unreadable, opened)
+    if body.get("listed_truncated"):
+        said += (" (The vault's own list stops at {0} notes, so even that count is "
+                 "a floor.)".format(total))
+    # The owner's ruling of 2026-11-25: untitled notes get their own management
+    # and an empty file is not a copy of another empty file. Say both, and why.
+    left = []
+    untitled = int(body.get("excluded_untitled") or 0)
+    empty = int(body.get("excluded_empty") or 0)
+    if untitled:
+        left.append("{0} untitled note{1}".format(untitled,
+                                                  "" if untitled == 1 else "s"))
+    if empty:
+        left.append("{0} empty file{1}".format(empty, "" if empty == 1 else "s"))
+    if left:
+        said += (" I left out {0} - this scan does not treat those as "
+                 "copies.".format(" and ".join(left)))
+    count = int(body.get("count") or 0)
+    said += (" I found no groups of copies." if count == 0
+             else " I found {0} group{1} of copies.".format(
+                 count, "" if count == 1 else "s"))
+    said += (" Near copies are notes at least {0}% the same words, and I only "
+             "compare notes with at least {1} words.".format(
+                 int(round(float(body.get("threshold") or 0.0) * 100)),
+                 int(body.get("min_words") or 0)))
+    if count:
+        said += " " + DUP_KEEP_RULE_SAID
+        for index, group in enumerate(body.get("groups") or [], 1):
+            said += "\n\n" + _dup_group_said(index, group)
+        if body.get("truncated"):
+            said += " I have shown the first {0} of {1} groups.".format(
+                int(body.get("shown") or 0), count)
+        said += "\n\n" + DUP_OFFER_SAID.format(most=_notes_delete_max())
+    return said
+
+
+def _run_note_duplicates(f: dict) -> Result:
+    """The duplicate scan's answer: read-only, bounded, and it says both.
+
+    `f["asked_delete"]` is set when the sentence asked for the copies to be
+    removed ("delete any duplicates"): the answer then opens by saying nothing
+    has been deleted, because this lane never deletes. The removal itself is the
+    owner naming the notes and `_run_note_delete`'s one existing card.
+    """
+    if _notes_hidden():
+        return Result(NOTES_SEARCH_HIDDEN, "note_duplicates")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_find_duplicates()
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(DUP_SCAN_FAILED_SAID, "note_duplicates")
+    if code != 200:
+        return Result(_note_unreadable(body), "note_duplicates")
+    body = body if isinstance(body, dict) else {}
+    if int(body.get("total") or 0) <= 0:
+        return Result(DUP_NO_NOTES_SAID, "note_duplicates")
+    said = _duplicates_said(body)
+    if f.get("asked_delete"):
+        said = "Nothing has been deleted. " + said
+    return Result(said, "note_duplicates")
+
+
+def _run_note_delete_capability() -> Result:
+    """"can you delete my notes?" - yes, from the real card and its real limit."""
+    return Result(NOTE_DELETE_CAPABLE_SAID.format(most=_notes_delete_max()),
+                  "note_delete_capability")
+
+
+def _run_note_duplicates_capability() -> Result:
+    """"can you find duplicates?" - yes, and the bounds come from the scan itself."""
+    try:
+        import jarvis_notes_edit as NE
+        cap = int(getattr(NE, "DUP_SCAN_CAP", 1200))
+        percent = int(round(float(getattr(NE, "DUP_SIMILARITY", 0.90)) * 100))
+    except Exception:                       # noqa: BLE001 - module absent
+        cap, percent = 1200, 90
+    return Result(NOTE_DUPLICATES_CAPABLE_SAID.format(
+        cap=cap, percent=percent, most=_notes_delete_max()),
+        "note_duplicates_capability")
+
+
+#: The capability answers themselves. Each says the thing exists, names the one
+#: door and states its limit; neither can say "I cannot", and neither invents a
+#: second card. `str.format` fills the numbers from the modules that own them.
+NOTE_DELETE_CAPABLE_SAID = (
+    'Yes - I can delete notes. Say which ones - "delete my Shopping note" or '
+    '"delete notes Shopping, Workout and Ideas" - and they move into your '
+    "vault's .trash folder, not into nothing. Every delete needs ONE approval "
+    "card that names each note, confirmed with Windows Hello on this PC or your "
+    "phone's own fingerprint, and I delete up to {most} notes at a time. I can "
+    "also look for duplicate notes and tell you which have copies.")
+NOTE_DUPLICATES_CAPABLE_SAID = (
+    'Yes - I can look for duplicate notes. Say "find duplicate notes" and I '
+    "read your Obsidian vault myself, without the model: identical copies (the "
+    "same words, ignoring front matter and formatting), the same title in two "
+    "folders, and near copies (at least {percent}% the same words). Untitled "
+    "notes and empty files are left out - they are not copies here. I scan at "
+    "most {cap} notes in one pass and tell you how many I covered and skipped. "
+    "The scan never deletes or changes anything: say which ones to remove and I "
+    "will list them on one approval card first, up to {most} at a time.")
 
 
 # --- what model Jarvis is running, the presets, measured models (2026-10-31) ---
@@ -26849,6 +28410,568 @@ def _run_tools_inventory(intent: Intent) -> Result:
              "search, browser control and the data sandbox have their own - so "
              "the live page is Settings, \"What asks first\".")
     return Result(head + body, intent.name)
+
+
+#: The areas the COMPLETE inventory is grouped under, in the order they are
+#: shown (2026-11-25, the owner's "list all of your tools"). DISPLAY ONLY: which
+#: tools exist and which area each belongs to is read from
+#: `jarvis_agent.CORE_TOOLS` and `jarvis_agent.TOOL_GROUPS` - the same tables
+#: `more_tools` and `test_short_tool_list.py` already own - so a tool added to a
+#: group appears in this answer with no second list to edit. Only the plain-word
+#: AREA NAMES are written down here. "Other" is the catch-all and is never
+#: empty-handed by design: a tool in neither table is listed there rather than
+#: dropped, and the suite asserts every tool is named exactly once.
+_TOOL_AREA_ORDER = (
+    "Everyday", "Memory", "Notes", "Email", "Calendar",
+    "Timers and reminders", "The web", "Smart home", "GitHub",
+    "Files and documents", "Goals and projects", "Settings", "Accounts",
+    "Controlling your PC and phone", "Money", "Phone and messages", "Other",
+)
+
+#: `jarvis_agent.TOOL_GROUPS` group name -> the area it is listed under. A group
+#: this table has not met yet still appears (under "Other"), so a new group is
+#: never silently missing - but a listed group that stops existing is named by
+#: the suite, so this table cannot quietly go stale.
+_TOOL_GROUP_AREA = {
+    "timers": "Timers and reminders",
+    "goals": "Goals and projects",
+    "projects": "Goals and projects",
+    "send_email": "Email",
+    "draft_email": "Email",
+    "notes": "Notes",
+    "home_control": "Smart home",
+    "documents": "Files and documents",
+    "files": "Files and documents",
+    "retirement": "Money",
+    "connect": "Accounts",
+    "github": "GitHub",
+    "read_web_page": "The web",
+    "web_search_grant": "The web",
+    "control": "Controlling your PC and phone",
+    "settings": "Settings",
+    # The drop-in plugins share the settings group's subject, and the group is
+    # empty on this build; mapping it now keeps the table honest if one lands.
+    "plugins": "Settings",
+    "send_text": "Phone and messages",
+}
+
+#: `jarvis_agent.CORE_TOOLS` name -> the area it is listed under. The core is
+#: the eight tools offered on every turn; they belong to the areas a person
+#: would look for them in, not to one "core" heading.
+_TOOL_CORE_AREA = {
+    "calculator": "Everyday",
+    "memory_search": "Memory",
+    "calendar_read": "Calendar",
+    "email_check": "Email",
+    "notes_search": "Notes",
+    "web_search": "The web",
+    "home_read": "Smart home",
+    "set_reminder": "Timers and reminders",
+}
+
+#: Tools whose GROUP area is not the area a person would look under. Today that
+#: is one: the spending reader shares the "documents" group with the file reader
+#: (both need a listed folder) but is about money.
+_TOOL_AREA_OVERRIDE = {"my_spending": "Money"}
+
+
+def _tool_area_rows(names) -> list:
+    """`[(area, [name, ...]), ...]` for every name, in the fixed area order.
+
+    NOTHING IS DROPPED. The area of each name comes from `jarvis_agent`'s own
+    tables - `TOOL_GROUPS` first, then `CORE_TOOLS` - and a name in neither is
+    listed under "Other". That is the one thing this builder must never get
+    wrong: a "list all my tools" answer with a hole in it is the defect this
+    change exists to remove. If `jarvis_agent` itself cannot be imported the
+    grouping is lost but the names are not - every one lands under "Other".
+    """
+    where = {}
+    try:
+        import jarvis_agent as A
+        for group, _what, members in A.TOOL_GROUPS:
+            area = _TOOL_GROUP_AREA.get(str(group)) or "Other"
+            for name in members:
+                where[str(name)] = area
+        for name in A.CORE_TOOLS:
+            where.setdefault(str(name), _TOOL_CORE_AREA.get(str(name)) or "Other")
+    except Exception:                       # noqa: BLE001 - grouping is display only
+        pass
+    buckets = {area: [] for area in _TOOL_AREA_ORDER}
+    for name in names:
+        key = str(name)
+        area = _TOOL_AREA_OVERRIDE.get(key) or where.get(key) or "Other"
+        buckets.setdefault(area, []).append(key)
+    order = list(_TOOL_AREA_ORDER) + sorted(a for a in buckets
+                                           if a not in _TOOL_AREA_ORDER)
+    rows = []
+    for area in order:
+        got = buckets.get(area) or []
+        if got:
+            got.sort(key=lambda n: _tool_label(n).casefold())
+            rows.append((area, got))
+    return rows
+
+
+def _tool_rows_text(names, on, *, heading: bool = True) -> str:
+    """The grouped bullet blocks every tool-list answer shares.
+
+    One `- <label> — on|off` line per tool, under a plain `Area:` heading, an
+    empty line between areas - the shape the owner asked for and the one the
+    chat pane draws (it keeps line breaks). `on` is the set of switched-on
+    names, or None when the settings file could not be read (then no mark is
+    printed at all, because a guess is worse than a blank). `heading=False`
+    prints the same bullets with no area line, for a caller that already says
+    the subject once (the settings answer's two halves).
+    """
+    blocks = []
+    for area, area_names in _tool_area_rows(names):
+        lines = [area + ":"] if heading else []
+        if on is None:
+            lines += [f"- {_tool_label(n)}" for n in area_names]
+        else:
+            lines += [f"- {_tool_label(n)} — {'on' if n in on else 'off'}"
+                      for n in area_names]
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def _read_tool_inventory():
+    """`jarvis_self_portrait.tool_inventory()`, or the suite fixture.
+
+    One reader for every tool-list answer, so the count answer, the full list,
+    a category list and the switched-off list cannot read two different
+    inventories. `_MEASURED_FIXTURE["tools"]` is the suite's seam; production
+    never sets it.
+    """
+    if _MEASURED_FIXTURE is not None and _MEASURED_FIXTURE.get("tools") is not None:
+        return dict(_MEASURED_FIXTURE["tools"])
+    try:
+        import jarvis_self_portrait as SP
+        return SP.tool_inventory()
+    except Exception:                       # noqa: BLE001 - older PC
+        return None
+
+
+def _inventory_names(inv) -> list:
+    """Every registered tool name, from an inventory dict, or []."""
+    if not isinstance(inv, dict):
+        return []
+    return [str(n) for n in (inv.get("all_names") or inv.get("registered_names") or ())
+            if str(n or "").strip()]
+
+
+def _inventory_on(inv):
+    """The set of switched-on names, or None when the file could not be read.
+
+    `enabled` is a COUNT and `enabled_names` is the NAMES; a count with no names
+    is not a usable read either, so it answers None rather than marking every
+    tool off (which would be a guess).
+    """
+    if not isinstance(inv, dict) or inv.get("enabled") is None:
+        return None
+    offered = [str(n) for n in (inv.get("enabled_names") or ())
+               if str(n or "").strip()]
+    if not offered and inv.get("enabled"):
+        return None
+    return set(offered)
+
+
+def _run_tools_list_all(intent: Intent) -> Result:
+    """"List all of your tools" - the COMPLETE inventory, one tool per line.
+
+    THE OWNER'S COMPLAINT, 2026-11-25. "Can you list all of your tools?" was
+    answered by `_run_tools_inventory`, whose body is
+    `_self_list([...], cap=30)`: with 47 tools switched on it named 30 and said
+    "and 17 more", joining every name into one comma-run. That cap is right for
+    "what tools do you have?" - a count and a flavour - and wrong for a question
+    that says ALL, so the two questions now have two shapes.
+
+    NO CAP HERE, and no "and N more". The list is `tool_inventory()`'s
+    `all_names` - the registry's whole list; a settings file that names every
+    tool changes the MARKS, never the list. Where a part really cannot be read
+    the answer says which part and why, in the same breath - a shorter list with
+    no explanation is the class of bug this removes.
+
+    `_MEASURED_FIXTURE["tools"]` is the same suite seam `_run_tools_inventory`
+    reads, so a test can pin the names and the on/off split without depending on
+    tonight's settings file. Production never sets it.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    on = _inventory_on(inv)
+    total = len(names)
+    missing = max(0, registered - total)
+    said = []
+    if on is None:
+        why = ("the settings file did not answer" if inv.get("enabled") is None
+               else "the settings file gave a count but not the names")
+        said.append(f"{registered} tools built in. I cannot read which of them "
+                    f"are switched on - {why}, so no tool below is marked on or "
+                    f"off and I will not guess.")
+    else:
+        switched = sum(1 for n in names if n in on)
+        said.append(f"{registered} tools built in, {switched} switched on.")
+        said.append("Here is every one, with on or off against each.")
+    if missing:
+        # A bound that must exist says itself, honestly: this is the "never a
+        # silent omission" rule, applied to the one case where a name really is
+        # not there to print.
+        said.append(f"The registry names {total} of them; the other {missing} "
+                    f"could not be read, so they are missing from the list below "
+                    f"- not switched off.")
+    said.append(_tool_rows_text(names, on))
+    if on is not None:
+        said.append(f"That is all {registered} - nothing is left off the list. "
+                    f"The switches are in Settings, \"What asks first\".")
+    return Result("\n\n".join(said), intent.name)
+
+
+# --------------------------------------------------------------------------
+#   One category of tools, the other side of the switch, and the group list
+#   (2026-11-26, the owner's follow-up)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED GAP. The owner drove these at the live app and every one fell to
+# the model: "which github tools do you have", "what note tools are there",
+# "show me the email tools", "what groups of tools do you have", "list your
+# tools by category", "which tools are switched off", "which tools work on
+# notes". The model has no tool registry to read, so the answers were guesses.
+#
+# WHERE THE GROUPS COME FROM. Not a second list. The AREAS are the ones
+# `_tool_area_rows` already builds from `jarvis_agent.CORE_TOOLS` and
+# `jarvis_agent.TOOL_GROUPS` - the tool registry's own grouping, which
+# `test_short_tool_list.py` already forces to hold every tool in exactly one
+# group or the core, so the categories partition all 90 by construction. Only
+# the owner's WORDS are typed here (`_TOOL_CATEGORY_WORDS`), because a word list
+# is exactly what an alias table is for and no registry owns "vault" meaning
+# notes. The alternatives were checked and are worse for this question:
+# `jarvis_asks_first.TOOL_GROUPS` are the Settings switch panels (8 groups, 43
+# of them under "Jarvis's own tools", and 6 tools in no panel at all), so
+# "which github tools" would answer with forty-three unrelated tools;
+# `jarvis_tool_profiles.FAMILIES` is a real partition but keeps GitHub inside
+# "coding" (24 tools), so the same question would list shell_exec and the
+# Android builder. Both are still read here for what they own - the profiles'
+# labels are the tool labels this answer prints.
+
+#: (the area(s) the word means, the owner's words for it). An empty area tuple
+#: is a real answer, not a bug: there is no pictures/audio TOOL in the registry,
+#: and the honest answer to "what photo tools do you have" is "none", with the
+#: nearest file tool named - never a guess and never a silent nothing.
+_TOOL_CATEGORY_WORDS = (
+    (("Notes",),
+     ("note", "notes", "vault", "vaults", "obsidian", "logseq", "joplin")),
+    (("GitHub",),
+     ("github", "repo", "repos", "repository", "repositories", "pull request",
+      "pull requests", "pr", "prs", "issue", "issues")),
+    (("Email",), ("email", "emails", "mail", "gmail", "inbox")),
+    (("Calendar",), ("calendar", "calendars", "diary", "schedule", "schedules")),
+    (("Files and documents",),
+     ("file", "files", "document", "documents", "folder", "folders")),
+    ((), ("picture", "pictures", "photo", "photos", "screenshot", "screenshots",
+          "image", "images", "media", "audio")),
+    (("The web",), ("web", "search", "browser", "internet", "online")),
+    (("Memory",), ("memory", "memories", "remember", "fact", "facts")),
+    (("Settings",), ("setting", "settings", "config", "configuration",
+                     "preference", "preferences")),
+    (("Phone and messages",),
+     ("phone", "phones", "android", "mobile", "sms", "text", "texts",
+      "text message", "text messages")),
+    # "system" is two areas on purpose: the PC tools are the files/document
+    # readers and the program/phone controllers, and neither alone is "system".
+    (("Files and documents", "Controlling your PC and phone"),
+     ("system", "systems", "pc", "pcs", "computer", "computers", "windows",
+      "desktop")),
+)
+
+#: word -> the areas it means, and the one alternation the patterns share.
+_TOOL_CATEGORY_AREAS = {word: areas
+                        for areas, words in _TOOL_CATEGORY_WORDS
+                        for word in words}
+_TOOL_CATEGORY_ALT = "|".join(re.escape(w) for _areas, words
+                              in _TOOL_CATEGORY_WORDS for w in words)
+
+#: The whole-sentence shapes that name ONE category. `fullmatch` only, so "the
+#: email tools broke this morning" is not claimed. Each pattern names the group
+#: word as `area`, read back through `_TOOL_CATEGORY_AREAS`.
+_TOOL_CATEGORY_PATTERNS = tuple(re.compile(p) for p in (
+    # "which github tools do you have" / "what note tools are there"
+    r"(?:which|what)\s+(?:of\s+your\s+|of\s+the\s+|the\s+|your\s+)?"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
+    r"(?:tools?|functions?|abilities?)"
+    r"(?:\s+(?:do|does)\s+(?:you|jarvis)\s+(?:have|got))?"
+    r"(?:\s+(?:are|is)\s+there)?\s*\??$",
+    # "show me the email tools" / "list the github tools"
+    r"(?:show|list)\s+(?:me\s+)?(?:all\s+(?:of\s+)?)?(?:the|your)\s+"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+(?:tools?|functions?|abilities?)"
+    r"\s*\??$",
+    # "the calendar tools"
+    r"the\s+(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
+    r"(?:tools?|functions?|abilities?)\s*\??$",
+    # "what can the files tools do"
+    r"(?:what\s+can|what\s+do)\s+(?:the|your|my)\s+"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
+    r"(?:tools?|functions?|abilities?)\s+(?:do|have)\s*\??$",
+    # "which tools work on notes"
+    r"which\s+(?:tools?|functions?)\s+(?:work|works|are\s+used)\s+"
+    r"(?:on|for|with)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s*\??$",
+))
+
+#: "what groups of tools do you have" / "list your tools by category"
+_TOOLS_CATEGORIES = re.compile(
+    r"(?:what|which)\s+groups?\s+of\s+(?:your\s+|the\s+)?tools\s+"
+    r"(?:do\s+you\s+have|are\s+there|have\s+you\s+got)\s*\??$"
+    r"|(?:what|which)\s+(?:categories|groups|areas)\s+of\s+tools\s+"
+    r"(?:do\s+you\s+have|are\s+there)\s*\??$"
+    r"|list\s+(?:all\s+(?:of\s+)?)?(?:your\s+|the\s+)?tools\s+by\s+"
+    r"(?:category|categories|group|groups|area|areas)\s*\??$")
+
+#: "which tools are switched off" - the question you ask when one is missing
+_TOOLS_SWITCHED_OFF = re.compile(
+    r"(?:which|what)\s+(?:of\s+your\s+)?(?:tools?|functions?)\s+"
+    r"(?:are|is)\s+(?:switched\s+off|turned\s+off|off|disabled|not\s+on)\s*\??$"
+    r"|(?:which|what)\s+tools?\s+(?:have|has)\s+(?:you|jarvis)\s+"
+    r"(?:switched|turned)\s+off\s*\??$"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:tools?|functions?)\s+"
+    r"(?:that|which)\s+(?:are\s+)?(?:switched\s+off|off|disabled)\s*\??$")
+
+#: "what tools can change my settings" - the ATTRIBUTE form. It is answered
+#: from the settings area (see `_run_tools_settings`), whose own group
+#: description is "change one of Jarvis's own settings".
+_TOOLS_SETTINGS_CHANGERS = re.compile(
+    r"(?:what|which)\s+(?:of\s+your\s+)?tools?\s+(?:can|could)\s+"
+    r"(?:change|edit|modify|alter)\s+(?:my|your|the)\s+"
+    r"(?:settings?|config|configuration|preferences?)\s*\??$"
+    r"|(?:what|which)\s+(?:of\s+your\s+)?tools?\s+(?:change|edit|modify)\s+"
+    r"(?:my|your)\s+settings?\s*\??$"
+    r"|which\s+(?:tools?|functions?)\s+change\s+(?:a|one\s+of\s+my)\s+"
+    r"settings?\s*\??$")
+
+
+def _self_tools_categories(s: str) -> Optional[Intent]:
+    """The category / group-list / switched-off / settings-attribute questions.
+
+    Called from `_match` AFTER the GitHub self-answers, so "what github tools do
+    you have" keeps the answer it has always had (`github_self`, which lists the
+    GitHub tools with their cards); "which github tools do you have" is not
+    claimed there and reaches `tools_in_category` here. Every branch returns a
+    whole-sentence intent or None - a near miss still goes to the model.
+    """
+    if _TOOLS_SETTINGS_CHANGERS.fullmatch(s):
+        return Intent("tools_settings")
+    if _TOOLS_CATEGORIES.fullmatch(s):
+        return Intent("tools_categories")
+    if _TOOLS_SWITCHED_OFF.fullmatch(s):
+        return Intent("tools_switched_off")
+    for pattern in _TOOL_CATEGORY_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m is not None:
+            word = " ".join(str(m.group("area") or "").split())
+            return Intent("tools_in_category",
+                          {"areas": list(_TOOL_CATEGORY_AREAS.get(word) or ()),
+                           "words": word})
+    return None
+
+
+def _category_names(rows, areas) -> list:
+    """Every tool in the named areas, in the areas' own order."""
+    wanted = set(areas)
+    names = []
+    for area, area_names in rows:
+        if area in wanted:
+            names += area_names
+    return names
+
+
+def _run_tools_in_category(intent: Intent) -> Result:
+    """"Which github tools do you have?" - one group, same bullet shape.
+
+    The count line is the group's own count ("20 tools in GitHub, 5 switched
+    on"), and the body is `_tool_rows_text`, the same renderer the all-90 list
+    uses, so the two cannot drift. A word that names NO area (pictures, photos,
+    audio) is answered honestly with the nearest file tool - there is no
+    picture tool in the registry, and saying so is the answer.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    rows = _tool_area_rows(names)
+    areas = [str(a) for a in (intent.f.get("areas") or ())]
+    if not areas:
+        # A real, honest empty answer. The nearest TOOL is read from the
+        # registry, not typed: send_file_to_phone is the one tool that can carry
+        # a picture (it sends one file), and it is only named if it is there.
+        near = [n for n in names if n == "send_file_to_phone"]
+        tail = (f" The nearest is {_tool_label(near[0])}, which sends one file "
+                f"from your PC to your phone." if near else "")
+        return Result(
+            f"I have no built-in tool for pictures, photos, screenshots or "
+            f"audio - nothing in my tool list does that.{tail} Say \"list the "
+            f"files tools\" for the file tools I do have.",
+            intent.name)
+    wanted = _category_names(rows, areas)
+    on = _inventory_on(inv)
+    where = areas[0] if len(areas) == 1 else "these groups"
+    said = []
+    if on is None:
+        said.append(f"{len(wanted)} tools in {where} built in. I cannot read "
+                    f"which are switched on - the settings file did not answer, "
+                    f"so no tool below is marked on or off.")
+    else:
+        switched = sum(1 for n in wanted if n in on)
+        said.append(f"{len(wanted)} tools in {where}, {switched} switched on.")
+    said.append(_tool_rows_text(wanted, on))
+    if on is not None:
+        said.append(f"That is all {len(wanted)} in {where} - nothing is left "
+                    f"off. Say \"list all of your tools\" for the whole list.")
+    return Result("\n\n".join(said), intent.name)
+
+
+def _run_tools_categories(intent: Intent) -> Result:
+    """"What groups of tools do you have?" - every area, its count, its on count.
+
+    Read from the same partition the all-90 list renders, so the groups and the
+    tools under them cannot disagree. Each line is a `- ` bullet like the tool
+    lines, and the closing sentence says how to reach either side.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    on = _inventory_on(inv)
+    rows = _tool_area_rows(names)
+    said = []
+    if on is None:
+        said.append(f"{len(rows)} groups of tools, {len(names)} built in. I "
+                    f"cannot read which are switched on - the settings file did "
+                    f"not answer, so no group shows an on count.")
+    else:
+        switched = sum(1 for n in names if n in on)
+        said.append(f"{len(rows)} groups of tools, {len(names)} built in, "
+                    f"{switched} switched on.")
+    lines = []
+    for area, area_names in rows:
+        n = len(area_names)
+        on_n = (sum(1 for t in area_names if t in on) if on is not None else None)
+        lines.append(f"- {area}: {n} tool{'' if n == 1 else 's'}"
+                     + ("" if on_n is None else f" ({on_n} on)"))
+    said.append("\n".join(lines))
+    said.append("Say \"list the GitHub tools\" for one group, or \"list all of "
+                "your tools\" for every tool with its own on or off mark.")
+    return Result("\n\n".join(said), intent.name)
+
+
+def _run_tools_switched_off(intent: Intent) -> Result:
+    """"Which tools are switched off?" - the complement, and the count.
+
+    The enabled set is the same read the count answer makes; the complement is
+    computed from the registry's own names, never from a typed list. If the
+    settings file cannot be read the answer says that instead of inventing an
+    off set.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    on = _inventory_on(inv)
+    if on is None:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read which of "
+            f"them are switched off - the settings file did not answer, so I "
+            f"will not guess at the list.", intent.name)
+    off = [n for n in names if n not in on]
+    switched = sum(1 for n in names if n in on)
+    said = [f"{len(off)} of my {registered} built-in tools are switched off; "
+            f"{switched} are switched on."]
+    if not off:
+        said = [f"None - every one of my {registered} built-in tools is switched "
+                f"on in your settings file."]
+    else:
+        said.append(_tool_rows_text(off, on))
+        said.append(f"That is all {len(off)} switched-off tools, nothing left "
+                    f"out. Say \"list all of your tools\" for the whole list with "
+                    f"both marks.")
+    return Result("\n\n".join(said), intent.name)
+
+
+def _run_tools_settings(intent: Intent) -> Result:
+    """"What tools can change my settings?" - the settings group, split honestly.
+
+    The ATTRIBUTE is read from the registry's own words, not from a second list:
+    a tool whose plain label says "(read-only)" cannot change anything, and every
+    tool in the settings group whose label does not say that has a card or a
+    write path. The group itself is `jarvis_agent.TOOL_GROUPS`' "settings" group
+    - the table whose own description is "change one of Jarvis's own settings".
+    The gate's `risk_for` cannot help here: it has no "read-only" tier (a read
+    is simply unclassified), so a gate-based split would need a hand-written
+    action list, which the rule against second lists forbids.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    rows = _tool_area_rows(names)
+    settings = _category_names(rows, ("Settings",))
+    if not settings:
+        return Result("I have no tools for my own settings in this build.",
+                      intent.name)
+    changers = [n for n in settings if "read-only" not in _tool_label(n).lower()]
+    readers = [n for n in settings if n not in changers]
+    on = _inventory_on(inv)
+    said = [f"{len(changers)} of my {len(settings)} tools about my own settings "
+            f"can change one; the other {len(readers)} only read them."]
+    if changers:
+        said.append("Can change one:\n" + _tool_rows_text(changers, on,
+                                                         heading=False))
+    if readers:
+        said.append("Only read them:\n" + _tool_rows_text(readers, on,
+                                                          heading=False))
+    said.append("The switches are in Settings, \"What asks first\". Say \"list "
+                "the settings tools\" for all of them with their marks.")
+    return Result("\n\n".join(said), intent.name)
 
 
 def _run_tools_asking(intent: Intent) -> Result:
@@ -32726,6 +34849,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_settings(f)
     if n == "cloud_settings_change":
         return _run_cloud_settings_change(f, peer=peer, local=local)
+    # The personal data removal tool (2026-11-26, PR 1 of 3). The QUESTIONS read
+    # this PC's own mode, mail details, key presence and tracker (no model, no
+    # card, no write); the CHANGE goes through the settings registry's ONE mode
+    # row, which raises the cloud-PII consent card for `optery_api`/`hybrid`, so
+    # it is deliberately NOT in READ_ONLY_INTENTS - it can raise a card and can
+    # change a setting.
+    if n == "privacy_explain":
+        return _run_privacy_explain(f)
+    if n == "privacy_mode_change":
+        return _run_privacy_mode_change(f, peer=peer, local=local)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "jobs_priority":
@@ -32869,12 +35002,40 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result(NOTE_CREATE_ASK_SAID, "note_create_refused")
     if n == "note_create_capability":
         return _run_note_create_capability()
+    if n == "note_delete_capability":
+        # "can you delete my notes?" (DEF-095, 2026-11-25): the capability
+        # sentence, from the real card and its real limit. Read-only.
+        return _run_note_delete_capability()
+    if n == "note_duplicates_capability":
+        # "can you find duplicates?" - the scan exists, and its bounds are the
+        # ones the scan itself uses. Read-only.
+        return _run_note_duplicates_capability()
     if n == "note_location":
         return _run_note_location(f, hidden=_notes_write_hidden())
     if n == "note_append":
         return _run_note_append(f)
     if n == "note_tag":
         return _run_note_tag(f)
+    # The five FULL-CONTROL verbs of 2026-11-25 that had no chat sentence, plus
+    # the pinned-note read. Every write lands on the notes editor's OWN route
+    # (one card each where a card is owed, one File Guardian copy, one Undo
+    # where an undo exists) - nothing here writes a file itself, and no name is
+    # ever guessed: each runner resolves the note through `_find_note` and
+    # refuses, naming what it looked for, when there is no such note.
+    if n == "note_rewrite":
+        return _run_note_rewrite(f)
+    if n == "note_copy":
+        return _run_note_copy(f)
+    if n == "note_section_delete":
+        return _run_note_section_delete(f)
+    if n == "note_merge":
+        return _run_note_merge(f)
+    if n == "note_merge_ask":
+        return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+    if n == "note_empty_trash":
+        return _run_note_empty_trash(f)
+    if n == "note_pinned":
+        return _run_note_pinned(f)
     if n == "note_rename":
         return _run_note_rename(f)
     if n == "note_move":
@@ -33244,6 +35405,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_internet_access(intent)
     if n == "tools_inventory":
         return _run_tools_inventory(intent)
+    if n == "tools_list_all":
+        return _run_tools_list_all(intent)
+    if n == "tools_in_category":
+        return _run_tools_in_category(intent)
+    if n == "tools_categories":
+        return _run_tools_categories(intent)
+    if n == "tools_switched_off":
+        return _run_tools_switched_off(intent)
+    if n == "tools_settings":
+        return _run_tools_settings(intent)
     if n == "tools_asking":
         return _run_tools_asking(intent)
     if n == "connected_list":
@@ -33366,6 +35537,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_search(intent.f.get("needle") or "")
     if n == "note_open":
         return _run_note_open(intent.f.get("title") or "")
+    if n == "note_duplicates":
+        # "find duplicate notes" (DEF-095, 2026-11-25): a read-only, bounded
+        # scan of the vault. Reads and lists only; the removal is the owner
+        # naming the notes and `note_delete`'s one existing card.
+        return _run_note_duplicates(intent.f or {})
     if n == "surface_origin":
         # 2026-11-01 field test: "where am I talking from?" - answered from
         # jarvis_surface's own header fact, never the model's guess at a place.
@@ -33901,8 +36077,13 @@ _PROJECT_INTENTS = frozenset({"project_working", "project_next", "project_blocki
 _ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_needs",
                               "android_build_install"})
 
-#: The plug-in answers (2026-10-31): fixed words, no card.
-_PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plugin_install"})
+#: The plug-in answers (2026-10-31): fixed words, no card. Since 2026-11-26 the
+#: two SWITCH intents are here too - they route to `_run_plugins` like the rest,
+#: but they are deliberately NOT in READ_ONLY_INTENTS: each one can raise a card
+#: or change what runs. The two reads are, and they are.
+_PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about",
+                             "plugin_install", "plugin_on", "plugin_off",
+                             "plugin_off_list", "plugin_on_state"})
 
 #: The reminders capability answers (2026-10-31): fixed words, no card.
 #: Read-only intents answered deterministically even in a PRIVATE chat
@@ -33962,6 +36143,15 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # deliberately NOT here: it changes a setting or raises a card, and a
     # private chat refuses that like every action.
     "cloud_settings",
+    # The personal data removal tool's answers (2026-11-26, PR 1 of 3): each one
+    # is built from this PC's own state - the saved mode, whether the Gmail App
+    # Password and an Optery key are present, and the tracker's counts - with no
+    # secret, no model and no write, so a private chat gets the real state rather
+    # than a model's guess about a tool it cannot see. The CHANGE
+    # (`privacy_mode_change`) is deliberately NOT here: it can raise the cloud
+    # consent card and it changes the mode, and a private chat refuses that like
+    # every action.
+    "privacy_explain",
     # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
     # own hardware and answers in its module's fixed words - nothing written.
     "model_recommender",
@@ -34000,6 +36190,12 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # halves are done ... they differ") is why this lane exists, so a private
     # chat gets the real comparison rather than the same guess.
     "update_state",
+    # The two plug-in READS (2026-11-26): which plug-ins are switched off and
+    # whether one named plug-in is on. Both read THIS PC's live registry
+    # (`jarvis_agent._plugin_rows`, the same one `plugin_list` shows) and write
+    # nothing, so a private chat gets the truth instead of a model's guess. The
+    # two CHANGES (`plugin_on`, `plugin_off`) are deliberately NOT here.
+    "plugin_off_list", "plugin_on_state",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -34068,6 +36264,12 @@ READ_ONLY_INTENTS = frozenset({
     # The CHANGE (`cloud_settings_change`) is deliberately absent - it changes
     # a setting or raises a card.
     "cloud_settings",
+    # The data removal tool's answers (2026-11-26, PR 1 of 3): they read this
+    # PC's own mode file, key presence and tracker and change nothing, so none
+    # may take away what "cancel that" would undo. The CHANGE
+    # (`privacy_mode_change`) is deliberately absent - it changes the mode and
+    # can raise the cloud consent card.
+    "privacy_explain",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
@@ -34080,6 +36282,12 @@ READ_ONLY_INTENTS = frozenset({
     "project_working", "project_next", "project_blocking",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    # The two plug-in READS (2026-11-26): "which plug-ins are switched off" and
+    # "is plug-in X on" read the live registry and write nothing, so neither may
+    # take away what "cancel that" would undo. The two CHANGES (`plugin_on`,
+    # `plugin_off`) are deliberately ABSENT - one raises the modify_own_code
+    # card, the other writes the loader's own marker.
+    "plugin_off_list", "plugin_on_state",
     "skill_menu_info",
     # Any of its own tools, in depth (2026-11-04): it reads a fixed dossier in
     # this repository and calls nothing - the module has no setter, no card and
@@ -34150,9 +36358,20 @@ READ_ONLY_INTENTS = frozenset({
     # delete's own WAITING and DONE results are deliberately NOT here.
     "note_delete_ask", "note_delete_refused", "note_line_delete_refused",
     "obsidian_style_refused", "note_make_refused", "note_list", "note_read_about",
+    # Full note control (2026-11-25): the pinned-note READ names flags and
+    # changes nothing, and the two ASK answers ("can you merge two notes?",
+    # "can you empty the trash?") raise no card either - so none may clear what
+    # "cancel that" would undo. Every write/merge/copy/trash RESULT is
+    # deliberately absent.
+    "note_pinned", "note_merge_ask", "note_empty_trash_ask",
     # The card-free create's capability answer and the where-is-my-vault answer
     # (2026-10-31): both only read the vault setting and change nothing.
     "note_create_capability", "note_location",
+    # The duplicate scan and the two note-capability answers (DEF-095,
+    # 2026-11-25): `note_duplicates` lists and reads the vault and raises no
+    # card, and the two capability answers only say what the code does. None of
+    # the three may take away what "cancel that" would undo.
+    "note_duplicates", "note_delete_capability", "note_duplicates_capability",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",
@@ -34217,6 +36436,16 @@ READ_ONLY_INTENTS = frozenset({
     # changing or restarting anything - so none may take back what "cancel
     # that" would undo.
     "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # "List all of your tools" (2026-11-25): the complete inventory, read from
+    # the same registry and settings file as the count answer. It writes
+    # nothing, raises no card and calls no model, so it may not take back what
+    # "cancel that" would undo.
+    "tools_list_all",
+    # The category, group-list, switched-off and settings-attribute answers
+    # (2026-11-26): every one reads the same registry, the same partition and
+    # the same settings file, writes nothing and raises no card.
+    "tools_in_category", "tools_categories", "tools_switched_off",
+    "tools_settings",
     # The model-conversation reads (2026-11-08): all-preset models, per-preset
     # advice, the model history, and how to start a benchmark - every one reads
     # this PC's own rows and changes nothing, so none may clear "cancel that".

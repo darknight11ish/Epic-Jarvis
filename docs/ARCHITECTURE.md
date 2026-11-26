@@ -3400,7 +3400,13 @@ backend routes, in both directions; the rest are listed here only.
   EXISTING `modify_own_code` card, already listed on the "What asks first" page
   in its "Jarvis's own code" group, so no new page row was invented either; the
   feature itself is on both apps' Features pages (`features/features.json`,
-  `plugin-switch`). `backend/test_plugin_switch.py` holds both halves.
+  `plugin-switch`). `backend/test_plugin_switch.py` holds both halves. **Since
+  2026-11-26 the fast path answers the same six sentences too** (`plugin_on`,
+  `plugin_off`, `plugin_off_list`, `plugin_on_state` in
+  `backend/jarvis_quick.py`, JARVIS-API §181): it is the same ability through
+  the same card, still with no route, no Rust command, no app screen and no new
+  permission path, so `tools/check_parity.py` stays clean and the one-sided
+  part is still the screen.
 
 - **A question on a reminder is ANSWERED on both apps and CREATED only on the
   PC, and that is one-sided on purpose** (2026-11-02, the owner's ask;
@@ -3596,6 +3602,24 @@ backend routes, in both directions; the rest are listed here only.
   one-sidedness is registered: the route belongs in `BACKEND_ONLY` (documented,
   no app caller), not in a `todo` queue for a phone or desktop half; no such
   half is owed.
+
+- **The four full-note-control verbs are chat-and-route only, on purpose**
+  (2026-11-25; the owner's *"full control and full ability to manipulate and
+  change any of my notes, with deletions requiring a card of approval"*, and the
+  same reasoning as the delete paragraph above). Copying, merging, deleting one
+  section and emptying the vault's trash are built and documented (JARVIS-API
+  section 170.15) and **no app draws a screen for any of them**: the chat
+  sentence is the door both apps already have, `jarvis_quick` calls each route's
+  own handler in process inside the `/api/chat` turn the HUD and the phone
+  already share, and every write raises its ONE card there. A screen would be a
+  second approval surface for the same act - and for the merge and the empty,
+  an act neither app can undo - which is the thing to avoid, not a missing half.
+  All three routes are named in `tools/check_parity.py`'s `BACKEND_ONLY` with
+  that reason. The one side that DOES differ is deliberate and is the copy's
+  card rule, not a screen: a copy the owner makes directly in the editor is
+  card-free (create's own rule, because a brand-new file cannot overwrite or
+  delete anything), while the same copy asked for in chat or from the phone
+  raises the card - one rule, applied to whoever asked.
 
 - **Routing a typed "was this answer right?" is the HUD page's and the phone's
   alone, not the desktop's main chat window** (2026-11-01; the field-test gap:

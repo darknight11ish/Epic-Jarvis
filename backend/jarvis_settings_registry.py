@@ -4467,6 +4467,103 @@ def control_invalid_words(control: str, words: str) -> str:
             f"Its fields are: {fields}.")
 
 
+# --------------------------------------------------------------------------
+#   The data removal mode dial (2026-11-26, PR 1 of 3)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK (2026-11-26): the personal-data removal tool has three modes -
+# `local` (the default), `optery_api` and `hybrid` - and "the mode dial must be
+# changeable". This is that row: the words a person types, the three values, and
+# the ONE function behind them.
+#
+# WHY IT IS NOT ONE OF THE COUNTED TABLES. `BOOL_SETTINGS`, `CHOICE_SETTINGS`
+# and `NUMBER_SETTINGS` are the rows both Settings screens draw, and every one
+# of them is a cardless change: a choice is read back by `current_value` and
+# undone by setting it to the other value. This row is neither. Two of its
+# three values send the owner's name, address, phone number and email address
+# to Optery's cloud, so they MUST raise a consent card and MUST be able to come
+# back as "waiting" - and a Settings screen only exists for this tool from PR 2
+# onwards. Putting it in CHOICE_SETTINGS would either make the card illegal or
+# make the screen claim a switch it cannot draw yet, so it is its own small
+# table with the SAME contract shape (`set(value, *, peer, local) -> Outcome`)
+# and the SAME `_say()` reading of whatever the module returns.
+#
+# NO SECOND MUTATION PATH. `set_data_removal_mode` calls
+# `jarvis_privacy_removal.set_mode()`, which is the only writer of
+# `privacy-removal.json`. When PR 2 adds the Settings switch it calls this same
+# setter, exactly as every other row on this page calls the function its own
+# screen already called.
+
+
+@dataclass(frozen=True)
+class ModeSetting:
+    """One setting whose values are modes rather than an on/off or a pick.
+
+    The `set` callable has the same signature every other row's does -
+    `(value, *, peer=None, local=None) -> Outcome` - so a caller that already
+    knows how to adjust a setting needs no special case for this one.
+    """
+
+    key: str
+    #: What a person may call the dial. Exact aliases; `jarvis_quick.py`'s
+    #: sentence is matched against these, never against a guess.
+    names: tuple
+    #: The accepted values, in the order an answer lists them.
+    modes: tuple
+    #: Calls the module's own setter; (value, *, peer, local) -> Outcome.
+    set: Callable[..., Outcome] = field(repr=False)
+    #: What the dial decides, in one line, for the "what is this?" answer.
+    what: str = ""
+
+
+def set_data_removal_mode(value, *, peer=None, local=None) -> Outcome:
+    """Change the personal-data removal mode through the module's ONE setter.
+
+    `local` applies at once and raises no card. `optery_api` and `hybrid` raise
+    the cloud-PII consent card and come back as `waiting`; a denial, a timeout
+    or a withdrawal leaves the mode exactly as it was, and the words are the
+    module's own - this file never invents a sentence about consent.
+    """
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                       # noqa: BLE001 - an older PC
+        return _missing("the data removal tool")
+    try:
+        code, body = PR.set_mode(value, peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Outcome(False, "The data removal mode could not be changed "
+                              f"({type(exc).__name__}), so nothing was changed.")
+    return _say(code, body)
+
+
+MODE_SETTINGS: tuple = (
+    ModeSetting(
+        "data_removal",
+        ("the data removal mode", "the data removal tool", "data removal",
+         "the personal data removal mode", "the personal info removal mode",
+         "the privacy removal mode", "the removal mode"),
+        ("local", "optery_api", "hybrid"),
+        set_data_removal_mode,
+        "where the removal requests are made: on this PC only (local, the "
+        "default), through Optery's paid cloud API, or both (hybrid). Only local "
+        "keeps your details on this PC, so the other two raise a consent card.",
+    ),
+)
+
+
+def find_mode_setting(words: str) -> Optional["ModeSetting"]:
+    """The mode dial `words` names exactly, or None - never a fuzzy guess."""
+    bare = _bare(words)
+    if not bare:
+        return None
+    for setting in MODE_SETTINGS:
+        if bare == _bare(setting.key.replace("_", " ")):
+            return setting
+        if any(bare == _bare(name) for name in setting.names):
+            return setting
+    return None
+
+
 #: The owner's two Settings-only exceptions (ruling Q3.3, 2026-10-22): typing
 #: a change to them is refused in plain words with the Settings pointer - never
 #: handed to the model, never a card.
