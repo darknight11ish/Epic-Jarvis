@@ -407,6 +407,11 @@ TITLES = {
     # a byte is written, and the card names the file, its size and the folder's
     # name - never a path and never a byte of it.
     "receive_uploaded_document": "save a document your phone sent",
+    # Connecting a MAILBOX (jarvis_connect_account.py's Gmail row, DEF-096,
+    # 2026-11-25): ONE card takes the address and an app password and saves them
+    # in Credential Manager. The title is spoken and drawn on a lock screen, so
+    # it names the account, never the provider's product name.
+    "connect_mail": "connect your mail account",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -662,6 +667,10 @@ SUMMARY = {
     # A document sent from the owner's phone (jarvis_upload.py, 2026-11-05):
     # ONE card per file, before a byte is written.
     "receive_uploaded_document": "save a document from your phone",
+    # The mailbox card's short words (DEF-096, 2026-11-25): what it does, in a
+    # glance - the full card says the value goes to Credential Manager and that
+    # the one test reads only a count.
+    "connect_mail": "connect your mail account",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above

@@ -1681,6 +1681,14 @@ def _match(text, now: float, conversation: Optional[str] = None,
     # exact, read-only shapes and must win over the generic capability lane.
     if _NOTE_CREATE_CAPABILITY.fullmatch(s):
         return Intent("note_create_capability")
+    # "can you delete my notes?" and "can you find duplicates?" (DEF-095,
+    # 2026-11-25): read from the RAW sentence, because `normalize_spoken_command`
+    # strips the leading "can you" and "delete my notes" would then be the
+    # delete REQUEST - answered by asking which note, not by the capability
+    # sentence. Answered from what the code really does: both exist.
+    got = _note_capability_question(text)
+    if got is not None:
+        return got
     if _NOTE_LOCATION_LAST.fullmatch(s):
         return Intent("note_location", {"context": "last"})
     if _NOTE_LOCATION_VAULT.fullmatch(s):
@@ -19137,12 +19145,13 @@ def _run_connect(f: dict) -> Result:
     sid = str(f.get("service") or "")
     if ask == "later" or not sid:
         return Result(
-            "I can connect two things by talking today: a calendar (the private iCal "
-            "link, or a CalDAV server's username and password) and GitHub. The rest - "
-            "email, Notion, Obsidian, the search and chatbot keys, Home Assistant - "
-            "still need Settings, Accounts on the PC, because none of them has a test "
-            "I can run to prove it works. A password or a token is never typed into "
-            "the chat, there or anywhere else.",
+            "I can connect three things by talking today: a calendar (the private iCal "
+            "link, or a CalDAV server's username and password), GitHub, and a Gmail "
+            "mailbox (your address and an app password, read-only). The rest - Notion, "
+            "Obsidian, the search and chatbot keys, Home Assistant - still need Settings, "
+            "Accounts on the PC, because none of them has a test I can run to prove it "
+            "works. A password or a token is never typed into the chat, there or anywhere "
+            "else.",
             "connect_account")
     if ask == "status":
         said = C.status_words(sid)
@@ -19206,8 +19215,10 @@ CONNECT_MISSING = ("I cannot raise the connect card on this PC: jarvis_connect_a
 #   (b) calendar, read-only - the private iCal link, typed on the secure
 #       connect card this PC raises ("connect my calendar");
 #   (c) GitHub - the same kind of secure card ("connect GitHub");
-#   (d) email - NOT built: no connect card, and its IMAP details are typed in
-#       Settings, Accounts on this PC.
+#   (d) email - Gmail, read-only: the same kind of secure card ("connect my
+#       Gmail"), which saves the address and an app password in Credential
+#       Manager and reads only the INBOX count to prove it (2026-11-25,
+#       DEF-096; other providers keep Settings, Accounts).
 #
 # NOTHING HERE TYPES A VALUE, raises a card or changes anything: the answer is
 # read-only (READ_ONLY_INTENTS) and only navigates Settings, Accounts.
@@ -19237,8 +19248,10 @@ ACCOUNTS_PATHS_WORDS = (
     "2. Google Calendar, quick read-only - the private iCal link. Say \"connect my calendar\" "
     "and one secure card appears on this PC for it.\n"
     "3. GitHub - the same kind of secure card: say \"connect GitHub\".\n"
-    "4. Email - not built yet: there is no connect card for it, and its IMAP details (mail "
-    "server, username, password) are typed in Settings, Accounts on this PC."
+    "4. Email - Gmail, read-only: say \"connect my Gmail\" and one secure card appears on "
+    "this PC for your address and an app password (it reads only how many messages INBOX "
+    "holds). Any other provider's IMAP details (mail server, username, password) are "
+    "typed in Settings, Accounts on this PC."
 )
 
 #: The first sentence, from the calendar's own chosen way - so an owner who
@@ -19312,14 +19325,16 @@ ACCOUNTS_EMAIL_LEAD_ON = "A mail server is saved on this PC already.\n"
 #: is said last. The app-password rule is Google's, not a measurement of his
 #: account, and the sentence says so.
 ACCOUNTS_EMAIL_WORDS = (
-    "Email is set up in Settings, Accounts on the PC, not on the phone: there is no "
-    "connect card for email here yet.\n"
-    "For Gmail: under Server addresses, Mail server imap.gmail.com, port 993, Mailbox "
-    "folder INBOX, and the Sending server can stay empty. Under the account secrets, "
-    "IMAP username is your Gmail address, and IMAP password must be an APP PASSWORD: "
-    "Google refuses your normal password over IMAP, and makes an app password only "
-    "with 2-step verification switched on. That is how Google's app passwords work - "
-    "I have not checked it against your account.\n"
+    "Email is set up in Settings, Accounts on the PC, and Gmail has its own secure "
+    "connect card: say \"connect my Gmail\" for your address and an app password "
+    "(read-only - it reads only how many messages INBOX holds).\n"
+    "The same account typed by hand in those boxes is the other way in, and the way "
+    "for any other provider: under Server addresses, Mail server imap.gmail.com, port "
+    "993, Mailbox folder INBOX, and the Sending server can stay empty. Under the "
+    "account secrets, IMAP username is your Gmail address, and IMAP password must be an "
+    "APP PASSWORD: Google refuses your normal password over IMAP, and makes an app "
+    "password only with 2-step verification switched on. That is how Google's app "
+    "passwords work - I have not checked it against your account.\n"
     "With that saved I read the sender of new mail (no subject, no text, and nothing "
     "goes to the model) and can send one when you ask. Type the password in that box "
     "on the PC, never into this chat."
@@ -19364,6 +19379,26 @@ def _accounts_connect(s: str) -> Optional[Intent]:
     if _CONNECT_STATUS.match(said):
         return None
     if _ACCOUNTS_ASK.match(said) or _ACCOUNTS_BARE.match(said):
+        # THE CONNECT CARD OWNS A SENTENCE THAT NAMES A MAIL SERVICE
+        # (2026-11-25, DEF-096). The owner said "i would like to connect you to
+        # my gmail" and got this answer's old line - "there is no connect card
+        # for email here yet" - which was true and useless. `gmail` is a
+        # service on that card now, so a sentence that names it belongs to
+        # `_connect` below, which raises the card and whose card says exactly
+        # what is read.
+        #
+        # IT YIELDS TO THE INTENT, NOT TO A WORD LIST. `_connect(said)` is asked
+        # what it would do, and only a real card ask is handed over - so a
+        # question this file's own grammar does not claim ("what about gmail?")
+        # keeps this answer, unchanged. The calendar half stays here too: this
+        # answer holds the Google two-way setup and the private iCal link, and a
+        # sentence naming both ("connect my gmail and google calendar") still
+        # needs it.
+        if not _ACCOUNTS_NAMES_CALENDAR.search(said) and _connectable_mail_service(said):
+            card = _connect(said)
+            if card is not None and card.name == "connect_account" \
+                    and str(card.f.get("ask") or "") == "card":
+                return None
         # Email alone, when the sentence names email and not the calendar: the
         # four-path answer below is the right shape for "gmail or google
         # calendar", and the wrong shape for "how do I connect a Gmail
@@ -19372,6 +19407,22 @@ def _accounts_connect(s: str) -> Optional[Intent]:
             return Intent("accounts_email")
         return Intent("accounts_connect")
     return None
+
+
+def _connectable_mail_service(text: str) -> str:
+    """The mail service this sentence names ("" when it names none).
+
+    Asks the card table itself (`jarvis_connect_account.SERVICES` and its
+    `MAIL_SERVICES`), so a second mail service added there needs no second
+    word list here. A missing module answers "", which keeps this answer's own
+    path unchanged.
+    """
+    try:
+        import jarvis_connect_account as C
+        sid = C.service_from_words(text)
+    except Exception:                       # noqa: BLE001 - module absent
+        return ""
+    return sid if sid in getattr(C, "MAIL_SERVICES", ()) else ""
 
 
 def _run_accounts_connect() -> Result:
@@ -19643,9 +19694,12 @@ _DAILY_NOTE_ADD = re.compile(
     r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+"
     r"(?:my\s+|today'?s\s+|todays\s+|the\s+)?(?:obsidian\s+)?"
     r"(?:daily\s+|today'?s\s+)?note\s*(?:[:,-]\s*|\s+)(?P<text>.+)$")
-#: Create/rename/delete of a note are NOT built (the notes editor's own honest
-#: limit, and the catalogue row says so). These shapes get one plain refusal
-#: instead of the model's promise.
+#: A create-shaped sentence this lane could not read a NAME out of. The old note
+#: here said "create/rename/delete of a note are NOT built", which was true when
+#: it was written and is not any more: creating, renaming, moving and deleting a
+#: note all exist (delete since 2026-11-23), so this is only the fallback that
+#: asks for the name and names the doors - see NOTE_CHANGE_REFUSAL. It never
+#: denies an ability the PC has.
 _NOTE_CREATE_REFUSED = re.compile(
     r"(?:create|make|start|add)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?"
     r"(?:new\s+|brand\s+new\s+)?note\b"
@@ -19763,12 +19817,13 @@ def _delete_phrases(rest: str) -> list:
     if len(parts) > 1 and all(parts):
         return [whole, parts]
     return [whole]
-#: Asking chat to READ or SEARCH a note: chat does not read note text today.
-#: The audit measured the model claiming "I have located your notes" with no
-#: tool run. These shapes get the true door in plain words instead - the Notes
-#: plate can search/read/save, chat cannot - and it never names a note title, so
-#: the hidden-lists rule is kept too. (The honesty lane's own duplicate
-#: note_door matcher is retired; this is the one door for note reading.)
+#: Asking chat to READ or SEARCH a note. The comment that used to sit here said
+#: "chat does not read note text today ... the Notes plate can search/read/save,
+#: chat cannot". That was true when it was written (2026-10-31) and is not now:
+#: `_notes_chat` above answers `note_read`, `note_search`, `note_list` and
+#: `note_open` from the same vault files the editor routes read, and every one of
+#: these patterns routes to those REAL readers. It still never guesses a title:
+#: a name that matches nothing answers in words.
 _NOTE_READ_PATTERNS = (
     re.compile(r"what\s+(?:does|do)\s+(?:my\s+|the\s+|a\s+|an\s+)?"
                r"(?P<name>.+?)\s+notes?\s+say\b.*"),
@@ -19895,6 +19950,62 @@ _NOTE_CREATE_CAPABILITY = re.compile(
     r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
     r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s*\??$"
     r"|(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note\s*\??$")
+
+#: "CAN YOU DELETE MY NOTES?" and "CAN YOU FIND DUPLICATES?" (DEF-095,
+#: 2026-11-25). Both are answered from the real capability because both exist:
+#: deleting a note shipped on 2026-11-23 (`delete_vault_notes`, one card naming
+#: every path, into .trash) and the duplicate scan is `jarvis_notes_edit
+#: .chat_find_duplicates`. The owner measured the model answering "I cannot
+#: delete your notes. My access to your Obsidian or Joplin files is strictly
+#: read-only", which was false twice - so these two shapes are claimed on the
+#: RAW sentence, BEFORE the normaliser strips "can you": without that, "can you
+#: delete my notes" arrives as "delete my notes" and the delete lane rightly
+#: asks which note, which is not the question.
+#:
+#: Both are anchored at the END, so a sentence that NAMES a note - "can you
+#: delete my Shopping note?" - is still a delete REQUEST with its one card, and
+#: one that names a topic - "can you find duplicate notes about the boiler" -
+#: is still the model's. Only the bare capability question is claimed.
+_NOTE_DELETE_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:delete|remove|erase|trash|get\s+rid\s+of)\s+"
+    r"(?:(?:my|the|any|all|some|of)\s+)*(?:obsidian\s+)?notes?"
+    r"(?:\s+(?:in|from|inside)\s+(?:my|the)\s+(?:obsidian\s+)?vault)?\s*\??$"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:delete|remove|erase|trash)\s+"
+    r"(?:my\s+|the\s+)?notes?\s*\??$"
+    r"|do\s+you\s+have\s+(?:a\s+)?(?:way|ability|permission|access)\s+to\s+"
+    r"(?:delete|remove|erase|trash)\s+(?:my\s+|the\s+)?notes?\s*\??$"
+    r"|(?:is|are)\s+there\s+(?:a\s+)?way\s+to\s+(?:delete|remove)\s+"
+    r"(?:my\s+|the\s+)?notes?\s*\??$")
+
+_NOTE_DUPLICATES_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:find|look\s+for|search\s+for|spot|detect|identify|check\s+for)\s+"
+    r"(?:(?:my|the|any|all|some|of)\s+)*"
+    r"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies)"
+    r"(?:\s+(?:in|inside)\s+(?:my|the)\s+(?:obsidian\s+)?(?:vault|notes?))?\s*\??$"
+    r"|(?:can|could)\s+you\s+(?:find|look\s+for|search\s+for|spot|detect)\s+"
+    r"(?:any\s+)?duplicates?\s*\??$"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:find|spot|detect)\s+"
+    r"(?:duplicate|duplicated|identical)\s+notes?\s*\??$"
+    r"|do\s+you\s+have\s+(?:a\s+)?(?:way|ability)\s+to\s+(?:find|spot|detect)\s+"
+    r"(?:duplicate|duplicated)\s+notes?\s*\??$")
+
+
+def _note_capability_question(raw) -> Optional[Intent]:
+    """The two bare note-capability questions, read from the RAW sentence.
+
+    Deliberately not `normalize_spoken_command`: that is what strips "can you",
+    and the whole point of this lane is to tell the QUESTION from the command
+    that follows it. Case, spacing and a trailing question mark are the only
+    normalising done.
+    """
+    text = " ".join(str(raw or "").strip().casefold().split())
+    if _NOTE_DUPLICATES_CAPABILITY.fullmatch(text):
+        return Intent("note_duplicates_capability")
+    if _NOTE_DELETE_CAPABILITY.fullmatch(text):
+        return Intent("note_delete_capability")
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -23410,6 +23521,70 @@ _NOTE_LIST_SHAPES = (
     re.compile(r"(?:search|look)\s+(?:through\s+|in\s+|at\s+)?(?:my|the)\s+notes?\s*"),
 )
 
+#: FINDING DUPLICATE NOTES (DEF-095, 2026-11-25). The owner's own sentences -
+#: "look for notes that have copies", "find duplicate notes", "do I have any
+#: duplicate notes", "find my notes with copies", "any duplicate notes", "which
+#: notes are duplicated" - measured on the live install reaching NO intent at
+#: all, so the model improvised. Every shape ends where the question ends: an
+#: optional "in my vault" and nothing else. That is the rule that keeps a
+#: sentence naming a real search term in the search lane - "find duplicate
+#: notes about the boiler" is not claimed here, and "search my notes for milk"
+#: never was. A note TITLE is not read out of any of them; the scan reads the
+#: whole vault and asks which group to act on.
+_DUP_TAIL = (r"(?:\s+(?:in|inside|from)\s+(?:my|the)\s+(?:obsidian\s+)?"
+             r"(?:vault|notes?))?"
+             r"(?:\s+(?:right\s+now|for\s+me|please))?")
+
+_DUPLICATES_ASKING = re.compile(
+    # "find duplicate notes", "show me duplicated notes", "list any copies"
+    rf"(?:find|look\s+for|search\s+for|search|show\s+me|show|list|get|"
+    rf"check\s+for|check|give\s+me)\s+(?:me\s+)?"
+    rf"(?:all\s+|any\s+|the\s+|my\s+)?"
+    rf"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies){_DUP_TAIL}"
+    # "find my notes with copies", "look for notes that have copies"
+    rf"|(?:find|look\s+for|search\s+for|search|show\s+me|show|list|check|get)\s+"
+    rf"(?:me\s+)?(?:all\s+|any\s+|the\s+|my\s+)?notes?\s+"
+    rf"(?:that\s+(?:have|are)\s+copies|with\s+copies|"
+    rf"that\s+are\s+duplicated|which\s+are\s+duplicated){_DUP_TAIL}"
+    # "do I have any duplicate notes", "do we have copies"
+    rf"|(?:do|does)\s+(?:i|we)\s+have\s+(?:any\s+|some\s+|a\s+)?"
+    rf"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies){_DUP_TAIL}"
+    rf"|(?:do|does)\s+(?:i|we)\s+have\s+(?:any\s+|some\s+)?(?:duplicates?|copies){_DUP_TAIL}"
+    # "are there any duplicate notes", "is there a duplicate"
+    rf"|(?:is|are)\s+there\s+(?:any\s+|some\s+)?"
+    rf"(?:duplicate|duplicated|identical)\s+(?:notes?|copies){_DUP_TAIL}"
+    rf"|(?:is|are)\s+there\s+(?:any\s+|some\s+)?duplicates?{_DUP_TAIL}"
+    # "any duplicate notes" (the bare question)
+    rf"|(?:any|all)\s+(?:duplicate|duplicated|identical)\s+notes?{_DUP_TAIL}"
+    # "which notes are duplicated"
+    rf"|which\s+(?:of\s+)?(?:my\s+|the\s+)?notes?\s+(?:are|is)\s+"
+    rf"(?:duplicated|duplicates|identical|the\s+same|copies|a\s+copy){_DUP_TAIL}"
+    # "check my notes for duplicates"
+    rf"|check\s+(?:my\s+|the\s+)?notes?\s+for\s+"
+    rf"(?:duplicates?|copies|near[- ]duplicates?){_DUP_TAIL}"
+    # "find duplicates", "look for copies"
+    rf"|(?:find|look\s+for|search\s+for|search|show\s+me|show|list)\s+"
+    rf"(?:me\s+)?(?:any\s+|all\s+|the\s+|my\s+)?(?:duplicates?|copies){_DUP_TAIL}"
+    # THE OWNER'S OWN SENTENCE (2026-11-24): "delete any copy or almost identical
+    # copy ... delete any duplicates". It asks for the removal before naming what
+    # to remove, so it gets the scan's list and the one offer - NOT a guess and
+    # NOT a card. Nothing is deleted by any of these.
+    rf"|(?:delete|remove|erase|trash)\s+(?:any\s+|all\s+|the\s+|my\s+)?"
+    rf"(?:duplicate|duplicated|identical|near[- ]duplicate)\s+(?:notes?|copies){_DUP_TAIL}"
+    rf"|(?:delete|remove|erase|trash)\s+(?:the\s+|any\s+|all\s+)?"
+    rf"(?:duplicates?|copies){_DUP_TAIL}"
+)
+
+_DUPLICATES_DELETE_SHAPE = re.compile(r"^(?:delete|remove|erase|trash)\b", re.I)
+
+
+def _note_duplicates_asking(s: str) -> Optional[Intent]:
+    """The duplicate-finding sentences, or None - answered by the scan, no model."""
+    if not _DUPLICATES_ASKING.fullmatch(s):
+        return None
+    return Intent("note_duplicates",
+                  {"asked_delete": bool(_DUPLICATES_DELETE_SHAPE.match(s))})
+
 
 def _notes_chat(s: str) -> Optional[Intent]:
     """The note questions this file answers without a model.
@@ -23418,7 +23593,21 @@ def _notes_chat(s: str) -> Optional[Intent]:
     `chat_*` helpers, which read the SAME vault files the editor routes read.
     The content questions come first, so "what do my notes say about milk" is a
     search rather than a note called "say about milk".
+
+    The duplicate-finding sentences come FIRST (DEF-095, 2026-11-25): "find my
+    notes with copies" used to be read as the LIST shape below and answered with
+    a note at random, which is the other half of why the owner never got a
+    duplicate answer. Their own grammar names no title, so nothing below wants
+    their words.
     """
+    # Both halves of 2026-11-25 appended here, and BOTH are kept: the
+    # duplicate-finding sentences first (main's DEF-095), then the pinned-note
+    # flag read. They claim disjoint sentences - one names copies, the other
+    # names a pin - so the order between them changes nothing, and neither one
+    # may be dropped to make the merge smaller.
+    got = _note_duplicates_asking(s)
+    if got is not None:
+        return got
     # Which notes are PINNED, asked four ways (2026-11-25). It runs before every
     # read shape below, because "show me the notes I pinned" was being read as
     # "show me the notes [called what?]" and answered as a note read. It is a
@@ -23664,6 +23853,219 @@ def _run_note_open(title: str) -> Result:
     said = ('Opening the Brain on this PC. Your notes are under Notes - look for '
             '"{0}" there.'.format(body["title"]))
     return Result(said, "note_open", open_brain="brain")
+
+
+# --------------------------------------------------------------------------
+#   Finding duplicate notes, and the two note-capability answers (DEF-095,
+#   2026-11-25)
+# --------------------------------------------------------------------------
+# The owner's words of 2026-11-24: "i would like you to go through my notes and
+# delete any copy or almost identical copy. leave at least one copy, delete any
+# duplicates" - and the answer was "I cannot delete your notes. My access to your
+# Obsidian or Joplin files is strictly read-only", false twice over. So:
+#
+#   * the finding sentences get a real, read-only scan
+#     (`jarvis_notes_edit.chat_find_duplicates`) and a plain list;
+#   * "can you delete my notes?" and "can you find duplicates?" are answered
+#     from what the code does, on the RAW sentence, before the normaliser turns
+#     the question into a command;
+#   * the list offers ONE next step - say which to remove - and the removal is
+#     the EXISTING `delete_vault_notes` card in `_run_note_delete`: one card
+#     naming every path, nothing moved before the yes. This block adds no delete
+#     path, no card and no write of its own.
+DUP_NO_NOTES_SAID = ("Your Obsidian vault has no notes in it yet, so there are none "
+                     "to compare.")
+DUP_SCAN_FAILED_SAID = ("The notes could not be scanned on this PC, so nothing was "
+                        "compared and nothing was changed.")
+#: The one keep-one rule this answer offers, stated in words and fixed in
+#: `jarvis_notes_edit._dup_group` so the two cannot disagree.
+DUP_KEEP_RULE_SAID = ("Where I say which I would keep, it is the oldest copy; a tie "
+                      "goes to the shorter path.")
+DUP_OFFER_SAID = ('Say which to remove - like "delete notes Alpha and Beta" - and I '
+                  "will list every one of them on one card before anything moves. "
+                  "I delete up to {most} notes at a time.")
+#: The kind labels the scan's three questions are reported under.
+DUP_KIND_SAID = {"identical": "identical copies",
+                 "same_name": "the same name in two different folders",
+                 "near": "near copies"}
+
+
+def _dup_when(stamp) -> str:
+    """One note's mtime as a plain local day, never a time of day."""
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(float(stamp or 0)))
+    except (OverflowError, OSError, ValueError):
+        return "an unknown date"
+
+
+def _dup_group_said(index: int, group: dict) -> str:
+    """One group: its members, which is largest/newest, and which to keep."""
+    kind = str(group.get("kind") or "")
+    label = DUP_KIND_SAID.get(kind, "copies")
+    if kind == "near":
+        label += " (at least {0}% the same words)".format(
+            int(round(float(group.get("similarity") or 0.0) * 100)))
+    titles = [str(t) for t in (group.get("titles") or [])]
+    paths = [str(p) for p in (group.get("paths") or [])]
+    members = ['"{0}" ({1})'.format(title, path)
+               for title, path in zip(titles, paths)]
+    sizes = [int(s) for s in (group.get("sizes") or [])]
+    mtimes = [float(t) for t in (group.get("mtimes") or [])]
+    largest = str(group.get("largest") or "")
+    newest = str(group.get("newest") or "")
+    keep = str(group.get("keep") or "")
+    said = "{0}. {1}: {2}.".format(index, label, ", ".join(members))
+    if sizes and len(set(sizes)) == 1:
+        said += " {0} {1} byte{2}.".format(
+            "Both are" if len(sizes) == 2 else "All {0} are".format(len(sizes)),
+            sizes[0], "" if sizes[0] == 1 else "s")
+    elif sizes:
+        biggest = sizes[paths.index(largest)] if largest in paths else 0
+        said += " The largest is {0} ({1} byte{2}).".format(
+            largest, biggest, "" if biggest == 1 else "s")
+    if mtimes and len(set(mtimes)) == 1:
+        said += " They share the date {0}; I would keep {1} (the shorter path).".format(
+            _dup_when(mtimes[0]), keep)
+    elif mtimes:
+        said += (" The newest is {0} ({1}); the oldest, which I would keep, is {2} "
+                 "({3}).".format(newest, _dup_when(mtimes[paths.index(newest)]
+                                                   if newest in paths else mtimes[0]),
+                                 keep, _dup_when(mtimes[paths.index(keep)]
+                                                 if keep in paths else mtimes[0])))
+    return said
+
+
+def _duplicates_said(body: dict) -> str:
+    """The scan's own words: what it covered, the threshold, the groups, the offer.
+
+    Every number comes from the scan's own answer - the cap, the counts, the
+    threshold, the groups - so the sentence cannot claim a coverage the scan did
+    not make. It never says "no copies" without naming what was NOT read.
+    """
+    body = body if isinstance(body, dict) else {}
+    total = int(body.get("total") or 0)
+    candidates = int(body.get("candidates") or 0)
+    opened = int(body.get("opened") or 0)
+    scanned = int(body.get("scanned") or 0)
+    skipped = int(body.get("skipped") or 0)
+    unreadable = int(body.get("unreadable") or 0)
+    cap = int(body.get("cap") or 0)
+    if candidates <= 0:
+        said = "Your vault has no notes I can compare for copies."
+    elif not skipped and not unreadable:
+        said = ("I scanned all {0} notes I could compare in your vault - {1} is the "
+                "most I read in one pass, so that was all of them.".format(
+                    candidates, cap))
+    else:
+        said = ("I scanned {0} of the {1} notes I could compare in your vault, "
+                "newest first - {2} is the most I read in one pass.".format(
+                    scanned, candidates, cap))
+        if skipped:
+            said += " {0} older note{1} {2} not read.".format(
+                skipped, "" if skipped == 1 else "s",
+                "was" if skipped == 1 else "were")
+        if unreadable:
+            said += " {0} of the {1} I opened could not be read.".format(
+                unreadable, opened)
+    if body.get("listed_truncated"):
+        said += (" (The vault's own list stops at {0} notes, so even that count is "
+                 "a floor.)".format(total))
+    # The owner's ruling of 2026-11-25: untitled notes get their own management
+    # and an empty file is not a copy of another empty file. Say both, and why.
+    left = []
+    untitled = int(body.get("excluded_untitled") or 0)
+    empty = int(body.get("excluded_empty") or 0)
+    if untitled:
+        left.append("{0} untitled note{1}".format(untitled,
+                                                  "" if untitled == 1 else "s"))
+    if empty:
+        left.append("{0} empty file{1}".format(empty, "" if empty == 1 else "s"))
+    if left:
+        said += (" I left out {0} - this scan does not treat those as "
+                 "copies.".format(" and ".join(left)))
+    count = int(body.get("count") or 0)
+    said += (" I found no groups of copies." if count == 0
+             else " I found {0} group{1} of copies.".format(
+                 count, "" if count == 1 else "s"))
+    said += (" Near copies are notes at least {0}% the same words, and I only "
+             "compare notes with at least {1} words.".format(
+                 int(round(float(body.get("threshold") or 0.0) * 100)),
+                 int(body.get("min_words") or 0)))
+    if count:
+        said += " " + DUP_KEEP_RULE_SAID
+        for index, group in enumerate(body.get("groups") or [], 1):
+            said += "\n\n" + _dup_group_said(index, group)
+        if body.get("truncated"):
+            said += " I have shown the first {0} of {1} groups.".format(
+                int(body.get("shown") or 0), count)
+        said += "\n\n" + DUP_OFFER_SAID.format(most=_notes_delete_max())
+    return said
+
+
+def _run_note_duplicates(f: dict) -> Result:
+    """The duplicate scan's answer: read-only, bounded, and it says both.
+
+    `f["asked_delete"]` is set when the sentence asked for the copies to be
+    removed ("delete any duplicates"): the answer then opens by saying nothing
+    has been deleted, because this lane never deletes. The removal itself is the
+    owner naming the notes and `_run_note_delete`'s one existing card.
+    """
+    if _notes_hidden():
+        return Result(NOTES_SEARCH_HIDDEN, "note_duplicates")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_find_duplicates()
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(DUP_SCAN_FAILED_SAID, "note_duplicates")
+    if code != 200:
+        return Result(_note_unreadable(body), "note_duplicates")
+    body = body if isinstance(body, dict) else {}
+    if int(body.get("total") or 0) <= 0:
+        return Result(DUP_NO_NOTES_SAID, "note_duplicates")
+    said = _duplicates_said(body)
+    if f.get("asked_delete"):
+        said = "Nothing has been deleted. " + said
+    return Result(said, "note_duplicates")
+
+
+def _run_note_delete_capability() -> Result:
+    """"can you delete my notes?" - yes, from the real card and its real limit."""
+    return Result(NOTE_DELETE_CAPABLE_SAID.format(most=_notes_delete_max()),
+                  "note_delete_capability")
+
+
+def _run_note_duplicates_capability() -> Result:
+    """"can you find duplicates?" - yes, and the bounds come from the scan itself."""
+    try:
+        import jarvis_notes_edit as NE
+        cap = int(getattr(NE, "DUP_SCAN_CAP", 1200))
+        percent = int(round(float(getattr(NE, "DUP_SIMILARITY", 0.90)) * 100))
+    except Exception:                       # noqa: BLE001 - module absent
+        cap, percent = 1200, 90
+    return Result(NOTE_DUPLICATES_CAPABLE_SAID.format(
+        cap=cap, percent=percent, most=_notes_delete_max()),
+        "note_duplicates_capability")
+
+
+#: The capability answers themselves. Each says the thing exists, names the one
+#: door and states its limit; neither can say "I cannot", and neither invents a
+#: second card. `str.format` fills the numbers from the modules that own them.
+NOTE_DELETE_CAPABLE_SAID = (
+    'Yes - I can delete notes. Say which ones - "delete my Shopping note" or '
+    '"delete notes Shopping, Workout and Ideas" - and they move into your '
+    "vault's .trash folder, not into nothing. Every delete needs ONE approval "
+    "card that names each note, confirmed with Windows Hello on this PC or your "
+    "phone's own fingerprint, and I delete up to {most} notes at a time. I can "
+    "also look for duplicate notes and tell you which have copies.")
+NOTE_DUPLICATES_CAPABLE_SAID = (
+    'Yes - I can look for duplicate notes. Say "find duplicate notes" and I '
+    "read your Obsidian vault myself, without the model: identical copies (the "
+    "same words, ignoring front matter and formatting), the same title in two "
+    "folders, and near copies (at least {percent}% the same words). Untitled "
+    "notes and empty files are left out - they are not copies here. I scan at "
+    "most {cap} notes in one pass and tell you how many I covered and skipped. "
+    "The scan never deletes or changes anything: say which ones to remove and I "
+    "will list them on one approval card first, up to {most} at a time.")
 
 
 # --- what model Jarvis is running, the presets, measured models (2026-10-31) ---
@@ -33341,6 +33743,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result(NOTE_CREATE_ASK_SAID, "note_create_refused")
     if n == "note_create_capability":
         return _run_note_create_capability()
+    if n == "note_delete_capability":
+        # "can you delete my notes?" (DEF-095, 2026-11-25): the capability
+        # sentence, from the real card and its real limit. Read-only.
+        return _run_note_delete_capability()
+    if n == "note_duplicates_capability":
+        # "can you find duplicates?" - the scan exists, and its bounds are the
+        # ones the scan itself uses. Read-only.
+        return _run_note_duplicates_capability()
     if n == "note_location":
         return _run_note_location(f, hidden=_notes_write_hidden())
     if n == "note_append":
@@ -33856,6 +34266,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_search(intent.f.get("needle") or "")
     if n == "note_open":
         return _run_note_open(intent.f.get("title") or "")
+    if n == "note_duplicates":
+        # "find duplicate notes" (DEF-095, 2026-11-25): a read-only, bounded
+        # scan of the vault. Reads and lists only; the removal is the owner
+        # naming the notes and `note_delete`'s one existing card.
+        return _run_note_duplicates(intent.f or {})
     if n == "surface_origin":
         # 2026-11-01 field test: "where am I talking from?" - answered from
         # jarvis_surface's own header fact, never the model's guess at a place.
@@ -34649,6 +35064,11 @@ READ_ONLY_INTENTS = frozenset({
     # The card-free create's capability answer and the where-is-my-vault answer
     # (2026-10-31): both only read the vault setting and change nothing.
     "note_create_capability", "note_location",
+    # The duplicate scan and the two note-capability answers (DEF-095,
+    # 2026-11-25): `note_duplicates` lists and reads the vault and raises no
+    # card, and the two capability answers only say what the code does. None of
+    # the three may take away what "cancel that" would undo.
+    "note_duplicates", "note_delete_capability", "note_duplicates_capability",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",

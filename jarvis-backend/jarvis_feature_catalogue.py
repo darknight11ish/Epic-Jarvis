@@ -3,7 +3,7 @@
 The owner's feature list, as data: 184 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 56c458e03daf90e6b12d4833bc3f9f4f5f2cfd6949d905ec1d7795a659e848b6); the apps' Features pages read their own
+`features/features.json` (sha256 d83656c56696a22452d431dc11cd046bd1c22cf6099f8f0903508f2ad76211f4); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "56c458e03daf90e6b12d4833bc3f9f4f5f2cfd6949d905ec1d7795a659e848b6"
+SOURCE_SHA256 = "d83656c56696a22452d431dc11cd046bd1c22cf6099f8f0903508f2ad76211f4"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -726,10 +726,10 @@ FEATURES = (
         "id": "notes-editor",
         "group": "Notes and files",
         "title": "Create and customize your notes",
-        "what": "Browse, search, create, extend, surgically change, rename and move notes in your Obsidian vault from the PC or the phone, and use the PC editor's formatting toolbar and templates.",
-        "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename and move sentences work in chat on either app.",
-        "asks": "Reading and searching ask nothing. Creating a BRAND-NEW note from your own typed or spoken words in the HUD asks no card at all (it is additive, and one Undo removes exactly the new file; after a turn that read outside text, or from a background job, it still asks its one card); adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
-        "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
+        "what": "Browse, search, create, extend, surgically change, rename, move and delete notes in your Obsidian vault from the PC or the phone, find duplicate and near-duplicate notes, and use the PC editor's formatting toolbar and templates.",
+        "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename, move, delete and duplicate-finding sentences work in chat on either app.",
+        "asks": "Reading and searching ask nothing. Creating a BRAND-NEW note from your own typed or spoken words in the HUD asks no card at all (it is additive, and one Undo removes exactly the new file; after a turn that read outside text, or from a background job, it still asks its one card); adding to it, changing one line, renaming or moving it, deleting a note, or saving a template raises ONE approval card; denying it changes nothing.",
+        "limit": "Obsidian vault only, one note per request; deleting names up to 20 notes on ONE card and moves them into the vault's .trash folder, a line is never deleted on its own, the duplicate scan reads at most 1,200 notes in one pass and reports how many it covered, and there are no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
         "surface": "both",
         "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar", "creates and customizes my notes"],
         "covers": ["notes-editor", "notes-customization", "notes-rename-move"],

@@ -169,6 +169,7 @@ mechanism.
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -178,6 +179,7 @@ import stat
 import tempfile
 import threading
 import time
+from collections import Counter
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -4941,6 +4943,305 @@ def chat_open_note(title: str) -> tuple:
     first = matches[0]
     return 200, {"ok": True, "title": str(first.get("title") or ""),
                  "path": first.get("path", ""), "count": len(matches)}
+
+
+# ---------------------------------------------------------------------------
+#   Duplicate and near-duplicate notes (DEF-095, 2026-11-25)
+# ---------------------------------------------------------------------------
+#
+# WHY THIS IS A CHAT READ AND NOT A SECOND ORGANIZER. The vault organizer's
+# `_find_duplicates` hashes each WHOLE file, front matter included, and only
+# lists what it found inside an off-by-default dry run. It answers a different
+# question ("are these two files byte-identical?") and nothing outside the plan
+# can see its answer. The owner's request of 2026-11-24 was asked in chat - "go
+# through my notes and delete any copy or almost identical copy" - and the model
+# answered "I cannot delete your notes ... strictly read-only". This is the
+# CHAT side of that question: a read-only scan that names the groups, says what
+# it covered, and hands the removal to the EXISTING `delete_vault_notes` card
+# (`handle_delete` above) - never a new delete path, never a cardless write.
+#
+# THREE KINDS OF COPY, strongest first, and a note is listed in ONE group:
+#
+#   identical      the same normalised BODY: front matter, case, punctuation and
+#                  whitespace taken out, so two notes that differ only in their
+#                  `id:` or aliases are still the same words.
+#   same_name      the same note title (the file's stem, case-insensitive) in
+#                  two different folders.
+#   near           at least DUP_SIMILARITY of the normalised words in the same
+#                  order (`difflib.SequenceMatcher`), so a copy with a word
+#                  changed is found while two different notes on one subject are
+#                  not. Every pair in the group clears the threshold.
+#
+# BOUNDED, AND THE ANSWER SAYS SO. At most DUP_SCAN_CAP notes are OPENED (the
+# newest first, the order `handle_list` already gives) and at most DUP_GROUP_CAP
+# groups are returned. The open notes are read by `_dup_read_bodies`, which
+# trusts the one protection walk `handle_list` has already made and then applies
+# the file-level rules again (no link, the 2 MiB cap) - reading 950 of a
+# 1,004-note vault through the one-note door measured 5.96 s and through this
+# reader about 0.3 s, with the identical notes read. `chat_find_duplicates`
+# reports the counts it covered, skipped and could not read; it never claims the
+# whole vault when the cap cut the scan short.
+#
+# TWO KINDS OF NOTE ARE NOT COPIES HERE (the owner's ruling, 2026-11-25):
+#
+#   untitled*   a note whose basename is `untitled` or `untitled <n>` is a
+#               stub the owner wants managed on its own, not offered as a
+#               copy - even when two of them are byte-identical. Excluded by
+#               basename, case-insensitively, BEFORE anything is read.
+#   empty       a zero-byte note is not a copy of another zero-byte note.
+#               Excluded by its listed size, and only counted for context.
+#
+# Both counts are reported so the answer can say what it left out and why.
+#
+# NO NEW DEPENDENCY (ruling for DEF-095, 2026-11-25). `difflib` is the standard
+# library and is the whole similarity measure. RapidFuzz was considered and
+# turned down: the measured vault is ~1,002 notes / ~0.68 MB, so the scan is
+# I/O-trivial, and this repository keeps its dependency list short. The
+# organizer's `_shingles` (word 5-grams + Jaccard) is deliberately NOT reused
+# for the similarity: 82% of the measured vault is under 500 bytes, so a short
+# note yields one or two shingles and every pair then looks identical. Word-
+# sequence ratio on the whole normalised body is the measure for every length,
+# with a word-count and character floor below which notes are not compared -
+# a note too short to tell apart is not guessed at.
+DUP_SCAN_CAP = 1200
+DUP_GROUP_CAP = 8
+DUP_SIMILARITY = 0.90
+DUP_MIN_WORDS = 8
+DUP_MIN_CHARS = 40
+
+_DUP_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
+#: `untitled`, `untitled 3`, `untitled-3`, `untitled 3 (2)` - the stub names the
+#: owner asked to keep out of this feature. Case-insensitive by `re.I`.
+_DUP_UNTITLED = re.compile(r"^untitled(?:[\s_-]*\d+)?(?:\s*\(\d+\))?$", re.I)
+
+
+def _dup_body(text: str) -> str:
+    """A note's body as normalised words: no front matter, case or punctuation."""
+    _open, _front, body, why = _split_frontmatter(str(text or ""))
+    if why:
+        body = str(text or "")
+    return " ".join(_DUP_TOKEN.findall(body.casefold()))
+
+
+def _dup_similarity(a: dict, b: dict) -> float:
+    """How much of the two notes' word sequence is the same, or 0.0 when untested.
+
+    The two cheap tests first are a bound, not a verdict: neither can pass a
+    pair that the real ratio would put under the threshold, and both are far
+    cheaper than building a SequenceMatcher. `autojunk=False` keeps the ratio
+    honest for a long note with one very common word in it.
+    """
+    wa, wb = a["words"], b["words"]
+    if len(wa) < DUP_MIN_WORDS or len(wb) < DUP_MIN_WORDS:
+        return 0.0
+    if len(a["norm"]) < DUP_MIN_CHARS or len(b["norm"]) < DUP_MIN_CHARS:
+        return 0.0
+    shortest, longest = sorted((len(wa), len(wb)))
+    if 2.0 * shortest / (shortest + longest) < DUP_SIMILARITY:
+        return 0.0
+    shared = sum(min(n, b["counts"].get(word, 0)) for word, n in a["counts"].items())
+    if 2.0 * shared / (len(wa) + len(wb)) < DUP_SIMILARITY:
+        return 0.0
+    return difflib.SequenceMatcher(None, wa, wb, autojunk=False).ratio()
+
+
+def _dup_group(kind: str, members: list, similarity=None) -> dict:
+    """One group's rows, its ends and the one a keep-one rule would keep.
+
+    The rule is stated in the chat answer and is fixed here so it cannot drift:
+    the OLDEST mtime is kept, a tie goes to the SHORTEST relative path, and a
+    further tie to the alphabetical path. Largest/newest are the same three
+    keys with the opposite order, so they are deterministic too.
+    """
+    ordered = sorted(members, key=lambda n: n["path"])
+    largest = sorted(ordered, key=lambda n: (-n["size"], len(n["path"]), n["path"]))[0]
+    newest = sorted(ordered, key=lambda n: (-n["mtime"], len(n["path"]), n["path"]))[0]
+    keep = sorted(ordered, key=lambda n: (n["mtime"], len(n["path"]), n["path"]))[0]
+    return {
+        "kind": kind,
+        "paths": [n["path"] for n in ordered],
+        "titles": [n["title"] for n in ordered],
+        "sizes": [n["size"] for n in ordered],
+        "mtimes": [n["mtime"] for n in ordered],
+        "largest": largest["path"],
+        "newest": newest["path"],
+        "keep": keep["path"],
+        "similarity": (round(float(similarity), 2)
+                       if similarity is not None else None),
+    }
+
+
+def _dup_group_order(group: dict):
+    return ({"identical": 0, "same_name": 1, "near": 2}.get(group["kind"], 3),
+            group["paths"][0])
+
+
+def _dup_read_bodies(vault: Path, rows: list) -> list:
+    """`[(row, text, size, mtime)]` for the listed notes that can be read.
+
+    THE SAME RULES AS `handle_read`, WITHOUT PAYING FOR THEM TWICE. Every row
+    here came from `handle_list`, which has already walked only inside the
+    vault, skipped dot folders and symlinked folders, refused a symlinked file,
+    enforced the same 2 MiB cap for the LIST, and dropped every note "Protected
+    from Jarvis" blocks (`blocked_path`) - that is the one protection check, and
+    repeating it per note was measured at 1.4 ms a note on this PC. This adds
+    the file-level repeat a scan still needs (a link or an over-size file that
+    appeared since the list), then reads. A note that fails any check is simply
+    left out, and the caller counts it as unreadable.
+
+    Measured on a seeded 1,004-note vault: 5.96 s for 950 notes through
+    `_chat_read` and about 0.3 s here, with the identical notes read.
+    """
+    out = []
+    for row in rows:
+        rel = str(row.get("path") or "")
+        parts = [p for p in rel.split("/") if p]
+        if not parts or any(p.startswith(".") for p in parts[:-1]):
+            continue
+        full = vault.joinpath(*parts)
+        if _is_link_or_reparse(full):
+            continue
+        try:
+            stat_row = os.stat(str(full))
+            if stat_row.st_size > MAX_FILE_BYTES:
+                continue
+            data = _read_bytes(full)
+        except OSError:
+            continue
+        out.append((row, data.decode("utf-8", errors="replace"),
+                    int(stat_row.st_size), float(stat_row.st_mtime)))
+    return out
+
+
+def chat_find_duplicates(limit: int = 0) -> tuple:
+    """Find identical, same-name and near-copy notes in the vault, read-only.
+
+    `(200, body)` with the groups and the counts it covered; `(503, {"said": ...})`
+    when the vault cannot be listed. `limit` overrides DUP_SCAN_CAP and exists so
+    a suite can prove the bound on a small vault; the chat path always uses the
+    shipped cap. Nothing here writes, moves, deletes or raises a card.
+
+    Untitled and zero-byte notes are counted and LEFT OUT before anything is
+    read (see `_DUP_UNTITLED`), so neither can appear in a group or in the one
+    removal the answer offers. `candidates` is what is left to compare, and the
+    cap is applied to that.
+    """
+    cap = int(limit or DUP_SCAN_CAP)
+    if cap < 1:
+        cap = DUP_SCAN_CAP
+    code, body = handle_list("")
+    if code != 200:
+        return 503, {"said": str(body.get("error") or
+                                 "The vault could not be read.")}
+    rows = list(body.get("notes") or [])
+    total = len(rows)
+    candidates, excluded_untitled, excluded_empty = [], 0, 0
+    for row in rows:
+        if _DUP_UNTITLED.fullmatch(str(row.get("title") or "").strip()):
+            excluded_untitled += 1
+            continue
+        if int(row.get("size") or 0) == 0:
+            excluded_empty += 1
+            continue
+        candidates.append(row)
+    opened = candidates[:cap]
+    vault, why = _vault()
+    if vault is None:
+        return 503, {"said": "No notes list: " + why + "."}
+    notes = []
+    for row, text, size, mtime in _dup_read_bodies(vault, opened):
+        norm = _dup_body(text)
+        words = norm.split() if norm else []
+        notes.append({
+            "path": str(row.get("path") or ""),
+            "title": str(row.get("title") or ""),
+            "folder": os.path.dirname(str(row.get("path") or "")).replace("\\", "/"),
+            "size": size,
+            "mtime": mtime,
+            "norm": norm,
+            "words": words,
+            "counts": Counter(words),
+        })
+    unreadable = len(opened) - len(notes)
+
+    groups, claimed = [], set()
+
+    # 1. Identical bodies, from the one hash of the normalised words.
+    by_hash = {}
+    for note in notes:
+        if not note["norm"]:
+            continue
+        digest = hashlib.sha256(note["norm"].encode("utf-8")).hexdigest()
+        by_hash.setdefault(digest, []).append(note)
+    for digest in sorted(by_hash,
+                         key=lambda d: min(n["path"] for n in by_hash[d])):
+        members = by_hash[digest]
+        if len(members) < 2:
+            continue
+        groups.append(_dup_group("identical", members))
+        claimed.update(n["path"] for n in members)
+
+    # 2. The same title in two different folders.
+    by_name = {}
+    for note in notes:
+        if note["path"] in claimed:
+            continue
+        by_name.setdefault(note["title"].casefold(), []).append(note)
+    for stem in sorted(by_name,
+                       key=lambda s: min(n["path"] for n in by_name[s])):
+        members = by_name[stem]
+        if len(members) < 2 or len({n["folder"] for n in members}) < 2:
+            continue
+        groups.append(_dup_group("same_name", members))
+        claimed.update(n["path"] for n in members)
+
+    # 3. Near copies among what is left. A clique, so every pair in a group
+    #    really clears the threshold the answer states; the group's figure is
+    #    the weakest pair in it, never the best one.
+    pool = [n for n in notes
+            if n["path"] not in claimed and len(n["words"]) >= DUP_MIN_WORDS]
+    pool.sort(key=lambda n: n["path"])
+    used = set()
+    for i, first in enumerate(pool):
+        if first["path"] in used:
+            continue
+        members, weakest = [first], None
+        for other in pool[i + 1:]:
+            if other["path"] in used:
+                continue
+            sims = [_dup_similarity(member, other) for member in members]
+            if min(sims) < DUP_SIMILARITY:
+                continue
+            members.append(other)
+            used.add(other["path"])
+            weakest = min(sims) if weakest is None else min(weakest, min(sims))
+        if len(members) > 1:
+            used.add(first["path"])
+            groups.append(_dup_group("near", members, weakest))
+
+    groups.sort(key=_dup_group_order)
+    shown = groups[:DUP_GROUP_CAP]
+    return 200, {
+        "ok": True,
+        "groups": shown,
+        "count": len(groups),
+        "shown": len(shown),
+        "truncated": len(groups) > len(shown),
+        "group_cap": DUP_GROUP_CAP,
+        "total": total,
+        "candidates": len(candidates),
+        "listed_truncated": bool(body.get("truncated")),
+        "opened": len(opened),
+        "scanned": len(notes),
+        "skipped": max(0, len(candidates) - len(opened)),
+        "unreadable": unreadable,
+        "excluded_untitled": excluded_untitled,
+        "excluded_empty": excluded_empty,
+        "cap": cap,
+        "threshold": DUP_SIMILARITY,
+        "min_words": DUP_MIN_WORDS,
+        "min_chars": DUP_MIN_CHARS,
+    }
 
 
 # ---------------------------------------------------------------------------

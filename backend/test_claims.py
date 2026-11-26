@@ -122,11 +122,16 @@ And on the real register, four things the checker cannot say about itself:
   * it exits 0 today, so the first run after this lands is green;
   * `--list` prints every row it checked - by id - so the happy line can be
     told apart from a run that looked at nothing;
-  * every one of the seven kinds in the vocabulary is used by at least one row
-    (a kind nothing uses is a kind nothing tests; `symbol:` is row C54's check);
+  * every one of the eight kinds in the vocabulary is exercised (a kind nothing
+    uses is a kind nothing tests): the seven CHECK kinds by a real row, and
+    `changelog:` by the twelve `source` cells added on 2026-11-25 - no claim is
+    PROVED by the changelog sentence that announced it, so no row carries it as
+    a check, and the kind's two halves are bitten on a throwaway repository
+    instead;
   * every row's `source` names a file that exists and either a line inside it or
-    a symbol/heading the file really carries, so a doc edit that moves the anchor
-    (or a renamed function) is caught here rather than by a reader.
+    a symbol/heading/changelog title it really carries, so a doc edit that moves
+    the anchor (or a renamed function, or a reworded changelog title) is caught
+    here rather than by a reader.
 
 And the decision record became TWO places on 2026-10-28. A new owner decision is
 one file under `decisions.d/`, rolled into `docs/DECISIONS.md` later
@@ -180,15 +185,31 @@ def check(name, cond, detail=""):
 
 HEADER = "# id\tclaim\tcheck\tstate\tsource\n"
 
-#: How long a run of the WHOLE register may take here, in seconds. The checker's
-#: own ceiling is 900 s for ONE suite (`tools/check_claims.py`'s TEST_TIMEOUT),
-#: and the register has more than a hundred `test:` rows, so a harness ceiling of
-#: 600 s can kill a checker that is still working - which is a red test with no
-#: verdict about the register, not a finding. Measured 2026-11-13 on a loaded PC:
-#: the 600 s call raised TimeoutExpired before the first full run finished. A
-#: one-row throwaway register keeps the short ceiling; only these two calls need
-#: this one.
-REGISTER_TIMEOUT = 1800
+#: How long ONE run of the WHOLE register may take here, in seconds. The
+#: checker's own ceiling is 900 s for ONE suite (`tools/check_claims.py`'s
+#: TEST_TIMEOUT), and the register has more than a hundred `test:` rows, so this
+#: harness ceiling has to sit well above the whole sweep. Its history is the
+#: reason for the number, and the number is measured rather than guessed:
+#:
+#:   * 600 s was the first ceiling, and it expired before the first full run
+#:     finished (measured 2026-11-13 on a loaded PC);
+#:   * 1800 s replaced it. By 2026-11-25 the sweep on the owner's own PC
+#:     measured 1740-1830 s, so the suite failed at its own ceiling while the
+#:     direct command exited 0 - a check that cannot pass on the one machine it
+#:     most needs to pass on. A ceiling chosen above the measured cost is the
+#:     only kind that is a test rather than a coin toss;
+#:   * 3600 s is about twice the worst of those measurements. It also sits above
+#:     `backend/run_suites.py`'s own 2400 s per-suite limit, so on the runner
+#:     path this ceiling is not the one that would fire first; on the direct
+#:     `py -3 -B backend/test_claims.py` path it is the only limit, and about
+#:     twice the measured worst is the headroom it exists to give.
+#:
+#: AND THE SUITE RUNS THE SWEEP ONCE, NOT TWICE (2026-11-25). The green-line and
+#: `--list` checks used to start the whole register separately - about 2 x 30
+#: minutes on the desk, and together over the runner's own 2400 s. `--list`
+#: prints the summary line as well as every row, so ONE run proves both; see
+#: `the_register_run`.
+REGISTER_TIMEOUT = 3600
 
 
 def run(*args, env=None, timeout=600):
@@ -199,16 +220,36 @@ def run(*args, env=None, timeout=600):
     wants. Those pass a dict so the ambient value is a value this test chose,
     not whatever the machine happens to carry.
 
-    `timeout` is this harness's own ceiling. The two calls that check the whole
-    real register pass `REGISTER_TIMEOUT`, because 600 s is shorter than the
-    checker's own per-suite ceiling and can expire while it is still working;
-    everything else drives one or two throwaway rows and stays at 600 s.
+    `timeout` is this harness's own ceiling. The ONE call that checks the whole
+    real register (`the_register_run`) passes `REGISTER_TIMEOUT`, because 600 s
+    is shorter than the checker's own per-suite ceiling and can expire while it
+    is still working; everything else drives one or two throwaway rows and
+    stays at 600 s.
     """
     done = subprocess.run(
         [sys.executable, str(CHECKER), *args], cwd=str(REPO),
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout, env=env)
     return done.returncode, (done.stdout or "") + (done.stderr or "")
+
+
+#: The one run of the whole real register. A list rather than a module global
+#: so the cache is visible in the code that fills it, and so a failed start is
+#: cached too - a second 30-minute attempt would tell a reader nothing new.
+_REGISTER_RUN: list = []
+
+
+def the_register_run():
+    """(exit code, output) for ONE `--list` run of the whole real register.
+
+    `--list` implies `-v` and prints its summary line after the rows, so this
+    one run is the evidence for both checks that need the whole sweep: the
+    green line with its suite counts, and every row id. Started once, on the
+    first caller; `REGISTER_TIMEOUT`'s comment says why that matters.
+    """
+    if not _REGISTER_RUN:
+        _REGISTER_RUN.append(run("--list", timeout=REGISTER_TIMEOUT))
+    return _REGISTER_RUN[0]
 
 
 def register_with(rows: str) -> Path:
@@ -242,7 +283,9 @@ def t_the_checker_exists():
 
 
 def t_the_committed_register_is_green():
-    code, out = run(timeout=REGISTER_TIMEOUT)
+    # The whole-register run is `--list` (see `the_register_run`): its output
+    # carries this summary line AFTER the rows, so one sweep proves both checks.
+    code, out = the_register_run()
     check("the register passes today (the first run after it lands is green)",
           code == 0, out[-1500:])
     check("the green line says a number of rows, so 'nothing is wrong' cannot "
@@ -264,7 +307,7 @@ def t_the_committed_register_is_green():
 
 
 def t_list_prints_every_row_it_checked():
-    code, out = run("--list", timeout=REGISTER_TIMEOUT)
+    code, out = the_register_run()
     check("--list still exits 0 on the real register", code == 0, out[-800:])
     rows = data_rows(REGISTER.read_text(encoding="utf-8"))
     missing = [row["id"] for row in rows if row["id"] not in out]
@@ -274,6 +317,58 @@ def t_list_prints_every_row_it_checked():
           f"all {len(rows)} row(s) were looked at" in out, out[-400:])
 
 
+def t_the_whole_register_is_swept_once():
+    """The suite's own cost, which is what made it fail on the owner's PC.
+
+    The whole-register sweep measured 1740-1830 s there on 2026-11-25, and CI
+    gives ONE suite 2400 s (`backend/run_suites.py`). The green-line and
+    `--list` checks used to start the sweep separately - nearly an hour of the
+    desk's time and over the runner's own ceiling - so both now read ONE run.
+    This proves the NUMBER of sweeps, with the checker itself stubbed out and
+    the two inner checks' verdicts both silenced and NOT counted: the real
+    verdicts are the two tests above, and a stub cannot prove a register.
+    """
+    rows = data_rows(REGISTER.read_text(encoding="utf-8"))
+    states = [sum(1 for row in rows if row["state"] == state)
+              for state in ("built", "open", "unverifiable")]
+    canned = (f"{len(rows)} claim(s) checked against the code: {states[0]} "
+              f"built, {states[1]} still open, {states[2]} unverifiable (the "
+              f"reason is in each row).\n"
+              f"3 suite run(s) behind the `test:` rows reported 9 check(s): 9 "
+              f"passed, 0 skipped, 0 failed.\n\nall {len(rows)} row(s) were "
+              f"looked at:\n"
+              + "\n".join(f"  {row['id']:<7} {row['state']}" for row in rows))
+    calls = []
+    real_run = run
+    real_passed, real_failed = list(PASSED), list(FAILED)
+
+    def stub(*args, **kwargs):
+        calls.append((args, kwargs.get("timeout")))
+        return 0, canned
+
+    # `run` is looked up by name inside the two checks, so replacing the module
+    # global is what they call.
+    globals()["run"] = stub
+    _REGISTER_RUN.clear()
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            t_the_committed_register_is_green()
+            t_list_prints_every_row_it_checked()
+    finally:
+        globals()["run"] = real_run
+        _REGISTER_RUN.clear()
+        PASSED[:] = real_passed
+        FAILED[:] = real_failed
+    check("the whole register is swept ONCE for both checks, not twice",
+          len(calls) == 1, calls)
+    check("... and that one call gets the ceiling with real headroom",
+          bool(calls) and calls[0][1] == REGISTER_TIMEOUT, calls)
+    check("... where the ceiling is at least twice the 1800 s one it replaces, "
+          "which is about twice the desk's measured worst (1830 s) - a ceiling "
+          "under the real cost is not a test",
+          REGISTER_TIMEOUT >= 3600, REGISTER_TIMEOUT)
+
+
 def t_the_vocabulary_is_actually_used():
     """A kind no row uses is a kind no test of this script would ever reach.
 
@@ -281,22 +376,39 @@ def t_the_vocabulary_is_actually_used():
     uses it as its check - the same `faceSerious` declaration `grep:` used to
     name - so the kind is exercised through a real row as well as through the
     throwaway bite test below.
+
+    `changelog:` joined the same day, for the rolled changelog bullets no
+    heading and no declaration can name. It is exercised by the register in its
+    OTHER role: twelve rows cite a bullet's bold title as their `source`. No row
+    carries it as a CHECK, and none should - a claim is proved by the code, not
+    by the changelog sentence that announced it - so the check half of the kind
+    is proved on a throwaway repository
+    (`t_a_changelog_row_bites_on_a_temp_repository`) instead of being demanded
+    from a real row.
     """
-    kinds = {row["check"].split(":", 1)[0] for row in
-             data_rows(REGISTER.read_text(encoding="utf-8"))
+    rows = data_rows(REGISTER.read_text(encoding="utf-8"))
+    kinds = {row["check"].split(":", 1)[0] for row in rows
              if row["state"] != "unverifiable"}
-    for kind in ("file", "no-file", "grep", "absent", "test", "number", "symbol"):
+    for kind in ("file", "no-file", "grep", "absent", "test", "number",
+                 "symbol"):
         check(f"the register uses a `{kind}:` row", kind in kinds, sorted(kinds))
+    cited = [row["id"] for row in rows
+             if row["source"].startswith("changelog:")]
+    check("the register cites a changelog bullet by its bold title, so the "
+          "`changelog:` kind is exercised too", bool(cited), cited)
+    check("... and all twelve of the rows the 2026-11-25 sweep migrated say so",
+          len(cited) == 12, cited)
 
 
 def source_problems(rows, repo: Path = REPO) -> list:
     """Every row whose `source` does not trace to what it names.
 
-    Three forms are accepted since the 2026-11-25 ruling: `path:line`,
-    `path::symbol` and `doc.md#heading`. The durable two are verified by the
-    checker's own `check_claims.source_problem`, so this suite and the checker
-    cannot disagree about what a citation means - a symbol or heading is looked
-    up in the file, not merely typed into the cell.
+    Four forms are accepted since the 2026-11-25 ruling: `path:line`,
+    `path::symbol`, `doc.md#heading` and `changelog:"<bold title>"`. The durable
+    three are verified by the checker's own `check_claims.source_problem`, so
+    this suite and the checker cannot disagree about what a citation means - a
+    symbol, heading or changelog title is looked up in the file, not merely
+    typed into the cell.
 
     Since 2026-10-28 a decision may be recorded as ONE file under
     `decisions.d/` and rolled into `docs/DECISIONS.md` later, so a `:line` source
@@ -315,7 +427,8 @@ def source_problems(rows, repo: Path = REPO) -> list:
         problem = check_claims.source_problem(source, repo=repo)
         if problem is None:
             continue
-        durable = "::" in source or "#" in source
+        durable = ("::" in source or "#" in source
+                   or source.startswith("changelog:"))
         path, _, _line = source.rpartition(":")
         if (not durable
                 and path.replace("\\", "/").startswith(DECISION_FRAGMENTS + "/")
@@ -330,13 +443,13 @@ def t_every_source_points_at_a_real_line():
     """A register whose sources drift off their anchor is a register nobody
     can trace back to the sentence a claim came from.
 
-    Since the 2026-11-25 ruling a source may name a symbol or a heading instead
-    of a line, and the CHECKER verifies that the named thing is really there -
-    so the migrated rows are proved here in the required `backend` job as well
-    as by `tools/check_claims.py`."""
+    Since the 2026-11-25 ruling a source may name a symbol, a heading or a
+    changelog bullet's bold title instead of a line, and the CHECKER verifies
+    that the named thing is really there - so the migrated rows are proved here
+    in the required `backend` job as well as by `tools/check_claims.py`."""
     bad = source_problems(data_rows(REGISTER.read_text(encoding="utf-8")))
-    check("every source is a file and a line inside it, or a symbol or heading "
-          "that file really has", not bad, bad)
+    check("every source is a file and a line inside it, or a symbol, heading or "
+          "changelog title that file really has", not bad, bad)
 
 
 def t_a_source_may_name_a_decisions_fragment():
@@ -437,11 +550,101 @@ def t_a_symbol_row_bites_on_a_temp_repository():
     check("... and the same row FAILS once the declaration is removed", code == 1, out)
 
 
-def t_the_about_generator_accepts_the_symbol_kind():
+def t_a_source_may_name_a_changelog_bullet():
+    """A rolled changelog bullet has NO heading and NO declaration, so neither
+    `doc.md#heading` nor `path::symbol` can name it - which is why the twelve
+    rows this migrated kept a bare line number after the 2026-11-25 sweep
+    (2026-11-25). Its own bold title can, and the checker verifies the bullet is
+    really there, so a reworded or removed title fails instead of leaving a
+    citation that points at somebody else's entry."""
+    root = Path(tempfile.mkdtemp(prefix="claims-changelog-source-"))
+    (root / "CHANGELOG.md").write_text(
+        "## Not in a numbered version yet\n"
+        "\n"
+        "- **The phone's Galaxy gets a read-only \"at a glance\" band "
+        "(2026-10-23).** What changed.\n"
+        "- **A title that wraps across the line break,\n"
+        "  and still names itself (2026-10-22).** Prose.\n"
+        "- **The serve decision #814 landed on the server (2026-10-25).** "
+        "Prose.\n"
+        "- A bullet with **a bold phrase in the middle** of its prose.\n",
+        encoding="utf-8")
+    good = [
+        {"id": "S1", "source": 'changelog:"The phone\'s Galaxy gets a read-only '
+                               '"at a glance" band (2026-10-23)."'},
+        {"id": "S2", "source": 'changelog:"A title that wraps across the line '
+                               'break, and still names itself (2026-10-22)."'},
+        # A `#` inside the title is part of the TITLE, not the heading form -
+        # this passes only because the changelog form is read first.
+        {"id": "S3", "source": 'changelog:"The serve decision #814 landed on the '
+                               'server (2026-10-25)."'},
+    ]
+    check("a source may name a changelog bullet by its own bold title - quotes, "
+          "a wrapped line and a `#` inside the title all keep working",
+          source_problems(good, root) == [], source_problems(good, root))
+    missing = source_problems(
+        [{"id": "S4", "source": 'changelog:"The phone\'s Galaxy gets a read-only '
+                                '"At a glance" band (2026-10-23)."'}], root)
+    check("a title whose CASE changed is reported - 'the exact bold title'",
+          len(missing) == 1 and "no bullet" in missing[0], missing)
+    missing = source_problems(
+        [{"id": "S5", "source": 'changelog:"A band about a Galaxy (2026-10-23)."'}], root)
+    check("a title that is not there is reported",
+          len(missing) == 1 and "no bullet" in missing[0], missing)
+    missing = source_problems(
+        [{"id": "S6", "source": 'changelog:"a bold phrase in the middle"'}], root)
+    check("a bold phrase in the middle of a bullet's prose is NOT a title",
+          len(missing) == 1 and "no bullet" in missing[0], missing)
+    missing = source_problems(
+        [{"id": "S7", "source": 'changelog:The phone\'s Galaxy'}], root)
+    check("an UNQUOTED title is refused rather than half-matched",
+          len(missing) == 1 and "QUOTED" in missing[0], missing)
+    # The bite: the same citation passes, then the bullet's title is reworded
+    # and the SAME row fails.
+    (root / "CHANGELOG.md").write_text(
+        "- **The phone's Galaxy gets a read-only \"at a glance\" strip "
+        "(2026-10-23).** What changed.\n", encoding="utf-8")
+    bite = source_problems(good[:1], root)
+    check("... and a title reworded above the citation makes the same source fail",
+          len(bite) == 1 and "no bullet" in bite[0], bite)
+
+
+def t_a_changelog_row_bites_on_a_temp_repository():
+    """The `changelog:` CHECK, end to end through the checker in a throwaway
+    repository: it passes while the bold title is there and fails the moment it
+    is reworded. The source is an ordinary line into the same file, so the
+    failure is the CHECK's own and cannot be the citation's."""
+    root = Path(tempfile.mkdtemp(prefix="claims-changelog-repo-"))
+    (root / "CHANGELOG.md").write_text(
+        "## Not in a numbered version yet\n\n"
+        "- **A bullet a claim can cite (2026-11-25).** Prose.\n",
+        encoding="utf-8")
+    register = root / "CLAIMS.tsv"
+
+    def one(kind, title, source="CHANGELOG.md:1"):
+        register.write_text(
+            HEADER + f"S1\ta changelog claim\t{kind}:\"{title}\"\tbuilt\t"
+                     f"{source}\n", encoding="utf-8")
+        return run("--repo", str(root), str(register))
+
+    code, out = one("changelog", "A bullet a claim can cite (2026-11-25).")
+    check("a `changelog:` row passes when the bold title is there", code == 0, out)
+    code, out = one("changelog", "A bullet a claim cannot cite (2026-11-25).")
+    check("... and FAILS when no bullet carries that title",
+          code == 1 and "no bullet" in out, out)
+    (root / "CHANGELOG.md").write_text(
+        "- **A bullet a claim can cite, reworded (2026-11-25).** Prose.\n",
+        encoding="utf-8")
+    code, out = one("changelog", "A bullet a claim can cite (2026-11-25).")
+    check("... and the same row FAILS once the title is reworded", code == 1, out)
+
+
+def t_the_about_generator_accepts_the_durable_kinds():
     """`tools/gen_about_claims.py` counts the register through the checker's own
-    `read_register`, so a `symbol:` row must count like any other - and a
-    symbol/heading SOURCE must not make the About page unreadable. The ruling's
-    second half names this tool, so it is proved here rather than assumed."""
+    `read_register`, so a `symbol:` or `changelog:` row must count like any
+    other - and a symbol/heading/changelog SOURCE must not make the About page
+    unreadable. The rulings name this tool, so it is proved here rather than
+    assumed."""
     tools = REPO / "tools"
     sys.path.insert(0, str(tools))
     import importlib.util
@@ -451,10 +654,17 @@ def t_the_about_generator_accepts_the_symbol_kind():
     spec.loader.exec_module(module)
     path = register_with(
         "S1\ta symbol row is counted\tsymbol:backend/jarvis_agent.py::with_manner_note"
-        "\tbuilt\tbackend/jarvis_agent.py::with_manner_note\n")
+        "\tbuilt\tbackend/jarvis_agent.py::with_manner_note\n"
+        "S2\ta changelog row is counted\t"
+        'changelog:"Cloud in the Presets menu, and one switch that lets Jarvis '
+        'escalate without asking first (2026-10-27)."'
+        "\tbuilt\t"
+        'changelog:"Cloud in the Presets menu, and one switch that lets Jarvis '
+        'escalate without asking first (2026-10-27)."\n')
     values = module.counts(Path(path))
-    check("gen_about_claims counts a `symbol:` row and a symbol-form source",
-          values == {"rows": 1, "built": 1, "open": 0, "unverifiable": 0}, values)
+    check("gen_about_claims counts the durable kinds and their sources",
+          values == {"rows": 2, "built": 2, "open": 0, "unverifiable": 0}, values)
+
 
 
 def t_the_record_grep_is_answered_by_both_places():
@@ -636,7 +846,8 @@ def t_a_check_kind_nobody_knows_is_refused():
     # all of them, and it would not have noticed a kind missing from the list.
     check("... and names every kind that is allowed",
           all(kind in out for kind in ("file", "no-file", "grep", "absent",
-                                       "test", "number", "symbol")), out)
+                                       "test", "number", "symbol",
+                                       "changelog")), out)
 
 
 def t_an_unknown_state_is_refused():
@@ -718,6 +929,10 @@ def t_every_kind_all_answers_on_a_real_row():
     `symbol:` is the seventh kind (architect ruling A, 2026-11-25): its live row
     names a declaration `backend/jarvis_agent.py` really carries, so the kind is
     proved against the tree a run actually reads, not only against a fixture.
+    `changelog:` is the eighth (2026-11-25), and its live row names a rolled
+    CHANGELOG.md bullet by its bold title - one of the twelve sources this same
+    change migrated, so a reworded title is caught here as well as by the
+    register.
 
     The `test:` row points at a throwaway suite rather than at a real one: a
     real suite can need packages this container has not installed, and pointing
@@ -745,6 +960,8 @@ def t_every_kind_all_answers_on_a_real_row():
         "test": f"test:{suite}",
         "number": "number:docs/DECISIONS.md:tools/shader_size.py:60,000",
         "symbol": "symbol:backend/jarvis_agent.py::with_manner_note",
+        "changelog": 'changelog:"Cloud in the Presets menu, and one switch that '
+                     'lets Jarvis escalate without asking first (2026-10-27)."',
     }
     for name, expr in rows.items():
         path = register_with(f"K-{name}\ta live {name} check\t{expr}\tbuilt\tCLAUDE.md:1\n")
@@ -1395,12 +1612,15 @@ def t_a_suite_the_checker_runs_does_not_see_the_ambient_value():
 if __name__ == "__main__":
     for fn in (t_the_checker_exists, t_the_committed_register_is_green,
                t_list_prints_every_row_it_checked,
+               t_the_whole_register_is_swept_once,
                t_the_vocabulary_is_actually_used,
                t_every_source_points_at_a_real_line,
                t_a_source_may_name_a_decisions_fragment,
                t_a_source_may_name_a_symbol_or_a_heading,
+               t_a_source_may_name_a_changelog_bullet,
                t_a_symbol_row_bites_on_a_temp_repository,
-               t_the_about_generator_accepts_the_symbol_kind,
+               t_a_changelog_row_bites_on_a_temp_repository,
+               t_the_about_generator_accepts_the_durable_kinds,
                t_the_record_grep_is_answered_by_both_places,
                t_the_about_page_quotes_the_register_it_describes,
                t_a_built_row_that_stopped_holding_fails,

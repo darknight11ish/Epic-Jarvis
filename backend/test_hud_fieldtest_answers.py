@@ -137,15 +137,27 @@ GOOGLE_SAID = (
     "how do I connect my google calendar",
 )
 
-#: The sentences that name EMAIL and not the calendar, so they are answered
-#: about email alone (2026-11-15). The first is the owner's own question, which
-#: used to get the four-path calendar inventory and never a Gmail step.
+#: The sentences that name EMAIL and no provider, so they are answered about
+#: email alone (2026-11-15). The first is the owner's own question, which used
+#: to get the four-path calendar inventory and never a Gmail step.
+#:
+#: DEF-096 (2026-11-25) moved the three that NAME GMAIL to `GMAIL_CARD_SAID`
+#: below: `gmail` is a service the connect card can test now, so the sentence
+#: that names it raises the card, and the email answer's own first line now
+#: names that card for anyone who asks about email in general.
 EMAIL_SAID = (
-    "how do I connect a Gmail account to you?",
     "connect my email",
-    "connect my gmail",
     "what about gmail?",
+)
+
+#: The sentences that name GMAIL, and so raise the connect card (DEF-096,
+#: 2026-11-25): the owner's own "i would like to connect you to my gmail", and
+#: the how-to shape, which the card answers better than a page of steps.
+GMAIL_CARD_SAID = (
+    "i would like to connect you to my gmail",
+    "connect my gmail",
     "set up my gmail account",
+    "how do I connect a Gmail account to you?",
 )
 
 #: What the EMAIL answer must name: the real boxes on the desktop's Accounts
@@ -173,8 +185,9 @@ EMAIL_NOT_WANTED = (
 )
 
 #: What the answer MUST name, one entry per real path (2026-10-29): the Google
-#: two-way setup and its doc, the private iCal card, GitHub's card, and email
-#: as not built with its IMAP details in Settings, Accounts.
+#: two-way setup and its doc, the private iCal card, GitHub's card, and email -
+#: Gmail's own secure card since 2026-11-25 (DEF-096), with any other provider's
+#: IMAP details in Settings, Accounts.
 WANTED_PATHS = (
     "py -3 jarvis_google_calendar.py",
     "docs/GOOGLE-CALENDAR-SETUP.md",
@@ -183,7 +196,7 @@ WANTED_PATHS = (
     "connect my calendar",
     "GitHub",
     "connect GitHub",
-    "not built yet",
+    "connect my Gmail",
     "IMAP",
     "Settings, Accounts",
 )
@@ -568,9 +581,64 @@ def t_email_alone_is_answered_about_email():
               got is not None and got.name == "accounts_connect", got)
 
 
+def t_naming_gmail_raises_the_connect_card():
+    """DEF-096 (2026-11-25): "i would like to connect you to my gmail" raises ONE
+    card - the owner's own sentence, which used to be told there was no connect
+    card for email. The card's words name the address box and say the one test
+    reads only a count; nothing is fetched until it is answered on the PC."""
+    import jarvis_connect_account as C
+    C.reset_for_tests()
+    try:
+        for said in GMAIL_CARD_SAID:
+            got = Q.match(said)
+            check(f"{said!r} is the connect card's sentence",
+                  got is not None and got.name == "connect_account"
+                  and got.f.get("ask") == "card" and got.f.get("service") == "gmail",
+                  got)
+            r = _answer(said)
+            check(f"... answered here, not by the model ({said!r})", r is not None, r)
+            if r is None:
+                continue
+            check(f"... with the route naming the card ({said!r})",
+                  r.intent == "connect_account", r.intent)
+            check(f"... it says one card is waiting and where ({said!r})",
+                  "One card is waiting in the HUD window on this PC" in r.reply, r.reply)
+            check(f"... it names the boxes to type ({said!r})",
+                  "Gmail address" in r.reply and "App password" in r.reply, r.reply)
+            check(f"... it says a value is never typed into the chat ({said!r})",
+                  "never typed into the chat" in r.reply, r.reply)
+            cards = [c for c in C.pending_cards() if c["service"] == "gmail"]
+            check(f"... and ONE card is waiting, with the address and password boxes "
+                  f"({said!r})",
+                  len(cards) == 1
+                  and [f["name"] for f in cards[0]["fields"]] == ["address",
+                                                                 "app_password"],
+                  cards)
+            if cards:
+                check(f"... whose words say the one test reads only a count ({said!r})",
+                      "count" in cards[0]["summary"].lower(), cards[0]["summary"])
+            C.reset_for_tests()
+        # A REFUSAL RAISES NO CARD: a switched-off action answers in words.
+        real = C.tier_problem
+        try:
+            C.tier_problem = lambda sid, tier_of=C.tier_of: (
+                "Connecting a mailbox is switched off on this PC." if sid == "gmail"
+                else "")
+            refused = _answer("connect my gmail")
+        finally:
+            C.tier_problem = real
+        check("a switched-off card answers in words, and raises nothing",
+              refused is not None and "switched off" in refused.reply
+              and C.pending_cards() == [],
+              refused and refused.reply)
+    finally:
+        C.reset_for_tests()
+
+
 def main():
     for fn in (t_google_and_email_are_answered_with_the_real_paths,
                t_email_alone_is_answered_about_email,
+               t_naming_gmail_raises_the_connect_card,
                t_the_commands_and_the_doc_are_the_real_ones,
                t_the_lead_says_what_is_really_chosen,
                t_the_not_connected_answer_names_no_missing_settings_row,

@@ -1556,6 +1556,45 @@ GITHUB_MODE_GATE_ROWS = Repair(
 )
 
 
+#: DEF-096 (2026-11-25): the mailbox connect card's own action, `connect_mail`
+#: (`jarvis_connect_account.py`'s Gmail row - the address plus an app password,
+#: Google's App Password with 2-Step Verification on, never Google OAuth).
+#:
+#: WHY IT IS NEEDED ON A LIVE INSTALL AT ALL. The card refuses to be raised at
+#: any tier but "ask" (`jarvis_connect_account.tier_problem`), and a name with
+#: no `[autonomy.tiers]` line takes `unknown_action_tier` - "ask" on this PC - so
+#: the card itself works either way. What the row adds is the GATE'S OWN RECORD
+#: of the action: without it `risk_for()` answers the unclassified fallback,
+#: "permanent and able to leave this PC", which is false of a local, reversible
+#: Credential Manager write followed by one IMAP count. The published base
+#: carries the row at the end of the file, in a `_RISK.update({...})` block - the
+#: region no earlier patch's hunk claims.
+#:
+#: WHY THE ROW SITS INSIDE THE LITERAL HERE. This is the LIVE file and no patch
+#: is applied after this write, so the base's end-of-file rule does not bind -
+#: `devices-cleanup` and `note-edit` above use the same shape for the same
+#: reason. The text is copied from `jarvis-backend/jarvis_gate.py` byte for byte,
+#: so a repaired install equals a fresh one.
+CONNECT_MAIL_RISK = Repair(
+    name="connect-mail",
+    filename="jarvis_gate.py",
+    probes=('"connect_mail": ("yes", "local"',),
+    anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+    replace_with=(
+        "_RISK: dict[str, tuple[str, str, str]] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-25, DEF-096): the\n"
+        "    # mailbox connect card's own action. Local and reversible: two\n"
+        "    # entries in Windows Credential Manager, and the one test reads\n"
+        "    # only how many messages the inbox holds. Copied from\n"
+        "    # jarvis-backend/jarvis_gate.py byte for byte.\n"
+        '    "connect_mail": ("yes", "local", "saves your mail address and an app password in Windows Credential Manager on this PC and then reads ONLY how many messages the inbox holds, to prove the login works - no sender, no subject, no date and no message body is read, nothing is marked as read, nothing is sent anywhere, and deleting the saved entries is instant"),\n'
+    ),
+    why="without the row the gate's own record of the action is the "
+        "unclassified fallback - permanent and able to leave this PC - which is "
+        "false of a local, reversible credential write and one IMAP count",
+)
+
+
 REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               NOTE_DELETE_RISK, NOTE_DELETE_NO_RULE,
                               EMPTY_TRASH_RISK, EMPTY_TRASH_NO_RULE,
@@ -1563,6 +1602,7 @@ REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               DEVICES_CLEANUP_GATE_ROWS,
                               GITHUB_MODE_GATE_ROWS,
                               CANCEL_SCHEDULED_TOOL_ACTION,
+                              CONNECT_MAIL_RISK,
                               GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
                               UNKNOWN_RISK)}
 

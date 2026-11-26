@@ -2453,7 +2453,7 @@
   "type": "function",
   "function": {
    "name": "connect_account",
-   "description": "Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
+   "description": "Raise ONE card that connects a calendar, GitHub or a mail mailbox (Gmail) to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
    "parameters": {
     "type": "object",
     "properties": {

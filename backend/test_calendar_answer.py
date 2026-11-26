@@ -268,7 +268,12 @@ def t_one_owner_per_sentence():
         # four-path inventory led with the calendar's state for a Gmail
         # question. The calendar shapes above keep the inventory.
         ("connect my email", "accounts_email", None, None),
-        ("connect my gmail", "accounts_email", None, None),
+        # "connect my gmail" MOVED ON 2026-11-25 (DEF-096): the word `gmail`
+        # names a service the connect card can TEST now (address + app
+        # password, one IMAP count), so the card owns the sentence and the
+        # email answer keeps the sentences that name no provider - it names
+        # that card in its own first line.
+        ("connect my gmail", "connect_account", "card", "gmail"),
         # -- this answer: the setup shapes the card does not claim --
         ("calendar setup", "calendar_setup", None, None),
         ("sync my calendar with jarvis", "calendar_setup", None, None),
