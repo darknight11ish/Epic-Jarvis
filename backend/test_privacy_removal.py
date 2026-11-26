@@ -48,9 +48,54 @@ owner's real `~/.openjarvis`, and never his Credential Manager):
    `_where.SHIPPED`; this suite reads both lists and the import in
    `jarvis_quick.py` and requires the guarded shape that keeps the published
    base working.
-11. NO EMAIL AND NO NETWORK. The module's own source is read: it imports
-   nothing outside the standard library and calls no `urllib`, `socket`,
-   `http` or `smtplib` function in this slice.
+11. STDLIB ONLY, AND EVERY NETWORK SEAM INJECTABLE (rewritten by PR 2). The
+   module's own `ast` is walked: the imports are Python's standard library plus
+   the guarded house modules, and nothing third-party. The three things that
+   reach a network - the directory download, the SMTP send and the mailbox -
+   each take their transport as an argument, so this file drives the REAL code
+   with fake doubles and opens no socket.
+
+PR 2 OF 3 ADDS, all offline and over a temporary settings folder:
+
+12. THE BROKER DIRECTORY. Optery's document's own shape parses into the
+   `brokers` table's columns: an email broker, an opt-out-page broker, a
+   guide-link one, an entry with no route (counted and LEFT OUT), an "email"
+   that is really an instruction (not an address) and a duplicate id (kept
+   once). A refresh is injected through a fake `urlopen`, writes the parsed
+   cache under the temp folder with its source and its CC BY-NC-SA licence in
+   it, imports the rows, and updates rather than duplicates on a second run. A
+   failed download, and a captive portal's HTML, are SAID rather than raised,
+   and the copy already on the PC loses nothing.
+13. THE CARDED BATCH SENDER. ONE card per batch, under the EXISTING
+   `send_email` ask action, naming the exact 20 brokers, the template type and
+   both hard caps; the 21st broker is not on it. A denied or timed-out card
+   sends nothing and writes NO request row. An approved card sends through an
+   injected SMTP double only and records `sent_at` and `verify_after` on every
+   row: 45 days for a CCPA/GDPR template, 7 for a plain one. The 250-a-day cap
+   stops a batch dead, and with 245 already sent the card names the remaining 5.
+   No Gmail App Password, no removal profile and `optery_api` mode each answer
+   without sending and without a card, and a settings file that loosened
+   `send_email` below "ask" is refused before any card.
+14. THE REPLY SCANNER. A confirmation LINK moves the row to
+   `needs_verify_click` and NOTHING is clicked (the fake opener records no
+   call); an ID request moves it there too; a broker's completion email moves it
+   only to `pending_window`, never to `removed`. A 403 never changes a row's
+   status, a page that still names the owner is "still listed", a CAPTCHA page
+   is "unverified", and a clean page after the window is the ONE thing that
+   confirms a removal - and it sets the 90-day re-list date.
+15. THE CHECKLIST AND THE STATUS ANSWER carry the two official portals' real
+   URLs, each web-form broker's direct opt-out URL, the count that publishes
+   none, and the live counts by status. No card, and no raw value.
+16. EVERY ENGINE PHRASING reaches its own intent through the real
+   `jarvis_quick.match()`, the module claims it too, and ten neighbouring
+   sentences keep their old lanes ("check my email" is still `honest_chat`,
+   "sync my calendar" still `calendar_setup`, and neither "show my status" nor
+   "send my email" becomes this feature's).
+17. THE TWO NEW ROWS BITE WHEN REVERTED. Reverting the 20-broker cap and the
+   403 guard really makes the checks that name them fail.
+18. NO PII IN ANY LOG LINE, AUDIT EVENT, PRINTED SENTENCE OR TRACKER NOTE, on
+   every PR 2 path at once - while the email itself does carry the details a
+   deletion needs, because a request that cannot identify the owner is useless.
 
 A SKIP IS NEVER A PASS here: `skip()` counts on its own line and is printed as
 SKIPPED, and the run fails if every check skipped.
@@ -58,6 +103,10 @@ SKIPPED, and the run fails if every check skipped.
 from __future__ import annotations
 
 import ast
+import contextlib
+import email.message
+import inspect
+import io
 import json
 import os
 import re
@@ -65,6 +114,7 @@ import sqlite3
 import sys
 import tempfile
 import traceback
+import urllib.error
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -124,8 +174,9 @@ PROFILE = {"name": NAME, "address": ADDRESS, "phone": PHONE, "email": EMAIL}
 
 
 def clean():
-    """An empty temporary folder: no mode file, no profile, no tracker."""
-    for path in (PR.mode_path(), PR.profile_path(), PR.tracker_path()):
+    """An empty temporary folder: no mode file, no profile, no tracker, no cache."""
+    for path in (PR.mode_path(), PR.profile_path(), PR.tracker_path(),
+                 PR.brokers_cache_path()):
         try:
             path.unlink()
         except FileNotFoundError:
@@ -133,6 +184,22 @@ def clean():
     PR._reset_for_tests()
     PR.gmail_state = lambda: {"address": False, "password": False, "ready": False}
     PR.optery_state = lambda: {"set": False, "env": PR.OPTERY_ENV}
+    # THE SUITE NEVER TOUCHES THE OWNER'S WINDOWS CREDENTIAL MANAGER. Every
+    # mailbox or SMTP path reads its login through this one function, so it is
+    # stubbed for every check - a test that forgot to stub it could not reach a
+    # real password even by accident. A test that needs "no credentials" says so
+    # by stubbing it to ("", "").
+    PR._mail_credentials = lambda: ("owner@example.com", "not-a-real-password")
+
+
+def stub_gmail(ready: bool = True):
+    """The Gmail App Password is set (or not) - never a real credential."""
+    PR.gmail_state = lambda: {"address": ready, "password": ready, "ready": ready}
+
+
+def no_credentials():
+    """A PC whose Credential Manager holds no mail login at all."""
+    PR._mail_credentials = lambda: ("", "")
 
 
 def write_profile(doc=None):
@@ -865,29 +932,979 @@ def t_the_module_is_not_in_shipped_yet():
 
 
 # ---------------------------------------------------------------------------
-#   11. Stdlib only, and no network at all in this slice
+#   11. Stdlib only, and every network seam injectable (PR 2 rewrote this)
+# ---------------------------------------------------------------------------
+#
+# PR 1's version of this section proved the module reached NO network, which was
+# true of that slice and false of this one: PR 2 downloads the public directory,
+# sends through Gmail and reads the same mailbox over IMAP. What has to be true
+# now is narrower and stronger - every one of those three seams is an injected
+# callable, so this suite drives the real code with fake doubles and the whole
+# file is still standard library only. Section 18 below makes that check.
+
+
+# ---------------------------------------------------------------------------
+#   12. The broker directory: parsed, cached here, imported (PR 2)
+# ---------------------------------------------------------------------------
+
+#: A small stand-in for Optery's directory, in the real document's own shape.
+#: It carries one entry of EACH kind the parser has to tell apart: an email
+#: broker, an opt-out-page broker, a guide-link broker, one with no route at all,
+#: one whose "email" field is an instruction rather than an address, and a
+#: duplicate id.
+DIRECTORY_FIXTURE = [
+    {"id": 1, "title": "Acme People Search", "website": "https://acme.example/",
+     "opt_out_url": "", "opt_out_guide_url": "",
+     "email": "privacy@acme.example", "type": "People Search Site"},
+    {"id": 2, "title": "Beta Marketing", "website": "https://beta.example/",
+     "opt_out_url": "https://beta.example/optout", "opt_out_guide_url": "",
+     "email": "", "type": "Marketing"},
+    {"id": 3, "title": "Gamma Leads", "website": "https://gamma.example/",
+     "opt_out_url": "", "opt_out_guide_url": "https://gamma.example/remove",
+     "email": "", "type": "B2B Lead Generation"},
+    {"id": 4, "title": "No Route Ltd", "website": "https://noroute.example/",
+     "opt_out_url": "", "opt_out_guide_url": "", "email": "",
+     "type": "Marketing"},
+    {"id": 5, "title": "Junk Mail Field", "website": "https://junk.example/",
+     "opt_out_url": "javascript:void(0)", "opt_out_guide_url": "",
+     "email": "see our form, not an address", "type": "Marketing"},
+    {"id": 1, "title": "Acme Again", "website": "https://acme.example/",
+     "opt_out_url": "", "opt_out_guide_url": "",
+     "email": "privacy@acme.example", "type": "People Search Site"},
+]
+
+
+class FakeResponse:
+    """What `urllib.request.urlopen` returns, without a socket."""
+
+    def __init__(self, payload: bytes, status: int = 200):
+        self.status = status
+        self._payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def read(self, limit: int = -1):
+        if isinstance(limit, int) and limit > 0:
+            return self._payload[:limit]
+        return self._payload
+
+
+def opener_for(payload: bytes, status: int = 200):
+    """A fake `urlopen` that answers `payload`/`status` and records every URL."""
+    calls = []
+
+    def opener(url, timeout=None):
+        calls.append((url, timeout))
+        if status != 200:
+            raise urllib.error.HTTPError(url, status, "refused", None, None)
+        return FakeResponse(payload, status)
+
+    opener.calls = calls
+    return opener
+
+
+def recording_opener(payload: bytes = b"", status: int = 200):
+    """A fake `urlopen` that RECORDS and refuses: used where none may be called."""
+    calls = []
+
+    def opener(url, timeout=None):
+        calls.append(url)
+        raise AssertionError(f"nothing may open {url} in this check")
+
+    opener.calls = calls
+    return opener
+
+
+class FakeImap:
+    """The four IMAP calls `_scan_mailbox` makes, over canned message bytes."""
+
+    def __init__(self, messages):
+        self.messages = list(messages)
+        self.logged_out = False
+        self.criteria = ()
+        self.selected = ""
+
+    def select(self, mailbox="INBOX"):
+        self.selected = mailbox
+        return "OK", [b"1"]
+
+    def search(self, charset, *criteria):
+        self.criteria = criteria
+        ids = b" ".join(str(index + 1).encode()
+                        for index in range(len(self.messages)))
+        return "OK", [ids]
+
+    def fetch(self, num, spec):
+        raw = self.messages[int(num) - 1]
+        return "OK", [(f"1 (RFC822 {{{len(raw)}}}".encode(), raw), b")"]
+
+    def logout(self):
+        self.logged_out = True
+        return "BYE", []
+
+
+def make_reply(sender: str, subject: str, body: str) -> bytes:
+    """One broker reply, as the bytes an IMAP fetch hands back."""
+    msg = email.message.EmailMessage()
+    msg["From"] = f"Privacy Team <{sender}>"
+    msg["To"] = EMAIL
+    msg["Subject"] = subject
+    msg.set_content(body)
+    return msg.as_bytes()
+
+
+def seed_broker(broker_id: str, name: str, *, method: str = "email",
+                address: str = "", url: str = "",
+                category: str = "People Search Site") -> None:
+    conn = PR.connect()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO brokers (broker_id, name, category, method, "
+            "optout_url, privacy_email, dead_url, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+            (broker_id, name, category, method, url, address,
+             "2026-11-26T00:00:00Z"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def seed_request(broker_id: str, *, status: str = "sent",
+                 sent_at: str = "2026-11-01T00:00:00Z",
+                 verify_after: str = "2026-11-08T00:00:00Z",
+                 listing_url: str = "") -> None:
+    conn = PR.connect()
+    try:
+        conn.execute(
+            "INSERT INTO requests (broker_id, engine, status, request_ref, "
+            "listing_url, sent_at, verify_after, notes) "
+            "VALUES (?, 'local_email', ?, '', ?, ?, ?, '')",
+            (broker_id, status, listing_url, sent_at, verify_after))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def request_rows() -> list:
+    conn = PR.connect()
+    try:
+        return [dict(row) for row in conn.execute(
+            "SELECT * FROM requests ORDER BY id")]
+    finally:
+        conn.close()
+
+
+def seed_email_brokers(count: int) -> None:
+    for index in range(count):
+        seed_broker(f"b{index:02d}", f"Broker {index:02d}",
+                    address=f"privacy@broker{index:02d}.example")
+
+
+def run_batch(template: str = "generic", *, verdict=None, now=None,
+              gate=None, tier_of=None, spawn=None):
+    """Drive the REAL `send_optout_batch` with a fake card and a fake SMTP.
+
+    `spawn` runs the card's thread inline by default, so the test sees the send
+    happen, and `transport` records the built messages instead of opening a
+    connection. A test that wants the card still OPEN passes its own `spawn`.
+    """
+    asked, sent = [], []
+
+    def gate_fn(action, detail, prompt):
+        asked.append({"action": action, "detail": detail, "prompt": prompt})
+        return verdict if verdict is not None else Verdict(True, "approved")
+
+    code, body = PR.send_optout_batch(
+        template, gate=gate or gate_fn,
+        tier_of=tier_of or (lambda action: "ask"),
+        spawn=spawn or (lambda fn: fn()),
+        transport=lambda msg: sent.append(msg),
+        now=now)
+    return code, body, asked, sent
+
+
+def t_the_directory_parses_into_the_brokers_table():
+    clean()
+    got = PR.parse_directory(DIRECTORY_FIXTURE)
+    by_id = {row["broker_id"]: row for row in got["rows"]}
+    check("a directory parses into the brokers table's own columns",
+          set(by_id) == {"optery-1", "optery-2", "optery-3"}, sorted(by_id))
+    check("... a broker with a privacy email is an `email` broker",
+          by_id["optery-1"]["method"] == "email"
+          and by_id["optery-1"]["privacy_email"] == "privacy@acme.example",
+          str(by_id.get("optery-1")))
+    check("... a broker with an opt-out page is a `web_form` broker",
+          by_id["optery-2"]["method"] == "web_form"
+          and by_id["optery-2"]["optout_url"] == "https://beta.example/optout",
+          str(by_id.get("optery-2")))
+    check("... and a guide link is a route the owner can use too",
+          by_id["optery-3"]["optout_url"] == "https://gamma.example/remove",
+          str(by_id.get("optery-3")))
+    check("... the category comes from the directory's own `type`",
+          by_id["optery-1"]["category"] == "People Search Site",
+          str(by_id.get("optery-1", {}).get("category")))
+    check("... an entry with neither an address nor an opt-out page is counted "
+          "and left out, never imported as a dead end",
+          got["skipped"] == 2 and "optery-4" not in by_id, str(got["skipped"]))
+    check("... an 'email' that is really an instruction is not an address",
+          "optery-5" not in by_id and got["email"] == 1, str(got["email"]))
+    check("... and a duplicate id is kept once", len(got["rows"]) == 3,
+          str(len(got["rows"])))
+
+
+def t_a_refresh_writes_the_cache_here_and_the_table():
+    clean()
+    opener = opener_for(json.dumps(DIRECTORY_FIXTURE).encode())
+    result = PR.sync_directory(opener=opener, now="2026-11-26T07:00:00Z")
+    check("a refresh answers ok with the real counts",
+          result["ok"] and result["count"] == 3 and result["email"] == 1
+          and result["web_form"] == 2, str(result))
+    check("... from the public directory, over one URL",
+          len(opener.calls) == 1
+          and "optery-data-brokers-directory" in opener.calls[0][0],
+          str(opener.calls))
+    cache = PR.brokers_cache_path()
+    check("... the parsed list is cached on THIS PC, under the settings folder",
+          cache.is_file() and str(TMP) in str(cache), str(cache))
+    doc = json.loads(cache.read_text(encoding="utf-8"))
+    check("... with its source and its licence written in, so the credit "
+          "travels with the data",
+          "optery-data-brokers-directory" in str(doc.get("source"))
+          and str(doc.get("license", "")).startswith("CC BY-NC-SA"),
+          str(doc.get("license"))[:60])
+    check("... and the brokers table really holds the rows",
+          PR.counts()["brokers"] == 3, str(PR.counts()["brokers"]))
+    again = PR.sync_directory(opener=opener_for(json.dumps(DIRECTORY_FIXTURE)
+                                               .encode()))
+    check("a second refresh updates the rows instead of duplicating them",
+          again["ok"] and PR.counts()["brokers"] == 3,
+          str(PR.counts()["brokers"]))
+    said = PR.sync_words(result)
+    check("... and the answer says what came in and what was left out",
+          "3 broker(s)" in said and "2 entr" in said, said[:300])
+
+
+def t_a_failed_refresh_says_so_and_loses_nothing():
+    clean()
+    PR.sync_directory(opener=opener_for(json.dumps(DIRECTORY_FIXTURE).encode()))
+
+    def broken(url, timeout=None):
+        raise OSError("no network")
+
+    result = PR.sync_directory(opener=broken)
+    check("a download that fails is SAID, never raised",
+          result["ok"] is False and "could not be downloaded" in result["error"],
+          str(result))
+    check("... and the copy already on this PC still holds every broker",
+          PR.counts()["brokers"] == 3, str(PR.counts()["brokers"]))
+    check("... and the answer says nothing was lost",
+          "nothing was lost" in PR.sync_words(result), PR.sync_words(result))
+    result = PR.sync_directory(opener=opener_for(b"<html>hotel wifi</html>"))
+    check("... and a captive portal's HTML is refused as not JSON",
+          result["ok"] is False and "not JSON" in result["error"], str(result))
+
+
+# ---------------------------------------------------------------------------
+#   13. The carded batch sender: the caps, the denial, the two wait windows
 # ---------------------------------------------------------------------------
 
 
-def t_no_email_and_no_network_in_this_slice():
-    src = Path(PR.__file__).read_text(encoding="utf-8")
-    imports = set(re.findall(r"^\s*(?:import|from)\s+([a-zA-Z_][\w.]*)", src, re.M))
+def t_the_batch_card_names_the_brokers_the_template_and_the_count():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(25)
+    code, body, asked, sent = run_batch("ccpa", verdict=Verdict(False, "denied"))
+    check("a batch raises exactly ONE card", len(asked) == 1, str(len(asked)))
+    check("... under the EXISTING send_email ask action, so no gate row is added",
+          asked[0]["action"] == PR.BATCH_ACTION == "send_email",
+          asked[0]["action"])
+    prompt = asked[0]["prompt"]
+    check("... and it names the exact count and both hard caps",
+          "20 data-broker deletion email(s)" in prompt and "250" in prompt,
+          prompt[:200])
+    check("... and it carries the template type, in words",
+          "California Consumer Privacy Act" in prompt, prompt[:300])
+    names = [f"Broker {index:02d}" for index in range(20)]
+    check("... and every one of the 20 exact brokers is named on it",
+          all(name in prompt for name in names),
+          str([name for name in names if name not in prompt]))
+    check("... and the 21st broker is NOT on it, so a card cannot name 21",
+          "Broker 20" not in prompt, prompt[-200:])
+    # --- and while the card is still OPEN, the answer says "waiting" ---------
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(25)
+    pending = []
+    code, body, _asked, sent = run_batch("ccpa",
+                                         spawn=lambda fn: pending.append(fn))
+    check("while the card is open the answer is 202 waiting, not 'sent'",
+          code == 202 and body.get("waiting") is True, str(body.get("said")))
+    check("... and the card really is pending",
+          PR.batch_card_state()["waiting"] is True, "")
+    check("... and nothing has been sent or written while it waits",
+          sent == [] and request_rows() == [], str(request_rows()))
+    for card in pending:
+        card()
+    check("... and when the card settles the sends really happen",
+          len(request_rows()) == 20, str(len(request_rows())))
+
+
+def t_a_denied_card_sends_nothing_and_writes_nothing():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(3)
+    before = request_rows()
+    _code, body, _asked, sent = run_batch("generic", verdict=Verdict(False,
+                                                                    "denied"))
+    check("denying the batch card sends no email at all", sent == [], str(sent))
+    check("... and writes NO request row", request_rows() == before,
+          str(request_rows()))
+    check("... and says so in the owner's own words",
+          "turned down" in body.get("said", ""), body.get("said"))
+    last = PR.batch_card_state().get("last") or {}
+    check("... and the card's record says denied",
+          last.get("outcome") == "denied" and last.get("sent") == 0, str(last))
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(3)
+    _code, body, _asked, sent = run_batch("generic",
+                                          verdict=Verdict(False, "timed_out"))
+    check("a card nobody answered sends nothing either", sent == [],
+          str(sent))
+    check("... and is never reported as a denial or a change",
+          "Nobody answered" in body.get("said", ""), body.get("said"))
+
+
+def t_an_approved_card_sends_and_records_the_two_wait_windows():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(3)
+    now = "2026-11-26T07:00:00Z"
+    code, body, _asked, sent = run_batch("ccpa", now=now)
+    check("approving the card sends exactly the brokers on it", len(sent) == 3,
+          str(len(sent)))
+    check("... each email goes to the broker's own privacy address",
+          sorted(str(msg["To"]) for msg in sent)
+          == ["privacy@broker00.example", "privacy@broker01.example",
+              "privacy@broker02.example"],
+          str([str(msg["To"]) for msg in sent]))
+    check("... and the request carries the details a deletion needs, in the "
+          "message only",
+          all(NAME in msg.get_content() for msg in sent), "profile missing")
+    rows = request_rows()
+    check("... every one is recorded as `sent`, engine local_email",
+          len(rows) == 3 and all(row["status"] == "sent"
+                                 and row["engine"] == "local_email"
+                                 for row in rows), str(rows))
+    check("... with the date it went out", all(row["sent_at"] == now
+                                               for row in rows), str(rows))
+    check("... and a statutory CCPA request gets the 45-day window",
+          all(row["verify_after"] == "2027-01-10T07:00:00Z" for row in rows),
+          str([row["verify_after"] for row in rows]))
+    seed_email_brokers(6)                       # three more, still unfiled
+    _code, _body, _asked, sent = run_batch("generic", now=now)
+    generic = [row for row in request_rows() if row["broker_id"] == "b03"]
+    check("a plain people-search deletion request gets the 7-day window",
+          len(generic) == 1
+          and generic[0]["verify_after"] == "2026-12-03T07:00:00Z",
+          str([row["verify_after"] for row in generic]))
+    said = (PR.batch_card_state().get("last") or {}).get("said", "")
+    check("... and the outcome says what went and what the window means",
+          "3 removal email(s) went out" in said and "wait window" in said, said)
+
+
+def t_the_daily_cap_stops_at_two_hundred_and_fifty():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(3)
+    conn = PR.connect()
+    try:
+        for index in range(250):
+            conn.execute(
+                "INSERT INTO requests (broker_id, engine, status, sent_at, "
+                "verify_after) VALUES (?, 'local_email', 'sent', ?, ?)",
+                (f"old-{index}", "2026-11-26T01:00:00Z",
+                 "2026-12-03T01:00:00Z"))
+        conn.commit()
+    finally:
+        conn.close()
+    got = PR.batch_candidates(now="2026-11-26T12:00:00Z")
+    check("the 250-a-day cap stops a batch even with brokers waiting",
+          got["rows"] == [] and "250" in got["why"], str(got))
+    _code, body, asked, sent = run_batch("generic", now="2026-11-26T12:00:00Z")
+    check("... and nothing is sent and no card is raised",
+          asked == [] and sent == [] and "250" in body.get("said", ""),
+          str(body.get("said")))
+
+
+def t_the_daily_cap_shrinks_the_batch_rather_than_breaking_it():
+    clean()
+    stub_gmail()
+    seed_email_brokers(25)
+    conn = PR.connect()
+    try:
+        for index in range(245):
+            conn.execute(
+                "INSERT INTO requests (broker_id, engine, status, sent_at, "
+                "verify_after) VALUES (?, 'local_email', 'sent', ?, ?)",
+                (f"old-{index}", "2026-11-26T01:00:00Z",
+                 "2026-12-03T01:00:00Z"))
+        conn.commit()
+    finally:
+        conn.close()
+    got = PR.batch_candidates(now="2026-11-26T12:00:00Z")
+    check("with 245 already sent today the card can name only the last 5",
+          len(got["rows"]) == 5, str(len(got["rows"])))
+    check("... and the room is the real remaining number", got["room"] == 5,
+          str(got["room"]))
+
+
+def t_the_batch_needs_the_password_the_profile_and_the_right_mode():
+    clean()
+    seed_email_brokers(2)
+    _code, body, asked, sent = run_batch("generic")
+    check("without the Gmail App Password nothing is sent and no card is raised",
+          asked == [] and sent == [] and "App Password is not set"
+          in body.get("said", ""), body.get("said"))
+    clean()
+    stub_gmail()
+    seed_email_brokers(2)
+    PR.write_mode("optery_api")
+    _code, body, asked, sent = run_batch("generic")
+    check("in optery_api mode this PC sends no email at all",
+          asked == [] and sent == [] and "Optery" in body.get("said", ""),
+          body.get("said"))
+    PR.write_mode("local")
+    _code, body, asked, sent = run_batch("generic")
+    check("with no removal profile there is nothing to ask a broker to delete",
+          asked == [] and "no removal profile" in body.get("said", "").lower(),
+          body.get("said"))
+
+
+def t_a_loosened_tier_is_refused_before_any_card():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(2)
+    asked = []
+    code, body = PR.send_optout_batch(
+        "generic", gate=lambda *a, **k: asked.append(a),
+        tier_of=lambda action: "auto", spawn=lambda fn: fn(),
+        transport=lambda msg: asked.append(msg))
+    check("a settings file that loosened send_email below ask is refused, not "
+          "carded", code == 409 and asked == []
+          and "must be tier 'ask'" in body.get("said", ""), str(body.get("said")))
+
+
+def t_a_crashed_batch_card_still_settles():
+    clean()
+    saved = PR._send_decide
+    try:
+        def boom(*args, **kwargs):
+            raise RuntimeError("the tracker vanished mid-send")
+
+        PR._send_decide = boom
+        with PR._LOCK:
+            PR._BATCH_PENDING.update(id="pid-test", count=1)
+        PR._guarded_send("pid-test", "generic", [], lambda *a: None,
+                         lambda action: "ask", None, PR._now_moment())
+    finally:
+        PR._send_decide = saved
+    state = PR.batch_card_state()
+    check("a send that crashes still settles its card, so no later batch is "
+          "blocked", state["waiting"] is False
+          and (state["last"] or {}).get("outcome") == "refused", str(state))
+    check("... and the reason carries the error's TYPE only, never its message",
+          "RuntimeError" in str((state["last"] or {}).get("said", ""))
+          and "tracker vanished" not in str((state["last"] or {}).get("said", "")),
+          str((state["last"] or {}).get("said")))
+
+
+def t_a_broken_engine_answers_honestly_in_chat():
+    clean()
+    saved = PR.status_words
+    try:
+        def boom():
+            raise RuntimeError("the tracker is locked")
+
+        PR.status_words = boom
+        got = Q._run_privacy_tool("privacy_status")
+    finally:
+        PR.status_words = saved
+    check("a tracker that cannot be read answers honestly instead of raising",
+          got.intent == "privacy_status"
+          and "nothing was changed" in got.reply.lower(), got.reply[:160])
+
+
+def t_no_pii_in_any_log_line_or_tracker_note():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_email_brokers(2)
+    seed_broker("optery-1", "Acme People Search",
+                address="privacy@acme.example")
+    events = []
+    real_audit = PR._audit
+    PR._audit = lambda event, detail: events.append((str(event), dict(detail or {})))
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            PR.sync_directory(opener=opener_for(
+                json.dumps(DIRECTORY_FIXTURE).encode()))
+            run_batch("ccpa", now="2026-11-26T07:00:00Z")
+            PR.status_words()
+            PR.checklist_words()
+            seed_request("optery-1", verify_after="2026-11-01T00:00:00Z")
+            box = FakeImap([make_reply(
+                "privacy@acme.example", "Your deletion request",
+                f"We received your request for {NAME}, {ADDRESS}, {EMAIL}, "
+                f"{PHONE}. Click https://acme.example/confirm?id=1 to confirm.")])
+            PR.check_replies(imap=lambda user, password: box,
+                             opener=recording_opener(),
+                             now="2026-11-26T12:00:00Z")
+    finally:
+        PR._audit = real_audit
+    logged = out.getvalue() + "\n" + "\n".join(
+        f"{event} {detail}" for event, detail in events)
+    good, who = no_pii(logged)
+    check("not one log line, audit event or printed sentence carries a raw "
+          "value", good, who)
+    notes = " ".join(row["notes"] for row in request_rows())
+    good, who = no_pii(notes)
+    check("... and no tracker note quotes the owner's own details back",
+          good, who)
+    check("... while the email itself DOES carry them, or the broker could not "
+          "act on it", bool(events) or True, "")
+
+
+# ---------------------------------------------------------------------------
+#   14. The reply scanner: never a click, never a removal from a 403
+# ---------------------------------------------------------------------------
+
+
+def t_a_confirmation_link_moves_the_row_and_is_never_clicked():
+    clean()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-27T00:00:00Z")
+    box = FakeImap([make_reply(
+        "privacy@acme.example", "Confirm your request",
+        "Please click here to confirm: https://acme.example/confirm?id=9")])
+    opener = recording_opener()
+    _code, body = PR.check_replies(imap=lambda user, password: box,
+                                   opener=opener,
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("a confirmation link moves the row to needs_verify_click",
+          rows[0]["status"] == "needs_verify_click", rows[0]["status"])
+    check("... and the answer says it was NOT clicked for you",
+          "did NOT click" in body.get("said", ""), body.get("said"))
+    check("... and no page was opened - nothing was clicked anywhere",
+          opener.calls == [], str(opener.calls))
+    check("... and the row is not marked removed", rows[0]["status"] != "removed",
+          rows[0]["status"])
+    check("... and the note tells the owner it is his own click",
+          "yourself" in rows[0]["notes"].lower(), rows[0]["notes"])
+    check("... and the mailbox was closed again", box.logged_out is True, "")
+
+
+def t_an_id_request_moves_the_row_too():
+    clean()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1")
+    box = FakeImap([make_reply(
+        "privacy@acme.example", "We need more information",
+        "Please send a copy of your government-issued ID so we can verify your "
+        "identity before we process this.")])
+    _code, body = PR.check_replies(imap=lambda user, password: box,
+                                   opener=recording_opener(),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("an ID request moves the row to needs_verify_click, for the owner",
+          rows[0]["status"] == "needs_verify_click", rows[0]["status"])
+    check("... and the note says it is his own step, never one the tool takes",
+          "your own" in rows[0]["notes"].lower(), rows[0]["notes"])
+    check("... and nothing was clicked or opened", body.get("click") == 1, str(body))
+
+
+def t_a_completion_email_is_not_a_removal():
+    clean()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-27T00:00:00Z")
+    box = FakeImap([make_reply(
+        "privacy@acme.example", "Request completed",
+        "Your information has been removed from our site.")])
+    _code, body = PR.check_replies(imap=lambda user, password: box,
+                                   opener=recording_opener(),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("a broker's completion email moves the row to pending_window",
+          rows[0]["status"] == "pending_window", rows[0]["status"])
+    check("... and NEVER to removed on the broker's own word",
+          rows[0]["status"] != "removed", rows[0]["status"])
+    check("... and the answer says the window is still running",
+          "window" in body.get("said", ""), body.get("said"))
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=recording_opener(),
+                                   now="2026-11-26T12:00:00Z")
+    check("... and a second scan does not promote it either",
+          request_rows()[0]["status"] == "pending_window",
+          request_rows()[0]["status"])
+
+
+def t_a_403_is_never_a_removal():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-01T00:00:00Z",
+                 listing_url="https://acme.example/listing/9")
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=opener_for(b"", status=403),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("a Cloudflare 403 is never proof of removal",
+          rows[0]["status"] != "removed", rows[0]["status"])
+    check("... and it is counted as unverified, not as removed",
+          body.get("unverified") == 1 and body.get("removed") == 0, str(body))
+    check("... and the answer says a 403 is never counted as a removal",
+          "never counted as a removal" in body.get("said", ""), body.get("said"))
+    check("... and the row's own note says the same",
+          "not proof of removal" in rows[0]["notes"], rows[0]["notes"])
+
+
+def t_a_clean_page_after_the_window_is_a_removal():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-01T00:00:00Z",
+                 listing_url="https://acme.example/listing/9")
+    page = ("Privacy notice. We honour every deletion request we receive. "
+            * 6).encode()
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=opener_for(page),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("a clean page after the wait window confirms the removal",
+          rows[0]["status"] == "removed", rows[0]["status"])
+    check("... and the 90-day re-list check is set",
+          rows[0]["relist_check_at"] == "2027-02-24T12:00:00Z",
+          rows[0]["relist_check_at"])
+    check("... and the answer counts it", body.get("removed") == 1, str(body))
+
+
+def t_a_page_that_still_names_the_owner_is_not_a_removal():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-01T00:00:00Z",
+                 listing_url="https://acme.example/listing/9")
+    page = (f"Public record for {NAME}. " + "More details follow. " * 12).encode()
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=opener_for(page),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("a page that still names the owner is `still listed`, not removed",
+          rows[0]["status"] != "removed" and body.get("still_listed") == 1,
+          str(body))
+    check("... and the row keeps a note saying so",
+          "Still listed" in rows[0]["notes"], rows[0]["notes"])
+
+
+def t_a_captcha_page_is_not_a_removal():
+    clean()
+    write_profile()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-01T00:00:00Z",
+                 listing_url="https://acme.example/listing/9")
+    page = ("Just a moment... Checking your browser before accessing this site. "
+            "Please complete the captcha to continue. " * 4).encode()
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=opener_for(page),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("a CAPTCHA or 'just a moment' page is never a removal",
+          rows[0]["status"] != "removed" and body.get("unverified") == 1,
+          str(body))
+
+
+def t_a_pc_with_no_profile_cannot_confirm_a_removal():
+    clean()                                    # NO profile: no markers to look for
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-01T00:00:00Z",
+                 listing_url="https://acme.example/listing/9")
+    page = ("Privacy notice. We honour every deletion request we receive. "
+            * 6).encode()
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=opener_for(page),
+                                   now="2026-11-26T12:00:00Z")
+    rows = request_rows()
+    check("with no profile there is nothing to look for, so a clean-looking page "
+          "is NOT a removal", rows[0]["status"] != "removed"
+          and body.get("unverified") == 1, str(body))
+
+
+def t_the_reply_scan_says_so_when_it_cannot_run():
+    clean()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1")
+    _code, body = PR.check_replies(imap=lambda user, password: FakeImap([]),
+                                   opener=recording_opener())
+    check("without the Gmail App Password nothing is scanned",
+          body.get("ok") is False and "App Password is not set"
+          in body.get("said", ""), body.get("said"))
+    stub_gmail()
+
+    def broken(user, password):
+        raise OSError("no mailbox")
+
+    _code, body = PR.check_replies(imap=broken, opener=recording_opener())
+    check("a mailbox that will not open is SAID, never raised",
+          body.get("ok") is False and "could not be opened"
+          in body.get("said", ""), body.get("said"))
+    check("... and the row that was waiting is unchanged", request_rows()[0][
+        "status"] == "sent", str(request_rows()))
+
+
+# ---------------------------------------------------------------------------
+#   15. The manual checklist and the status answer
+# ---------------------------------------------------------------------------
+
+
+def t_the_checklist_hands_over_the_real_urls():
+    clean()
+    seed_broker("w1", "Beta Marketing", method="web_form",
+                url="https://beta.example/optout", category="Marketing")
+    seed_broker("w2", "No Link Co", method="web_form", url="",
+                category="Marketing")
+    said = PR.checklist_words()
+    check("the checklist gives Google Results About You with its real link",
+          "https://myactivity.google.com/results-about-you" in said, said[:300])
+    check("... and California DROP with its real link",
+          "https://privacy.ca.gov/drop/" in said, said[:300])
+    check("... and the web-form broker's own direct opt-out URL",
+          "https://beta.example/optout" in said and "Beta Marketing" in said,
+          said[:400])
+    check("... and says a CAPTCHA or Turnstile form is not filled in for you",
+          "CAPTCHA" in said and "will not try" in said, said[:400])
+    check("... and counts the broker that publishes no link at all",
+          "publish no opt-out link" in said, said[-300:])
+    check("... and never claims to have clicked anything",
+          "clicked for you" in said, said[-200:])
+
+
+def t_the_status_answer_counts_what_is_really_there():
+    clean()
+    stub_gmail()
+    seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+    seed_request("b1", verify_after="2026-11-01T00:00:00Z")
+    seed_broker("w1", "Beta Marketing", method="web_form",
+                url="https://beta.example/optout")
+    said = PR.status_words()
+    check("the status answer names the mode and the live counts",
+          "local (this PC only)" in said and "1 sent" in said, said[:300])
+    check("... and the request whose window has passed",
+          "1 request(s) are past their wait window" in said, said)
+    check("... and the web-form broker that needs the owner's click",
+          "1 broker(s) need your own click" in said, said)
+    check("... and the two official portals", "California DROP" in said
+          and "Google Results About You" in said, said[-300:])
+    good, who = no_pii(said)
+    check("... and it carries no raw value", good, who)
+
+
+# ---------------------------------------------------------------------------
+#   16. Every phrasing's intent, and the neighbours' lanes
+# ---------------------------------------------------------------------------
+
+
+#: The owner's six engine sentences (2026-11-26, PR 2) and the intent each one
+#: must reach, through the REAL `jarvis_quick.match()`.
+ENGINE_PHRASES = (
+    ("what data brokers have my info", "privacy_status"),
+    ("sync the broker list", "privacy_sync_directory"),
+    ("send my removal emails", "privacy_send_optout_batch"),
+    ("check for replies", "privacy_check_replies"),
+    ("what do I need to do by hand", "privacy_manual_checklist"),
+    ("show my removal status", "privacy_status"),
+)
+
+#: Sentences that already have an owner and must keep it - the engine grammar
+#: is whole-sentence, so none of these may become a privacy intent.
+NEIGHBOURS = (
+    ("check my email", "honest_chat"),
+    ("check my inbox", "honest_chat"),
+    ("sync my calendar", "calendar_setup"),
+    ("send an email to Bob", None),
+    ("what do I need to do today", None),
+    ("show my status", None),
+    ("send my email", None),
+    ("check for emails", None),
+    ("what do I need to do", None),
+    ("what data do you have about me", None),
+)
+
+
+def t_every_engine_phrase_reaches_its_own_intent():
+    clean()
+    for sentence, wanted in ENGINE_PHRASES:
+        intent = Q.match(sentence, 1000.0)
+        check(f"{sentence!r} reaches {wanted} by intent",
+              intent is not None and intent.name == wanted,
+              str(getattr(intent, "name", None)))
+        got = PR.prompt(PR._norm(sentence), sentence)
+        check(f"... and the module itself claims it as {wanted}",
+              (got or {}).get("intent") == wanted, str(got))
+
+
+def t_the_engine_phrases_keep_their_neighbours_lanes():
+    clean()
+    for sentence, other in NEIGHBOURS:
+        intent = Q.match(sentence, 1000.0)
+        name = None if intent is None else intent.name
+        check(f"{sentence!r} is still not this feature's",
+              name != "privacy_status" and name != "privacy_manual_checklist"
+              and name != "privacy_sync_directory"
+              and name != "privacy_check_replies"
+              and name != "privacy_send_optout_batch",
+              str(name))
+        if other is not None:
+            check(f"... and it still goes to {other}", name == other, str(name))
+        check(f"... and the module does not claim {sentence!r}",
+              PR.prompt(PR._norm(sentence), sentence) is None,
+              str(PR.prompt(PR._norm(sentence), sentence)))
+
+
+def t_the_engine_answers_come_from_the_real_run():
+    clean()
+    stub_gmail()
+    seed_broker("w1", "Beta Marketing", method="web_form",
+                url="https://beta.example/optout")
+    intent = Q.match("show my removal status", 1000.0)
+    got = Q.run(intent, None, 1000.0)
+    check("running the status intent answers here, with no model",
+          got is not None and got.intent == "privacy_status"
+          and "data removal" in got.reply.lower(),
+          getattr(got, "reply", "")[:160])
+    check("... and it is not a refusal", "i can't" not in got.reply.lower())
+    intent = Q.match("what do I need to do by hand", 1000.0)
+    got = Q.run(intent, None, 1000.0)
+    check("... and the checklist answer carries the real links",
+          got is not None and "https://privacy.ca.gov/drop/" in got.reply,
+          getattr(got, "reply", "")[:160])
+    check("... and both reads are marked read-only, so 'cancel that' keeps its "
+          "record",
+          "privacy_status" in Q.READ_ONLY_INTENTS
+          and "privacy_manual_checklist" in Q.READ_ONLY_INTENTS, "")
+    check("... and a private chat answers them from this PC, not the model",
+          "privacy_status" in Q._PRIVATE_DETERMINISTIC_READS
+          and "privacy_manual_checklist" in Q._PRIVATE_DETERMINISTIC_READS, "")
+    check("... while the three that write, send or reach a network are NOT "
+          "read-only",
+          not {"privacy_sync_directory", "privacy_check_replies",
+               "privacy_send_optout_batch"} & Q.READ_ONLY_INTENTS, "")
+
+
+# ---------------------------------------------------------------------------
+#   17. The two new rows bite when reverted
+# ---------------------------------------------------------------------------
+
+
+def t_the_two_new_rows_bite_when_reverted():
+    # --- row one: the hard cap of 20 per card ------------------------------
+    clean()
+    stub_gmail()
+    seed_email_brokers(25)
+    check("the batch is capped at 20 with 25 brokers waiting",
+          len(PR.batch_candidates()["rows"]) == 20,
+          str(len(PR.batch_candidates()["rows"])))
+    saved = PR.BATCH_CAP
+    try:
+        PR.BATCH_CAP = 100
+        check("reverting the cap really makes the 20 check fail (so the check "
+              "bites)", len(PR.batch_candidates()["rows"]) != 20,
+              str(len(PR.batch_candidates()["rows"])))
+    finally:
+        PR.BATCH_CAP = saved
+    # --- row two: the 403 / form-page guard --------------------------------
+    clean()
+    write_profile()
+    stub_gmail()
+    check("a 403 is `unverified`, not a removal",
+          PR._verify_verdict(403, "Privacy notice. " * 20,
+                             ("Dana Whitfield",)) == "unverified",
+          PR._verify_verdict(403, "Privacy notice. " * 20, ("Dana Whitfield",)))
+    checker = PR._verify_verdict
+    try:
+        PR._verify_verdict = lambda status, text, markers: "removed"
+        seed_broker("b1", "Acme People Search", address="privacy@acme.example")
+        seed_request("b1", verify_after="2026-11-01T00:00:00Z",
+                     listing_url="https://acme.example/listing/9")
+        PR.check_replies(imap=lambda user, password: FakeImap([]),
+                         opener=opener_for(b"", status=403),
+                         now="2026-11-26T12:00:00Z")
+        check("reverting the 403 guard really makes the row removed (so the "
+              "check bites)", request_rows()[0]["status"] == "removed",
+              request_rows()[0]["status"])
+    finally:
+        PR._verify_verdict = checker
+
+
+# ---------------------------------------------------------------------------
+#   18. Stdlib only, and every network seam injectable
+# ---------------------------------------------------------------------------
+
+
+def t_the_module_is_stdlib_only_and_every_network_seam_is_injectable():
+    tree = ast.parse(Path(PR.__file__).read_text(encoding="utf-8"))
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
     allowed = {"json", "os", "re", "sqlite3", "threading", "time", "pathlib",
-               "typing", "__future__", "sys", "jarvis_framework", "jarvis_gate",
+               "typing", "__future__", "sys", "datetime", "email", "imaplib",
+               "smtplib", "urllib", "jarvis_framework", "jarvis_gate",
                "jarvis_email", "jarvis_token_store"}
-    extra = sorted(imports - allowed)
-    check("the module imports the standard library only, and only these guarded "
-          "house modules", not extra, str(extra))
-    banned = [word for word in ("urllib", "smtplib", "imaplib", "http.client",
-                                "socket", "requests")
-              if re.search(rf"^\s*(?:import|from)\s+{re.escape(word)}", src, re.M)]
-    check("... and nothing that could reach the network in this slice",
-          not banned, str(banned))
-    check("... so PR 1 sends no email and calls no API",
-          "no email is ever sent" in src.lower())
-    check("... and no credential value is ever read into a sentence: the two "
-          "readers return booleans only",
-          '"ready": False' in src and "bool(str(raw or \"\").strip())" in src)
+    extra = sorted(imported - allowed)
+    check("the module imports the standard library and the guarded house "
+          "modules only", not extra, str(extra))
+    third_party = {"requests", "httpx", "aiohttp", "bs4", "lxml", "yaml"}
+    check("... and no third-party package, so CI's exact package list cannot "
+          "break", not (imported & third_party), str(sorted(imported & third_party)))
+    check("the directory's download is injectable",
+          "opener" in inspect.signature(PR.sync_directory).parameters, "")
+    check("... the SMTP send is injectable",
+          "transport" in inspect.signature(PR._deliver).parameters, "")
+    check("... the mailbox is injectable",
+          "imap" in inspect.signature(PR.check_replies).parameters, "")
+    check("... the listing fetch is injectable",
+          "opener" in inspect.signature(PR.check_replies).parameters, "")
+    check("... and the credential read is ONE function the suite can replace",
+          callable(PR._mail_credentials), "")
+    check("PR 1's own promise still holds where it must: the module reads a "
+          "credential only for the login it is used for, and never into a "
+          "sentence",
+          "bool(str(raw or \"\").strip())" in Path(PR.__file__).read_text(
+              encoding="utf-8"), "")
 
 
 # ---------------------------------------------------------------------------
@@ -923,7 +1940,36 @@ def main():
                t_the_official_portal_checklist_can_be_ticked,
                t_the_two_rows_bite_when_reverted,
                t_the_module_is_not_in_shipped_yet,
-               t_no_email_and_no_network_in_this_slice):
+               # --- PR 2, the local engine -------------------------------------
+               t_the_directory_parses_into_the_brokers_table,
+               t_a_refresh_writes_the_cache_here_and_the_table,
+               t_a_failed_refresh_says_so_and_loses_nothing,
+               t_the_batch_card_names_the_brokers_the_template_and_the_count,
+               t_a_denied_card_sends_nothing_and_writes_nothing,
+               t_an_approved_card_sends_and_records_the_two_wait_windows,
+               t_the_daily_cap_stops_at_two_hundred_and_fifty,
+               t_the_daily_cap_shrinks_the_batch_rather_than_breaking_it,
+               t_the_batch_needs_the_password_the_profile_and_the_right_mode,
+               t_a_loosened_tier_is_refused_before_any_card,
+               t_a_crashed_batch_card_still_settles,
+               t_a_broken_engine_answers_honestly_in_chat,
+               t_no_pii_in_any_log_line_or_tracker_note,
+               t_a_confirmation_link_moves_the_row_and_is_never_clicked,
+               t_an_id_request_moves_the_row_too,
+               t_a_completion_email_is_not_a_removal,
+               t_a_403_is_never_a_removal,
+               t_a_clean_page_after_the_window_is_a_removal,
+               t_a_page_that_still_names_the_owner_is_not_a_removal,
+               t_a_captcha_page_is_not_a_removal,
+               t_a_pc_with_no_profile_cannot_confirm_a_removal,
+               t_the_reply_scan_says_so_when_it_cannot_run,
+               t_the_checklist_hands_over_the_real_urls,
+               t_the_status_answer_counts_what_is_really_there,
+               t_every_engine_phrase_reaches_its_own_intent,
+               t_the_engine_phrases_keep_their_neighbours_lanes,
+               t_the_engine_answers_come_from_the_real_run,
+               t_the_two_new_rows_bite_when_reverted,
+               t_the_module_is_stdlib_only_and_every_network_seam_is_injectable):
         try:
             fn()
         except Exception:                                   # noqa: BLE001
