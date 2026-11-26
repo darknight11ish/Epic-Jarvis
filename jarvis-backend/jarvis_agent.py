@@ -19579,10 +19579,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # because a yes in chat approves nothing (rule 4) and a prose proposal
         # was never a card.
         if replaced_claims:
-            claimed_undone = True
-            _truth = replaced_claims[0].truth_line()
-            if _truth:
-                tell_owner(_truth)
+            # ...and only when the turn really did nothing. A claim dropped
+            # from a round that then called a tool which WENT THROUGH is not a
+            # lie to correct: the action ran, and the turn must not say
+            # otherwise (the same fail-closed direction as everywhere else -
+            # never a wrong "nothing was done" after something really was).
+            try:
+                import jarvis_claims as _JC_end
+                _backed_now = _JC_end.action_succeeded(steps)
+            except Exception:
+                _backed_now = True       # unknown is never "nothing ran"
+            if not _backed_now:
+                claimed_undone = True
+                _truth = replaced_claims[0].truth_line()
+                if _truth:
+                    tell_owner(_truth)
         # EVERY one of these corrections now comes from `postscript_lines`
         # (2026-10-27 audit, H1), which is also what jarvis_hud.py's cloud
         # relay asks for - so a cloud answer and a local one are corrected by
@@ -19860,13 +19871,16 @@ class _ClaimGate:
     soon as it ends, `jarvis_claims.strip_false_completion` decides, on the same
     rule the old footer read. An unbacked claim is dropped and never sent;
     every other sentence goes out exactly as the model wrote it, so the cost is
-    one sentence of delay on a turn that has no action behind it yet. A turn
-    whose action really succeeded is not gated at all (`_claims_backed`), so a
-    true "Done" streams untouched.
+    one sentence of delay on a turn that has no action behind it yet. A round
+    with an action already behind it is not gated at all, so a true "Done"
+    streams untouched.
 
     `dropped` is the count; the turn says the truth ONCE at the end, never over
-    each claim. A missing or broken jarvis_claims.py lets every word through:
-    a broken checker must cost the correction, never the answer.
+    each claim - and only if nothing succeeded later in the turn. A sentence
+    dropped before a tool call that then WENT THROUGH is not a lie to correct
+    at the end: the action really ran, so the turn must not say nothing did.
+    A missing or broken jarvis_claims.py lets every word through: a broken
+    checker must cost the correction, never the answer.
     """
 
     def __init__(self, steps, *, spoken: bool = False, owner_bare_yes: bool = False):
