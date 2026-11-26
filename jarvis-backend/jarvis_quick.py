@@ -13284,8 +13284,8 @@ def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
                   "cloud_settings_change")
 
 
-# --- the personal data removal tool (2026-11-26, PR 1 of 3) -----------------
-# ONE block for both jobs, and `jarvis_privacy_removal` is where the words and
+# --- the personal data removal tool (2026-11-26, PR 1 and PR 2 of 3) ---------
+# ONE block for every job, and `jarvis_privacy_removal` is where the words and
 # the rules live:
 #
 #   * the QUESTIONS ("what is the data removal tool", "pros and cons of local vs
@@ -13301,12 +13301,33 @@ def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
 #     instant and cardless; `optery_api` and `hybrid` raise the consent card
 #     that says the owner's name, address, phone number and email address would
 #     be sent to Optery over HTTPS, and a denied card changes nothing.
+#   * the FIVE ENGINE sentences (PR 2) are answered by the module's own
+#     functions, never by the model: "what data brokers have my info" and
+#     "show my removal status" read the tracker, "what do I need to do by hand"
+#     lists the web-form brokers and the two official portals with their real
+#     links, "sync the broker list" refreshes the local cache from the public
+#     directory, "check for replies" scans the owner's own mailbox, and "send my
+#     removal emails" raises the ONE carded batch (max 20 brokers, 250 a day)
+#     and sends nothing unless a person approves it. Three of those reach a
+#     network, and only on the owner's own sentence.
 #
 # The import is GUARDED on purpose (backend/test_shipped_modules.py's
 # REPO_ONLY_IMPORTS): the module is not in `_where.SHIPPED` yet - the owner's
 # ruling is that only the pull request which wires a live caller may ship it -
 # so a copy of this file in the published base, which does not carry it, must
 # still import and answer as it always did.
+
+#: The five PR 2 sentences, routed to `_run_privacy_tool`. A DISPATCH set, not a
+#: read mark: every name here is answered by that one runner before the rest of
+#: `run()`'s chain. Only TWO of them are read-only (see READ_ONLY_INTENTS):
+#: `privacy_sync_directory` writes the local cache and the brokers table,
+#: `privacy_check_replies` moves request rows, and `privacy_send_optout_batch`
+#: sends email behind a card.
+_PRIVACY_TOOL_INTENTS = frozenset({
+    "privacy_status", "privacy_manual_checklist", "privacy_sync_directory",
+    "privacy_check_replies", "privacy_send_optout_batch",
+})
+
 
 def _privacy_prompt(s: str, text: str) -> Optional[Intent]:
     """The data removal sentence, or None (see jarvis_privacy_removal)."""
@@ -13352,6 +13373,63 @@ def _run_privacy_mode_change(f: dict, *, peer=None, local=None) -> Result:
                       "nothing was changed.", "privacy_mode_change")
     outcome = R.set_data_removal_mode(mode_wanted, peer=peer, local=local)
     return Result(outcome.said, "privacy_mode_change")
+
+
+def _run_privacy_tool(name: str) -> Result:
+    """One of the five PR 2 answers, from this PC's own engine. No model.
+
+    READ-ONLY ANSWERS RETURN THE TRACKER'S OWN WORDS: "what data brokers have my
+    info" / "show my removal status" read the counts, and "what do I need to do
+    by hand" reads the broker list and the two official portals. The two that do
+    something - the directory refresh and the reply scan - do it here and answer
+    with what really happened. The batch NEVER sends from here: it raises ONE
+    approval card and returns the "waiting for your yes" sentence, so this
+    function must not be able to send an email on its own.
+    """
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                                       # noqa: BLE001
+        return Result("The data removal tool is not set up on this PC, so there "
+                      "is nothing to answer with yet.", name)
+    if name == "privacy_status":
+        try:
+            return Result(PR.status_words(), name)
+        except Exception:                                   # noqa: BLE001
+            return Result("The removal tracker could not be read just now, so "
+                          "there is no honest status to give. Nothing was "
+                          "changed.", name)
+    if name == "privacy_manual_checklist":
+        try:
+            return Result(PR.checklist_words(), name)
+        except Exception:                                   # noqa: BLE001
+            return Result("The broker list could not be read just now, so there is "
+                          "no checklist to give. Nothing was changed.", name)
+    if name == "privacy_sync_directory":
+        try:
+            return Result(PR.sync_words(PR.sync_directory()), name)
+        except Exception:                                   # noqa: BLE001
+            return Result("The broker list could not be refreshed just now. The "
+                          "copy already on this PC is untouched.", name)
+    if name == "privacy_check_replies":
+        try:
+            _code, body = PR.check_replies()
+        except Exception:                                   # noqa: BLE001
+            return Result("The mailbox check could not run just now, so nothing "
+                          "was scanned and nothing was changed.", name)
+        return Result(str(body.get("said")
+                          or "The mailbox check answered nothing, so nothing was "
+                             "changed."), name)
+    if name == "privacy_send_optout_batch":
+        try:
+            _code, body = PR.send_optout_batch("generic")
+        except Exception:                                   # noqa: BLE001
+            return Result("The removal-email batch could not be prepared just "
+                          "now, so nothing was sent and nothing was changed.",
+                          name)
+        return Result(str(body.get("said")
+                          or "Nothing was sent, and nothing was changed."), name)
+    return Result("That data removal question is not one this PC can answer yet.",
+                  name)
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -34768,16 +34846,21 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_settings(f)
     if n == "cloud_settings_change":
         return _run_cloud_settings_change(f, peer=peer, local=local)
-    # The personal data removal tool (2026-11-26, PR 1 of 3). The QUESTIONS read
-    # this PC's own mode, mail details, key presence and tracker (no model, no
-    # card, no write); the CHANGE goes through the settings registry's ONE mode
-    # row, which raises the cloud-PII consent card for `optery_api`/`hybrid`, so
-    # it is deliberately NOT in READ_ONLY_INTENTS - it can raise a card and can
-    # change a setting.
+    # The personal data removal tool (2026-11-26, PR 1 and PR 2 of 3). The
+    # QUESTIONS read this PC's own mode, mail details, key presence and tracker
+    # (no model, no card, no write); the CHANGE goes through the settings
+    # registry's ONE mode row, which raises the cloud-PII consent card for
+    # `optery_api`/`hybrid`, so it is deliberately NOT in READ_ONLY_INTENTS - it
+    # can raise a card and can change a setting.
     if n == "privacy_explain":
         return _run_privacy_explain(f)
     if n == "privacy_mode_change":
         return _run_privacy_mode_change(f, peer=peer, local=local)
+    # The five engine sentences (PR 2): two read the tracker, one refreshes the
+    # local cache, one scans the owner's own mailbox, and one raises the ONE
+    # carded batch card. Only the two reads are in READ_ONLY_INTENTS.
+    if n in _PRIVACY_TOOL_INTENTS:
+        return _run_privacy_tool(n)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "jobs_priority":
@@ -36060,15 +36143,20 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # deliberately NOT here: it changes a setting or raises a card, and a
     # private chat refuses that like every action.
     "cloud_settings",
-    # The personal data removal tool's answers (2026-11-26, PR 1 of 3): each one
-    # is built from this PC's own state - the saved mode, whether the Gmail App
-    # Password and an Optery key are present, and the tracker's counts - with no
-    # secret, no model and no write, so a private chat gets the real state rather
-    # than a model's guess about a tool it cannot see. The CHANGE
+    # The personal data removal tool's answers (2026-11-26, PR 1 and PR 2 of 3):
+    # each one is built from this PC's own state - the saved mode, whether the
+    # Gmail App Password and an Optery key are present, and the tracker's counts
+    # - with no secret, no model and no write, so a private chat gets the real
+    # state rather than a model's guess about a tool it cannot see. The two PR 2
+    # reads join it: `privacy_status` and `privacy_manual_checklist` read the
+    # tracker and the broker cache and write nothing. The CHANGE
     # (`privacy_mode_change`) is deliberately NOT here: it can raise the cloud
     # consent card and it changes the mode, and a private chat refuses that like
-    # every action.
-    "privacy_explain",
+    # every action - and neither are the other three PR 2 sentences
+    # (`privacy_sync_directory` writes the cache and the brokers table,
+    # `privacy_check_replies` moves request rows, `privacy_send_optout_batch`
+    # sends email behind a card).
+    "privacy_explain", "privacy_status", "privacy_manual_checklist",
     # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
     # own hardware and answers in its module's fixed words - nothing written.
     "model_recommender",
@@ -36181,12 +36269,16 @@ READ_ONLY_INTENTS = frozenset({
     # The CHANGE (`cloud_settings_change`) is deliberately absent - it changes
     # a setting or raises a card.
     "cloud_settings",
-    # The data removal tool's answers (2026-11-26, PR 1 of 3): they read this
-    # PC's own mode file, key presence and tracker and change nothing, so none
-    # may take away what "cancel that" would undo. The CHANGE
-    # (`privacy_mode_change`) is deliberately absent - it changes the mode and
-    # can raise the cloud consent card.
-    "privacy_explain",
+    # The data removal tool's answers (2026-11-26, PR 1 and PR 2 of 3): they
+    # read this PC's own mode file, key presence and tracker and change nothing,
+    # so none may take away what "cancel that" would undo. `privacy_status` and
+    # `privacy_manual_checklist` are the two PR 2 reads and belong here for the
+    # same reason. The CHANGE (`privacy_mode_change`) is deliberately absent -
+    # it changes the mode and can raise the cloud consent card - and so are the
+    # three PR 2 sentences that write or send or reach a network
+    # (`privacy_sync_directory`, `privacy_check_replies`,
+    # `privacy_send_optout_batch`).
+    "privacy_explain", "privacy_status", "privacy_manual_checklist",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
