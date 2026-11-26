@@ -91,8 +91,53 @@ export const FREE_SPEECH = Object.freeze([
   { id: "passage", text: "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.", seconds: [8, 25], why: "a varied passage with long and short sounds" },
 ]);
 
-/** The fixed wake words: the detector's own words, never training material. */
-export const WAKE_PHRASES = Object.freeze(["hey Jarvis"]);
+/* ── The wake phrase, as the copy shows it (2026-11-25) ─────────────────────
+ *
+ * ONE source for every sentence that names the phrase, and it is the phrase
+ * the PC REPORTS (`status.wake.phrase`), never a fixed word. The reason is the
+ * shipped default and the existing PC are different: a fresh install gets
+ * `hey_atlas` (the owner's ruling), while an existing PC keeps whatever its own
+ * `jarvis-framework.toml` says - the installer never rewrites that file - so a
+ * PC left on `hey_jarvis` must read "Hey Jarvis" here, and a fresh one must
+ * read "Hey Atlas". A fixed word would tell one of them the wrong thing.
+ * `DEFAULT_WAKE_PHRASE` is used only for the moment before the first status
+ * answer, so the page never shows an empty label.
+ *
+ * Copy is written with the `{p}` slot where the phrase goes; `withPhrase`
+ * fills it in. `phraseOf` is the one place a status is read for it.
+ */
+export const DEFAULT_WAKE_PHRASE = "Hey Atlas";
+
+/** "hey_atlas" / "Hey Atlas" / "HEY_ATLAS" -> "Hey Atlas"; nothing -> the shipped phrase. */
+export function phraseTitle(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return DEFAULT_WAKE_PHRASE;
+  if (/\s/.test(raw)) return raw.replace(/\s+/g, " "); // already words
+  return raw.split(/[_\-\s]+/).filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
+
+/** The phrase THIS PC is set to, from a `/api/voice/status` body, or the
+ *  shipped one before the first answer. `wake.title` when the PC sends it
+ *  ("Hey Atlas"), else `wake.phrase` ("hey_atlas"). */
+export function phraseOf(status) {
+  const wake = (status && status.wake) || {};
+  return phraseTitle(wake.title || wake.phrase);
+}
+
+/** `text` with its `{p}` slot filled in. */
+export function withPhrase(text, phrase) {
+  return String(text == null ? "" : text).split("{p}").join(phrase || DEFAULT_WAKE_PHRASE);
+}
+
+/** The fixed wake words: the detector's own words, never training material.
+ *  The PC sends the real list in its plan; this names the shipped phrase for
+ *  the moment before the first status answer. */
+export function wakePhrasesOf(status) {
+  const plan = (((status || {}).gate || {}).training || {}).training;
+  const sent = Array.isArray(plan && plan.wake_phrases) ? plan.wake_phrases : [];
+  return sent.length ? sent.slice() : [DEFAULT_WAKE_PHRASE];
+}
 
 /** The twelve texts only, for a caller that does not need the focus labels. */
 export const SENTENCES = Object.freeze(READ_PHRASES.map((p) => p.text));
@@ -119,28 +164,34 @@ export const DESKTOP_ROUND_LIMIT = 4;
  * same sentences. Change it here and there together; tests/voice-training
  * .mjs compares the two files.
  */
-export const TEST_SENTENCES = Object.freeze([
-  "Hey Jarvis, what time is my first meeting tomorrow?",
+const TEST_SENTENCE_TEMPLATES = Object.freeze([
+  "{p}, what time is my first meeting tomorrow?",
   "Can you read me the last message from my brother?",
   "Add bread, eggs and coffee to the shopping list.",
-  "Hey Jarvis, how long until the next train into town?",
+  "{p}, how long until the next train into town?",
   "Remind me to water the plants on Saturday morning.",
   "What did I say I wanted to do this weekend?",
   "Turn the heating down by two degrees, please.",
-  "Hey Jarvis, set an alarm for half past six.",
+  "{p}, set an alarm for half past six.",
   "Find the notes I wrote about the garden last month.",
   "How much rain is forecast for the afternoon?",
-  "Hey Jarvis, pause the music for a moment.",
+  "{p}, pause the music for a moment.",
   "Put the dentist in my calendar for next Tuesday.",
   "What was the name of that film we talked about?",
-  "Hey Jarvis, tell me the headlines in one minute.",
+  "{p}, tell me the headlines in one minute.",
   "Send me a reminder when I get home tonight.",
   "Is there anything I need to do before Friday?",
-  "Hey Jarvis, start a timer for the pasta, eleven minutes.",
+  "{p}, start a timer for the pasta, eleven minutes.",
   "Read my calendar for the rest of the week, please.",
   "How far is it to the nearest petrol station?",
-  "Hey Jarvis, thank you, that is everything for now.",
+  "{p}, thank you, that is everything for now.",
 ]);
+
+/** The twenty guided sentences, in the PC's own phrase: `phrase` comes from
+ *  `phraseOf(status)`, never a constant (see the block at the top). */
+export function testSentences(phrase) {
+  return TEST_SENTENCE_TEMPLATES.map((text) => withPhrase(text, phrase));
+}
 
 /** The PC's limits (`gate.training.limits`), with the phone's numbers when missing. */
 export function limits(status) {
@@ -187,13 +238,18 @@ export const CLEAR_LABEL = "Clear previous voice training";
  * backend/jarvis_voice_enroll.py writes the card itself; this is the page's
  * summary beside the button, and it names only what the card names.
  */
-export const CLEAR_WHAT_IT_DOES =
+const CLEAR_WHAT_IT_DOES_TEMPLATE =
   "Deletes every saved voice print on your PC (one per microphone you trained), " +
-  "the \"hey Jarvis\" check built from those recordings, and the small notes it " +
+  "the \"{p}\" check built from those recordings, and the small notes it " +
   "kept from learning your voice in Live. It does not delete your custom " +
   "speaking voices, your chat history or your phone pairing. ONE card approves " +
   "it: nothing is deleted until you say yes, and voice commands and Jarvis Live " +
   "are refused until you train your voice again.";
+
+/** What the ONE card does, in the phrase this PC reports. */
+export function clearWhatItDoes(phrase) {
+  return withPhrase(CLEAR_WHAT_IT_DOES_TEMPLATE, phrase);
+}
 
 /** Said once the PC has cleared the training (the status's own outcome). */
 export const CLEARED_LINE =
@@ -902,17 +958,46 @@ export function heldOutLines(source) {
 
 /* ── How strict, and private answers ──────────────────────────────────── */
 
-const SETTING_NAMES = {
+/** The eight settings a card can loosen, as a sentence names them, in the
+ *  phrase this PC reports. */
+export function settingName(key, phrase) {
+  const text = SETTING_NAME_TEMPLATES[key];
+  return text ? withPhrase(text, phrase) : undefined;
+}
+
+/** The choices as the page shows them, in the PC's own phrase. */
+export function handsFree(phrase) {
+  return HANDS_FREE_TEMPLATES.map((c) => ({ ...c, detail: withPhrase(c.detail, phrase) }));
+}
+
+export function handsFreeScreen(phrase) {
+  return HANDS_FREE_SCREEN_TEMPLATES.map((c) => ({ ...c, detail: withPhrase(c.detail, phrase) }));
+}
+
+export function handsFreeLive(phrase) {
+  return HANDS_FREE_LIVE_TEMPLATES.map((c) => ({ ...c, label: withPhrase(c.label, phrase),
+                                                detail: withPhrase(c.detail, phrase) }));
+}
+
+export function wakeConfirmChoices(phrase) {
+  return WAKE_CONFIRM_TEMPLATES.map((c) => ({ ...c, detail: withPhrase(c.detail, phrase) }));
+}
+
+/** The three sentences the "someone else" check asks, in the PC's phrase. */
+export function otherSentences(phrase) {
+  return OTHER_SENTENCE_TEMPLATES.map((text) => withPhrase(text, phrase));
+}
+const SETTING_NAME_TEMPLATES = {
   strictness: "how strict the voice check is",
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
-  hands_free: "how far \"Hey Jarvis\" is trusted",
-  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
+  hands_free: "how far \"{p}\" is trusted",
+  hands_free_screen: "answers about your screen or the camera after \"{p}\"",
   hands_free_live: "how far Jarvis Live is trusted",
   live_end: "when Jarvis Live ends on this PC",
   talk_to_type: "talk-to-type",
-  wake_confirm: "the second \"hey Jarvis\" check",
+  wake_confirm: "the second \"{p}\" check",
   voice_id_model: "the voice-ID model",
 };
 
@@ -989,35 +1074,35 @@ export const SENSITIVE_MEMORY = Object.freeze([
  * card, and held on a stale link. The default is marked "(default)", not
  * "(recommended)": it is the owner's choice, not the safer one.
  */
-export const HANDS_FREE = Object.freeze([
+const HANDS_FREE_TEMPLATES = Object.freeze([
   {
     id: "same_as_button",
     label: "Same as the talk button",
     isDefault: true,
-    detail: "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+    detail: "A question started with \"{p}\" is trusted like one where you press the button.",
   },
   {
     id: "button_only",
     label: "Only trust the talk button",
-    detail: "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
+    detail: "{p} still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
   },
 ]);
 
 /**
  * The owner's decision of 2026-09-28: under "Only trust the talk button",
  * an answer about the screen ("Look at this", "Watch with me") to a
- * question started with "Hey Jarvis" stays on screen, with this setting to
+ * question started with "Hey Atlas" stays on screen, with this setting to
  * allow reading it aloud even then. Keeping it on screen is the default and
  * applies at once; "Read aloud" is the looser choice - the voice card, and
  * held on a stale link. Under "Same as the talk button" it changes nothing
  * (`SCREEN_ONLY_WHEN_STRICT_NOTE`).
  */
-export const HANDS_FREE_SCREEN = Object.freeze([
+const HANDS_FREE_SCREEN_TEMPLATES = Object.freeze([
   {
     id: "screen_on_screen",
     label: "Keep on screen",
     recommended: true,
-    detail: "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.",
+    detail: "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"{p}\" gets a written answer only.",
   },
   {
     id: "screen_aloud",
@@ -1029,13 +1114,13 @@ export const HANDS_FREE_SCREEN = Object.freeze([
 /**
  * Jarvis Live under "Only trust the talk button" (the owner's answers of
  * 2026-09-28): a Live session is trusted like the talk button by default,
- * however it was started - the owner pressed Start, or said "Hey Jarvis,
+ * however it was started - the owner pressed Start, or said "Hey Atlas,
  * let's talk". Two stricter choices apply at once; each looser one is the
  * voice card, held on a stale link. The phone's StrictVoice.HANDS_FREE_LIVE
  * has the same words. Under "Same as the talk button" it changes nothing
  * (`LIVE_ONLY_WHEN_STRICT_NOTE`).
  */
-export const HANDS_FREE_LIVE = Object.freeze([
+const HANDS_FREE_LIVE_TEMPLATES = Object.freeze([
   {
     id: "live_trust_fully",
     label: "Trust Live fully",
@@ -1045,12 +1130,12 @@ export const HANDS_FREE_LIVE = Object.freeze([
   {
     id: "live_button_start_only",
     label: "Only when I start it with the button",
-    detail: "A Live you start with the button is trusted like the talk button. One started by saying \"Hey Jarvis, let's talk\" gets the \"Hey Jarvis\" caution.",
+    detail: "A Live you start with the button is trusted like the talk button. One started by saying \"{p}, let's talk\" gets the \"{p}\" caution.",
   },
   {
     id: "live_like_hey_jarvis",
-    label: "Be as careful as with \"Hey Jarvis\"",
-    detail: "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a card, and memory or private answers stay on screen.",
+    label: "Be as careful as with \"{p}\"",
+    detail: "Everything said in Jarvis Live gets the \"{p}\" caution: no facts learned without a card, and memory or private answers stay on screen.",
   },
 ]);
 
@@ -1121,23 +1206,23 @@ export const TALK_TO_TYPE = Object.freeze([
 
 /**
  * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md section
- * 80). A second "hey Jarvis" detector that must agree with the first. One
+ * 80). A second "hey Atlas" detector that must agree with the first. One
  * detector is the default (today's behaviour); two is the stricter choice
  * and applies at once; going back to one is the voice card. Two cannot be
  * chosen while the PC does not have the second detector (the PC's words
  * say why: `gate.settings.blocked.wake_confirm`).
  */
-export const WAKE_CONFIRM = Object.freeze([
+const WAKE_CONFIRM_TEMPLATES = Object.freeze([
   {
     id: "one",
     label: "One detector",
     isDefault: true,
-    detail: "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every time before anything is written down or done.",
+    detail: "One detector listens for \"{p}\", as before. Your voice is still checked every time before anything is written down or done.",
   },
   {
     id: "both",
     label: "Two detectors must agree",
-    detail: "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
+    detail: "A second, differently built detector (microWakeWord) must also hear \"{p}\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
   },
 ]);
 
@@ -1162,19 +1247,19 @@ export const VOICE_ID_MODEL = Object.freeze([
   },
 ]);
 
-function choiceWords(setting, value) {
+function choiceWords(setting, value, phrase) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
-      : setting === "hands_free" ? HANDS_FREE : setting === "hands_free_screen" ? HANDS_FREE_SCREEN
-        : setting === "hands_free_live" ? HANDS_FREE_LIVE : setting === "live_end" ? LIVE_END
-          : setting === "talk_to_type" ? TALK_TO_TYPE : setting === "wake_confirm" ? WAKE_CONFIRM
+      : setting === "hands_free" ? handsFree(phrase) : setting === "hands_free_screen" ? handsFreeScreen(phrase)
+        : setting === "hands_free_live" ? handsFreeLive(phrase) : setting === "live_end" ? LIVE_END
+          : setting === "talk_to_type" ? TALK_TO_TYPE : setting === "wake_confirm" ? wakeConfirmChoices(phrase)
             : setting === "voice_id_model" ? VOICE_ID_MODEL : [];
   return list.find((c) => c.id === value) || null;
 }
 
 /** "Balanced", "Stay on screen" - a choice's label, or "". */
-export function settingLabel(setting, value) {
-  const c = choiceWords(setting, value);
+export function settingLabel(setting, value, phrase) {
+  const c = choiceWords(setting, value, phrase);
   return c ? c.label : "";
 }
 
@@ -1233,7 +1318,7 @@ export function currentSetting(status, setting) {
  *  "Trust Live fully" loosens; an unknown one counts as from the strictest. */
 export function loosens(setting, value, current = "") {
   if (setting === "hands_free_live") {
-    const order = HANDS_FREE_LIVE.map((c) => c.id);
+    const order = HANDS_FREE_LIVE_TEMPLATES.map((c) => c.id);
     const v = order.indexOf(value);
     const c = order.indexOf(current);
     if (v < 0) return true;
@@ -1288,11 +1373,11 @@ export function settingsView(status) {
   const rawSensitive = s.sensitive_memory !== undefined ? s.sensitive_memory : gate.sensitive_memory;
   const sensitiveMemory = rawSensitive === "sensitive_on_screen" || rawSensitive === "sensitive_aloud"
     ? rawSensitive : "";
-  // The fifth, how far "Hey Jarvis" is trusted: `gate.settings.hands_free`
+  // The fifth, how far "Hey Atlas" is trusted: `gate.settings.hands_free`
   // (or `gate.hands_free`). "" from a PC that does not have it - not offered.
   const rawHandsFree = s.hands_free !== undefined ? s.hands_free : gate.hands_free;
   const handsFree = rawHandsFree === "same_as_button" || rawHandsFree === "button_only" ? rawHandsFree : "";
-  // The sixth, answers about the screen after "Hey Jarvis" (the owner's
+  // The sixth, answers about the screen after "Hey Atlas" (the owner's
   // decision of 2026-09-28): `gate.settings.hands_free_screen` (or
   // `gate.hands_free_screen`). "" from a PC that does not have it - not
   // offered.
@@ -1302,7 +1387,7 @@ export function settingsView(status) {
   // `gate.settings.hands_free_live` (or `gate.hands_free_live`). "" from a
   // PC that does not have it - not offered.
   const rawLive = s.hands_free_live !== undefined ? s.hands_free_live : gate.hands_free_live;
-  const handsFreeLive = HANDS_FREE_LIVE.some((c) => c.id === rawLive) ? rawLive : "";
+  const handsFreeLive = HANDS_FREE_LIVE_TEMPLATES.some((c) => c.id === rawLive) ? rawLive : "";
   // The eighth, when App lock ends Jarvis Live on this PC (the owner's
   // decision of 2026-09-28): `gate.settings.live_end` (or `gate.live_end`).
   // "" from a PC that does not have it - not offered.
@@ -1339,10 +1424,10 @@ export function settingsView(status) {
 }
 
 /** The line under the choices while a card to loosen one waits. */
-export function settingWaitingLine(waiting, approveWhere) {
+export function settingWaitingLine(waiting, approveWhere, phrase) {
   if (!waiting) return null;
-  const words = choiceWords(waiting.setting, waiting.value);
-  const what = words ? ` to change ${SETTING_NAMES[waiting.setting]} to "${words.label}"` : "";
+  const words = choiceWords(waiting.setting, waiting.value, phrase);
+  const what = words ? ` to change ${settingName(waiting.setting, phrase)} to "${words.label}"` : "";
   return `Waiting for your approval${what}. Approve it ${approveWhere} — nothing changes until you do.`;
 }
 
@@ -1430,8 +1515,8 @@ export function measureLines(result) {
  * different voice gets. The phone's `VoiceTraining.OTHER_SENTENCES`, word
  * for word.
  */
-export const OTHER_SENTENCES = Object.freeze([
-  "Hey Jarvis, what time is it?",
+const OTHER_SENTENCE_TEMPLATES = Object.freeze([
+  "{p}, what time is it?",
   "Can you read me the news headlines?",
   "Turn the heating up a couple of degrees.",
 ]);

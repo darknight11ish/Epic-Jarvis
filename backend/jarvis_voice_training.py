@@ -65,7 +65,10 @@ from typing import Optional
 
 #: The fixed wake words. The wake detector has its own vocabulary; these are
 #: NOT training prompts and must never be mixed into the voice-print set.
-WAKE_PHRASES = ("hey Jarvis",)
+#: The phrase that ships since 2026-11-25 is "hey Atlas", so this names it; a
+#: PC set to `wake_phrase = "hey_jarvis"` still uses that phrase for waking,
+#: and this list only says what the product ships (2026-11-25).
+WAKE_PHRASES = ("hey Atlas",)
 
 #: Phonetically balanced, varied reading material. `focus` is what the phrase
 #: exercises, kept honest and small: every English vowel, the consonant

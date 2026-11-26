@@ -2242,6 +2242,14 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if got is not None:
         return got
 
+    # --- the typed answer's layout (jarvis_answer_style.py, 2026-11-25) --------
+    # The owner asked for bullet points on a long answer, "and adjust it in the
+    # settings and adjust it through chat". After the "from now on ..." phrase,
+    # whose own runner reaches the same setting through _answer_style_cmd.
+    got = _answer_style_cmd(s)
+    if got is not None:
+        return got
+
     # --- personality presets (2026-10-22) ---------------------------------------
     got = _personality(s)
     if got is not None:
@@ -5767,7 +5775,58 @@ def _from_now_on(s: str) -> Optional[Intent]:
         return Intent("thinking_from_now_on", {"level": "off"})
     if _TO_THINK_AUTO.fullmatch(tail):
         return Intent("thinking_from_now_on", {"level": "auto"})
+    # "From now on, use bullet points" is the same dial as the bare sentence,
+    # through the same matcher and the same runner (jarvis_answer_style.py).
+    got = _answer_style_cmd(tail)
+    if got is not None:
+        return got
     return Intent("manner_from_now_on", {"manner": None})
+
+
+# --- the typed answer's layout (jarvis_answer_style.py, 2026-11-25) ---------
+#
+# The owner's ask: "if atlas has a long response can it be put with bullet
+# points", and "make sure I can adjust it in the settings and adjust it
+# through chat". These are the chat halves - the bare sentences and, above,
+# the same ones after "from now on ...". Whole sentences only, like every
+# other command here: a question that merely MENTIONS bullet points ("how do
+# I use bullet points in GitHub markdown?") is not a command and must fall
+# through to the model untouched (pinned in test_answer_style.py both ways).
+#
+# The three style ids are jarvis_answer_style's own (auto / bullets / prose),
+# never a second set of names here; the reply is that module's `said()` line,
+# so chat and Settings cannot drift.
+_AS_BULLETS = re.compile(
+    r"(?:please\s+)?(?:always\s+)?(?:use|give\s+me|write|answer\s+(?:in|with)|"
+    r"format\s+(?:it\s+|them\s+|answers\s+)?(?:in|with|as))\s+"
+    r"bullets?(?:\s+points?)?(?:\s+for\s+(?:lists?|answers?))?"
+    r"|(?:please\s+)?always\s+bullets?(?:\s+points?)?"
+    r"|(?:please\s+)?bullets?(?:\s+points?)?\s+(?:please|for\s+(?:lists?|answers?))")
+_AS_PROSE = re.compile(
+    r"(?:please\s+)?(?:use|give\s+me|write|answer\s+(?:in|with))\s+"
+    r"(?:plain|ordinary|normal)\s+(?:paragraphs?|prose|text|sentences?)"
+    r"|(?:please\s+)?(?:no|without|stop\s+using|don'?t\s+use|never\s+use)\s+"
+    r"(?:more\s+)?bullets?(?:\s+points?)?"
+    r"|(?:please\s+)?(?:plain|ordinary|normal)\s+(?:paragraphs?|prose|text)")
+_AS_AUTO = re.compile(
+    r"(?:please\s+)?(?:use\s+)?bullets?(?:\s+points?)?\s+"
+    r"when\s+(?:it|they|the\s+answer)\s+helps?"
+    r"|(?:please\s+)?(?:use\s+)?bullets?(?:\s+points?)?\s+only\s+when\s+(?:it\s+)?helps?"
+    r"|(?:please\s+)?bullets?(?:\s+points?)?\s+when\s+needed")
+
+
+def _answer_style_cmd(s: str) -> Optional[Intent]:
+    """"use bullet points" / "always use bullet points" / "no bullet points" /
+    "plain paragraphs" / "bullet points when it helps" - the typed answer's
+    layout, changed at once, no card either way."""
+    text = s.strip().rstrip(".!?")
+    if _AS_AUTO.fullmatch(text):
+        return Intent("answer_style_set", {"style": "auto"})
+    if _AS_BULLETS.fullmatch(text):
+        return Intent("answer_style_set", {"style": "bullets"})
+    if _AS_PROSE.fullmatch(text):
+        return Intent("answer_style_set", {"style": "prose"})
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -9875,6 +9934,7 @@ def _run_adding_howto(name: str) -> Result:
 # --------------------------------------------------------------------------
 
 PLUGIN_CATALOGUE = (
+    ('answer-style', 'how a TYPED answer is laid out: GET/POST /api/answer-style, so the Settings picker and chat read and change the one value - bullet points when an answer has several parts, always bullets, or plain paragraphs. Never a spoken answer, and no card either way.'),
     ('android-builder', 'Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for th...'),
     ('antislop', "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buz..."),
     ('auto-router', 'estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and a...'),
@@ -13284,8 +13344,8 @@ def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
                   "cloud_settings_change")
 
 
-# --- the personal data removal tool (2026-11-26, PR 1 of 3) -----------------
-# ONE block for both jobs, and `jarvis_privacy_removal` is where the words and
+# --- the personal data removal tool (2026-11-26, PR 1 and PR 2 of 3) ---------
+# ONE block for every job, and `jarvis_privacy_removal` is where the words and
 # the rules live:
 #
 #   * the QUESTIONS ("what is the data removal tool", "pros and cons of local vs
@@ -13301,12 +13361,33 @@ def _run_cloud_settings_change(f: dict, *, peer=None, local=None) -> Result:
 #     instant and cardless; `optery_api` and `hybrid` raise the consent card
 #     that says the owner's name, address, phone number and email address would
 #     be sent to Optery over HTTPS, and a denied card changes nothing.
+#   * the FIVE ENGINE sentences (PR 2) are answered by the module's own
+#     functions, never by the model: "what data brokers have my info" and
+#     "show my removal status" read the tracker, "what do I need to do by hand"
+#     lists the web-form brokers and the two official portals with their real
+#     links, "sync the broker list" refreshes the local cache from the public
+#     directory, "check for replies" scans the owner's own mailbox, and "send my
+#     removal emails" raises the ONE carded batch (max 20 brokers, 250 a day)
+#     and sends nothing unless a person approves it. Three of those reach a
+#     network, and only on the owner's own sentence.
 #
 # The import is GUARDED on purpose (backend/test_shipped_modules.py's
 # REPO_ONLY_IMPORTS): the module is not in `_where.SHIPPED` yet - the owner's
 # ruling is that only the pull request which wires a live caller may ship it -
 # so a copy of this file in the published base, which does not carry it, must
 # still import and answer as it always did.
+
+#: The five PR 2 sentences, routed to `_run_privacy_tool`. A DISPATCH set, not a
+#: read mark: every name here is answered by that one runner before the rest of
+#: `run()`'s chain. Only TWO of them are read-only (see READ_ONLY_INTENTS):
+#: `privacy_sync_directory` writes the local cache and the brokers table,
+#: `privacy_check_replies` moves request rows, and `privacy_send_optout_batch`
+#: sends email behind a card.
+_PRIVACY_TOOL_INTENTS = frozenset({
+    "privacy_status", "privacy_manual_checklist", "privacy_sync_directory",
+    "privacy_check_replies", "privacy_send_optout_batch",
+})
+
 
 def _privacy_prompt(s: str, text: str) -> Optional[Intent]:
     """The data removal sentence, or None (see jarvis_privacy_removal)."""
@@ -13352,6 +13433,63 @@ def _run_privacy_mode_change(f: dict, *, peer=None, local=None) -> Result:
                       "nothing was changed.", "privacy_mode_change")
     outcome = R.set_data_removal_mode(mode_wanted, peer=peer, local=local)
     return Result(outcome.said, "privacy_mode_change")
+
+
+def _run_privacy_tool(name: str) -> Result:
+    """One of the five PR 2 answers, from this PC's own engine. No model.
+
+    READ-ONLY ANSWERS RETURN THE TRACKER'S OWN WORDS: "what data brokers have my
+    info" / "show my removal status" read the counts, and "what do I need to do
+    by hand" reads the broker list and the two official portals. The two that do
+    something - the directory refresh and the reply scan - do it here and answer
+    with what really happened. The batch NEVER sends from here: it raises ONE
+    approval card and returns the "waiting for your yes" sentence, so this
+    function must not be able to send an email on its own.
+    """
+    try:
+        import jarvis_privacy_removal as PR
+    except Exception:                                       # noqa: BLE001
+        return Result("The data removal tool is not set up on this PC, so there "
+                      "is nothing to answer with yet.", name)
+    if name == "privacy_status":
+        try:
+            return Result(PR.status_words(), name)
+        except Exception:                                   # noqa: BLE001
+            return Result("The removal tracker could not be read just now, so "
+                          "there is no honest status to give. Nothing was "
+                          "changed.", name)
+    if name == "privacy_manual_checklist":
+        try:
+            return Result(PR.checklist_words(), name)
+        except Exception:                                   # noqa: BLE001
+            return Result("The broker list could not be read just now, so there is "
+                          "no checklist to give. Nothing was changed.", name)
+    if name == "privacy_sync_directory":
+        try:
+            return Result(PR.sync_words(PR.sync_directory()), name)
+        except Exception:                                   # noqa: BLE001
+            return Result("The broker list could not be refreshed just now. The "
+                          "copy already on this PC is untouched.", name)
+    if name == "privacy_check_replies":
+        try:
+            _code, body = PR.check_replies()
+        except Exception:                                   # noqa: BLE001
+            return Result("The mailbox check could not run just now, so nothing "
+                          "was scanned and nothing was changed.", name)
+        return Result(str(body.get("said")
+                          or "The mailbox check answered nothing, so nothing was "
+                             "changed."), name)
+    if name == "privacy_send_optout_batch":
+        try:
+            _code, body = PR.send_optout_batch("generic")
+        except Exception:                                   # noqa: BLE001
+            return Result("The removal-email batch could not be prepared just "
+                          "now, so nothing was sent and nothing was changed.",
+                          name)
+        return Result(str(body.get("said")
+                          or "Nothing was sent, and nothing was changed."), name)
+    return Result("That data removal question is not one this PC can answer yet.",
+                  name)
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -31791,6 +31929,28 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
     return Result(_from_now_on_said(manner, temporary), n)
 
 
+#: Said when a PC's backend does not have jarvis_answer_style.py yet.
+ANSWER_STYLE_MISSING = (
+    "Your PC's Jarvis cannot change how an answer is laid out yet - run "
+    "apply-patches.ps1 on the PC.")
+
+
+def _run_answer_style_set(f: dict) -> Result:
+    """"use bullet points" / "always use bullet points" / "no bullet points" /
+    "plain paragraphs" / "bullet points when it helps" (the owner's ask of
+    2026-11-25): applies at once, no card either way - it changes only how a
+    TYPED answer is laid out, never a spoken one and never what Jarvis does,
+    asks or remembers. jarvis_answer_style.handle_set() owns the words, so
+    this sentence, the Settings picker and the agent's note cannot drift."""
+    n = "answer_style_set"
+    try:
+        import jarvis_answer_style as AS
+    except Exception:
+        return Result(ANSWER_STYLE_MISSING, n)
+    _ok, _style, said = AS.handle_set({"style": f.get("style")})
+    return Result(said, n)
+
+
 def _switch_words(title: str) -> str:
     """The sentence that really switches to a preset - ONE copy for both
     answers that offer it (the status words and the describe words).
@@ -34768,16 +34928,21 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_settings(f)
     if n == "cloud_settings_change":
         return _run_cloud_settings_change(f, peer=peer, local=local)
-    # The personal data removal tool (2026-11-26, PR 1 of 3). The QUESTIONS read
-    # this PC's own mode, mail details, key presence and tracker (no model, no
-    # card, no write); the CHANGE goes through the settings registry's ONE mode
-    # row, which raises the cloud-PII consent card for `optery_api`/`hybrid`, so
-    # it is deliberately NOT in READ_ONLY_INTENTS - it can raise a card and can
-    # change a setting.
+    # The personal data removal tool (2026-11-26, PR 1 and PR 2 of 3). The
+    # QUESTIONS read this PC's own mode, mail details, key presence and tracker
+    # (no model, no card, no write); the CHANGE goes through the settings
+    # registry's ONE mode row, which raises the cloud-PII consent card for
+    # `optery_api`/`hybrid`, so it is deliberately NOT in READ_ONLY_INTENTS - it
+    # can raise a card and can change a setting.
     if n == "privacy_explain":
         return _run_privacy_explain(f)
     if n == "privacy_mode_change":
         return _run_privacy_mode_change(f, peer=peer, local=local)
+    # The five engine sentences (PR 2): two read the tracker, one refreshes the
+    # local cache, one scans the owner's own mailbox, and one raises the ONE
+    # carded batch card. Only the two reads are in READ_ONLY_INTENTS.
+    if n in _PRIVACY_TOOL_INTENTS:
+        return _run_privacy_tool(n)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "jobs_priority":
@@ -35266,6 +35431,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_animal(n, f, peer, local, conversation=conversation)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
+    if n == "answer_style_set":
+        return _run_answer_style_set(f)
     if n == "personality_set":
         return _run_personality_set(f, conversation, temporary)
     if n == "personality_dial":
@@ -36060,15 +36227,20 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # deliberately NOT here: it changes a setting or raises a card, and a
     # private chat refuses that like every action.
     "cloud_settings",
-    # The personal data removal tool's answers (2026-11-26, PR 1 of 3): each one
-    # is built from this PC's own state - the saved mode, whether the Gmail App
-    # Password and an Optery key are present, and the tracker's counts - with no
-    # secret, no model and no write, so a private chat gets the real state rather
-    # than a model's guess about a tool it cannot see. The CHANGE
+    # The personal data removal tool's answers (2026-11-26, PR 1 and PR 2 of 3):
+    # each one is built from this PC's own state - the saved mode, whether the
+    # Gmail App Password and an Optery key are present, and the tracker's counts
+    # - with no secret, no model and no write, so a private chat gets the real
+    # state rather than a model's guess about a tool it cannot see. The two PR 2
+    # reads join it: `privacy_status` and `privacy_manual_checklist` read the
+    # tracker and the broker cache and write nothing. The CHANGE
     # (`privacy_mode_change`) is deliberately NOT here: it can raise the cloud
     # consent card and it changes the mode, and a private chat refuses that like
-    # every action.
-    "privacy_explain",
+    # every action - and neither are the other three PR 2 sentences
+    # (`privacy_sync_directory` writes the cache and the brokers table,
+    # `privacy_check_replies` moves request rows, `privacy_send_optout_batch`
+    # sends email behind a card).
+    "privacy_explain", "privacy_status", "privacy_manual_checklist",
     # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
     # own hardware and answers in its module's fixed words - nothing written.
     "model_recommender",
@@ -36181,12 +36353,16 @@ READ_ONLY_INTENTS = frozenset({
     # The CHANGE (`cloud_settings_change`) is deliberately absent - it changes
     # a setting or raises a card.
     "cloud_settings",
-    # The data removal tool's answers (2026-11-26, PR 1 of 3): they read this
-    # PC's own mode file, key presence and tracker and change nothing, so none
-    # may take away what "cancel that" would undo. The CHANGE
-    # (`privacy_mode_change`) is deliberately absent - it changes the mode and
-    # can raise the cloud consent card.
-    "privacy_explain",
+    # The data removal tool's answers (2026-11-26, PR 1 and PR 2 of 3): they
+    # read this PC's own mode file, key presence and tracker and change nothing,
+    # so none may take away what "cancel that" would undo. `privacy_status` and
+    # `privacy_manual_checklist` are the two PR 2 reads and belong here for the
+    # same reason. The CHANGE (`privacy_mode_change`) is deliberately absent -
+    # it changes the mode and can raise the cloud consent card - and so are the
+    # three PR 2 sentences that write or send or reach a network
+    # (`privacy_sync_directory`, `privacy_check_replies`,
+    # `privacy_send_optout_batch`).
+    "privacy_explain", "privacy_status", "privacy_manual_checklist",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",

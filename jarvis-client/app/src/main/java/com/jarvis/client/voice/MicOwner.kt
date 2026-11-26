@@ -55,7 +55,7 @@ object MicOwner {
     /** The five capture paths. [CALL_RECORD] outranks the rest. */
     enum class Use(val words: String) {
         LIVE("Jarvis Live"),
-        WAKE("\"hey Jarvis\""),
+        WAKE("\"Hey Atlas\""),
         TALK("the talk button, a voice check or a training clip"),
         HANDSFREE("the hands-free answer window"),
         CALL_RECORD("call recording"),

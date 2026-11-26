@@ -265,6 +265,7 @@ SUBSYSTEMS = (
             "jarvis_agent", "jarvis_compaction", "jarvis_structured",
             "jarvis_tool_schema", "jarvis_tool_profiles", "jarvis_arbiter",
             "jarvis_prompt_coach", "jarvis_manner", "jarvis_antislop",
+            "jarvis_answer_style",
             "jarvis_personality_creator", "jarvis_plan", "jarvis_task_control",
             "jarvis_task_lease", "jarvis_jobs", "jarvis_tasks", "jarvis_stop_all",
             "jarvis_backoff", "jarvis_decision_lab",

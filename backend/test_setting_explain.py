@@ -189,7 +189,10 @@ def t_the_counts_and_the_readers_are_the_registrys_own():
     (ruling Q4), whose reader is `_read_wifi_auto_reconnect` in this table."""
     check("39 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 39,
           len(R.BOOL_SETTINGS))
-    check("10 CHOICE_SETTINGS", len(R.CHOICE_SETTINGS) == 10, len(R.CHOICE_SETTINGS))
+    # 2026-11-25: `answer_style` joined CHOICE_SETTINGS (the typed answer's
+    # layout dial beside the manner pair), so ten -> eleven. Measured from the
+    # registry, not chosen.
+    check("11 CHOICE_SETTINGS", len(R.CHOICE_SETTINGS) == 11, len(R.CHOICE_SETTINGS))
     check("1 NUMBER_SETTINGS", len(R.NUMBER_SETTINGS) == 1, len(R.NUMBER_SETTINGS))
     gap = [b.key for b in R.BOOL_SETTINGS if b.key not in G.STATE_READERS]
     check("every switch has a state reader (the guide's own table)", not gap, gap)

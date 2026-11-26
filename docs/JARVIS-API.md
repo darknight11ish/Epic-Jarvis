@@ -1468,9 +1468,13 @@ it afterwards does nothing). What `jarvis_hud.py`'s route does with this dict
 is not visible here; the module used to return `{"ok": true, "enabled": ...}`
 for both. Re-read `/api/voice/status` to learn the truth:
 `listening.wake_word`, `listening.wake_word_pending`, and a `wake` block -
-`{enabled, pending, expires_in?, last?, phrase, threshold, awake_seconds,
-spotter: {available, engine, why}}` (`spotter` says whether this PC can hear
-"hey Jarvis" in a clip, which the desktop app's listening needs).
+`{enabled, pending, expires_in?, last?, phrase, title, threshold, awake_seconds,
+spotter: {available, engine, why}}` (`phrase` is the per-PC name, `"hey_atlas"`
+or `"hey_jarvis"`; `title` is the same as words, `"Hey Atlas"` / `"Hey Jarvis"`,
+so a client shows the phrase THIS PC reports rather than a fixed one - the
+desktop's Settings -> Voice does exactly that since 2026-11-25. `spotter` says
+whether this PC can hear its configured phrase in a clip, which the desktop
+app's listening needs).
 
 **`source=wake_word`.** The server refuses it while the wake word is off
 (`available: false`). Otherwise it runs, in order: Silero VAD (no speech ->
@@ -38580,7 +38584,7 @@ POST /api/voice/utterance?source=live can now answer a clip it DROPPED as backgr
 alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
 - **
 eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
-- **ok and owner are 
+- **ok and owner are
 alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
 - **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
 - **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
@@ -42199,7 +42203,53 @@ engine's `load_coder`, and the unasked call staying byte-identical), and
 `backend/test_presets_owner_ui.py`'s "exactly three literal callers" pin names
 the start-up preload as the third, with its reason.
 
-## 233. The personal data removal tool: the mode dial, the tracker, and the cloud consent card (added 2026-11-26, PR 1 of 3)
+## 233. How a typed answer is laid out: bullet points, plain paragraphs, or only when it helps (2026-11-25)
+
+The owner asked: *"if atlas has a long response can it be put with bullet points"*, and *"make sure I can adjust it in the settings and adjust it through chat if i want to"*. One setting, three styles, one file on the PC - `answer-style.json` beside `manner.json` - and the same value is read by the chat lane, the desktop's Settings and both apps' chat sentences.
+
+- `auto` (the default): a one-line answer stays a sentence; an answer with three or more separate parts, or one that would run past about four sentences, opens with one short plain sentence and then puts each part on its own `- ` line.
+- `bullets`: any answer with more than one part is bulleted, however short.
+- `prose`: **no note at all** - 0 tokens, and the request bytes are exactly what the model got before this module existed. That is what makes the setting fully reversible.
+
+### 233.1 What reaches the model, and where
+
+`jarvis_agent.with_style_note(msgs)` (called from `dress_messages`) inserts the module's `note_message()` as one system message **just before the newest user message**, so `keep_rules_first` still finds the Jarvis rules first. It runs only on a TYPED turn:
+
+- **never on a spoken turn** - `SPOKEN_NOTE` forbids lists outright, because everything a spoken turn writes is read aloud;
+- **never on a conversation's first question** - that request stays `[rules] + the question`, byte for byte, which `backend/test_agent.py` pins and the warm-up prefix is measured from. The note starts with the first follow-up turn.
+
+The note never enters the caller's own `messages`: a new list is returned, so the relay/cloud path - which sends the caller's messages untouched - cannot see it.
+
+### 233.2 The route
+
+`GET /api/answer-style` answers the three choices with the PC's own labels and reasons, and the one in force:
+
+```json
+{"ok": true, "style": "auto", "title": "Long answers", "detail": "...", "default": "auto",
+ "choices": [{"id": "auto", "label": "Bullet points when it helps (default)", "why": "..."}, ...]}
+```
+
+`POST /api/answer-style {"style": "auto" | "bullets" | "prose"}` changes it: **200** with the new state and a `said` sentence, **400** for a value nobody offered (the three options are named) or a field the setting does not have, **401/403** behind the token and the origin check like every other route. No approval card in either direction: it changes only how a typed answer is laid out. Aliases an owner actually types ("bullet points", "plain", "paragraphs", "when it helps", "always") are accepted; a made-up value is refused, never silently defaulted.
+
+The route is installed by the ready plug-in `plugins/ready/answer-style` naming `jarvis_answer_style.install()`, so no patch is added to `jarvis_hud.py`. `list-plugins.ps1` shows it, and `tools/reconcile_live_backend.py` installs it on a live PC like the other drop-in folders.
+
+### 233.3 Through chat
+
+`backend/jarvis_quick.py` claims these whole sentences and runs them through `jarvis_answer_style.handle_set()`, answering with the module's own sentence:
+
+- "use bullet points" / "always use bullet points" / "answer in bullet points" / "give me bullet points" -> `bullets`
+- "no bullet points" / "no more bullet points" / "plain paragraphs" / "use plain paragraphs" -> `prose`
+- "bullet points when it helps" -> `auto`
+- any of them after "from now on, ..." (the existing phrase runs the same matcher)
+
+A question that merely mentions bullet points ("how do I use bullet points in GitHub markdown?", "does GitHub support bullet points") is **not** a command and falls through to the model; `backend/test_answer_style.py` pins both directions.
+
+### 233.4 The desktop control
+
+Settings -> How Jarvis talks -> **Long answers** (`src-tauri/src/answer_style.rs` `get_answer_style`/`set_answer_style`, drawn by `src/answer-style-settings.js`) is a three-choice radio group whose labels and reasons are the PC's own. The phone has no picker in this slice; it changes the same PC-wide value through the chat sentences above, and `docs/ARCHITECTURE.md` section 8 records that as one-sided on purpose. `tools/check_parity.py` classifies the route `deliberate`.
+
+**Not done in this slice:** no model was asked to write a bulleted answer, so the note's effect on real output is unmeasured until the owner sees it on his PC.
+## 234. The personal data removal tool: the mode dial, the tracker, and the cloud consent card (added 2026-11-26, PR 1 of 3)
 
 Personal-data discovery and data-broker removal, as the owner asked for it on
 2026-11-26: `backend/jarvis_privacy_removal.py`, Python standard library only,
@@ -42356,3 +42406,172 @@ zeros; and **two negative controls** that remove the new `Privacy` row from
 `jarvis_asks_first.TOOL_GROUPS` and the new `data_removal` row from
 `jarvis_settings_registry.MODE_SETTINGS` and require the checks naming them to
 fail.
+
+## 234. The personal data removal engine: the broker directory, the carded batch sender, the reply scanner and the manual checklist (added 2026-11-26, PR 2 of 3)
+
+The local engine the owner asked for in section 5 item 2 of the spec, in the
+same `backend/jarvis_privacy_removal.py` (Python standard library only - it now
+also imports `datetime`, `email`, `imaplib`, `smtplib` and `urllib`, every one
+of them stdlib). Still **no route** and still **not in `_where.SHIPPED`**.
+
+### The broker directory: `privacy/brokers.json`
+
+`sync_directory()` downloads **Optery's Open-Source Data Broker Directory**
+(`https://raw.githubusercontent.com/optery/optery-data-brokers-directory/master/data/data-brokers.json`),
+parses it, caches the PARSED copy at `<config>/privacy/brokers.json` **on this
+PC only**, and imports the rows into the `brokers` table. The directory is
+never vendored into this repository: it is third-party data under **CC BY-NC-SA
+4.0 (Optery, Inc.)** - this product is non-commercial, and the licence and the
+source URL are written into the cache itself so the credit travels with the
+data.
+
+`parse_directory()` maps an entry's `title` to `name`, `type` to `category`,
+`email` to `privacy_email` and `opt_out_url`/`opt_out_guide_url` to
+`optout_url`, and derives `method` in this order:
+
+* a usable privacy **email** -> `email` (the batch sender can file it), 806 of
+  the 956 entries measured on 2026-11-26;
+* otherwise a real http(s) opt-out or guide **URL** -> `web_form` (the manual
+  checklist hands it over), 59 more;
+* otherwise **left out**, counted and said in the answer, never imported as a
+  dead end (90 entries publish neither, and some "email" fields hold an
+  instruction such as "see our form", which is not an address).
+
+The import is an **upsert on `broker_id`** (`optery-<id>`), so a second refresh
+updates a broker's route and date and never duplicates it or throws away the
+owner's own `dead_url` mark. A failed download, a captive portal's HTML and a
+document of the wrong shape all answer `ok: false` with a plain-words `error`
+and **lose nothing**: the copy already on the PC stays exactly as it was.
+
+### The carded batch sender: `privacy_send_optout_batch(template)`
+
+One call picks the next brokers whose own `method` is `email` (never one that
+already has a live request - `sent`, `needs_verify_click`, `pending_window` or
+`removed`; a `failed` row may be retried) and raises **ONE** approval card:
+
+> Send 20 data-broker deletion email(s)? They go to exactly these 20 broker(s):
+> ... The template is CCPA (the California Consumer Privacy Act). ...
+
+* **The card is raised under the EXISTING `send_email` ask-tier action** - the
+  one outbound-mail authorization this PC already has, already `ask` in the
+  shipped settings file and already in the gate's "acts only on tier `ask`"
+  table - so PR 2 adds **no gate row, no tier row and no settings key**, the
+  route PR 1 took with `change_own_config`. A settings file that loosened
+  `send_email` below `ask` is answered `409` with the tier named and no card.
+* **Hard caps**: `BATCH_CAP = 20` brokers per card and `DAILY_CAP = 250` emails
+  a day. The 20 is applied when the batch is picked (`min(limit, 20, room)`), so
+  a card can never name 21; the 250 is counted from the tracker's own
+  `requests.sent_at` for TODAY (UTC), so a second batch the same day is
+  **smaller** rather than refused after the fact, and a restart cannot reset it.
+* **Three templates**: `ccpa` (California Consumer Privacy Act), `gdpr`
+  (Article 17 erasure) and `generic` (a plain deletion request, the default - a
+  request that cites no statute is always true).
+* **Deny sends nothing.** The rows are written only inside the card's decision
+  and only after `approved`: a denied, timed-out, refused or crashed card
+  leaves the tracker exactly as it was.
+* **Two wait windows, recorded per row**: `sent_at` plus `verify_after` =
+  **45 days** for a statutory CCPA/GDPR request and **7 days** for a plain one
+  (`WAIT_DAYS`), stored in the row so a later change cannot move a window that
+  is already running.
+* **The password is the one that already exists**: `_mail_credentials()` reads
+  `jarvis_email.imap_user()` / `imap_password()` - the owner's Gmail App
+  Password (`#1506`, Windows Credential Manager). No second store, no file and
+  no logged value; the value is used for the SMTP login and nothing else.
+* The card waits on its own thread, so the chat turn answers `202` with
+  `waiting: true` at once; when it has already settled by the time the answer
+  is built, the answer carries the real outcome. The outcome is kept in
+  `batch_card_state()`, so a later status answer says what happened.
+* Every transport is **injected** (`opener`, `transport`, `imap`), so the suite
+  drives the real code with fake doubles and sends no email and reads no real
+  credential.
+
+### The reply scanner: `privacy_check_replies()`
+
+Reads the owner's own mailbox over IMAP (`imap.gmail.com`, the same App
+Password), searches `SINCE` the oldest filed request (60 messages at most),
+parses each message with the stdlib `email` module and classifies it:
+
+| The broker's answer | What the row becomes |
+|---|---|
+| a confirmation LINK | `needs_verify_click` - **the tool never clicks it**; the owner opens it in his own inbox |
+| an ID / more-detail request | `needs_verify_click`, with a note saying it is his own step |
+| "we removed your information" | `pending_window` - **never `removed`** on the broker's own word |
+
+A reply is matched to a request by the broker's exact privacy address, then by
+domain only when the domain is not a public mail provider (two brokers writing
+from gmail.com are not the same broker). **Nothing from the email is ever
+written into a note or a log** - a broker's reply can quote the very address
+this tool is asking it to delete, so the notes are fixed sentences and the
+sender is used to match and for nothing else.
+
+The verify pass (`_verify_pass()`) is the **only** place that writes `removed`,
+and only for a row whose `verify_after` has passed AND that has a recorded
+`listing_url` answering **200** with enough text to be a page, no CAPTCHA /
+Turnstile / Cloudflare interstitial in it, and **none of the owner's own
+markers** (name, email local part, the last seven phone digits) in it. A 403, a
+404, a timeout, an empty body and a challenge page are all `unverified` and
+change no status. A confirmed removal sets `relist_check_at = +90 days`, because
+brokers re-scrape public sources.
+
+### The manual checklist and the status answer
+
+`privacy_manual_checklist` / `manual_checklist_words()` lists, in this order:
+the two free official portals with their real links (Google Results About You,
+California DROP), then each tracked `web_form` broker with its own direct
+opt-out URL (25 printed, the real count always), the count that publishes no
+link at all, and the plain sentence that **nothing is filled in or clicked for
+him**. `privacy_status` / `status_words()` reports the mode and where it came
+from, whether the Gmail App Password and an Optery key are present, the counts
+by status, how many requests are past their wait window with no answer, the
+`manual_todo` count, the size of the cached broker list, both official portals
+and the last batch's outcome.
+
+### The sentences it claims, and what they route to
+
+`jarvis_quick.py` asks `jarvis_privacy_removal.prompt()` before the feature
+answers; the grammar is whole-sentence, so nothing longer is swallowed:
+
+| Sentence | Intent | Card |
+|---|---|---|
+| "what data brokers have my info" / "show my removal status" | `privacy_status` | none (read-only) |
+| "what do I need to do by hand" | `privacy_manual_checklist` | none (read-only) |
+| "sync the broker list" | `privacy_sync_directory` | none (writes the local cache) |
+| "check for replies" | `privacy_check_replies` | none (moves row statuses) |
+| "send my removal emails" | `privacy_send_optout_batch` | ONE `send_email` card, max 20 |
+
+`privacy_status` and `privacy_manual_checklist` are in `READ_ONLY_INTENTS` and
+in `_PRIVATE_DETERMINISTIC_READS` (they read this PC's own tables and change
+nothing); the other three are deliberately in **neither**, because one writes
+the cache and the brokers table, one moves request rows and one sends email.
+The neighbours keep their lanes: "check my email" is still `honest_chat`, "sync
+my calendar" still `calendar_setup`, and "show my status", "send my email" and
+"what do I need to do today" are still not this feature's - proved through the
+real `jarvis_quick.match()`.
+
+### What PR 2 deliberately does not do
+
+No Optery call and no Optery key: the two cloud modes remain a dial and a
+consent card with no engine behind them until PR 3. No route, no Settings page,
+no desktop or phone screen. The module is still **not** in `_where.SHIPPED`
+(the owner's ruling: only the pull request that wires the live caller may), so
+every call site stays a guarded import and the published base - which does not
+carry it - imports and behaves exactly as before; PR 3 moves it into `SHIPPED`
+with the adapter that completes the feature.
+
+**Proof.** `backend/test_privacy_removal.py` (312 checks, offline: its own
+temporary `JARVIS_CONFIG_DIR`, a stubbed gate, a stubbed credential reader, a
+fake `urlopen`, a fake IMAP box and a fake SMTP transport - no socket, no real
+password and no real email): the directory's parse, cache, upsert and two
+failure shapes; the ONE card naming the exact 20 brokers, the template and both
+caps; a denial and a timeout sending nothing and writing no row; an approval
+sending through the double and recording `sent_at` with the 45-day and 7-day
+windows; the 250-a-day cap stopping a batch and shrinking it to the real room;
+no password, no profile and `optery_api` mode each answering without a card; a
+confirmation link and an ID request moving a row to `needs_verify_click` with
+**no page opened**; a completion email stopping at `pending_window`; a 403, a
+CAPTCHA page and a page that still names the owner all refused as removals; a
+clean page after the window confirming one and setting the 90-day re-list date;
+the checklist's real URLs; every engine phrasing reaching its own intent and ten
+neighbours keeping theirs; no PII in any log line, audit event, printed sentence
+or tracker note; and **two negative controls** that revert the 20-broker cap and
+the 403 guard and require the checks naming them to fail.

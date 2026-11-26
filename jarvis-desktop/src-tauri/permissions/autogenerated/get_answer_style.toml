@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-answer-style"
+description = "Enables the get_answer_style command without any pre-configured scope."
+commands.allow = ["get_answer_style"]
+
+[[permission]]
+identifier = "deny-get-answer-style"
+description = "Denies the get_answer_style command without any pre-configured scope."
+commands.deny = ["get_answer_style"]

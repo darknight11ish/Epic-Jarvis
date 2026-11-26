@@ -52,6 +52,10 @@ import jarvis_agent as AG  # noqa: E402
 # The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
 # this one checks the rest of the request word for word, so it is left out here.
 AG._manner_now = lambda *a, **k: None
+# The typed answer's layout (jarvis_answer_style.py, 2026-11-25) has its own
+# suite, test_answer_style.py; this one pins the request word for word, so the
+# note is left out here.
+AG.answer_style_message = lambda: None
 # The Personalize Jarvis line (jarvis_agent.with_setup_state_note, Wave B
 # 2026-11-03) is ONE system line added to every local turn while the quiz is
 # unfinished - correct to send, but not inside a test that pins the request

@@ -196,6 +196,16 @@ class World:
         # MISSING_MODELS_ROOT.
         wake_dir = ((d / "voice-models" / "wakeword") if self.models
                     else missing_models("voice-models", "wakeword"))
+        # The SECOND place a missing model is looked for - beside
+        # jarvis_wakeword.py, which is `backend/wakeword/` in a checkout and
+        # the backend folder itself in a live install. status()'s "not on disk
+        # yet (looked in ... and ...)" sentence NAMES it, so left alone the
+        # committed fixture carried this machine's path (2026-11-25; the
+        # sentence gained the second folder when the Atlas head joined the
+        # module). Pinned to the same fixed stand-in as model_dir(), so the
+        # fixture is the same on every machine and in CI.
+        shipped_dir = ((d / "wakeword") if self.models
+                       else missing_models("wakeword"))
         turn_file = d / "voice-models" / "turn" / T.MODEL_FILE
         speaker_dir = missing_models("voice-models", "speaker")
         self.patches = [
@@ -219,6 +229,7 @@ class World:
             mock.patch.object(VOICES, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", self.profile),
             mock.patch.object(W, "model_dir", return_value=wake_dir),
+            mock.patch.object(W, "shipped_model_dir", return_value=shipped_dir),
             mock.patch.object(T, "model_path", return_value=turn_file),
             # The warm-up and the "One moment." clip start on a thread of
             # their own (jarvis_voice_flow): not started here, so every run
@@ -255,10 +266,22 @@ class World:
         for p in self.patches:
             p.start()
         if self.models:
-            # Empty stand-ins: status() only checks that the files are there.
+            # The front-end files only have to be THERE (status() checks
+            # existence), so an empty stand-in is what the fixture needs - it
+            # carries no bytes into the JSON. The wake HEAD is different: since
+            # 2026-11-25 status() hashes it against KNOWN_FILES, so an empty
+            # file reads "not the file this build ships" and the "models
+            # installed" case would say the PC cannot hear its phrase. The real
+            # head for the configured phrase is copied from the repository's
+            # own `backend/wakeword/`, which is exactly what a live PC has.
+            head = W.PHRASE_MODELS.get(W.phrase(), "")
+            real_head = BACKEND / "wakeword" / head if head else None
             for name in list(W.MODEL_FILES.values()) + list(W.PHRASE_MODELS.values()):
                 (wake_dir / name).parent.mkdir(parents=True, exist_ok=True)
-                (wake_dir / name).write_bytes(b"")
+                if name == head and real_head is not None and real_head.is_file():
+                    (wake_dir / name).write_bytes(real_head.read_bytes())
+                else:
+                    (wake_dir / name).write_bytes(b"")
             turn_file.parent.mkdir(parents=True, exist_ok=True)
             turn_file.write_bytes(b"")
         S.reload_engines()

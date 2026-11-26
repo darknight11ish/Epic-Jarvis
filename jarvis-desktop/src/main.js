@@ -5651,7 +5651,7 @@ async function refreshVoiceFlow() {
 
 /**
  * The face's mic-level meter (item 1, UI-AUDIT-2026-09-26.md): the
- * microphone's own loudness, 0..1, while push-to-talk or "hey Jarvis"
+ * microphone's own loudness, 0..1, while push-to-talk or "hey Atlas"
  * listening holds it open (voice.rs, `VOICE_LEVEL`) - never the audio
  * itself. `setLevel` (voice.js) is authoritative about the mode this puts
  * the reactor in: the moment a real level arrives it takes over from
@@ -5759,7 +5759,7 @@ function playHeardSound() {
   }
 }
 
-/** "Hey Jarvis" listening's barge-in hook: Rust sends this when a clip
+/** "Hey Atlas" listening's barge-in hook: Rust sends this when a clip
  *  that held the wake word, or the word "stop", comes back, so either cuts
  *  off a reply still being spoken (other sounds in the room do not).
  *  Push-to-talk gets the same treatment directly in `startPushToTalk`, since
@@ -5795,7 +5795,7 @@ function restorePromptPlaceholder() {
 }
 listen("voice-summon", () => {
   const how = state.autoListening
-    ? "Listening for \"hey Jarvis\" - say it, then speak."
+    ? "Listening for \"hey Atlas\" - say it, then speak."
     : "Hold the mic button, or hold Space while it is selected, then speak and let go.";
   if (dom.prompt && !state.autoListening) {
     dom.prompt.setAttribute("placeholder", how);
@@ -5806,7 +5806,7 @@ listen("voice-summon", () => {
   announce(how);
 });
 
-/** Turns "hey Jarvis" listening on or off (the command keeps its old name,
+/** Turns "hey Atlas" listening on or off (the command keeps its old name,
  *  `start_automatic_listening`). Mutually exclusive with push-to-talk.
  *  Turning it on when the PC's wake word is off does not open the
  *  microphone: it asks for the approval card, and the refusal text says so. */
@@ -5823,15 +5823,15 @@ async function setAutoListening(enabled) {
     state.autoListening = true;
     dom.voiceAuto.setAttribute("aria-pressed", "true");
     dom.mic.dataset.auto = "true";
-    dom.mic.title = 'Listening for "hey Jarvis"';
+    dom.mic.title = 'Listening for "hey Atlas"';
     // The name a screen reader reads, not only the tooltip: "Hold to talk"
     // on a button that no longer responds to being held was wrong.
     if (dom.micLabel) {
       dom.micLabel.textContent =
-        'Listening for "hey Jarvis" - turn it off with the button next to this';
+        'Listening for "hey Atlas" - turn it off with the button next to this';
     }
     // `echoCancelling` (voice.rs ListenInfo): the microphone goes through
-    // Windows' echo cancelling, so "stop" or "hey Jarvis" is heard over
+    // Windows' echo cancelling, so "stop" or "hey Atlas" is heard over
     // Jarvis's own voice. An older build returns nothing - the plain line.
     // `microphone`: which one, by Windows' own name for it - both paths
     // open the default microphone, and a PC with a headset and a webcam
@@ -5859,11 +5859,11 @@ function listeningLine(info) {
   // "Interrupt Jarvis while it talks" is off in Settings: say so, rather
   // than promise a "stop" that will be ignored.
   if (!loadBargeIn()) {
-    return `Listening for "hey Jarvis"${mic}. While Jarvis talks, what it hears is ignored (Settings, Voice).`;
+    return `Listening for "hey Atlas"${mic}. While Jarvis talks, what it hears is ignored (Settings, Voice).`;
   }
   return info && info.echoCancelling
-    ? `Listening for "hey Jarvis"${mic}. Say "stop" to interrupt Jarvis while it talks.`
-    : `Listening for "hey Jarvis"${mic}.`;
+    ? `Listening for "hey Atlas"${mic}. Say "stop" to interrupt Jarvis while it talks.`
+    : `Listening for "hey Atlas"${mic}.`;
 }
 
 /** The listener changed how it hears while still on (voice.rs
@@ -5876,7 +5876,7 @@ listen("voice-listening", (event) => {
   announce(info.note ? `${info.note} ${listeningLine(info)}` : listeningLine(info));
 });
 
-/** One "hey Jarvis" utterance the listener cut and sent on its own - there
+/** One "hey Atlas" utterance the listener cut and sent on its own - there
  *  is no command call waiting on this the way `stop_voice_capture` returns
  *  push-to-talk's result directly, so it arrives as an event instead. Only
  *  clips that held the wake word (or a broken engine) arrive here; the rest
@@ -5892,7 +5892,7 @@ listen("voice-heard", (event) => {
     // its own kind of noise, so it is said once and the mode turns itself
     // off rather than keep trying against an engine that is not there.
     announce(
-      heard.reason || 'Speech recognition is not available here. Listening for "hey Jarvis" turned off.',
+      heard.reason || 'Speech recognition is not available here. Listening for "hey Atlas" turned off.',
       "assertive"
     );
     setAutoListening(false);
@@ -5901,7 +5901,7 @@ listen("voice-heard", (event) => {
   // "Interrupt Jarvis while it talks" is off: nothing heard over a reply
   // is acted on, a new question included (barge-in.js).
   if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
-  // "Hey Jarvis" was heard from the owner, but the command after it was
+  // "Hey Atlas" was heard from the owner, but the command after it was
   // too short to check: said, with the PC's own words. A short clip WITHOUT
   // the phrase could be anyone in the room, so it stays silent.
   if (heard.tooShort && heard.wakeHeard) {
@@ -5909,7 +5909,7 @@ listen("voice-heard", (event) => {
     return;
   }
   if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
-  // "Hey Jarvis" from the owner: the turn was cut and taken - a small "I
+  // "Hey Atlas" from the owner: the turn was cut and taken - a small "I
   // heard you". Here, not when the listener cuts: that happens for every
   // sound in the room, and only the PC knows which were addressed to Jarvis.
   if (heard.wakeHeard) playHeardSound();
@@ -6721,7 +6721,7 @@ onEvent((frame) => {
       dom.cardStatusText.textContent = stepText(frame.data);
     }
   }
-  // A timer going off, said aloud while "Hey Jarvis" listening is on - the
+  // A timer going off, said aloud while "Hey Atlas" listening is on - the
   // owner's "say timers aloud when voice is on" (2026-09-25). The toast
   // shows as well (Rust). Generic words only: the room may not be private.
   const aloud = aloudFor(frame, state.autoListening);
@@ -6811,7 +6811,7 @@ const LIVE_TRAIN_PLACE = "voice";
 const LIVE_EXPLAINED_KEY = "jarvis.live.explained";
 const LIVE_TYPE_HINT = "Type to Jarvis - typed answers stay on screen";
 const LIVE_EXPLAINER =
-  "Jarvis now listens after every answer - just talk, no \"Hey Jarvis\" needed. Your voice is checked once for this Live session, not on every sentence.";
+  "Jarvis now listens after every answer - just talk, no \"Hey Atlas\" needed. Your voice is checked once for this Live session, not on every sentence.";
 
 function liveOnHere() {
   return onHere(live.status, LIVE_ME);
@@ -6844,7 +6844,7 @@ function paintLive() {
   dom.liveToggle.setAttribute("aria-pressed", String(on));
   dom.liveToggle.title = on
     ? "Jarvis Live is on - click to end it"
-    : "Jarvis Live: talk back and forth, no \"Hey Jarvis\" needed";
+    : "Jarvis Live: talk back and forth, no \"Hey Atlas\" needed";
   const now = Date.now();
   const flash = now < live.flashUntil;
   const sign = liveSign(live.status, LIVE_ME, {
@@ -6953,7 +6953,7 @@ function liveRefused(why) {
 
 async function toggleLive() {
   // One click at a time: a double click used to start Live twice, and the
-  // second start took the Live microphone for a "hey Jarvis" one (bug 6).
+  // second start took the Live microphone for a "hey Atlas" one (bug 6).
   if (live.busy) return;
   live.busy = true;
   dom.liveToggle.setAttribute("aria-busy", "true");
@@ -7154,7 +7154,7 @@ function liveAsk(text, heard) {
 }
 
 /** Every reply the PC sent for a Live sentence (and "let's talk" or the
- *  move offer for a "hey Jarvis" one). True when it was Live's. */
+ *  move offer for a "hey Atlas" one). True when it was Live's. */
 function liveHeard(heard) {
   const isLive = heard.source === "live" || Boolean(heard.live) || Boolean(heard.liveElsewhere);
   if (!isLive) return false;

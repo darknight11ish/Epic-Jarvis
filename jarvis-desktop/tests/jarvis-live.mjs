@@ -270,10 +270,14 @@ await check("no clash with the Brain's \"Live\" tab: the bar's ids are jarvis-li
 
 await check("Settings -> Voice: the Live trust setting's three choices, the same words as the phone's", async () => {
   const VT = await import("../src/voice-training.js");
-  assert.deepEqual(VT.HANDS_FREE_LIVE.map((c) => c.id),
+  // The Live choices are templates since 2026-11-25 - the phrase is the PC's,
+  // read in Settings from the status - so this check fills the slot with the
+  // shipped phrase, which is the phrase the phone's copy names.
+  const live = VT.handsFreeLive(VT.DEFAULT_WAKE_PHRASE);
+  assert.deepEqual(live.map((c) => c.id),
     ["live_trust_fully", "live_button_start_only", "live_like_hey_jarvis"]);
-  assert.deepEqual(VT.HANDS_FREE_LIVE.map(VT.choiceText),
-    ["Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Jarvis\""]);
+  assert.deepEqual(live.map(VT.choiceText),
+    ["Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Atlas\""]);
   // Which way is looser depends on the choice now; unknown counts as the strictest.
   assert.equal(VT.loosens("hands_free_live", "live_button_start_only", "live_trust_fully"), false);
   assert.equal(VT.loosens("hands_free_live", "live_button_start_only", "live_like_hey_jarvis"), true);
@@ -283,7 +287,7 @@ await check("Settings -> Voice: the Live trust setting's three choices, the same
   assert.equal(VT.loosens("hands_free_screen", "screen_aloud"), true, "the others unchanged");
   const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/StrictVoice.kt")
     .replace(/"\s*\+\s*\n\s*"/g, "").replace(/\\"/g, '"');
-  for (const c of VT.HANDS_FREE_LIVE) assert.ok(kt.includes(c.detail), c.detail);
+  for (const c of live) assert.ok(kt.includes(c.detail), c.detail);
   assert.ok(kt.includes(VT.LIVE_ONLY_WHEN_STRICT_NOTE));
   const html = read("src/settings.html");
   assert.ok(html.includes('id="vt-live"') && html.includes('id="vt-live-end"'));

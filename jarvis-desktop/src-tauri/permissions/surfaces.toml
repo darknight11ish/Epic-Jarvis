@@ -901,6 +901,14 @@ permissions = [
   # nothing about whether an answer should be de-slopped.
   "allow-get-antislop",
   "allow-set-antislop",
+  # "Long answers" (2026-11-25; JARVIS-API section 233): how a TYPED answer is
+  # laid out - bullet points when it helps, always bullets, or plain paragraphs,
+  # on GET/POST /api/answer-style. The three labels and the change sentence are
+  # the module's own words; it changes only layout, never what Atlas does, asks
+  # or remembers, and no card either way. Settings window only: the phone has no
+  # picker in this slice and changes the same value through the chat sentences.
+  "allow-get-answer-style",
+  "allow-set-answer-style",
   # "Hands-free mode" (2026-11-04; JARVIS-API section 191): the one switch, on
   # GET/POST /api/handsfree. Turning it ON raises ONE approval card through the
   # backend - the ordinary `handsfree_enable` card, answered by `/api/approve`

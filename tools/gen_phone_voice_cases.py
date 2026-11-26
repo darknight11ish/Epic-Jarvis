@@ -248,6 +248,15 @@ class World:
             mock.patch.object(V, "PROFILE_PATH", profile),
             mock.patch.object(W, "model_dir",
                               return_value=missing_models("voice-models", "wakeword")),
+            # The SECOND folder a missing model is looked in - beside
+            # jarvis_wakeword.py - is named by status()'s "not on disk yet
+            # (looked in ... and ...)" sentence. Left unpinned, the committed
+            # fixture carried the generator's own checkout path (2026-11-25;
+            # the sentence gained this folder when the Atlas head joined the
+            # module). The same fixed stand-in as model_dir(), so the fixture is
+            # the same on every machine and in CI.
+            mock.patch.object(W, "shipped_model_dir",
+                              return_value=missing_models("wakeword")),
             mock.patch.object(T, "model_path", return_value=d / "voice-models" / "turn" / T.MODEL_FILE),
             # WHERE THE SPEAKER MODELS ARE, pinned like every other folder
             # here: jarvis_voice.status() reports the stronger models from

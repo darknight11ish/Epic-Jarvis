@@ -14,22 +14,52 @@ learns nothing about what was said.
 
 WHICH SPOTTER, AND WHY THIS ONE
 openWakeWord's pre-trained "hey jarvis" model (github.com/dscripka/openWakeWord,
-release v0.5.1). Three small ONNX files, 3.7 MB in all:
+release v0.5.1), and - for the product's own spoken name - the owner's trained
+"hey atlas" head. Either phrase is three small ONNX files:
 
     melspectrogram.onnx   audio -> a picture of its pitch over time
     embedding_model.onnx  that picture -> 96 numbers per 80 ms (Google's
                           speech_embedding, Apache-2.0)
-    hey_jarvis_v0.1.onnx  the last 16 of those -> one score, 0..1
+    hey_atlas.onnx        the last 16 of those -> one score, 0..1  (2026-11-25)
+    hey_jarvis_v0.1.onnx  the same job, for "hey Jarvis"
 
-The config already named it - `[voice] wake_phrase = "hey_jarvis"` and
-`wake_threshold = 0.5` are openWakeWord's own model name and default
-threshold, and the section's comment says "nothing is transcribed until the
-openWakeWord 'hey jarvis' model fires". docs/WAKE-WORD.md chose it too. The
-phone runs the SAME three files through the same steps (jarvis-client
-voice/WakeSpotter.kt), so one threshold means one thing on both.
+TWO PHRASES, ONE FRONT END. `[voice] wake_phrase` names the phrase and
+PHRASE_MODELS maps that name to its last model; the mel and embedding files are
+the same for both, so the streaming steps, the owner's verifier and the "stop"
+head are unchanged. `hey_atlas` is the owner's own model, trained on this PC
+with openWakeWord's `openwakeword/train.py` v0.6.0 (commit c8ef6912) on 50,000
+synthetic positives plus its adversarial (20,000) and general TTS/noise/silence
+(34,000) negatives. Measured, not re-measured here: on the owner's own 80.9 s
+recording it peaks at 0.925805 with 63 frames at or above the 0.5 bar, where
+the old model read 0.1744 with none; on 1,092 held-out synthetic positives
+74.634% of clips have a frame at or above 0.5; on 2,000 held-out synthetic
+negatives 0 clips fire. Those numbers are the evidence recorded in
+`decisions.d/2026-11-25-hey-atlas-wake-model-ships.md`; this module does not
+measure them.
 
-The pre-trained models are CC BY-NC-SA 4.0 (non-commercial, share-alike,
-attribution) - allowed by rule 5, recorded in THIRD-PARTY-NOTICES.txt.
+The model file ships beside this module (`backend/wakeword/hey_atlas.onnx`,
+215,964 bytes, SHA-256 0DBE0AA5...), so the phrase it is trained for needs no
+download. **`hey_atlas` is the shipped default since 2026-11-25** (the owner's
+ruling that the product is Atlas): a fresh install, and a config with no
+`wake_phrase` line, listens for it. `hey_jarvis` is NOT removed: a PC that still
+has `hey_jarvis_v0.1.onnx` and `wake_phrase = "hey_jarvis"` keeps waking exactly
+as before, so an update cannot break a working PC - the installer never rewrites
+`jarvis-framework.toml`, and moving a PC between the two phrases is that one
+line (decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md). **The phone hears it too (2026-11-25):**
+`jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx` is the same bytes,
+`OrtWakeModels.WAKE_FILE` names it, and the phone's own spotter runs the same
+front end on it, so both surfaces carry the same file and the same hash -
+`test_voice_upgrades.py` proves that rather than asserting the old absence. The
+phone's copy of openWakeWord's `hey_jarvis_v0.1.onnx` stays in the APK although
+no phone code loads it: it is this repository's only real copy of those bytes and
+the two wake-word suites build a fake PC model folder from it.
+
+The pre-trained openWakeWord files are CC BY-NC-SA 4.0 (non-commercial,
+share-alike, attribution) - allowed by rule 5, recorded in
+THIRD-PARTY-NOTICES.txt. The trained `hey_atlas.onnx` is treated as the same
+licence, because its negative features derive from the CC BY-NC-SA 4.0
+`davidscripka/openwakeword_features` dataset (the training folder's own
+REPORT.md section 4 records the reasoning).
 
 The other candidate, sherpa-onnx's own open-vocabulary keyword spotter, was
 measured against the same clips (backend/README.md, "the wake word"): fewer
@@ -144,8 +174,32 @@ MODEL_FILES = {
     "melspectrogram": "melspectrogram.onnx",
     "embedding": "embedding_model.onnx",
 }
-#: `wake_phrase` in [voice] -> the model file for it. Only one exists.
-PHRASE_MODELS = {"hey_jarvis": "hey_jarvis_v0.1.onnx"}
+#: `wake_phrase` in [voice] -> the model file for it. Two phrases, and the
+#: front end above is the same file for both. `hey_jarvis` stays first-class:
+#: a PC that has only `hey_jarvis_v0.1.onnx` and the old phrase set keeps
+#: waking exactly as before.
+PHRASE_MODELS = {
+    "hey_atlas": "hey_atlas.onnx",
+    "hey_jarvis": "hey_jarvis_v0.1.onnx",
+}
+#: What the phrase is called on screen ("Hey Atlas").
+PHRASE_TITLES = {"hey_atlas": "Hey Atlas", "hey_jarvis": "Hey Jarvis"}
+#: The phrases this PC can run. Both heads are on both surfaces since
+#: 2026-11-25 - the PC downloads both and the phone's APK carries both - so
+#: this is no longer a PC-only list.
+PC_PHRASES = ("hey_atlas", "hey_jarvis")
+#: The phrases whose model the phone's APK also carries (2026-11-25): BOTH.
+#: `OrtWakeModels.WAKE_FILE` names the atlas head, so that is the one the
+#: phone's spotter actually scores; openWakeWord's jarvis head is carried for
+#: the repository's own suites and for nothing the phone runs.
+#: docs/ARCHITECTURE.md section 8 records it, and test_voice_upgrades.py
+#: asserts every pinned file is in the phone's assets with the pinned hash.
+PHONE_PHRASES = ("hey_atlas", "hey_jarvis")
+#: The phrase the shipped framework template sets, and the fallback for a
+#: config with no `wake_phrase` line. `hey_atlas` since 2026-11-25: the model
+#: ships, so a fresh PC wakes on the product's own name. `hey_jarvis` is still
+#: a first-class phrase (`PHRASE_MODELS`, `PC_PHRASES`) - no PC is re-pointed.
+DEFAULT_PHRASE = "hey_atlas"
 
 #: Every wake-word file Jarvis ships, with its SHA-256, publisher, version
 #: and licence. The SAME files are in the phone's APK
@@ -170,6 +224,20 @@ KNOWN_FILES = {
     "hey_jarvis_v0.1.onnx": {
         "sha256": "94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb",
         "publisher": "openWakeWord (github.com/dscripka/openWakeWord)", "version": "v0.5.1",
+        "licence": "CC BY-NC-SA 4.0"},
+    # The owner's own "Hey Atlas", trained on this PC 2026-11-18 with
+    # openWakeWord's openwakeword/train.py at v0.6.0 (commit
+    # c8ef6912c5feccf1037b852d9bc6c7ed644135ba, Apache-2.0) - NOT livekit-wakeword,
+    # which is still the scaffolded fallback (tools/train_wakeword.py) and has
+    # produced nothing shipped. "trained-on-this-pc" names the publisher this
+    # project can actually show: the training folder's own STATUS.md/REPORT.md
+    # and model_identity.json record the config, the commit and this hash.
+    # Version is the training run's own, not v0.5.1: the version line says
+    # v0.5.1 above because those files ARE openWakeWord's release.
+    "hey_atlas.onnx": {
+        "sha256": "0dbe0aa5daf88538a4d368b5df1654cdaed7cb9aef8110a600735f6389ce2fbd",
+        "publisher": "trained on this PC with openWakeWord's train.py v0.6.0",
+        "version": "atlas-1 (run 2026-11-18)",
         "licence": "CC BY-NC-SA 4.0"},
 }
 
@@ -296,7 +364,14 @@ def model_dir() -> Path:
 
 
 def phrase() -> str:
-    return str(_cfg("wake_phrase", "hey_jarvis") or "hey_jarvis").strip().lower()
+    return str(_cfg("wake_phrase", DEFAULT_PHRASE) or DEFAULT_PHRASE).strip().lower()
+
+
+def phrase_title() -> str:
+    """"Hey Atlas" / "Hey Jarvis" - the phrase as a person writes it, for the
+    sentences this module hands back. An unknown phrase is quoted as it is."""
+    p = phrase()
+    return PHRASE_TITLES.get(p, p)
 
 
 def threshold() -> float:
@@ -314,29 +389,86 @@ def model_paths() -> dict:
     wake = str(_cfg("wake_model", "") or "")
     if not wake:
         name = PHRASE_MODELS.get(phrase())
-        wake = str(d / name) if name else ""
+        wake = str(_resolve_model(name)) if name else ""
     return {"melspectrogram": str(d / MODEL_FILES["melspectrogram"]),
             "embedding": str(d / MODEL_FILES["embedding"]),
             "wake": wake}
 
 
+def shipped_model_dir() -> Path:
+    """Where this checkout/base keeps a wake model it ships (2026-11-25).
+
+    Two places, because the same module runs in two shapes: a repository
+    checkout keeps it in `backend/wakeword/`, and a live install has it
+    flattened beside the module by the installer (the same "leaf name"
+    rule `backend/static/` follows). The owner's own model folder always
+    wins over both - see `_resolve_model`."""
+    here = Path(__file__).resolve().parent
+    return here / "wakeword" if (here / "wakeword").is_dir() else here
+
+
+def _resolve_model(name: str) -> Path:
+    """The file for `name`: the owner's model folder first, then the copy
+    shipped beside this module. Never raises; a name that is nowhere still
+    comes back as a path, so `status()` can say where it looked."""
+    for p in (model_dir() / name, shipped_model_dir() / name):
+        if p.is_file():
+            return p
+    return model_dir() / name
+
+
+def verify_model(path, name: str = "") -> tuple:
+    """(is this the file KNOWN_FILES pins?, why not). Reads the whole file.
+
+    This is what stops a half-downloaded or hand-edited model from running
+    and scoring nonsense: a missing file, a file whose bytes differ from the
+    pinned SHA-256, and a file this module has no pin for are all refused,
+    each with one plain sentence."""
+    p = Path(path)
+    info = KNOWN_FILES.get(name or p.name)
+    if info is None:
+        return False, (f"{p.name} is not a wake-word file this build knows, so it is "
+                       f"not used")
+    if not p.is_file():
+        return False, (f"{p.name} is not in {p.parent} - the file that ships with Jarvis "
+                       f"is missing, so nothing can listen for {PHRASE_TITLES.get(phrase(), phrase())}")
+    try:
+        got = sha256_file(p)
+    except OSError as exc:
+        return False, f"{p.name} could not be read ({type(exc).__name__}), so it is not used"
+    if got != info["sha256"]:
+        return False, (f"{p.name} is not the file this build ships (its SHA-256 does not "
+                       f"match), so it is not used - replace it with the one from the "
+                       f"install line in backend/README.md")
+    return True, ""
+
+
 def status() -> dict:
-    """Cheap: file checks only, no model is loaded to answer."""
+    """Cheap: file checks and one hash of the last model. No model loads."""
     paths = model_paths()
     missing = [k for k, p in paths.items() if not p or not Path(p).is_file()]
+    bad = ""
+    if paths["wake"] and Path(paths["wake"]).is_file():
+        ok, bad = verify_model(paths["wake"], PHRASE_MODELS.get(phrase(), ""))
+        if not ok:
+            missing = missing or ["wake"]
     if ort is None or np is None:
         why = ("the onnxruntime package is not installed in the Python that "
                "runs Jarvis (python -m pip install onnxruntime)")
     elif not paths["wake"]:
-        why = (f"there is no model for wake_phrase = {phrase()!r}; the only "
-               f"one available is \"hey_jarvis\"")
+        why = (f"there is no model for wake_phrase = {phrase()!r}. This build knows "
+               + ", ".join(f'"{k}"' for k in PC_PHRASES)
+               + f'; set [voice] wake_phrase to one of those')
+    elif bad:
+        why = bad
     elif missing:
         why = (f"the wake-word model files are not on disk yet (looked in "
-               f"{model_dir()})")
+               f"{model_dir()} and {shipped_model_dir()})")
     else:
         why = ""
     return {"available": not why, "engine": "openWakeWord (ONNX Runtime)",
-            "phrase": phrase(), "threshold": threshold(), "why": why,
+            "phrase": phrase(), "title": PHRASE_TITLES.get(phrase(), phrase()),
+            "threshold": threshold(), "why": why,
             "model_dir": str(model_dir())}
 
 
@@ -701,6 +833,9 @@ class Verifier:
         self.threshold = min(0.99, max(0.05, float(doc.get("threshold", VERIFIER_THRESHOLD))))
         self.positives = int(doc.get("positives", 0))
         self.mic = str(doc.get("mic", ""))
+        #: The model file it was trained against, so a phrase change can be
+        #: seen rather than guessed (see `_verifier_for_current_phrase`).
+        self.model = str(doc.get("model", ""))
 
     def probabilities(self, windows):
         x = np.asarray(windows, dtype=np.float64).reshape(len(windows), -1)
@@ -768,11 +903,26 @@ def _verifier_order(mic: str = "") -> list:
     return [verifier_path(n) for n in names]
 
 
+def _verifier_for_current_phrase(ver: "Verifier") -> bool:
+    """Was this verifier trained on the phrase the spotter listens for now?
+
+    A verifier is a logistic regression over the 16 x 96 windows of ONE
+    phrase's sound. Switching `wake_phrase` to "hey_atlas" while a verifier
+    trained on "hey Jarvis" still decided would reject the new phrase it has
+    never heard - so a model id that does not match is not used, and the first
+    model decides alone, exactly as when no verifier exists (2026-11-25).
+    A verifier with no recorded model (older file) is trusted as before."""
+    want = PHRASE_MODELS.get(phrase(), "")
+    return not ver.model or not want or ver.model == want
+
+
 def load_verifier(mic: str = "") -> Optional[Verifier]:
-    """The first verifier in `mic`'s order that exists, else None."""
+    """The first verifier in `mic`'s order that exists and belongs to the
+    phrase being listened for, else None."""
     for p in _verifier_order(mic):
         if p.is_file():
-            return _read_verifier(p)
+            ver = _read_verifier(p)
+            return ver if ver is not None and _verifier_for_current_phrase(ver) else None
     return None
 
 
@@ -784,10 +934,15 @@ def verifier_status(mic: str = "") -> dict:
             if ver is None:
                 return {"trained": False, "positives": 0,
                         "why": f"{p.name} could not be read - train your voice again"}
+            if not _verifier_for_current_phrase(ver):
+                return {"trained": False, "positives": 0,
+                        "why": (f"{p.name} was trained for a different wake phrase, so it is "
+                                f"not used. Say {phrase_title()} sentences and train your voice "
+                                f"again to get it back")}
             return {"trained": True, "positives": ver.positives, "why": ""}
     return {"trained": False, "positives": 0,
-            "why": ("not trained yet - it is built when you train your voice, from the "
-                    "sentences that start with \"hey Jarvis\"")}
+            "why": (f"not trained yet - it is built when you train your voice, from the "
+                    f"sentences that start with \"{phrase_title()}\"")}
 
 
 def _fit_logistic(x, y, c: float = VERIFIER_C, iters: int = 3000):
@@ -849,7 +1004,7 @@ def build_verifier(clips, sample_rate: int = SAMPLE_RATE, mic: str = "") -> dict
             neg += windows
     if heard < MIN_VERIFIER_CLIPS:
         return {"built": False, "clips": heard,
-                "why": (f"\"hey Jarvis\" was heard in {heard} of the sentences; it needs "
+                "why": (f"\"{phrase_title()}\" was heard in {heard} of the sentences; it needs "
                         f"at least {MIN_VERIFIER_CLIPS}")}
     bank = _bank()
     x = [np.asarray(w, dtype=np.float32).reshape(-1) for w in pos + neg]
@@ -873,25 +1028,37 @@ def build_verifier(clips, sample_rate: int = SAMPLE_RATE, mic: str = "") -> dict
 
 import re  # noqa: E402
 
-#: How speech-to-text writes "Jarvis" when it mishears it. Measured on the
-#: synthesised clips in backend/README.md: "Javis", "Jervis" and "Jarvis".
+#: How speech-to-text writes the name after "hey"/"hi"/"okay". The check is
+#: per PHRASE: only the configured phrase's name counts, so a clip that hears
+#: "Hey Atlas" is not accepted because the transcript says "Jarvis" (or the
+#: other way round) - the two detectors hear different sounds and the words
+#: have to agree with the model that fired.
 _NAME = re.compile(r"^(j[ae]r?v[iu]s|jarvis's|jervis)$")
+_NAME_ATLAS = re.compile(r"^(atlas|atlas's|atlass)$")
+_NAMES = {"hey_jarvis": _NAME, "hey_atlas": _NAME_ATLAS}
+#: A phrase this build does not know matches nothing (an unknown phrase must
+#: never wake on some other phrase's word).
+_NO_NAME = re.compile(r"(?!)")
 _CUES = {"hey", "hi", "hello", "ok", "okay", "yo", "oi", "hay", "a"}
 
 
 def split_wake(text: str) -> tuple:
     """(was the wake phrase at the start of this?, the words after it).
 
-    The spotter only says a clip SOUNDED like "hey Jarvis". The transcript is
+    The spotter only says a clip SOUNDED like the phrase. The transcript is
     the second opinion, and the one that stops "the computer in that film was
-    called Jarvis" from counting: the name must be the first or second word,
+    called Atlas" from counting: the name must be the first or second word,
     or come straight after "hey"/"hi"/"okay". The phone's clip includes a
     little audio from before the phrase, so the second rule matters.
-    """
+
+    WHICH name counts is `[voice] wake_phrase` (2026-11-25): "atlas" for
+    "hey_atlas", "jarvis" for "hey_jarvis". A phrase this build does not know
+    accepts neither, so a typo in the config cannot wake on the wrong word."""
     text = text or ""
+    name = _NAMES.get(phrase()) or _NO_NAME
     words = list(re.finditer(r"[A-Za-z']+", text))
     for i, m in enumerate(words):
-        if not _NAME.match(m.group(0).lower()):
+        if not name.match(m.group(0).lower()):
             continue
         prev = words[i - 1].group(0).lower() if i else ""
         if i <= 1 or prev in _CUES:

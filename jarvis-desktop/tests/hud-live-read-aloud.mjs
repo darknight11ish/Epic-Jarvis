@@ -114,12 +114,12 @@ await check("A: the Live button carries the BAR's own name and on/off words", ()
   // The bar's resting title, spelled in index.html, and its two words for the
   // two states as main.js writes them. The HUD must say the same things: one
   // control in two windows, not two vocabularies.
-  assert.match(BAR, /title="Atlas Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"/,
+  assert.match(BAR, /title="Atlas Live: talk back and forth, no &quot;Hey Atlas&quot; needed"/,
     "the bar's own Live title has moved - read it again before changing the HUD's");
   const live = between(HUD, 'id="rail-live"', "</button>", 1400);
   assert.match(live, /aria-label="Atlas Live"/,
     "the HUD's Live button must use the bar's name for a screen reader");
-  assert.match(live, /title="Atlas Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"/,
+  assert.match(live, /title="Atlas Live: talk back and forth, no &quot;Hey Atlas&quot; needed"/,
     "the HUD's resting title must be the bar's, word for word");
   assert.match(HUD, /"Jarvis Live is on - click to end it"/,
     "the HUD must say what the bar says while Live is on");

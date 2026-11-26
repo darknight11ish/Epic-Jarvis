@@ -2719,7 +2719,7 @@ def status() -> dict:
         "profile_embedder": prof.embedder if prof else "",
         "needs_retraining": retrain or strong_missing_in_print,
         "speaker_model_path": str(speaker_model_path()),
-        "wake_phrase": _cfg("wake_phrase", "hey_jarvis"),
+        "wake_phrase": _cfg("wake_phrase", "hey_atlas"),
         "wake_word_enabled": bool(_cfg("wake_word_enabled", False)),
         "note": ". ".join(notes),
         # One print per microphone ("general" is the old owner.json).

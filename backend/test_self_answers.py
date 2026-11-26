@@ -936,7 +936,10 @@ def the_two_settings_numbers_reconcile():
                      + len(REG.NUMBER_SETTINGS))
     # Wave-10 Q4 added `wifi_auto_reconnect` to BOOL_SETTINGS (the owner's
     # six-guardrail ruling), so this derived count moves 49 -> 50 with it.
-    check("the registry's own row count is 50", registry_rows == 50,
+    # 2026-11-25: `answer_style` joined CHOICE_SETTINGS (the typed answer's
+    # layout dial beside the manner pair), so the same derived count moves
+    # 50 -> 51. Measured from the three tables, not chosen.
+    check("the registry's own row count is 51", registry_rows == 51,
           str(registry_rows))
     check("the spoken answer names how many of its count are those rows",
           f"{registry_rows} of them are the switches, named choices and numbers" in

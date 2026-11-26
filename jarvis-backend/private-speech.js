@@ -55,9 +55,9 @@
  * Right after it, the screen (the owner's decision of 2026-09-28): an
  * answer about the screen (`read_screen` ran) is kept on screen unless the
  * utterance reply said `screen_aloud: true`. The PC says true for the talk
- * button, and for "Hey Jarvis" under "Same as the talk button"; under "Only
+ * button, and for "Hey Atlas" under "Same as the talk button"; under "Only
  * trust the talk button", only when the owner turned on "Answers about your
- * screen after "Hey Jarvis"" (voice setting `hands_free_screen`). Missing
+ * screen after "Hey Atlas"" (voice setting `hands_free_screen`). Missing
  * (an older PC) counts as false. Nothing after it can let such an answer
  * through - not even `private_aloud`.
  *
@@ -255,7 +255,7 @@ export function mayReadAloud(ctx) {
   if (usedSensitiveFact(c.route) && c.sensitiveAloud !== true) return false;
   // Then the screen (the owner's decision of 2026-09-28): an answer about
   // the screen stays on screen unless the PC said `screen_aloud` for this
-  // clip - false for "Hey Jarvis" under "Only trust the talk button" unless
+  // clip - false for "Hey Atlas" under "Only trust the talk button" unless
   // the owner allowed it. Before `privateAloud`, so nothing lets it through.
   if (c.screenRead === true && c.screenAloud !== true) return false;
   if (c.privateAloud === true) return true;

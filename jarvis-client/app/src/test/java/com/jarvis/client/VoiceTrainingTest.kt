@@ -67,9 +67,9 @@ class VoiceTrainingTest {
     }
 
     @Test
-    fun `four start with hey Jarvis, so the PC can learn how the owner says it`() {
+    fun `four start with the wake phrase, so the PC can learn how the owner says it`() {
         // jarvis_wakeword.build_verifier needs at least two it can hear.
-        assertEquals(4, VoiceTraining.SENTENCES.count { it.startsWith("Hey Jarvis,") })
+        assertEquals(4, VoiceTraining.SENTENCES.count { it.startsWith("Hey Atlas,") })
         assertEquals(3, VoiceTraining.OTHER_SENTENCES.size)
         assertEquals("phone", VoiceTraining.MIC)
     }
@@ -80,14 +80,14 @@ class VoiceTrainingTest {
         // Every letter at least once - the first one is a pangram.
         for (c in 'a'..'z') assertTrue("no '$c'", c in all)
         assertTrue("a question, so the voice rises once", VoiceTraining.SENTENCES.any { it.endsWith("?") })
-        assertTrue("the name the owner will say most", VoiceTraining.SENTENCES.any { "Jarvis" in it })
+        assertTrue("the name the owner will say most", VoiceTraining.SENTENCES.any { "Atlas" in it })
     }
 
     @Test
     fun `the intro is the plain one`() {
         assertEquals(
             "Jarvis only listens to your voice. Read these 12 short sentences so it learns what " +
-                "you sound like, and how you say \"hey Jarvis\". It takes about two minutes.",
+                "you sound like, and how you say \"Hey Atlas\". It takes about two minutes.",
             VoiceTraining.INTRO,
         )
         assertEquals(
@@ -267,13 +267,13 @@ class VoiceTrainingTest {
         assertNull(VoiceTraining.lastLine(null))
         assertNull(untrained.gate.training.last)
         assertEquals(
-            "Last training was approved: 12 samples saved. Its \"hey Jarvis\" check was built too.",
+            "Last training was approved: 12 samples saved. Its \"Hey Atlas\" check was built too.",
             VoiceTraining.lastLine(
                 VoiceTrainingLast(outcome = "enrolled", samples = 12, wakeCheck = "built from 4 \"hey Jarvis\" sentences"),
             ),
         )
         assertEquals(
-            "Last training was approved: 12 samples saved. Its \"hey Jarvis\" check was not " +
+            "Last training was approved: 12 samples saved. Its \"Hey Atlas\" check was not " +
                 "built (\"hey Jarvis\" was heard in 1 of the sentences; it needs at least 2).",
             VoiceTraining.lastLine(
                 VoiceTrainingLast(

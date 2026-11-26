@@ -16332,6 +16332,80 @@ def with_manner_note(msgs: list, manner: Optional[str], *,
 
 
 # --------------------------------------------------------------------------
+#   The typed answer's layout (jarvis_answer_style.py, 2026-11-25)
+# --------------------------------------------------------------------------
+#
+# The owner asked, 2026-11-25: "if atlas has a long response can it be put
+# with bullet points". The words and the three-way setting live in
+# jarvis_answer_style.py; this is the half that puts its note into a TYPED
+# turn's request - never a spoken one, whose SPOKEN_NOTE forbids lists
+# because everything it writes is read aloud.
+#
+# WHERE IT GOES: just before the newest user message, like every other
+# per-turn note, so keep_rules_first (which runs last) can never find it
+# first. On a conversation's FIRST question it adds nothing at all, and that
+# is deliberate: the request there is `[rules] + the question`, pinned byte
+# for byte by test_agent.py against the shape a first question has always
+# had (and the one the warm-up prefix is measured from). From the second
+# question on - a real exchange before it - the note sits after the rules and
+# before the question, which is where the model reads it as this answer's
+# instruction. `prose` returns no note at all (0 tokens), which is what makes
+# the setting fully reversible.
+#
+# NEVER THE CALLER'S `messages`: a new list is returned and `msgs` is never
+# changed, so the relay/cloud path - which sends the caller's own messages -
+# cannot see it. A backend without the module adds nothing, as before.
+
+def answer_style_message() -> Optional[dict]:
+    """The typed-layout note for the setting in force, or None.
+
+    None means "add nothing": `prose`, a backend without the module, or
+    anything at all going wrong. A cosmetic note is never the reason a turn
+    fails.
+    """
+    try:
+        import jarvis_answer_style
+        return jarvis_answer_style.note_message()
+    except Exception:
+        return None
+
+
+def _has_earlier_exchange(msgs: list, at: int) -> bool:
+    """Is there a finished exchange before the newest user message?
+
+    False on a conversation's first question (only the question itself, or
+    one app-supplied system note before it) - the turn whose request is pinned
+    byte for byte. True from the second question on, when an assistant turn
+    the model itself wrote already sits in the history the app sent.
+    """
+    return any(isinstance(m, dict) and m.get("role") == "assistant"
+               for m in msgs[:at])
+
+
+def with_style_note(msgs: list) -> list:
+    """A new list: `msgs` with the typed-layout note just before the newest
+    user message - never first (see with_spoken_note, whose placing this is).
+    `msgs` itself is not changed.
+
+    Two kinds of turn get nothing: a SPOKEN one (the caller does not ask for
+    this function there - with_spoken_note owns that lane), and a
+    conversation's FIRST question, which keeps the exact request it had
+    before this note existed (test_agent.py pins it). No note, no question,
+    or the `prose` setting returns a plain copy.
+    """
+    note = answer_style_message()
+    if note is None:
+        return list(msgs)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return list(msgs)
+    at = users[-1]
+    if not _has_earlier_exchange(msgs, at):
+        return list(msgs)
+    return list(msgs[:at]) + [note] + list(msgs[at:])
+
+
+# --------------------------------------------------------------------------
 #   Briefer during focus (feasibility I144, 2026-09-27)
 # --------------------------------------------------------------------------
 #
@@ -17429,8 +17503,8 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    antislop: str = "", grant_note: str = "",
                    tool_note: str = "") -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
-    their order - grant, manner, focus, next-time, spoken, live, cut-off,
-    crisis, each just before
+    their order - grant, manner, the typed layout, focus, next-time, spoken,
+    live, cut-off, crisis, each just before
     the newest user message - and then keep_rules_first, last, so the rules
     stay first. A new list; `msgs` is not changed. run_local_turn and the
     warm-up both call this."""
@@ -17465,6 +17539,14 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # passes its own mark on, so the final-step persona hint says the answer
     # is said aloud rather than pointed at, exactly as `live` is read below.
     out = with_manner_note(out, manner, crisis=crisis, spoken_live=live)
+    if not spoken:
+        # The typed answer's layout (jarvis_answer_style.py, 2026-11-25):
+        # bullet points when an answer has several parts. Never on a spoken
+        # turn - SPOKEN_NOTE forbids lists - and never on a conversation's
+        # first question, whose request is pinned byte for byte. Added with
+        # the notes that say HOW to answer, before the ones that are more
+        # urgent still (spoken, cut-off, crisis).
+        out = with_style_note(out)
     if focus:
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.
@@ -18631,6 +18713,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         manner_msg = manner_message(manner)
         if manner_msg is not None:
             room -= estimate_tokens(manner_msg)
+        # The typed answer's layout note (jarvis_answer_style.py, 2026-11-25),
+        # held out of the room like every other note so it can never push the
+        # window over - and read only on a typed turn, because a spoken one
+        # never carries it.
+        style_msg = None if watch.spoken else answer_style_message()
+        if style_msg is not None:
+            room -= estimate_tokens(style_msg)
         if focus_brief:
             room -= estimate_tokens(_FOCUS_MSG)
         if next_time["note"]:
