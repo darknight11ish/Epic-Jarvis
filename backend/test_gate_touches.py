@@ -1063,10 +1063,6 @@ def t_the_published_base_already_carries_this_patch():
     Skips honestly when git is missing."""
     import shutil
     import subprocess
-    source = (BASE / "jarvis_gate.py").read_text(encoding="utf-8")
-    check("the published base already carries this patch's change",
-          "hit = _touches_protected(*_target_blobs(action, detail, prompt))" in source
-          and "def _target_blobs(" in source)
     git = shutil.which("git")
     if not git:
         return skip("git is not installed, so the rehearsal cannot run here")

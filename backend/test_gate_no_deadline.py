@@ -301,14 +301,15 @@ def t_the_base_carries_both_changes():
     d, why = built()
     if d is None:
         return check("the published base carries both changes", False, why)
-    base_text = (BASE / "jarvis_gate.py").read_text(encoding="utf-8")
+    G = load_module("jarvis_gate", d)
     check("the published base itself carries the 2026-10-28 no-deadline change",
-          "waited_until" in base_text and "APPROVAL_NEVER_EXPIRES" in base_text
-          and "_wait_open" in base_text and "still_waiting" in base_text)
+          G.APPROVAL_NEVER_EXPIRES and G.timeout_for("pair_device") is None
+          and callable(getattr(G, "still_waiting", None))
+          and callable(getattr(G, "_wait_open", None))
+          and callable(getattr(G, "_expire_overdue", None)))
     check("...and no `backend/jarvis_gate.py` twin was invented for it",
           not (BACKEND / "jarvis_gate.py").exists())
 
-    G = load_module("jarvis_gate", d)
     after = Path(G.__file__).read_text(encoding="utf-8")
     # The EXACT def line, not a bare "def pending": the queue builder must be
     # the function this reads, and a helper whose name starts with the same
@@ -324,10 +325,11 @@ def t_the_base_carries_both_changes():
     for action in ROUTINE:
         check(f"{action}: its REQUEST keeps the shipped 900",
               G.timeout_for(action) == float(MINUTES_15), G.timeout_for(action))
-    check("the timer is the REQUEST's own seconds left, not a card deadline",
-          'float(_waited) - time.time()' in pending_body
-          and 'float(d.get("created"))' not in pending_body,
-          "pending() measures the field from the CARD's own created moment")
+    # The timer's formula (`waited_until`, never `created` + the action's
+    # window) is proved by BEHAVIOUR in backend/test_gate_card_timer.py -
+    # `t_the_timer_counts_from_the_request_moment_not_from_created`, whose
+    # caller-bounded card makes the two formulas disagree. Not pinned here as
+    # source text: that would be debt the source-pin ceiling does not allow.
     check("...while KEEPING #965's read-time sweep",
           "_expire_overdue(c)" in pending_body,
           "pending() no longer settles a card whose request has finished")

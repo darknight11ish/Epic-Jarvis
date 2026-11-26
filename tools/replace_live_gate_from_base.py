@@ -100,13 +100,12 @@ LIVE_GATE_SHA256 = (
 )
 
 #: The base that was diffed against it (232,674 bytes when the 2026-11-26
-#: replacement was measured; 254,865 bytes / 4,146 lines after the same day's
+#: replacement was measured; 254,627 bytes / 4,140 lines since the same day's
 #: second change put the 2026-10-28 request-bounding machinery and the
-#: 2026-10-30 card timer INTO the base, and its two now-historical comments were
-#: corrected). A moved base needs `--allow-new-base`, which says so in the
-#: output.
+#: 2026-10-30 card timer INTO the base). A moved base needs `--allow-new-base`,
+#: which says so in the output.
 BASE_GATE_SHA256 = (
-    "9d8bae0d0db25a3870b2accbafa18d2681832b995cb054002a7c2a4005a23a9d"
+    "be9f7469c1dfe833efc60f3e85bb6863215e6a7bbafe6fd5643ca80421d558a6"
 )
 
 #: The rows the replacement must prove are there after the write. They are

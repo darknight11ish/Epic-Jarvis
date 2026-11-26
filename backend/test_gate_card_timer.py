@@ -330,13 +330,11 @@ def t_the_base_carries_the_timer():
     d, why = built()
     if d is None:
         return check("the published base carries the timer", False, why)
-    base_text = (BASE / "jarvis_gate.py").read_text(encoding="utf-8")
+    # The base carries the block: the bite proof's own slice (below) finds its
+    # start and end markers and only then builds its "without" copy.
     check("the published base itself carries the 2026-10-30 timer block",
-          'd["expires_in"]' in base_text
-          and TIMER_BLOCK_START in base_text)
-    check("...together with the 2026-10-28 request-bounding model it sits on",
-          all(name in base_text for name in
-              ("waited_until", "_wait_open", "_expire_overdue", "still_waiting")))
+          built(timer=False)[0] is not None,
+          "the bite proof's slice could not find the block in the base")
 
     G = load_module("jarvis_gate", d)
     after = Path(G.__file__).read_text(encoding="utf-8")
@@ -349,7 +347,8 @@ def t_the_base_carries_the_timer():
     pending_body = after.split("def pending() -> list[dict]:")[1].split("def decide(")[0]
     check("the base module imports (it compiles)", True)
     check("the file this suite drives is the published base, byte for byte",
-          Path(G.__file__).read_bytes() == base_text.encode("utf-8"))
+          Path(G.__file__).read_bytes()
+          == (BASE / "jarvis_gate.py").read_bytes())
     check("pending() emits expires_in", 'd["expires_in"]' in pending_body)
     check("...from the row's own request end, not from `created` + a timeout",
           'float(_waited) - time.time()' in pending_body

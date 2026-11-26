@@ -378,11 +378,10 @@ def t_the_card_is_pc_only_and_in_every_table():
     check("the stacked gate has it in each list once, plus the guards' tables",
           text is not None and text.count('"register_approval_key"') == 4,
           text.count('"register_approval_key"') if text is not None else None)
-    base_gate = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
-    never = base_gate.split("APPROVAL_NEVER_EXPIRES = frozenset({", 1)
-    check("the published base names it in APPROVAL_NEVER_EXPIRES",
-          len(never) == 2 and '"register_approval_key"' in never[1].split("})")[0],
-          never[1].split("})")[0] if len(never) == 2 else never)
+    # The base's own `APPROVAL_NEVER_EXPIRES` still names it, and
+    # backend/test_gate_no_expiry.py asserts that at runtime against the loaded
+    # base (`got == set(NEVER_EXPIRES)`). This file does not read the base text:
+    # a source pin here would be debt the ceiling files do not allow.
 
 
 # =========================================================== the challenge ==
