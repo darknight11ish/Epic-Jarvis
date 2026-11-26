@@ -35091,9 +35091,11 @@ the real names are named, and a space for a hyphen ("notes edit" for
 `notes-edit`) is the one alias the catalogue answers already use. Neither
 direction is live in the running process, and every answer says so. No route,
 no Rust command, no Settings section and no gate row is added, and the six
-sentences cannot take the tool-switch lane's ("turn on the timer tool"), the
-install lane's ("how do I install a plugin") or the list lane's ("what plugins
-do you have") own sentences - each is pinned in both directions.
+sentences cannot take the tool-switch lane's ("turn on the timer tool", and the
+Tools page's own "turn on the plugin list tool" / "turn off the plugin switch
+tool", which stay `settings_tool`), the install lane's ("how do I install a
+plugin") or the list lane's ("what plugins do you have") own sentences - each is
+pinned in both directions.
 
 **Tests.** `backend/test_plugin_switch.py` (110 checks) drives the REAL
 `_one_call` with a fake gate and a throwaway plugin folder - no model, no

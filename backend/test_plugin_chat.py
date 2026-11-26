@@ -22,7 +22,12 @@ WHAT IS PROVED HERE, and each one is a different way the feature could lie:
      timer tool" is still `settings_tool`, "how do I install a plugin" is still
      `plugin_install`, "what plugins do you have" and "list my plugins" are
      still `plugin_list`, "is docker plugin installed?" is still `plugin_state`
-     - and the six new sentences are NOT those intents.
+     - and the six new sentences are NOT those intents. That includes the Tools
+     page's OWN two switches: "turn on the plugin list tool" is `settings_tool`
+     (`plugin_list`), not a plug-in called "list tool" - the collision the
+     measured CI caught on the first commit (claim C101 and the two
+     self-awareness rows), and "is the plugin list tool on" stays
+     `tool_switch_state`.
 
   3. THE NAME IS THE REAL REGISTRY'S. An unknown plugin is refused before any
      card, and the answer names both the words it looked for and the plugins
@@ -350,6 +355,30 @@ def t_the_other_lanes_keep_their_sentences():
           "(it keeps its own lane / the model, as before)",
           got is None or got.name != "plugin_on",
           None if got is None else (got.name, got.f))
+    # The Tools page's OWN two switches are the one collision measured CI
+    # caught (2026-11-26, claim C101 and the self-awareness rows): "turn on the
+    # plugin list tool" is the `plugin_list` TOOL switch, not a plug-in called
+    # "list tool" - and this fast path runs BEFORE the tool-switch lane, so the
+    # captured name must never end in the word "tool".
+    for text, tool in (("turn on the plugin list tool", "plugin_list"),
+                       ("turn off the plugin list tool", "plugin_list"),
+                       ("turn on the plugin switch tool", "plugin_switch"),
+                       ("turn off the plugin switch tool", "plugin_switch")):
+        got = Q.match(text)
+        check(f"{text!r} keeps the TOOL-switch lane",
+              got is not None and got.name == "settings_tool"
+              and got.f.get("tool") == tool,
+              None if got is None else (got.name, got.f))
+    for text, tool in (("is the plugin list tool on", "plugin_list"),
+                       ("is the plugin switch tool off", "plugin_switch")):
+        got = Q.match(text)
+        check(f"{text!r} keeps the tool-switch STATE lane",
+              got is not None and got.name == "tool_switch_state"
+              and got.f.get("tool") == tool,
+              None if got is None else (got.name, got.f))
+    check("... and the same word is still a real plug-in when it is one",
+          Q._plugin_name_is_one_plug_in("news")
+          and not Q._plugin_name_is_one_plug_in("list tool"))
     check("a sentence that merely mentions a plugin stays the model's",
           Q.match("remind me to turn on the plugin later") is None,
           Q.match("remind me to turn on the plugin later"))

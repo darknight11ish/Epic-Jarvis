@@ -10087,6 +10087,25 @@ def _plugin_spoken_name(words: str) -> str:
     return " ".join(str(words or "").strip().lower().split())
 
 
+def _plugin_name_is_one_plug_in(words: str) -> bool:
+    """Is this captured name a plug-in, or the TOOL-switch lane's sentence?
+
+    "turn on the plugin list tool" and "turn off the plugin switch tool" are
+    the Tools page's own two switches (`plugin_list` and `plugin_switch`), which
+    `_TOOL_SWITCH` / `find_tool_target` in `_settings_adjust` have answered since
+    2026-11-07 - and this lane runs BEFORE that one, so without this guard it
+    would swallow them as a plug-in called "list tool". A name that ENDS in the
+    word "tool" is that lane's: nothing in the live registry is called one (the
+    real names are read in `_plugin_lookup`), and the tool switch is the
+    established owner of the shape. Measured, not assumed: `test_live_settings_
+    parity.py` and `test_self_awareness.py` both failed on that collision before
+    this guard (2026-11-26).
+    """
+    name = _plugin_spoken_name(words)
+    return bool(name) and name not in ("tool", "tools") \
+        and not name.endswith((" tool", " tools"))
+
+
 def _plugin_switch_intent(s: str) -> Optional[Intent]:
     """The intent for one plug-in switch/read sentence, or None.
 
@@ -10097,17 +10116,17 @@ def _plugin_switch_intent(s: str) -> Optional[Intent]:
     """
     for pattern in _PLUGIN_ON_PATTERNS:
         m = pattern.fullmatch(s)
-        if m:
+        if m and _plugin_name_is_one_plug_in(m.group("name")):
             return Intent("plugin_on", {"name": _plugin_spoken_name(m.group("name"))})
     for pattern in _PLUGIN_OFF_PATTERNS:
         m = pattern.fullmatch(s)
-        if m:
+        if m and _plugin_name_is_one_plug_in(m.group("name")):
             return Intent("plugin_off", {"name": _plugin_spoken_name(m.group("name"))})
     if _PLUGIN_OFF_LIST.fullmatch(s):
         return Intent("plugin_off_list")
     for pattern in _PLUGIN_ON_STATE_PATTERNS:
         m = pattern.fullmatch(s)
-        if m:
+        if m and _plugin_name_is_one_plug_in(m.group("name")):
             return Intent("plugin_on_state",
                           {"name": _plugin_spoken_name(m.group("name"))})
     return None
