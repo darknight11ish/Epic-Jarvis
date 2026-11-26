@@ -1,23 +1,38 @@
 package com.jarvis.client
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The owner's ruling of 2026-11-21 (Gemini's ruling 7; recorded in
- * `decisions.d/2026-11-21-wake-copy-hey-jarvis.md`), verbatim:
+ * The owner's ruling of 2026-11-25 (recorded in
+ * `decisions.d/2026-11-25-hey-atlas-wake-model-ships.md`), which is the step
+ * the 2026-11-21 ruling left open, in the owner's own words:
  *
- *   "Standardize on `Hey Jarvis` everywhere until `Hey Atlas` actually ships.
- *    Drop `Hey Atlas is in training` from user-facing guides and in-app
- *    Settings copy - users shouldn't read about an unshipped model in daily UI.
- *    Keep the copy simple and factual: 'Wake phrase: Hey Jarvis.'"
+ *   "Once the custom Hey Atlas model passes local false-accept testing, swap
+ *    the string in one PR."
  *
- * This is the phone's half of the guard (the desktop's is
- * `jarvis-desktop/tests/wake-copy.mjs`): the two screens that SHOW the wake
- * phrase state it as that factual sentence, and no user-facing phone copy
- * promises a phrase that does not ship. KDoc and comments may explain the
- * history - the ruling allows that - so comments are stripped before scanning.
+ * The model passed and it ships with the PC (`backend/wakeword/hey_atlas.onnx`),
+ * and **since 2026-11-25 the phone carries the same file**:
+ * `assets/wakeword/hey_atlas.onnx`, named by `OrtWakeModels.WAKE_FILE` and
+ * scored by the phone's own spotter. So the copy says "Hey Atlas" and this
+ * suite REQUIRES it, on both surfaces it can read: the two plates that state
+ * the phrase (Settings' `VoiceSwitchesPlate` and Platform checks'
+ * `ReadinessScreen`) - the same two sentences the desktop's
+ * `jarvis-desktop/tests/wake-copy.mjs` checks on its side.
+ *
+ * What it still forbids is the wording that would still be false: any claim
+ * that a wake phrase is "in training" or "being trained", the old factual
+ * sentence coming back, and any sentence saying THIS PHONE hears "hey jarvis"
+ * now that its own model hears "Atlas".
+ *
+ * KDoc and comments may explain the history - the ruling allows that - so
+ * comments are stripped before scanning. One file is scanned for the forbidden
+ * wording but never held to the phrase: `assets/features.json`, which is
+ * generated from `features/features.json` and must stay byte-identical to it
+ * (`tools/check_feature_list.py`), so renaming the wake-word row is a change to
+ * that source, not to the phone's copy.
  */
 class WakePhraseCopyTest {
 
@@ -36,44 +51,142 @@ class WakePhraseCopyTest {
 
     private fun xmlText(raw: String): String = raw.replace(Regex("<!--[\\s\\S]*?-->"), "")
 
+    /**
+     * The ONE constant every phone plate binds to, read from its declaration
+     * beside `WAKE_FILE` (`OrtWakeModels.WAKE_PHRASE`). The tests below use
+     * the value, so a plate that types the words again cannot pass by
+     * accident: it would have to type the constant's own value, and the
+     * `contains("OrtWakeModels.WAKE_PHRASE")` checks would still fail.
+     */
+    private fun wakePhrase(): String {
+        val models = code(text("voice/OrtWakeModels.kt"))
+        val m = Regex("WAKE_PHRASE\\s*=\\s*\"([^\"]+)\"").find(models)
+        assertTrue(
+            "OrtWakeModels.WAKE_PHRASE is gone - the plates have no phrase to bind to",
+            m != null,
+        )
+        return m!!.groupValues[1]
+    }
+
     /* ── The sentence where the phrase is shown ─────────────────────────── */
 
     @Test
-    fun `Settings and Platform checks state the wake phrase as the ruling's factual sentence`() {
+    fun `Settings and Platform checks state the wake phrase the phone's model hears`() {
+        val phrase = wakePhrase()
+        assertEquals("WAKE_PHRASE no longer names the phrase the shipped head answers to",
+            "Hey Atlas", phrase)
+        for ((name, rel) in listOf(
+            "Settings" to "ui/screens/VoiceSwitchesPlate.kt",
+            "Platform checks" to "ui/screens/ReadinessScreen.kt",
+        )) {
+            val shown = code(text(rel))
+            assertTrue(
+                "$name no longer binds its wake-phrase sentence to OrtWakeModels.WAKE_PHRASE",
+                shown.contains("OrtWakeModels.WAKE_PHRASE"),
+            )
+            assertFalse(
+                "$name types the phrase again instead of binding it",
+                shown.contains("\"Wake phrase: $phrase.\""),
+            )
+            assertTrue("$name no longer says \"Wake phrase: ...\"", shown.contains("Wake phrase: "))
+        }
         val settings = code(text("ui/screens/VoiceSwitchesPlate.kt"))
         val checks = code(text("ui/screens/ReadinessScreen.kt"))
-        assertTrue(
-            "Settings no longer says \"Wake phrase: Hey Jarvis.\"",
-            settings.contains("\"Wake phrase: Hey Jarvis.\""),
-        )
-        assertTrue(
-            "Platform checks no longer says \"Wake phrase: Hey Jarvis.\"",
-            checks.contains("\"Wake phrase: Hey Jarvis.\""),
-        )
         assertFalse("Settings still carries the old wake-word title", settings.contains("Wake word - "))
         assertFalse("Platform checks still carries the old wake-word title", checks.contains("Wake word - "))
     }
 
-    /* ── Nothing on the phone promises an unshipped phrase ──────────────── */
+    /* ── What THIS PHONE's own listener hears ───────────────────────────── */
+
+    /**
+     * The phone's own copy promised "Hey Atlas" while its assets carried only
+     * openWakeWord's `hey_jarvis` model - the one-sided gap of 2026-11-25.
+     * Both halves have moved together now, so the model the copy promises and
+     * the sentences that describe this phone's listening are held to each
+     * other: if either drifts back, this fails.
+     */
+    @Test
+    fun `this phone's own listening copy names the phrase its shipped model hears`() {
+        val models = code(text("voice/OrtWakeModels.kt"))
+        assertTrue(
+            "OrtWakeModels.WAKE_FILE no longer loads the atlas head - the copy below would be false",
+            models.contains("WAKE_FILE = \"hey_atlas.onnx\""),
+        )
+        val phrase = wakePhrase()
+        // The constant and the file must name the SAME head: "Hey Atlas" ->
+        // "hey_atlas" -> "hey_atlas.onnx". If one moves without the other,
+        // the phone's sentences and its own spotter disagree.
+        val stem = Regex("WAKE_FILE\\s*=\\s*\"([^\"]+)\\.onnx\"").find(models)
+        assertTrue("OrtWakeModels.WAKE_FILE is gone", stem != null)
+        assertEquals(
+            "WAKE_FILE and WAKE_PHRASE name different heads",
+            stem!!.groupValues[1], phrase.lowercase().replace(" ", "_"),
+        )
+        val settings = code(text("ui/screens/VoiceSwitchesPlate.kt"))
+        assertTrue(
+            "Settings' phone line no longer binds to OrtWakeModels.WAKE_PHRASE",
+            settings.contains("OrtWakeModels.WAKE_PHRASE"),
+        )
+        assertTrue(
+            "Settings' phone line no longer says the phone waits until it hears the phrase",
+            settings.contains("the phone until it hears"),
+        )
+        assertTrue(
+            "Settings' phone line no longer says it heard the phrase",
+            settings.contains("Heard \\\""),
+        )
+        val resume = code(text("data/WakeResume.kt"))
+        assertTrue(
+            "the restart notice no longer binds to OrtWakeModels.WAKE_PHRASE",
+            resume.contains("OrtWakeModels.WAKE_PHRASE"),
+        )
+        assertFalse(
+            "the restart notice types the phrase again instead of binding it",
+            resume.contains("\"$phrase\""),
+        )
+        val strings = xmlText(SourceFile.read("jarvis-client/app/src/main/res/values/strings.xml"))
+        for (name in listOf("channel_wake_name", "channel_wake_desc", "wake_listening_title",
+                            "wake_listening_text", "wake_heard_text")) {
+            // A string may wrap over several source lines, so read the whole
+            // <string name="..."> ... </string> block, not one line of it.
+            val at = strings.indexOf("<string name=\"$name\">")
+            assertTrue("$name is gone from strings.xml", at >= 0)
+            val block = strings.substring(at).substringBefore("</string>")
+            assertTrue(
+                "$name no longer names \"$phrase\": $block",
+                block.contains("\\\"$phrase\\\""),
+            )
+        }
+    }
+
+    /* ── Nothing on the phone promises a phrase that does not ship ──────── */
 
     private data class Rule(val re: Regex, val why: String)
 
     private val forbidden = listOf(
         Rule(
-            Regex("(?i)hey atlas"),
-            "names a wake phrase the shipped spotter cannot hear (the ruling says Hey Jarvis until the model ships)",
-        ),
-        Rule(
             Regex("(?i)\\bin training\\b"),
-            "tells the owner a model is in training - the ruling drops that from user-facing copy",
+            "tells the owner a model is in training - nothing is: the model shipped on 2026-11-25",
         ),
         Rule(
             Regex("(?i)\\bbeing trained\\b"),
-            "promises a wake phrase that is still being trained",
+            "promises a wake phrase that is still being trained - it shipped on 2026-11-25",
         ),
         Rule(
-            Regex("(?i)spoken name is atlas"),
-            "promises an unshipped spoken name",
+            Regex("(?i)wake phrase:\\s*hey jarvis"),
+            "states the old phrase as the factual sentence; it is \"Wake phrase: Hey Atlas.\" now",
+        ),
+        Rule(
+            Regex("(?i)hears\\s*\\\\?\"hey jarvis"),
+            "says THIS PHONE hears \"hey jarvis\"; its own model hears \"Hey Atlas\"",
+        ),
+        Rule(
+            Regex("(?i)heard\\s*\\\\?\"hey jarvis"),
+            "says THIS PHONE heard \"hey jarvis\"; its own model hears \"Hey Atlas\"",
+        ),
+        Rule(
+            Regex("(?i)listening (?:for|to)\\s*\\\\?\"hey jarvis"),
+            "says THIS PHONE listens for \"hey jarvis\"; its own model hears \"Hey Atlas\"",
         ),
     )
 
@@ -106,6 +219,7 @@ class WakePhraseCopyTest {
                 }
             }
         }
-        assertTrue("the ruling is broken in user-facing copy:\n      ${problems.joinToString("\n      ")}", problems.isEmpty())
+        assertEquals("the ruling is broken in user-facing copy:\n      ${problems.joinToString("\n      ")}",
+            emptyList<String>(), problems)
     }
 }

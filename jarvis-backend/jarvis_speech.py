@@ -1033,16 +1033,21 @@ def _write_wake(enabled: bool) -> Optional[str]:
 
 
 def describe_wake_on() -> str:
-    """The card. Every word from here; what refusing costs is on it."""
+    """The card. Every word from here; what refusing costs is on it.
+
+    The phrase comes from the spotter (`jarvis_wakeword.phrase_title()`), so
+    the card asks about the word this PC is actually listening for - since
+    2026-11-25 that can be "hey atlas" as well as "hey jarvis"."""
+    said = jarvis_wakeword.phrase_title().lower()
     return (
-        "Turn on \"hey Jarvis\"?\n\n"
-        "If you say yes: the PC will accept recordings that start with \"hey "
-        "Jarvis\". The desktop app and the phone each still need their own "
+        f"Turn on \"{said}\"?\n\n"
+        f"If you say yes: the PC will accept recordings that start with \"{said}\". "
+        "The desktop app and the phone each still need their own "
         "listening switched on before anything listens - that stays off until "
         "you turn it on there, and the phone shows a notification the whole "
         "time it listens.\n\n"
         "The wake word is heard on the device itself. No sound is sent "
-        "anywhere until it hears \"hey Jarvis\", and then only to this PC, "
+        f"anywhere until it hears \"{said}\", and then only to this PC, "
         "where your voice is checked before any words are written down.\n\n"
         "If you did not just ask for this, say no.\n\n"
         "If you say no: nothing changes. Push-to-talk keeps working."
@@ -1097,7 +1102,8 @@ def _wake_decide(pid: str, gate: Callable) -> dict:
     """Raise the card, wait for the answer, act on it. Blocks - runs on its
     own thread. Only tier "ask" + outcome "approved" turns the wake word on."""
     text = describe_wake_on()
-    detail = {"text": text, "what": "turn on the \"hey Jarvis\" wake word",
+    detail = {"text": text,
+              "what": f'turn on the "{jarvis_wakeword.phrase_title().lower()}" wake word',
               "setting": "[voice] wake_word_enabled", "to": True}
     try:
         v = gate(WAKE_ACTION, detail, text)
@@ -1424,7 +1430,7 @@ def _close_question() -> None:
 def _wake_spotter_state() -> dict:
     if jarvis_wakeword is None:
         return {"available": False, "engine": "openWakeWord (ONNX Runtime)",
-                "phrase": str(_cfg("wake_phrase", "hey_jarvis")),
+                "phrase": str(_cfg("wake_phrase", "hey_atlas")),
                 "threshold": float(_cfg("wake_threshold", 0.5) or 0.5),
                 "why": "jarvis_wakeword.py is not in the backend folder",
                 "model_dir": ""}
@@ -1745,7 +1751,7 @@ def status() -> dict:
         "tts_engine": tts_engine_name,
         "tts_available": tts_ok,
         "wake_word_enabled": wake_on,
-        "wake_phrase": _cfg("wake_phrase", "hey_jarvis"),
+        "wake_phrase": _cfg("wake_phrase", "hey_atlas"),
         # The route's own comment explains why: a client that transcribed
         # locally would send text, and the owner-voice gate would have
         # nothing left to check.
@@ -1795,21 +1801,22 @@ def status() -> dict:
                 "chosen": vad_pick["chosen"], "note": vad_pick["note"]},
         "wake": {
             **wake,
-            "phrase": spotter.get("phrase", "hey_jarvis"),
+            "phrase": spotter.get("phrase", "hey_atlas"),
             "threshold": float(spotter.get("threshold", 0.5)),
             "awake_seconds": _awake_seconds(),
-            # Whether THIS PC can hear "hey Jarvis" in a clip (the desktop
+            # Whether THIS PC can hear its wake phrase in a clip (the desktop
             # app's listening needs it). The phone spots on its own.
             "spotter": {"available": bool(spotter.get("available")),
                         "engine": str(spotter.get("engine", "")),
                         "why": str(spotter.get("why", ""))},
-            # The owner's own "hey Jarvis" check (jarvis_wakeword's
-            # verifier), built on the PC when "Train my voice" is approved.
+            # The owner's own wake-phrase check (jarvis_wakeword's verifier),
+            # built on the PC when "Train my voice" is approved.
             "verifier": _verifier_state(),
             # "Stop" while Jarvis speaks (jarvis_wakeword.spot_stop).
             "stop_word": _stop_state(),
-            # The second "hey Jarvis" detector (jarvis_microwake.py) and the
-            # owner's "both must agree" setting. Section 80.
+            # The second detector (jarvis_microwake.py, microWakeWord's own
+            # "hey Jarvis" model) and the owner's "both must agree" setting.
+            # Section 80.
             "confirm": _wake_confirm_state(),
         },
         "audio_in": dict(AUDIO_IN),
@@ -1890,13 +1897,49 @@ def _wake_confirm_wanted() -> bool:
         return False
 
 
+#: The ONE phrase microWakeWord's own model hears (jarvis_microwake.MODEL_FILE
+#: is `hey_jarvis.tflite`; the package ships no other head).
+SECOND_DETECTOR_PHRASE = "hey_jarvis"
+
+
+def _second_detector_phrase_ok() -> bool:
+    """Can the second detector hear the phrase THIS PC is set to?
+
+    microWakeWord carries one model, for "hey Jarvis". On any other phrase its
+    verdict can only ever be "did not hear it", so asking it to agree would
+    make every wake fail and nothing would wake at all. It is reported as
+    unavailable instead, and the first detector decides alone - the same shape
+    as a PC that does not have the package (2026-11-25, when `hey_atlas`
+    became the shipped phrase). True when there is no jarvis_wakeword.py to
+    ask: that path already answers "cannot run" for its own reason."""
+    if jarvis_wakeword is None:
+        return True
+    try:
+        return str(jarvis_wakeword.phrase()) == SECOND_DETECTOR_PHRASE
+    except Exception:
+        return True
+
+
+def _wake_words() -> str:
+    """The wake phrase in the owner's words ("Hey Atlas"), for the sentences
+    this PC writes when a clip is refused. The phrase is a per-PC setting
+    whose shipped value is `hey_atlas` (2026-11-25), so a fixed name would
+    tell a fresh PC's owner the wrong words."""
+    if jarvis_wakeword is None:
+        return "Hey Atlas"
+    try:
+        return str(jarvis_wakeword.phrase_title())
+    except Exception:
+        return "Hey Atlas"
+
+
 def _wake_confirm(samples, sample_rate: int, first_at: float) -> str:
     """"off" (the setting is not on), "agreed", "disagreed", or
     "unavailable" (on, but the second detector cannot run here - the first
     one then decides alone, as before, and status() says so)."""
     if not _wake_confirm_wanted():
         return "off"
-    if jarvis_microwake is None:
+    if jarvis_microwake is None or not _second_detector_phrase_ok():
         return "unavailable"
     try:
         verdict, _spot = jarvis_microwake.confirm(samples, sample_rate, first_at)
@@ -1917,6 +1960,18 @@ def _wake_confirm_state() -> dict:
             st = jarvis_microwake.status()
         except Exception as exc:
             st = {"available": False, "why": f"it could not be asked ({type(exc).__name__})"}
+    if st.get("available") and not _second_detector_phrase_ok():
+        # The package is installed, but its ONE model is for another phrase:
+        # it could never agree, so it is not usable on this PC until the wake
+        # phrase is "hey_jarvis" (2026-11-25). Said here, and `_wake_confirm`
+        # treats it as unavailable so a wake is never silently dropped.
+        try:
+            heard = str(jarvis_wakeword.phrase_title())
+        except Exception:
+            heard = "Hey Atlas"
+        st = {"available": False,
+              "why": ("its own model only hears \"Hey Jarvis\", and this PC listens for "
+                      f"\"{heard}\" - set [voice] wake_phrase = \"hey_jarvis\" to use it")}
     active = wanted and bool(st.get("available"))
     if active:
         note = ""
@@ -3258,12 +3313,13 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                 spot = jarvis_wakeword.spot(samples, sample_rate)
             if not spot.ran:
                 return Heard(False, source=source, available=False, seconds=seconds,
-                             reason="the PC cannot listen for \"hey Jarvis\": " + spot.why)
+                             reason=(f"the PC cannot listen for \"{_wake_words()}\": "
+                                     + spot.why))
             if not spot.heard:
                 # Not for Jarvis. Not checked, not transcribed, not kept.
                 return Heard(False, source=source, seconds=seconds,
                              wake_score=spot.score,
-                             reason="no \"hey Jarvis\" in that recording")
+                             reason=f"no \"{_wake_words()}\" in that recording")
             # 3a (2026-09-28, "Better voice"). With the owner's "both
             # detectors" setting, the second, differently-built detector
             # must have heard it too, within a second of the first. It can
@@ -3276,7 +3332,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                 return Heard(False, source=source, seconds=seconds,
                              wake_score=spot.score,
                              reason=("the second \"hey Jarvis\" detector did not hear it, "
-                                     "so it was not taken as \"hey Jarvis\""))
+                                     f"so it was not taken as \"{_wake_words()}\""))
         steps["wake"] = (time.monotonic() - t) * 1000.0
 
     # Jarvis Live: "stop" in a short clip silences Jarvis, exactly as it
@@ -3710,7 +3766,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     found, rest = jarvis_wakeword.split_wake(text)
     if not found:
         return Heard(True, text="", engine=engine,
-                     reason="that did not start with \"hey Jarvis\", so it was ignored",
+                     reason=(f"that did not start with "
+                             f"\"{jarvis_wakeword.phrase_title().lower()}\", so it was ignored"),
                      **common)
     if not rest:
         # "Hey Jarvis." on its own, heard by two devices: only the first

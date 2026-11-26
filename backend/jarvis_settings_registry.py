@@ -1758,6 +1758,33 @@ def set_manner(manner: str, *, peer=None, local=None) -> Outcome:
     return Outcome(True, f"Done - Jarvis now answers {word}.")
 
 
+# The typed answer's layout (jarvis_answer_style.py, 2026-11-25): the same
+# cardless dial as the manner, changed from Settings or through chat. The
+# three labels and the change sentence are that module's OWN words, so this
+# row, the Settings picker and the chat sentence cannot drift.
+def _answer_style_choices() -> dict:
+    """The three styles by their labels first (so the answer says the label),
+    then the short ids and the words an owner actually types."""
+    try:
+        import jarvis_answer_style as AS
+    except Exception:
+        return {}
+    out = {AS.LABEL[s]: s for s in AS.STYLES}
+    out.update({"auto": AS.AUTO, "bullets": AS.BULLETS, "prose": AS.PROSE,
+                "bullet points": AS.BULLETS, "bullets when it helps": AS.AUTO,
+                "plain paragraphs": AS.PROSE})
+    return out
+
+
+def set_answer_style(style: str, *, peer=None, local=None) -> Outcome:
+    try:
+        import jarvis_answer_style as AS
+    except Exception:
+        return _missing("\"how a long answer is laid out\"")
+    ok, _now, said = AS.handle_set({"style": style})
+    return Outcome(bool(ok), said)
+
+
 # --------------------------------------------------------------------------
 #   The desktop Settings page's own switch rows (2026-10-09): every
 #   `<label class="toggle">` in jarvis-desktop/src/settings.html, in the
@@ -4063,6 +4090,19 @@ CHOICE_SETTINGS: tuple = (
         "manner", {"during": "during", "after": "after"}, set_antislop_mode,
         "whether the Anti-Slop filter works as it writes (during) or audits "
         "first (after)"),
+    # The typed answer's layout (2026-11-25, the owner's "if atlas has a long
+    # response can it be put with bullet points", and "adjust it ... through
+    # chat"): ONE row beside the manner/personality pair, its three choices and
+    # its change sentence read from jarvis_answer_style.py itself. Cardless
+    # either way - it changes only how a TYPED answer is laid out, never what
+    # Jarvis does, asks or remembers, and never a spoken answer.
+    ChoiceSetting(
+        "answer_style",
+        ("the answer layout", "the answer style", "how answers are laid out",
+         "the layout"),
+        "manner", _answer_style_choices, set_answer_style,
+        "how a typed answer is laid out (bullet points when it helps, always "
+        "bullet points, or plain paragraphs)"),
     # THE FINGERPRINT ON SMALL APPROVALS (the owner's request of 2026-11-01).
     # One setting, two answers, and the SAME function the approval itself reads
     # (jarvis_owner_check.set_approvals_mode / approvals_mode) - so "ask me for
@@ -4702,6 +4742,11 @@ def _choice_now(setting: "ChoiceSetting") -> Optional[str]:
             import jarvis_antislop as AS
             mode = str((AS.get_state() or {}).get("mode") or "")
             return _option_words(setting, mode) if mode else None
+        if key == "answer_style":
+            # The module's own current(), in the row's own label (the first
+            # key its list maps to the value), never a second wording here.
+            import jarvis_answer_style as AS
+            return _option_words(setting, AS.current())
         if key == "small_approvals":
             # The SAME function the approval itself reads. The mode is turned
             # into the row's own two words: asking for the small cards too

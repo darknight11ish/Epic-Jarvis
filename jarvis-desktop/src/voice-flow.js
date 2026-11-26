@@ -34,7 +34,7 @@
  *
  * "I HEARD YOU." A tiny two-note sound, made here from numbers (no file, no
  * new dependency), played when the owner's turn has been cut: on letting go
- * of the talk button, and when the PC says "hey Jarvis" was heard. The phone
+ * of the talk button, and when the PC says "hey Atlas" was heard. The phone
  * makes the same sound from the same numbers. It has its own switch, "Play a
  * short sound when I finish speaking", OFF by default (the owner's choice,
  * 2026-09-25), beside "One moment"

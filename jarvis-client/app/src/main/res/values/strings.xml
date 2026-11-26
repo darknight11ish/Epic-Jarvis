@@ -92,7 +92,7 @@
     <string name="widget_initial_headline">Atlas</string>
     <string name="widget_initial_words">No update yet — open Atlas to connect.</string>
 
-    <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
+    <!-- "Hey Atlas" on this phone (service/WakeWordService.kt). -->
     <!-- The three Quick Settings tile slots, as Android's tile editor lists
          them (data/QuickTiles.kt). Android's editor reads the MANIFEST, and
          the manifest cannot know which of the five actions the owner has given
@@ -107,13 +107,13 @@
     <string name="tile_slot_1">Tap to choose</string>
     <string name="tile_slot_2">Tap to choose</string>
     <string name="tile_slot_3">Tap to choose</string>
-    <string name="channel_wake_name">Listening for \"hey Jarvis\"</string>
+    <string name="channel_wake_name">Listening for \"Hey Atlas\"</string>
     <string name="channel_wake_desc">Shown for as long as this phone listens for
-        \"hey Jarvis\". The microphone is open the whole time.</string>
-    <string name="wake_listening_title">Listening for \"hey Jarvis\"</string>
+        \"Hey Atlas\". The microphone is open the whole time.</string>
+    <string name="wake_listening_title">Listening for \"Hey Atlas\"</string>
     <string name="wake_listening_text">The microphone is open. Nothing leaves this phone
-        until it hears \"hey Jarvis\" - then only what you say next goes to your PC.</string>
-    <string name="wake_heard_text">Heard \"hey Jarvis\" - listening to what you say next.</string>
+        until it hears \"Hey Atlas\" - then only what you say next goes to your PC.</string>
+    <string name="wake_heard_text">Heard \"Hey Atlas\" - listening to what you say next.</string>
     <string name="wake_stop">Stop listening</string>
 
     <string name="widget_quicklink_name">Atlas quick link</string>

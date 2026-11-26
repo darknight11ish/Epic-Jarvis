@@ -389,8 +389,13 @@ class VoiceStrictTest {
             "jarvis-desktop/src/voice-training.js not found above ${System.getProperty("user.dir")}"
         }.readText()
         val list = requireNotNull(
-            Regex("""TEST_SENTENCES\s*=\s*Object\.freeze\(\[(.*?)\]\)""", RegexOption.DOT_MATCHES_ALL).find(js),
-        ) { "TEST_SENTENCES not found in voice-training.js" }.groupValues[1]
+            // Since 2026-11-25 the desktop keeps the phrase as a `{p}` slot
+            // (the copy follows the PC's reported phrase); this test compares
+            // the phone's shipped phrase to the desktop's shipped one, so fill
+            // the slot with that phrase before reading the sentences.
+            Regex("""TEST_SENTENCE_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\)""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "TEST_SENTENCE_TEMPLATES not found in voice-training.js" }.groupValues[1]
+            .replace("{p}", "Hey Atlas")
         val desktop = Regex(""""((?:[^"\\]|\\.)*)"""").findAll(list).map { it.groupValues[1] }.toList()
         assertEquals(20, desktop.size)
         assertEquals(desktop, StrictVoice.MEASURE_SENTENCES)
@@ -731,9 +736,9 @@ class VoiceStrictTest {
         assertTrue(block, block.contains("choices = StrictVoice.SENSITIVE_MEMORY"))
     }
 
-    // ------------------------------------------ hands-free ("Hey Jarvis") --
+    // ------------------------------------------ hands-free ("Hey Atlas") --
     //
-    // The owner's decision, 2026-09-24: a question started with "Hey Jarvis"
+    // The owner's decision, 2026-09-24: a question started with "Hey Atlas"
     // is as trusted as the talk button by default, with a fifth setting to
     // make it stricter. The fixture carries it (the backend's own statuses).
 
@@ -816,7 +821,7 @@ class VoiceStrictTest {
 
     @Test
     fun `the hands-free plate uses the agreed words, the same as the desktop's`() {
-        assertEquals("Hands-free (\"Hey Jarvis\")", StrictVoice.HANDS_FREE_TITLE)
+        assertEquals("Hands-free (\"Hey Atlas\")", StrictVoice.HANDS_FREE_TITLE)
         assertEquals(
             listOf("Same as the talk button (default)", "Only trust the talk button"),
             StrictVoice.HANDS_FREE.map { it.label },
@@ -826,11 +831,11 @@ class VoiceStrictTest {
             StrictVoice.HANDS_FREE.map { it.value },
         )
         assertEquals(
-            "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+            "A question started with \"Hey Atlas\" is trusted like one where you press the button.",
             StrictVoice.HANDS_FREE[0].detail,
         )
         assertEquals(
-            "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private " +
+            "Hey Atlas still works, but it cannot teach Jarvis facts without a card, and memory or private " +
                 "answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
             StrictVoice.HANDS_FREE[1].detail,
         )
@@ -857,15 +862,15 @@ class VoiceStrictTest {
             java.io.File(dir, "jarvis-desktop/src/settings.html").takeIf { it.isFile }?.let { html = it }
             dir = dir.parentFile
         }
-        val js = requireNotNull(found).readText().replace("\\\"", "\"")
+        val js = requireNotNull(found).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
         val block = requireNotNull(
-            Regex("""HANDS_FREE\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
-        ) { "HANDS_FREE not found in voice-training.js" }.groupValues[1]
+            Regex("""HANDS_FREE_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "HANDS_FREE_TEMPLATES not found in voice-training.js" }.groupValues[1]
         for (c in StrictVoice.HANDS_FREE) {
             assertTrue(c.detail, block.contains(c.detail))
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)")}\""))
         }
-        assertTrue(requireNotNull(html).readText().contains(">Hands-free (\"Hey Jarvis\")<"))
+        assertTrue(requireNotNull(html).readText().contains(">Hands-free (\"Hey Atlas\")<"))
     }
 
     @Test
@@ -886,10 +891,10 @@ class VoiceStrictTest {
         assertTrue(block, block.contains("choices = StrictVoice.HANDS_FREE"))
     }
 
-    // ------------------- answers about your screen or the camera after "Hey Jarvis" --
+    // ------------------- answers about your screen or the camera after "Hey Atlas" --
     //
     // The owner's decision, 2026-09-28: under "Only trust the talk button",
-    // an answer about the screen to a "Hey Jarvis" question stays on screen,
+    // an answer about the screen to a "Hey Atlas" question stays on screen,
     // with a sixth setting to allow reading it aloud even then. The fixture
     // carries it (the backend's own statuses and answers).
 
@@ -904,7 +909,7 @@ class VoiceStrictTest {
     }
 
     @Test
-    fun `screen answers after hey Jarvis - read from the PC's real status, and only when the PC reports it`() {
+    fun `screen answers after hey Atlas - read from the PC's real status, and only when the PC reports it`() {
         assertEquals(VoiceStrict.SCREEN_ON_SCREEN, view("trained_three_rounds").handsFreeScreen)
         assertEquals(VoiceStrict.SCREEN_ON_SCREEN, view("hands_free_button_only").handsFreeScreen)
         assertEquals(VoiceStrict.SCREEN_ON_SCREEN, view("screen_aloud_denied").handsFreeScreen)
@@ -921,7 +926,7 @@ class VoiceStrictTest {
     }
 
     @Test
-    fun `screen answers after hey Jarvis - keep on screen is at once, read aloud asks and is held on a stale link`() {
+    fun `screen answers after hey Atlas - keep on screen is at once, read aloud asks and is held on a stale link`() {
         val onScreen = view("hands_free_button_only")
         val aloud = view("screen_aloud")
         assertTrue(StrictVoice.isCurrent(VoiceStrict.HANDS_FREE_SCREEN, VoiceStrict.SCREEN_ON_SCREEN, onScreen))
@@ -972,8 +977,8 @@ class VoiceStrictTest {
     }
 
     @Test
-    fun `screen answers after hey Jarvis - the agreed words, the same as the desktop's, and the note`() {
-        assertEquals("Answers about your screen or the camera after \"Hey Jarvis\"", StrictVoice.HANDS_FREE_SCREEN_TITLE)
+    fun `screen answers after hey Atlas - the agreed words, the same as the desktop's, and the note`() {
+        assertEquals("Answers about your screen or the camera after \"Hey Atlas\"", StrictVoice.HANDS_FREE_SCREEN_TITLE)
         assertEquals(listOf("Keep on screen (recommended)", "Read aloud"), StrictVoice.HANDS_FREE_SCREEN.map { it.label })
         assertEquals(
             listOf(VoiceStrict.SCREEN_ON_SCREEN, VoiceStrict.SCREEN_ALOUD),
@@ -981,7 +986,7 @@ class VoiceStrictTest {
         )
         assertEquals(
             "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with " +
-                "\"Hey Jarvis\" gets a written answer only.",
+                "\"Hey Atlas\" gets a written answer only.",
             StrictVoice.HANDS_FREE_SCREEN[0].detail,
         )
         assertEquals(
@@ -1011,16 +1016,16 @@ class VoiceStrictTest {
             java.io.File(dir, "jarvis-desktop/src/settings.html").takeIf { it.isFile }?.let { html = it }
             dir = dir.parentFile
         }
-        val js = requireNotNull(found).readText().replace("\\\"", "\"")
+        val js = requireNotNull(found).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
         val block = requireNotNull(
-            Regex("""HANDS_FREE_SCREEN\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
-        ) { "HANDS_FREE_SCREEN not found in voice-training.js" }.groupValues[1]
+            Regex("""HANDS_FREE_SCREEN_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "HANDS_FREE_SCREEN_TEMPLATES not found in voice-training.js" }.groupValues[1]
         for (c in StrictVoice.HANDS_FREE_SCREEN) {
             assertTrue(c.detail, block.contains(c.detail))
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (recommended)")}\""))
         }
         assertTrue(js.contains(StrictVoice.SCREEN_ONLY_WHEN_STRICT))
-        assertTrue(requireNotNull(html).readText().contains(">Answers about your screen or the camera after \"Hey Jarvis\"<"))
+        assertTrue(requireNotNull(html).readText().contains(">Answers about your screen or the camera after \"Hey Atlas\"<"))
     }
 
     @Test
@@ -1046,7 +1051,7 @@ class VoiceStrictTest {
     // The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "Only
     // trust the talk button", Jarvis Live is trusted like the talk button by
     // default however it started; "Only when I start it with the button" and
-    // "Be as careful as with Hey Jarvis" are stricter and immediate; each
+    // "Be as careful as with Hey Atlas" are stricter and immediate; each
     // looser choice is the voice card. The fixture carries the PC's real
     // statuses and answers.
 
@@ -1095,7 +1100,7 @@ class VoiceStrictTest {
     @Test
     fun `Jarvis Live - the same words as the desktop's, and the plate only when the PC reports it`() {
         assertEquals(
-            listOf("Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Jarvis\""),
+            listOf("Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Atlas\""),
             StrictVoice.HANDS_FREE_LIVE.map { it.label },
         )
         assertEquals(VoiceStrict.LIVE_ORDER, StrictVoice.HANDS_FREE_LIVE.map { it.value })
@@ -1116,10 +1121,10 @@ class VoiceStrictTest {
                 .takeIf { it.isFile }?.let { screen = it }
             dir = dir.parentFile
         }
-        val text = requireNotNull(js).readText().replace("\\\"", "\"")
+        val text = requireNotNull(js).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
         val block = requireNotNull(
-            Regex("""HANDS_FREE_LIVE\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(text),
-        ) { "HANDS_FREE_LIVE not found in voice-training.js" }.groupValues[1]
+            Regex("""HANDS_FREE_LIVE_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(text),
+        ) { "HANDS_FREE_LIVE_TEMPLATES not found in voice-training.js" }.groupValues[1]
         for (c in StrictVoice.HANDS_FREE_LIVE) {
             assertTrue(c.detail, block.contains(c.detail))
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)")}\""))
@@ -1206,7 +1211,7 @@ class VoiceStrictTest {
 
     @Test
     fun `better voice - the plates use the agreed words, the same as the desktop's, and the screen shows them`() {
-        assertEquals("Second \"hey Jarvis\" check", StrictVoice.WAKE_CONFIRM_TITLE)
+        assertEquals("Second \"Hey Atlas\" check", StrictVoice.WAKE_CONFIRM_TITLE)
         assertEquals("Voice-ID model", StrictVoice.VOICE_ID_MODEL_TITLE)
         for (c in StrictVoice.VOICE_ID_MODEL) {
             assertTrue(c.detail, c.detail.contains("cannot tell your voice from a recording or a copy"))
@@ -1222,18 +1227,19 @@ class VoiceStrictTest {
                 .takeIf { it.isFile }?.let { screen = it }
             dir = dir.parentFile
         }
-        val js = requireNotNull(found).readText().replace("\\\"", "\"")
-        for ((name, list) in listOf("WAKE_CONFIRM" to StrictVoice.WAKE_CONFIRM, "VOICE_ID_MODEL" to StrictVoice.VOICE_ID_MODEL)) {
+        val js = requireNotNull(found).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
+        for ((jsName, list) in listOf("WAKE_CONFIRM_TEMPLATES" to StrictVoice.WAKE_CONFIRM,
+                                      "VOICE_ID_MODEL" to StrictVoice.VOICE_ID_MODEL)) {
             val block = requireNotNull(
-                Regex("""$name\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
-            ) { "$name not found in voice-training.js" }.groupValues[1]
+                Regex("""$jsName\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+            ) { "$jsName not found in voice-training.js" }.groupValues[1]
             for (c in list) {
                 assertTrue(c.detail, block.contains(c.detail))
                 assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)").removeSuffix(" (recommended)")}\""))
             }
         }
         val page = requireNotNull(html).readText()
-        assertTrue(page.contains(">Second \"hey Jarvis\" check<") && page.contains(">Voice-ID model<"))
+        assertTrue(page.contains(">Second \"Hey Atlas\" check<") && page.contains(">Voice-ID model<"))
         val src = requireNotNull(screen).readText()
         for ((guard, name) in listOf("strict.wakeConfirm" to "WAKE_CONFIRM", "strict.voiceIdModel" to "VOICE_ID_MODEL")) {
             val at = src.indexOf("if ($guard.isNotBlank()) {")

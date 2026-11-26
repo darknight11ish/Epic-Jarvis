@@ -41,6 +41,7 @@ import tempfile
 import traceback
 import types
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -1092,18 +1093,47 @@ def t_real_pocket():
 # ------------------------------------------------------------ "hey Jarvis" --
 
 def t_one_file_one_hash_both_apps():
+    """One file, one hash - on BOTH surfaces, since 2026-11-25.
+
+    Every model this project pins is in the phone's APK and behind the PC's
+    spotter: the three openWakeWord files, and the owner's trained "Hey Atlas"
+    head. The phone's own copy is
+    `jarvis-client/app/src/main/assets/wakeword/`, `OrtWakeModels.WAKE_FILE`
+    names the atlas file, and `WakeWordService` loads the assets by that
+    constant - so the phone hears the same phrase the PC does once the PC is
+    switched, with the same front end and the same threshold. This test says
+    that out loud: every pinned file must be in the phone's assets with the
+    pinned SHA-256, and the atlas head must be in this repository and in the
+    published base byte for byte. It used to assert the opposite (that the
+    atlas file was ABSENT from the phone) while the phone heard only
+    "hey Jarvis"; docs/ARCHITECTURE.md section 8 records the change."""
     for name, info in W.KNOWN_FILES.items():
         p = ASSETS / name
         check(f"the phone's {name} is the pinned file", p.is_file() and sha(p) == info["sha256"])
-        check(f"{name}: publisher, version and licence recorded",
-              info["publisher"] and info["version"] == "v0.5.1" and "CC BY-NC-SA" in info["licence"])
+        check(f"{name}: publisher and licence recorded",
+              info["publisher"] and "CC BY-NC-SA" in info["licence"])
+    check("the phone carries both heads, and its spotter hears the atlas one",
+          W.PHONE_PHRASES == ("hey_atlas", "hey_jarvis"), W.PHONE_PHRASES)
+
+    info = W.KNOWN_FILES["hey_atlas.onnx"]
+    here = REPO / "backend" / "wakeword" / "hey_atlas.onnx"
+    base = REPO / "jarvis-backend" / "hey_atlas.onnx"
+    check("the owner's own model is in this repository and is the pinned file",
+          here.is_file() and sha(here) == info["sha256"], str(here))
+    check("the published base holds the same bytes",
+          base.is_file() and base.read_bytes() == here.read_bytes(), str(base))
+    check("the phone's copy and the PC's copy are the same file, byte for byte",
+          (ASSETS / "hey_atlas.onnx").read_bytes() == here.read_bytes())
+    check("hey_atlas.onnx: it is NOT passed off as openWakeWord's v0.5.1",
+          info["version"] != "v0.5.1", info["version"])
+
     readme = (HERE / "README.md").read_text(encoding="utf-8")
     check("the PC's install line checks the same hashes",
           all(i["sha256"].upper() in readme for i in W.KNOWN_FILES.values()))
     kt = (REPO / "jarvis-client/app/src/main/java/com/jarvis/client/voice/OrtWakeModels.kt"
           ).read_text(encoding="utf-8")
     check("the phone loads the pinned head by name",
-          f'WAKE_FILE = "{W.PHRASE_MODELS["hey_jarvis"]}"' in kt)
+          f'WAKE_FILE = "{W.PHRASE_MODELS["hey_atlas"]}"' in kt)
     tool = (REPO / "tools" / "train_wakeword.py").read_text(encoding="utf-8")
     check("the training tool and the PC pin the same livekit-wakeword commit",
           f'LIVEKIT_COMMIT = "{W.LIVEKIT_COMMIT}"' in tool)
@@ -1157,8 +1187,13 @@ def t_the_candidate_fails_closed():
         except ValueError as exc:
             check("a model of the wrong shape is refused, in words", "needs [1, 16, 96]" in str(exc),
                   str(exc))
-        check("spot() never uses the candidate: today's model is the one loaded",
-              W.model_paths()["wake"].endswith("hey_jarvis_v0.1.onnx"))
+        # Today's head for this bake-off is the hey_jarvis one (`_wake_dir`
+        # copies it), so pin the phrase: since 2026-11-25 the shipped default
+        # is `hey_atlas`, and this check is about spot() using today's model,
+        # not about which phrase the machine's config holds.
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("spot() never uses the candidate: today's model is the one loaded",
+                  W.model_paths()["wake"].endswith("hey_jarvis_v0.1.onnx"))
     finally:
         W.model_dir = orig
         W.reload()
@@ -1171,19 +1206,24 @@ def t_both_heads_score_the_same_windows():
     orig = W.model_dir
     try:
         d = _wake_dir()
-        W.reload()
-        cur = W._load()
-        cand = W.load_head(d / W.CANDIDATE_FILE)
-        heads = B.Heads(W, cur, cand, 0.5, None)
-        x = np.random.default_rng(0).standard_normal(16000 * 3).astype(np.float32) * 0.05
-        sc = heads.score(x, 16000)
-        check("the same model on the same windows gives the same scores",
-              len(sc["cur"]) == len(sc["cand"]) > 20 and np.allclose(sc["cur"], sc["cand"]))
-        check("the first five scores after a start are ignored, as upstream does",
-              sc["cur"][:5] == [0.0] * 5)
-        ref = W._clip_steps(cur, x, 16000)[0]
-        check("today's scores are exactly spot()'s", np.allclose(ref, sc["cur"]))
-        check("time per step is measured for both", all(v >= 0 for v in heads.ms_per_step()))
+        # The stand-in candidate IS today's hey_jarvis head (`_wake_dir`), so
+        # the phrase is pinned: since 2026-11-25 the shipped default is
+        # `hey_atlas`, and a test that read it would compare two different
+        # heads and fail for the right reason on the wrong premise.
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            W.reload()
+            cur = W._load()
+            cand = W.load_head(d / W.CANDIDATE_FILE)
+            heads = B.Heads(W, cur, cand, 0.5, None)
+            x = np.random.default_rng(0).standard_normal(16000 * 3).astype(np.float32) * 0.05
+            sc = heads.score(x, 16000)
+            check("the same model on the same windows gives the same scores",
+                  len(sc["cur"]) == len(sc["cand"]) > 20 and np.allclose(sc["cur"], sc["cand"]))
+            check("the first five scores after a start are ignored, as upstream does",
+                  sc["cur"][:5] == [0.0] * 5)
+            ref = W._clip_steps(cur, x, 16000)[0]
+            check("today's scores are exactly spot()'s", np.allclose(ref, sc["cur"]))
+            check("time per step is measured for both", all(v >= 0 for v in heads.ms_per_step()))
     finally:
         W.model_dir = orig
         W.reload()

@@ -133,12 +133,12 @@ CATALOGUE = (
                      "works, and it is trusted by default.",
              "where": "The talk button on the PC's Jarvis bar, or the phone's Home",
              "point": {"desktop": "prompt-field", "phone": "talk-button"}},
-            {"title": "\"Hey Jarvis\"",
+            {"title": "\"Hey Atlas\"",
              "body": "Hands-free: say the words, then speak. A voice setting can "
                      "make hands-free stricter than the talk button - under the "
-                     "stricter choice, a turn started by \"Hey Jarvis\" cannot "
+                     "stricter choice, a turn started by \"Hey Atlas\" cannot "
                      "save facts without a card.",
-             "where": "Brain → Voice → Hands-free (\"Hey Jarvis\")",
+             "where": "Brain → Voice → Hands-free (\"Hey Atlas\")",
              "point": {"desktop": "hud-talk", "phone": None}},
             {"title": "What the voice check does - and does not - prove",
              "body": "Every clip is checked against your voice print before it "
@@ -1321,7 +1321,7 @@ CATALOGUE = (
              "body": "Your voice is sent to this PC, where the model makes the "
                      "words. The phone's talk button is not put to the voice "
                      "check - a press on your own phone is your act, like typing "
-                     "- while \"Hey Jarvis\" and Jarvis Live still are. The phone "
+                     "- while \"Hey Atlas\" and Jarvis Live still are. The phone "
                      "never turns speech "
                      "into text itself, and it never keeps the model or your "
                      "memory.",
@@ -1956,8 +1956,8 @@ FAQ = (
           "event stream is stale.",
      "where": "Brain → What asks first"},
     {"q": "How do I start talking to it?",
-     "a": "The talk button, \"Hey Jarvis\", or the phone's tile. A voice setting "
-          "can make \"Hey Jarvis\" stricter than the button.",
+     "a": "The talk button, \"Hey Atlas\", or the phone's tile. A voice setting "
+          "can make \"Hey Atlas\" stricter than the button.",
      "where": "Brain → Voice"},
     {"q": "Why did it keep an answer on screen instead of reading it out?",
      "a": "It used a sensitive fact, or a reading tool such as email, files, "

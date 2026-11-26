@@ -469,6 +469,14 @@ SHIPPED = (
     # install(), called by plugins/ready/antislop - no patch of its own. A
     # cardless preference either way, like the prompt coach.
     "jarvis_antislop.py",
+    # The typed answer's layout (2026-11-25): auto / bullets / prose in one
+    # file beside manner.json, changed from the desktop's Settings picker or
+    # from a chat sentence, and a note jarvis_agent.py puts just before the
+    # newest question on a TYPED turn (never a spoken one, whose note forbids
+    # lists). GET/POST /api/answer-style come from its own install(), called by
+    # the ready plug-in plugins/ready/answer-style - no patch of its own, the
+    # same shape the read-aloud switch took. A cardless preference either way.
+    "jarvis_answer_style.py",
     # The automatic read-aloud switch (2026-11-07): ON by default, so the big
     # HUD window reads finished answers aloud exactly as before; OFF at once,
     # by the Settings switch or by saying "stop reading your replies out loud"
@@ -961,6 +969,14 @@ SHIPPED = (
     # refuses a whitelist entry nothing loads. Shipping it now is the asset
     # plumbing only; backend/test_vendored_three.py pins its bytes.
     "static/three.min.js",
+    # The owner's trained "Hey Atlas" wake-word head (2026-11-25). Not a module:
+    # jarvis_wakeword.py reads it from its own folder, so a live install needs it
+    # beside the server - and the patcher flattens this entry to `hey_atlas.onnx`
+    # for exactly that reason. `[voice] wake_phrase = "hey_atlas"` is the shipped
+    # default since 2026-11-25, so a fresh PC uses it; `hey_jarvis` is still
+    # accepted, so a PC left on the old phrase keeps waking. That one line is the
+    # per-PC switch.
+    "wakeword/hey_atlas.onnx",
     # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
     # Found by comparing a working backend against this list: all five were
     # already IN jarvis-backend/, and a SHIPPED module imports each of them, but

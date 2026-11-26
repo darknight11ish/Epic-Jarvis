@@ -93,9 +93,14 @@ def t_phrases_are_balanced_varied_and_separate_from_wake_words():
               and 5 <= p["seconds"][0] < p["seconds"][1] <= 60 for p in free), free)
     check("free speech asks for real speaking style, not reading only",
           any("own words" in p["text"] for p in free), free)
-    check("the wake words are a SEPARATE fixed set", wake == ["hey Jarvis"], wake)
+    # 2026-11-25: the phrase that ships is "hey Atlas" (WAKE_PHRASES, the same
+    # one the detector and both apps use), so the pins below name it. The
+    # training prompts still must not BE the wake words, so both phrases are
+    # checked against them.
+    check("the wake words are a SEPARATE fixed set", wake == ["hey Atlas"], wake)
     check("...and no training prompt is only the wake words",
-          all("hey jarvis" not in p["text"].lower() for p in read + free),
+          all("hey jarvis" not in p["text"].lower()
+              and "hey atlas" not in p["text"].lower() for p in read + free),
           read + free)
     check("the plan says its limits and that the wake words are separate",
           plan["max_clips_per_round"] == 12 and plan["min_clips"] == 3
@@ -126,7 +131,7 @@ def t_condition_rounds_and_enrollment_state():
     check("state() exposes the phrase/free-speech/condition plan",
           state.get("training", {}).get("read_phrases")
           and state["training"].get("free_speech")
-          and state["training"].get("wake_phrases") == ["hey Jarvis"], state.get("training"))
+          and state["training"].get("wake_phrases") == ["hey Atlas"], state.get("training"))
     check("...and the owner-visible adaptation count and caps",
           state.get("adaptation", {}).get("caps")
           == {"per_condition": T.MAX_PER_CONDITION, "total": T.MAX_TOTAL},

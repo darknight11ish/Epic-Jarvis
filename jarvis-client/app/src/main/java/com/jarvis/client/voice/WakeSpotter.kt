@@ -1,18 +1,19 @@
 package com.jarvis.client.voice
 
 /**
- * Listens for "hey Jarvis" in a stream of 16 kHz audio, and for nothing else.
+ * Listens for "Hey Atlas" in a stream of 16 kHz audio, and for nothing else.
  *
  * **A keyword spotter is not speech-to-text.** It turns audio into one number
- * — how much the last two seconds sounded like "hey Jarvis" — and has no
+ * — how much the last two seconds sounded like "Hey Atlas" — and has no
  * vocabulary and nothing it could write down. The "a client must not do
  * speech-to-text" rule is about words; this produces none. Every word is
  * still recognised on the PC, after the owner-voice check, exactly as for
  * push-to-talk.
  *
- * The model is openWakeWord's pre-trained "hey jarvis" (three small ONNX
- * files in `assets/wakeword/`, CC BY-NC-SA 4.0 — see the LICENSE there). The
- * PC runs the SAME three files through the same steps
+ * The head is the owner's own "Hey Atlas" model, trained on the PC
+ * (`backend/wakeword/hey_atlas.onnx`, shipped in `assets/wakeword/`), on
+ * openWakeWord's pre-trained front end (CC BY-NC-SA 4.0 — see the LICENSE
+ * there). The PC runs the SAME files through the same steps
  * (`backend/jarvis_wakeword.py`), so one threshold means one thing on both,
  * and the PC checks every clip this phone sends again before it does
  * anything with it.

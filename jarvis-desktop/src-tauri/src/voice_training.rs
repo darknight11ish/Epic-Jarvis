@@ -23,11 +23,11 @@
 //! owner typed.
 //!
 //! THE MICROPHONE IS SHARED. A Settings recording refuses while the Jarvis
-//! bar's talk button is recording, and push-to-talk and "hey Jarvis"
-//! listening refuse while one runs ([`MIC_IN_SETTINGS`]). "Hey Jarvis"
+//! bar's talk button is recording, and push-to-talk and "hey Atlas"
+//! listening refuse while one runs ([`MIC_IN_SETTINGS`]). "Hey Atlas"
 //! listening is stopped when a Settings recording starts - with a sentence
 //! in the Jarvis bar saying so - because half the training sentences start
-//! with "hey Jarvis" and must not be taken as commands.
+//! with "hey Atlas" and must not be taken as commands.
 //!
 //! WHAT IS HELD ON A STALE LINK (rule 4). Only what raises an approval card
 //! or loosens something: finishing a training (the card), the one-shot
@@ -87,7 +87,7 @@ const VOICES_TIMEOUT: Duration = Duration::from_secs(60);
 /// `jarvis_voices.MAX_CLIP_BYTES`: the largest WAV the server reads.
 const VOICE_CLIP_MAX_BYTES: usize = 2_900_000;
 
-/// What push-to-talk and "hey Jarvis" listening say while Settings records.
+/// What push-to-talk and "hey Atlas" listening say while Settings records.
 /// Settings' recorder took the microphone while Jarvis Live was on.
 pub(crate) const LIVE_ENDED_FOR_SETTINGS: &str = "Jarvis Live ended because Settings is recording.";
 pub(crate) const MIC_IN_SETTINGS: &str =
@@ -231,7 +231,7 @@ pub fn start_voice_sample(
     talk: State<VoiceCaptureState>,
 ) -> Result<(), String> {
     let slot = valid_slot(slot.trim())?.to_string();
-    // The talk button and "hey Jarvis" listening are asked, and stopped,
+    // The talk button and "hey Atlas" listening are asked, and stopped,
     // BEFORE this state's lock is taken, as they ask `recording` before
     // taking theirs: none of the three holds its lock while asking another,
     // so they cannot deadlock.
@@ -247,11 +247,11 @@ pub fn start_voice_sample(
         return Err(crate::voice::TALK_TYPE_HAS_MIC.to_string());
     }
     // Jarvis Live has this microphone too (even while paused): recording
-    // ends Live, and the owner is told that - not that "hey Jarvis" stopped.
+    // ends Live, and the owner is told that - not that "hey Atlas" stopped.
     let why = if crate::voice::LIVE_MODE.load(std::sync::atomic::Ordering::SeqCst) {
         LIVE_ENDED_FOR_SETTINGS
     } else {
-        "This PC stopped listening for \"hey Jarvis\" while you record in Settings. Turn \
+        "This PC stopped listening for \"hey Atlas\" while you record in Settings. Turn \
          it back on here when you are done."
     };
     stop_listening_because(&app, why.to_string());
@@ -622,7 +622,7 @@ pub(crate) fn clear_body() -> Value {
 }
 
 /// Clears the saved voice training on this PC: the voice print for each
-/// microphone trained, the "hey Jarvis" check built from those recordings and
+/// microphone trained, the "hey Atlas" check built from those recordings and
 /// the Live-adaptation notes. **ONE approval card** (`change_own_config`,
 /// tier `ask`) and NOTHING is deleted until it is approved; a denied card, a
 /// timeout, a refusal or any tier other than `ask` deletes nothing, and the
@@ -780,13 +780,13 @@ pub(crate) fn voice_setting(
         ("sensitive_memory", "sensitive_aloud") => {
             Ok(("sensitive_memory", "sensitive_aloud", true))
         }
-        // How far "Hey Jarvis" is trusted (the owner's decision,
+        // How far "Hey Atlas" is trusted (the owner's decision,
         // 2026-09-24). "Only trust the talk button" is the stricter choice
         // and applies at once; going back to "same as the talk button" (the
         // default) raises the voice card and is held on a stale link.
         ("hands_free", "button_only") => Ok(("hands_free", "button_only", false)),
         ("hands_free", "same_as_button") => Ok(("hands_free", "same_as_button", true)),
-        // Answers about the screen after "Hey Jarvis", under "Only trust the
+        // Answers about the screen after "Hey Atlas", under "Only trust the
         // talk button" (the owner's decision, 2026-09-28). Keeping them on
         // screen is the default and applies at once; reading them aloud
         // raises the voice card and is held on a stale link.
@@ -818,7 +818,7 @@ pub(crate) fn voice_setting(
         ("talk_to_type", "off") => Ok(("talk_to_type", "off", false)),
         ("talk_to_type", "on") => Ok(("talk_to_type", "on", true)),
         // "Better voice" (2026-09-28, docs/JARVIS-API.md section 80). Two
-        // "hey Jarvis" detectors that must agree only narrows when Jarvis
+        // "hey Atlas" detectors that must agree only narrows when Jarvis
         // wakes, so it applies at once; going back to one raises the voice
         // card. The newer, unmeasured voice-ID model raises the card; the
         // measured one applies at once.

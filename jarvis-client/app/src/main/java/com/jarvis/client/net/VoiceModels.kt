@@ -43,7 +43,7 @@ data class VoiceStatus(
      */
     val gate: VoiceGate = VoiceGate(),
     /**
-     * "Hey Jarvis" on the desktop: the switch (turned on only by approving a
+     * "Hey Atlas" on the desktop: the switch (turned on only by approving a
      * card), a card waiting, and whether the PC itself can hear the phrase.
      * Defaults say "off, no card". Read by the Checks screen's wake-word card
      * and by the phone's own listener (its threshold).
@@ -100,7 +100,7 @@ data class VoiceStatus(
     val sttMissing: Boolean get() = available && stt.status.isNotBlank() && !stt.available
 
     /**
-     * A voice card is waiting for the owner: the one that turns "hey Jarvis"
+     * A voice card is waiting for the owner: the one that turns "Hey Atlas"
      * on, or a voice training. Neither has an event of its own, so while
      * this is true the runtime re-reads the status when any approval is
      * decided - otherwise "Waiting…" stayed on screen after the card was
@@ -171,13 +171,19 @@ data class VoiceListening(
 data class VoiceWake(
     val enabled: Boolean = false,
     val pending: Boolean = false,
-    /** openWakeWord's model name, "hey_jarvis". */
-    val phrase: String = "hey_jarvis",
+    /**
+     * The phrase the PC reports it is listening for: `"hey_atlas"` or
+     * `"hey_jarvis"` (`jarvis_wakeword.status()["phrase"]`). This phone's own
+     * spotter hears "Hey Atlas" ([com.jarvis.client.voice.OrtWakeModels.WAKE_FILE]);
+     * the number it takes from here is [threshold], so one bar still means one
+     * thing on both devices.
+     */
+    val phrase: String = "hey_atlas",
     /** The spotter's bar, 0..1. The phone uses the desktop's so one number means one thing. */
     val threshold: Double = 0.5,
-    /** After "hey Jarvis." on its own, how long the desktop waits for the next sentence. */
+    /** After "Hey Atlas." on its own, how long the desktop waits for the next sentence. */
     @SerialName("awake_seconds") val awakeSeconds: Double = 8.0,
-    /** Whether the PC can hear "hey Jarvis" in a clip (it checks every one the phone sends). */
+    /** Whether the PC can hear its own phrase in a clip (it checks every one the phone sends). */
     val spotter: VoiceSpotter = VoiceSpotter(),
 )
 
@@ -206,7 +212,7 @@ data class FlowStatus(
     val moment: FlowMoment = FlowMoment(),
     /**
      * This PC keeps listening after Jarvis asks a question aloud (section 17,
-     * part 6): the phone records the reply without waiting for "hey Jarvis"
+     * part 6): the phone records the reply without waiting for "Hey Atlas"
      * only when this is true.
      */
     @SerialName("after_question") val afterQuestion: Boolean = false,
@@ -356,8 +362,8 @@ data class VoiceTrainingLast(
     val samples: Int = 0,
     val reason: String = "",
     /**
-     * The "hey Jarvis" check built from the same clips, in the PC's words:
-     * "built from 4 "hey Jarvis" sentences" or "not built: ...". Blank from
+     * The wake-phrase check built from the same clips, in the PC's words:
+     * "built from 4 "Hey Atlas" sentences" or "not built: ...". Blank from
      * a PC older than 2026-09-24, or for an outcome that trained nothing.
      */
     @SerialName("wake_check") val wakeCheck: String = "",
@@ -513,9 +519,9 @@ data class Heard(
      * that omits it is not read as broken.
      */
     val available: Boolean = true,
-    /** `source=wake_word` only: "hey Jarvis" was heard in the clip, from the owner. */
+    /** `source=wake_word` only: "Hey Atlas" was heard in the clip, from the owner. */
     @SerialName("wake_heard") val wakeHeard: Boolean = false,
-    /** The clip was "hey Jarvis" and nothing else: send the next sentence. */
+    /** The clip was "Hey Atlas" and nothing else: send the next sentence. */
     val awake: Boolean = false,
     @SerialName("awake_seconds") val awakeSeconds: Float = 0f,
     /**
@@ -562,7 +568,7 @@ data class Heard(
      * act on it (since 2026-09-24; false from an older PC). [reason] is the
      * PC's own "say a little more" sentence, and it is shown as it is.
      *
-     * For "hey Jarvis, <command>" the PC sends this with `ok`, `owner` and
+     * For "Hey Atlas, <command>" the PC sends this with `ok`, `owner` and
      * `wake_heard` all true and no text - it WAS the owner saying the phrase,
      * only the command after it was too short to check. Read as a
      * transcript, that empty text used to say "Nothing came back to send."
@@ -571,7 +577,7 @@ data class Heard(
     @SerialName("too_short") val tooShort: Boolean = false,
     /** The clip was the stop word: silence the reply being spoken, nothing else. */
     val stop: Boolean = false,
-    /** A "hey Jarvis" clip while Jarvis Live is on the other device: nothing was answered. */
+    /** A "Hey Atlas" clip while Jarvis Live is on the other device: nothing was answered. */
     @SerialName("other_device") val otherDevice: Boolean = false,
     /**
      * Jarvis Live (backend/jarvis_live.py; voice/LiveRules.kt): "" for a clip
@@ -617,7 +623,7 @@ data class Heard(
 
     val outcome: Outcome
         get() = when {
-            // Before TRANSCRIBED: a too-short "hey Jarvis, <command>" comes
+            // Before TRANSCRIBED: a too-short "Hey Atlas, <command>" comes
             // back with ok and owner true and nothing to send.
             tooShort -> Outcome.REFUSED
 

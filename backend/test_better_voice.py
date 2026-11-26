@@ -304,10 +304,13 @@ def t_hear_and_gate():
         check("'both', both heard it: on to the voice check and the words, as before",
               calls == [1.0] and verified and h.is_owner and h.text == "what time is it", h)
         h, calls, verified = _hear_wake(first_heard=False, confirm_boom=True)
+        # 2026-11-25: the refusal now names the phrase the way a person writes
+        # it (jarvis_wakeword.PHRASE_TITLES: "Hey Jarvis"), not the lower-case
+        # id, so the quoted title is capitalised here.
         check("the first did not hear it: refused, and the second is never asked "
               "(it can only say no, never make a wake)",
               not calls and not verified and not h.is_owner
-              and "no \"hey Jarvis\"" in h.reason, h)
+              and "no \"Hey Jarvis\"" in h.reason, h)
         h, calls, verified = _hear_wake(confirm="unavailable")
         check("'both' but the second cannot run: the first decides alone, as before",
               calls == [1.0] and verified and h.is_owner, h)

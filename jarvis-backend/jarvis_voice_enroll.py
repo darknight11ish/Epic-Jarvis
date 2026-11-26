@@ -172,6 +172,22 @@ from typing import Callable, Optional
 #: The gate action. See the module docstring for why this one.
 ACTION = "change_own_config"
 
+
+def wake_phrase_words() -> str:
+    """The wake phrase in the owner's words ("Hey Atlas"), for the sentences
+    THIS PC writes about it.
+
+    Until 2026-11-25 these sentences said "hey Jarvis" in the source. The
+    phrase is now a per-PC setting whose shipped value is `hey_atlas`, so a
+    hardcoded name would tell a fresh PC's owner the wrong words: every
+    sentence here names what `[voice] wake_phrase` really is. A backend with
+    no jarvis_wakeword.py gets the shipped phrase."""
+    try:
+        import jarvis_wakeword
+        return str(jarvis_wakeword.phrase_title())
+    except Exception:
+        return "Hey Atlas"
+
 #: Limits. Three is the fewest that says anything about how consistent the
 #: owner's voice is (enroll() lowers the bar to fit the loosest clip, so one
 #: clip would give it nothing to measure). Twelve since 2026-09-24 (the
@@ -452,7 +468,7 @@ def describe(count: int, seconds: float, mic: str = "", rounds: int = 1,
         f"recorded {where}? {parts}, {seconds:.0f} seconds in all.\n\n"
         f"If you say yes: from now on only a voice that matches these clips "
         f"can talk to Jarvis through {words}. Any voice trained before for it "
-        f"is replaced. The sentences that start with \"hey Jarvis\" also "
+        f"is replaced. The sentences that start with \"{wake_phrase_words()}\" also "
         f"teach it how you say that.\n\n"
         f"If you did not just do this {where}, say no - someone else may be "
         f"trying to make Jarvis obey their voice.\n\n"
@@ -622,7 +638,7 @@ def _wake_verifier(clips: list, mic: str = "", keep_old: bool = False) -> str:
         # fixture mode keeps the plaintext fixtures the suites use.
         import jarvis_voice as _V
         _V.write_biometric_json(p, out["doc"])
-        return f"built from {out['clips']} \"hey Jarvis\" sentences"
+        return f"built from {out['clips']} \"{wake_phrase_words()}\" sentences"
     except Exception as exc:
         if p is not None and not keep_old:
             _drop(p)

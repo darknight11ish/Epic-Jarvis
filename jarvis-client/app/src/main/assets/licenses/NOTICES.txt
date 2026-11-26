@@ -84,6 +84,14 @@ https://github.com/dscripka/openWakeWord
   NON-COMMERCIAL. The embedding model is derived from Google's
   speech_embedding model (Apache License 2.0).
 
+hey_atlas.onnx (in assets/wakeword/, added 2026-11-25) - the owner's own
+  "Hey Atlas" wake-word model, trained on this PC with openWakeWord's
+  openwakeword/train.py v0.6.0 on openWakeWord's front end. It is the model
+  the phone's own listener scores; the PC holds the same bytes at
+  backend/wakeword/hey_atlas.onnx. Treated as CC BY-NC-SA 4.0, because its
+  negative features derive from the davidscripka/openwakeword_features
+  dataset released under that licence.
+
 stop_head.bin (in assets/wakeword/) - Jarvis's own small "stop" model,
   trained on openWakeWord embeddings of synthetic voices, so it is treated
   under the same CC BY-NC-SA 4.0 terms as the models above. The voices it

@@ -1,26 +1,28 @@
 /**
  * User-facing copy may only claim the wake phrase that actually ships.
  *
- * The owner's ruling of 2026-11-21 (Gemini's ruling 7; recorded in
- * decisions.d/2026-11-21-wake-copy-hey-jarvis.md):
+ * THE RULING THIS GUARD NOW ENFORCES is the owner's of 2026-11-25 (recorded in
+ * decisions.d/2026-11-25-hey-atlas-wake-model-ships.md), which is the step the
+ * 2026-11-21 ruling left open:
  *
- *   "Standardize on `Hey Jarvis` everywhere until `Hey Atlas` actually ships.
- *    Drop `Hey Atlas is in training` from user-facing guides and in-app
- *    Settings copy - users shouldn't read about an unshipped model in daily UI.
- *    Keep the copy simple and factual: 'Wake phrase: Hey Jarvis.'"
+ *   "Once the custom Hey Atlas model passes local false-accept testing, swap
+ *    the string in one PR."
  *
- * This suite is the guard, so the promise cannot come back quietly in a later
+ * The model passed and it ships (`backend/wakeword/hey_atlas.onnx`), so the
+ * copy says "Hey Atlas" and this suite REQUIRES it. What it still forbids is
+ * the wording the old ruling removed and which would still be false: any claim
+ * that a wake phrase is "in training" or "being trained" (nothing is being
+ * trained now - the model shipped), and the old factual sentence coming back.
+ *
+ * This suite is the guard, so the promise cannot drift quietly in a later
  * wording pass. It reads the copy a person actually sees - the desktop's own
- * pages, the strings its modules inject, the feature list, and README.md -
- * and it FAILS when that copy names "Hey Atlas" or says a wake phrase is in
- * training / being trained.
+ * pages, the strings its modules inject, the feature list, and README.md.
  *
- * WHAT IS DELIBERATELY ALLOWED, because the ruling says so: code comments and
- * dated records may still explain the history. So this suite scans only the
- * DISPLAYED text: HTML comments are removed before scanning, and a JavaScript
- * file is read down to its string literals (a comment between two quotes is
- * not a string). docs/ and decisions.d/ are records, not user-facing copy, and
- * are not scanned at all.
+ * WHAT IS DELIBERATELY ALLOWED: code comments and dated records may still
+ * explain the history. So this suite scans only the DISPLAYED text: HTML
+ * comments are removed before scanning, and a JavaScript file is read down to
+ * its string literals (a comment between two quotes is not a string). docs/
+ * and decisions.d/ are records, not user-facing copy, and are not scanned.
  *
  * WHAT IS NOT SCANNED, AND WHY (Gemini's ruling 5.4, 2026-11-21): the ruling is
  * that a wake-copy guard scans the new-user guide's SOURCE Markdown or
@@ -123,21 +125,22 @@ function displayedCopy(full) {
 
 const FORBIDDEN = [
   {
-    re: /hey atlas/i,
-    why: "names a wake phrase the shipped spotter cannot hear (the ruling says Hey Jarvis until the model ships)",
-  },
-  {
     re: /\bin training\b/i,
-    why: "tells the owner a model is in training - the ruling drops that from user-facing copy",
+    why: "tells the owner a model is in training - nothing is: the model shipped on 2026-11-25",
   },
   {
     re: /\bbeing trained\b/i,
-    why: "promises a wake phrase that is still being trained",
+    why: "promises a wake phrase that is still being trained - it shipped on 2026-11-25",
   },
   {
-    re: /spoken name is atlas/i,
-    why: "promises an unshipped spoken name",
+    re: /wake phrase:\s*hey jarvis/i,
+    why: "states the old phrase as the factual sentence; it is \"Wake phrase: Hey Atlas.\" now",
   },
+];
+
+/** The sentence Settings must state, and the phrase the bar must name. */
+const REQUIRED = [
+  ["Wake phrase: Hey Atlas.", "Settings states the wake phrase as the ruling's factual sentence"],
 ];
 
 check(`every user-facing copy file is readable (${COPY_FILES.length} files)`, () => {
@@ -145,7 +148,7 @@ check(`every user-facing copy file is readable (${COPY_FILES.length} files)`, ()
   for (const file of COPY_FILES) displayedCopy(file);
 });
 
-check("no user-facing copy names \"Hey Atlas\" or promises a phrase in training", () => {
+check("no user-facing copy promises a phrase in training or states the old one", () => {
   const problems = [];
   for (const file of COPY_FILES) {
     const text = displayedCopy(file);
@@ -159,15 +162,15 @@ check("no user-facing copy names \"Hey Atlas\" or promises a phrase in training"
   assert.equal(problems.length, 0, `the ruling is broken in user-facing copy:\n      ${problems.join("\n      ")}`);
 });
 
-check("Settings states the wake phrase as the ruling's factual sentence", () => {
+check(REQUIRED[0][1], () => {
   const settings = displayedCopy(join(SRC, "settings.html"));
-  assert.ok(settings.includes("Wake phrase: Hey Jarvis."),
-    "settings.html no longer says \"Wake phrase: Hey Jarvis.\" - Settings must state the phrase simply and factually");
+  assert.ok(settings.includes(REQUIRED[0][0]),
+    `settings.html no longer says "${REQUIRED[0][0]}" - Settings must state the phrase that ships`);
 });
 
-check("the bar's wake-word control still names the phrase that ships", () => {
+check("the bar's wake-word control names the phrase that ships", () => {
   const bar = displayedCopy(join(SRC, "index.html"));
-  assert.match(bar, /hey Jarvis/i, "the bar's wake control no longer names \"Hey Jarvis\"");
+  assert.match(bar, /hey atlas/i, "the bar's wake control no longer names \"Hey Atlas\"");
 });
 
 if (fails.length) console.log(`\n${fails.length} failed: ${fails.join(", ")}`);

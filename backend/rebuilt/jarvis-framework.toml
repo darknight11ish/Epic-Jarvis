@@ -1704,8 +1704,9 @@ enabled = false
 # 14. VOICE - who may talk to Jarvis, and how it wakes
 # ------------------------------------------------------------------------
 # Two gates in front of the mic. WAKE: nothing is transcribed until the
-# openWakeWord "hey jarvis" model fires (CPU-only, never phones home;
-# Picovoice is ruled out - its free tier ended June 2026 and it calls home).
+# openWakeWord model for the phrase below fires (CPU-only, never phones
+# home; Picovoice is ruled out - its free tier ended June 2026 and it calls
+# home).
 # VOICE: the captured turn is checked against your enrolled voice-print
 # (SpeechBrain ECAPA, ~20 MB) before any command runs.
 #
@@ -1719,7 +1720,14 @@ enabled = true
 # "owner" = only your enrolled voice may command it (the default, because
 # the safe failure is to ignore a stranger). "broad" = accept anyone.
 mode = "owner"
-wake_phrase = "hey_jarvis"
+# The phrase this PC listens for. "hey_atlas" ships (2026-11-25, the owner's
+# ruling that the product is Atlas); "hey_jarvis" is still a phrase this build
+# knows, so a PC already set to it keeps waking exactly as before - and this
+# line is the ONE per-PC switch: change it here to move a PC between them.
+# A fresh install gets the line above; an existing jarvis-framework.toml is
+# never overwritten (scripts/apply-patches.ps1), so an update cannot re-point
+# a PC that has not asked for it.
+wake_phrase = "hey_atlas"
 wake_threshold = 0.5
 # Similarity bar for accepting a voice as yours, on the small voice-ID model.
 # Since 2026-09-24 nothing lowers it below that model's own measured floor

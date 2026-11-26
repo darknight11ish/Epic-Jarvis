@@ -32,12 +32,23 @@ No network, no microphone. What it proves:
      the first model is at least a little interested in (and only those),
      falls back to the first model when missing or unreadable, and - with
      the real models - keeps its owner while turning other voices away.
+
+THE PHRASE IS PINNED, NOT READ. This suite's sentences, fixtures and expected
+reasons are written for "hey Jarvis", and since 2026-11-25 the SHIPPED template
+says `hey_atlas`. So `Env` patches `jarvis_wakeword.phrase` to `hey_jarvis`:
+otherwise the suite's answer would change with whichever `wake_phrase` the
+machine's config happens to hold, which is exactly what the owner's ruling says
+must not happen to a PC. `t_two_phrases_one_front_end` patches BOTH phrases
+explicitly and proves the shipped `hey_atlas` head, the old `hey_jarvis` model,
+and the transcript check for each; the shipped default itself is proved by the
+contract fixtures generated from `backend/rebuilt/jarvis-framework.toml`.
 """
 import array
 import ast
 import io
 import math
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -100,6 +111,14 @@ class Env:
         d = Path(self.tmp.name)
         self.patches = [mock.patch.object(S, "_config_dir", return_value=d),
                         mock.patch.object(W, "_config_dir", return_value=d),
+                        # The phrase THIS SUITE's fixtures are written for.
+                        # The shipped default became `hey_atlas` on 2026-11-25,
+                        # so a test that read the machine's config would change
+                        # its answer with the template - pin it, as
+                        # `t_two_phrases_one_front_end` already does for both
+                        # phrases (that test is where the shipped default and
+                        # the old phrase are each proved).
+                        mock.patch.object(W, "phrase", return_value="hey_jarvis"),
                         mock.patch.object(V, "PROFILE_PATH", d / "owner.json"),
                         # The order of the checks, not the minimum length of a
                         # command (test_voice_strict.py has that, with the
@@ -201,9 +220,138 @@ def t_the_transcript_check():
         "Hey Jason, are you coming to dinner tonight?": (False, ""),
         "": (False, ""),
     }
-    for text, want in cases.items():
-        got = W.split_wake(text)
-        check(f"split_wake({text!r}) -> {want}", got == want, f"got {got}")
+    # The phrase these cases are written for, patched rather than read: since
+    # 2026-11-25 the shipped template says `hey_atlas`, and a transcript check
+    # that followed the machine's own config would change its answer with it.
+    # `t_two_phrases_one_front_end` proves both phrases explicitly.
+    with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+        for text, want in cases.items():
+            got = W.split_wake(text)
+            check(f"split_wake({text!r}) -> {want}", got == want, f"got {got}")
+
+
+# --------------------------------------- 10. two phrases, one front end --
+
+#: The phone's assets: the three files both apps have always shared.
+ASSETS = HERE.parent / "jarvis-client" / "app" / "src" / "main" / "assets" / "wakeword"
+
+
+def t_two_phrases_one_front_end():
+    """`[voice] wake_phrase` picks the model, and the model must be the file.
+
+    2026-11-25: the owner's trained "Hey Atlas" head ships in this repository
+    and "hey_atlas" joined PHRASE_MODELS beside "hey_jarvis". What is proved
+    here: both phrases resolve to their own file; the old phrase still
+    resolves with no new file; a missing file, a file whose bytes differ from
+    the pinned SHA-256, and a phrase this build does not know are each refused
+    with a sentence rather than run; the transcript check follows the phrase;
+    and a verifier trained for the other phrase does not decide."""
+    shipped = HERE.parent / "backend" / "wakeword" / "hey_atlas.onnx"
+    with Env():
+        d = W.model_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        for n in ("melspectrogram.onnx", "embedding_model.onnx", "hey_jarvis_v0.1.onnx"):
+            shutil.copyfile(ASSETS / n, d / n)
+
+        check("both phrases are mapped, and to different files",
+              W.PHRASE_MODELS.get("hey_atlas") == "hey_atlas.onnx"
+              and W.PHRASE_MODELS.get("hey_jarvis") == "hey_jarvis_v0.1.onnx", W.PHRASE_MODELS)
+        check("the shipped file is the one KNOWN_FILES pins, and it is in this repository",
+              shipped.is_file() and W.sha256_file(shipped) == W.KNOWN_FILES["hey_atlas.onnx"]["sha256"],
+              str(shipped))
+        check("the phone carries both heads, and hears the atlas one",
+              W.PHONE_PHRASES == ("hey_atlas", "hey_jarvis"), W.PHONE_PHRASES)
+        phone_atlas = ASSETS / "hey_atlas.onnx"
+        check("the phone's own copy of the atlas head is the shipped file",
+              phone_atlas.is_file()
+              and W.sha256_file(phone_atlas) == W.KNOWN_FILES["hey_atlas.onnx"]["sha256"],
+              str(phone_atlas))
+
+        # The old phrase, untouched: no new file needed for it. The phrase is
+        # patched rather than read, so this test answers the same on a PC
+        # whose own config already says "hey_atlas".
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("hey_jarvis still resolves to its own file",
+                  Path(W.model_paths()["wake"]).name == "hey_jarvis_v0.1.onnx"
+                  and W.status()["available"], W.model_paths())
+
+        with mock.patch.object(W, "phrase", return_value="hey_atlas"):
+            check("hey_atlas resolves to the shipped file",
+                  Path(W.model_paths()["wake"]).name == "hey_atlas.onnx"
+                  and Path(W.model_paths()["wake"]).is_file(), W.model_paths())
+            st = W.status()
+            check("with the shipped file present, the spotter says it is available",
+                  st["available"] and st["title"] == "Hey Atlas" and st["phrase"] == "hey_atlas", st)
+
+            # A file that is not the pinned one is refused, in words.
+            bad = d / "hey_atlas.onnx"
+            bad.write_bytes(b"not the model")
+            st = W.status()
+            check("a changed hey_atlas.onnx is refused, naming the SHA-256",
+                  not st["available"] and "SHA-256" in st["why"], st)
+            check("...and it is not loaded either", W._load() is None)
+
+            # Missing altogether: refused, saying where it looked.
+            bad.unlink()
+            W.shipped_model_dir, real_shipped = (lambda: d), W.shipped_model_dir
+            try:
+                st = W.status()
+                check("a missing hey_atlas.onnx is refused, saying where it looked",
+                      not st["available"] and "on disk" in st["why"], st)
+            finally:
+                W.shipped_model_dir = real_shipped
+
+            # The real file loads and scores on this front end.
+            if W.ort is None:
+                skip("the real hey_atlas.onnx loads and scores")
+            else:
+                m = W.load_head(shipped)
+                score = m.score(np.zeros((W.EMB_WINDOW, 96), dtype=np.float32))
+                check("the real hey_atlas.onnx loads and scores 0..1 on this front end",
+                      0.0 <= score <= 1.0, score)
+            W.reload()
+
+        # The transcript check follows the phrase, both ways round.
+        with mock.patch.object(W, "phrase", return_value="hey_atlas"):
+            check("hey_atlas: \"Hey Atlas, ...\" is accepted",
+                  W.split_wake("Hey Atlas, what time is it?") == (True, "what time is it?"))
+            check("hey_atlas: a transcript that says Jarvis is NOT accepted",
+                  W.split_wake("Hey Jarvis, what time is it?") == (False, ""))
+            check("hey_atlas: Atlas mid-sentence is not a wake",
+                  W.split_wake("I read about Atlas in a book.") == (False, ""))
+        check("hey_jarvis: \"Hey Jarvis, ...\" is still accepted",
+              W.split_wake("Hey Jarvis, what time is it?") == (True, "what time is it?"))
+        check("hey_jarvis: a transcript that says Atlas is NOT accepted",
+              W.split_wake("Hey Atlas, what time is it?") == (False, ""))
+
+        # A phrase this build does not know: refused, and it names the two it has.
+        with mock.patch.object(W, "phrase", return_value="hey_atlantis"):
+            st = W.status()
+            check("an unknown wake_phrase is refused and names the phrases this build has",
+                  not st["available"] and "hey_atlas" in st["why"] and "hey_jarvis" in st["why"], st)
+            check("an unknown phrase accepts no name in the transcript",
+                  W.split_wake("Hey Atlas, what time is it?") == (False, ""))
+
+        # A verifier belongs to the phrase it was trained on.
+        doc = {"version": W.VERIFIER_VERSION, "model": "hey_jarvis_v0.1.onnx",
+               "w": [0.0] * (W.EMB_WINDOW * 96), "b": 0.0, "threshold": 0.4,
+               "positives": 3, "mic": ""}
+        ver = W.Verifier(doc)
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("with hey_jarvis set, its own verifier may decide",
+                  W._verifier_for_current_phrase(ver))
+        with mock.patch.object(W, "phrase", return_value="hey_atlas"):
+            check("after a phrase change the old verifier is not used",
+                  not W._verifier_for_current_phrase(ver))
+            # The two callers, driven with the file read stubbed out, so the
+            # answer does not depend on what is enrolled on this PC.
+            with mock.patch.object(W, "_read_verifier", return_value=ver), \
+                    mock.patch.object(W, "_verifier_order", return_value=[Path(__file__)]):
+                check("load_verifier() skips a verifier for another phrase",
+                      W.load_verifier() is None)
+                vst = W.verifier_status()
+                check("...and the status says why, in words",
+                      not vst["trained"] and "different wake phrase" in str(vst["why"]), vst)
 
 
 # ------------------------------------------------------------ 3. order --
@@ -616,7 +764,7 @@ def t_no_spotter_is_said_not_crashed():
         with mock.patch.object(V, "verify", boom("the owner check")):
             h = S.hear(tone(), source="wake_word")   # no model files in the temp dir
         check("no wake-word models: refused, not available, and says why",
-              not h.is_owner and not h.available and "hey Jarvis" in h.reason, h)
+              not h.is_owner and not h.available and W.phrase_title() in h.reason, h)
         st = S.status()
         check("status says the PC cannot hear it, and why",
               st["wake"]["spotter"]["available"] is False and st["wake"]["spotter"]["why"]
@@ -958,6 +1106,7 @@ def t_real_models():
 
 if __name__ == "__main__":
     for fn in (t_streaming_does_not_depend_on_chunk_size, t_the_transcript_check,
+               t_two_phrases_one_front_end,
                t_order_wake_switched_off_runs_nothing, t_order_no_phrase_no_owner_check,
                t_order_not_the_owner_is_never_transcribed,
                t_order_the_owner_is_heard_and_the_phrase_removed, t_follow_up_window,

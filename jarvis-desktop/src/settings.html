@@ -1040,13 +1040,13 @@
               <p class="note" id="vt-sensitive-note"></p>
             </div>
             <div id="vt-handsfree-box" hidden>
-              <h3 class="subhead">Hands-free ("Hey Jarvis")</h3>
-              <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Jarvis is trusted"></div>
+              <h3 class="subhead" id="vt-handsfree-title">Hands-free ("Hey Atlas")</h3>
+              <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Atlas is trusted"></div>
               <p class="note" id="vt-handsfree-note"></p>
             </div>
             <div id="vt-screen-box" hidden>
-              <h3 class="subhead">Answers about your screen or the camera after "Hey Jarvis"</h3>
-              <div class="choices" id="vt-screen" role="group" aria-label="Answers about your screen or the camera after Hey Jarvis, under Only trust the talk button"></div>
+              <h3 class="subhead" id="vt-screen-title">Answers about your screen or the camera after "Hey Atlas"</h3>
+              <div class="choices" id="vt-screen" role="group" aria-label="Answers about your screen or the camera after Hey Atlas, under Only trust the talk button"></div>
               <p class="note" id="vt-screen-note"></p>
             </div>
             <div id="vt-live-box" hidden>
@@ -1071,15 +1071,15 @@
               <div class="choices" id="vt-talktype" role="group" aria-label="Talk-to-type: hold a key, speak, and Jarvis types what you said"></div>
               <p class="note" id="vt-talktype-note"></p>
               <p class="note">
-                It cannot share the microphone with "hey Jarvis" listening:
+                It cannot share the microphone with hands-free listening:
                 turn that off in the Jarvis bar first. Stop everything ends
                 it at once.
               </p>
             </div>
             <!-- "Better voice" (docs/JARVIS-API.md section 80): both apps. -->
             <div id="vt-wakeconfirm-box" hidden>
-              <h3 class="subhead">Second "hey Jarvis" check</h3>
-              <div class="choices" id="vt-wakeconfirm" role="group" aria-label="Second hey Jarvis check: one detector, or two that must agree"></div>
+              <h3 class="subhead" id="vt-wakeconfirm-title">Second "Hey Atlas" check</h3>
+              <div class="choices" id="vt-wakeconfirm" role="group" aria-label="Second hey Atlas check: one detector, or two that must agree"></div>
               <p class="note" id="vt-wakeconfirm-note"></p>
             </div>
             <div id="vt-voiceid-box" hidden>
@@ -1121,11 +1121,11 @@
           <!-- The wake phrase, exactly as the owner's ruling of 2026-11-21 asks
                for it: simple and factual, with no promise about an unshipped
                model (decisions.d/2026-11-21-wake-copy-hey-jarvis.md). -->
-          <h3 class="subhead" id="voice-wake-title">Wake phrase: Hey Jarvis.</h3>
+          <h3 class="subhead" id="voice-wake-title">Wake phrase: Hey Atlas.</h3>
           <p class="sc-line" id="voice-wake"></p>
           <div class="row">
             <button class="btn" id="voice-wake-off" type="button" hidden>Turn the wake word off</button>
-            <button class="btn" id="voice-wake-on" type="button" hidden>Turn on "hey Jarvis"</button>
+            <button class="btn" id="voice-wake-on" type="button" hidden>Turn on "hey Atlas"</button>
             <span class="status" id="voice-wake-status" role="status"></span>
           </div>
           <p class="note" id="voice-wake-on-note" hidden>
@@ -1152,7 +1152,7 @@
         <p class="note" id="voice-interrupt-note"></p>
         <p class="note">
           This PC only; your phone has its own. It matters while this PC
-          listens for "hey Jarvis", and in Jarvis Live. No card either way:
+          listens for its wake phrase, and in Jarvis Live. No card either way:
           it only changes when this PC listens.
         </p>
 
@@ -1193,6 +1193,25 @@
             <legend class="label">Answers</legend>
             <div id="mn-choices"></div>
           </fieldset>
+          <!-- ── Long answers (2026-11-25; answer-style-settings.js,
+               src-tauri/src/answer_style.rs get_answer_style/set_answer_style;
+               backend jarvis_answer_style.py, GET/POST /api/answer-style).
+               Bullet points when an answer has several parts, always bullet
+               points, or plain paragraphs - the owner's "if atlas has a long
+               response can it be put with bullet points", "and adjust it in the
+               settings and adjust it through chat". Wording/layout only, never
+               what Jarvis does, asks or remembers, and NEVER a spoken answer
+               (it is read aloud); a change is cardless either way and held on a
+               stale link like every other setting. The three labels and the
+               reasons are the PC's own (jarvis_answer_style.LABEL / WHY), so
+               the phone and a chat sentence read the same words. -->
+          <h3 class="subhead" id="as-title">Long answers</h3>
+          <p class="note" id="as-detail">When an answer has several parts, Jarvis can lay them out as bullet points instead of one long paragraph. Spoken answers are never bulleted - they are read aloud.</p>
+          <fieldset class="theme-list" id="as-list">
+            <legend class="label">Answer layout</legend>
+            <div id="as-choices"></div>
+          </fieldset>
+          <p class="status" id="as-status" role="status"></p>
           <p class="note" id="mn-spoken"></p>
           <!-- Humour (the owner's decision, 2026-09-27): a second, independent
                switch on this same screen - off to start. Same route, no card
@@ -1798,7 +1817,7 @@
           <span>Read replies out loud
             <span class="toggle-detail" id="hud-read-replies-detail">
               On by default. A VOICE answer - the quickbar's push-to-talk,
-              Jarvis Live, "hey Jarvis" - is read aloud in Jarvis's voice. A
+              Jarvis Live, "hey Atlas" - is read aloud in Jarvis's voice. A
               TYPED question is never read automatically: ask for it with the
               speaker beside an answer, or "Read out loud" in its own menu. Off
               stops automatic speech at once; those one-answer taps still work,
@@ -4185,6 +4204,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="answer-style-settings.js"></script>
     <script type="module" src="antislop-settings.js"></script>
     <script type="module" src="calendar-settings.js"></script>
     <script type="module" src="voiceprint-settings.js"></script>

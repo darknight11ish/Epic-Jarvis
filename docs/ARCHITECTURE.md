@@ -5237,6 +5237,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **The automatic read-aloud switch is PC-only, and the phone has its own on-device switch - one-sided on purpose (2026-11-07).** The owner asked for a real control over Jarvis reading replies aloud: typed answers stay silent by default, voice answers are spoken, and an answer that uses what Jarvis remembers is read aloud by default in Jarvis Live too, unless it is extremely sensitive. The PC half is the backend-owned `GET/POST /api/read-aloud` switch (ON by default), wired from brain to mouth by the ready plug-in `plugins/ready/read-aloud` (`backend/jarvis_read_aloud.py`, `backend/test_read_aloud.py`): the Settings switch, the chat/Live sentences and the HUD quickbar all speak the same state, and a model answer can never toggle it. The phone half is its own local switch (`MemoryAloud`, `PrivateAloud`, default ON including "hey Jarvis"/Live), its own chat sentences and its own per-answer Read out loud in the message menu; the phone never calls `/api/read-aloud`. That is deliberate: the PC route controls the PC's speakers, and a phone change must not silence or unmute the desktop by accident. `tools/check_parity.py` classifies `/api/read-aloud` as `deliberate` with that reason; what is one-sided is the *switch's owner*, not the permission, and both apps still show every answer and the same sensitive-answer rule.
 
+- **The typed answer's layout picker is the desktop's, and the phone changes the same value through chat - one-sided on purpose (2026-11-25).** The owner asked: *"if atlas has a long response can it be put with bullet points"*, and *"make sure I can adjust it in the settings and adjust it through chat if i want to"*. The PC half is the one setting `answer-style.json` beside `manner.json` (`backend/jarvis_answer_style.py`, `backend/test_answer_style.py`): `auto` puts a list of three or more parts on bullets, `bullets` bullets any answer with more than one part, and `prose` adds no note at all (0 tokens, the bytes the model got before this existed). `jarvis_agent.with_style_note` places the note just before the newest question on a TYPED turn only - never on a spoken one, whose own note forbids lists - and the module's `GET/POST /api/answer-style` route is installed by the ready plug-in `plugins/ready/answer-style`, so no patch carries it. The desktop's Settings -> How Jarvis talks -> Long answers is the three-choice picker (`src-tauri/src/answer_style.rs` get_answer_style/set_answer_style, `src/answer-style-settings.js`). **The phone has no picker in this slice, and it does not need one to change the value:** every phone chat turn already sends the sentence that changes the SAME PC-wide setting ("use bullet points", "no bullet points", "plain paragraphs", "bullet points when it helps", each also after "from now on ..."), answered on the PC by `jarvis_quick.py` through `jarvis_answer_style.handle_set()`. A phone-side picker is the remaining screen slice, not a missing permission - nothing here leaves the PC, raises a card or changes what Jarvis does. `tools/check_parity.py` classifies `/api/answer-style` as `deliberate` with that reason. **The honest limit:** a conversation's FIRST question keeps the exact request it always had (the note starts with the first follow-up), because that request is pinned byte for byte by `backend/test_agent.py` and by the warm-up prefix.
+
 - **The auto Wi-Fi reconnect is the PC's, and only the PC's** (2026-11-08; the
   owner's ask: *"add a feature to jarvis that defaults on but can be changed in
   settings or chat with jarvis, that jarvis if its running on a desktop and the
@@ -5713,6 +5715,69 @@ what is missing is only the Settings screen agreeing about who turned it off.
   route, and the page's own pairing sheet says the rest. A blank, wildcard,
   loopback or home-network address gets the card's plain "nothing for the phone
   to reach" sentence and no picture.
+- **The "Hey Atlas" wake model is on BOTH surfaces since 2026-11-25, and the
+  phone hears it too** (`backend/jarvis_wakeword.py`'s `PHRASE_MODELS`,
+  `KNOWN_FILES` and `PHONE_PHRASES`; the owner's ruling of 2026-11-21: *"Once
+  the custom Hey Atlas model passes local false-accept testing, swap the string
+  in one PR"*). The owner's trained head ships in this repository at
+  `backend/wakeword/hey_atlas.onnx` (215,964 bytes, SHA-256 `0DBE0AA5…`) and the
+  patcher puts it beside `jarvis_wakeword.py`, so **the PC hears "Hey Atlas"**:
+  since 2026-11-25 `[voice] wake_phrase = "hey_atlas"` is what the shipped
+  `jarvis-framework.toml` sets
+  (`decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md`), and
+  `hey_jarvis` stays a phrase this build knows, so a PC whose own file still
+  says it keeps waking exactly as before. **The phone carries the same
+  bytes:** `jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx`,
+  identical SHA-256, is what `OrtWakeModels.WAKE_FILE` names, and
+  `WakeWordService` loads the assets by that constant - so the phone's own
+  spotter scores the Atlas head on openWakeWord's unchanged front end, and its
+  own wake sentences ("until it hears "Hey Atlas"", the listening notification,
+  the restart notice) now say so truthfully. `backend/test_voice_upgrades.py`
+  asserts **every** pinned file is in the phone's assets with the pinned hash
+  and that the phone loads the atlas head by name; the earlier version of this
+  note recorded the opposite (the model was the PC's alone and the test asserted
+  the file ABSENT from the phone) - that one-sidedness is closed, and the
+  decision that closes it is `decisions.d/2026-11-25-hey-atlas-reaches-the-phone.md`.
+  **Two things are deliberately not "finished" by this:** (1) the two devices
+  must agree on the phrase, because `jarvis_speech.hear()` requires the
+  transcript to start with the configured phrase's name, so a PC still on
+  `wake_phrase = "hey_jarvis"` refuses a clip the phone woke on - a fresh
+  install now gets `hey_atlas`, but **an existing PC is never re-pointed**
+  (`scripts/apply-patches.ps1` does not overwrite `jarvis-framework.toml`), so
+  that one line is still changed by hand; (2)
+  the phone's copy of openWakeWord's `hey_jarvis_v0.1.onnx` stays in the APK
+  although no phone code loads it - it is this repository's only real copy of
+  those bytes and the two wake-word suites build a fake PC model folder from it.
+  `tools/check_parity.py` has nothing to classify: no route, no control and no
+  permission changed on either side. **NOT measured:** no phone microphone was
+  driven, so this is the model, the asset and the code path proven by tests -
+  not a device field test, and the 0.1 false-accepts-per-hour bar is still
+  unmeasured on both devices. The wake-word row of the generated feature list
+  (`features/features.json` -> the phone's `assets/features.json`) still reads
+  "Say "Hey Jarvis"": that file is generated data pinned by SHA-256 in
+  `backend/jarvis_feature_catalogue.py` and kept byte-identical to the source by
+  `tools/check_feature_list.py`, so renaming the row is its own change to that
+  source, not this one.
+- **The desktop's wake-phrase copy is DERIVED from the PC's own report since
+  2026-11-25** (the Principal Architect's Q1/Q2 ruling that day). Every
+  sentence in Settings -> Voice that names the phrase reads
+  `status.wake.title` (else `wake.phrase`): `jarvis-desktop/src/voice-training.js`'s
+  `phraseOf` is the one reader, ONE `DEFAULT_WAKE_PHRASE` covers only the moment
+  before the first status answer, and `voice-settings.js` / `voice-panel.js`
+  take the phrase from it. So a fresh install (whose shipped
+  `jarvis-framework.toml` says `hey_atlas`) reads "Hey Atlas", and **a PC whose
+  own file still says `hey_jarvis` reads "Hey Jarvis"** and moves only through
+  the explicit switch in Settings - the installer never rewrites that file, so
+  an update cannot re-point a working PC. The phone is the other half: its
+  plates bind to ONE `OrtWakeModels.WAKE_PHRASE` constant beside `WAKE_FILE`
+  (the phone owns its model, so its own listening sentences name what its
+  spotter hears), and `WakePhraseCopyTest` holds the constant, the file name
+  and the plates to each other. Product labels that are not about a PC's
+  setting (the bar's wake chip, `README.md`, the generated feature row) name
+  Atlas, the shipped phrase. What is **not** derived: the bar's live
+  "Listening for ..." line, which the bar page cannot read the status for
+  (`get_voice_status` is settings-only), so it stays a product label - a
+  follow-up, not a claim that it follows the PC.
 
 ## 9. Where the backend lives
 

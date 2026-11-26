@@ -369,11 +369,17 @@ def t_the_utterance_reply_serves_both_clients():
             tier_of=lambda a: "ask", spawn=lambda fn: fn())
         with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=False, score=0.01)):
             cases["wake word, not addressed to Jarvis"] = S.hear(tone(220.0), source="wake_word")
-        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.98)), \
+        # The two cases written for "hey Jarvis" pin the phrase: since
+        # 2026-11-25 the SHIPPED template says `hey_atlas`, and this contract is
+        # about the wire shape, not about which phrase the machine's config
+        # holds (a PC left on `hey_jarvis` is still a supported PC).
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"), \
+                mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.98)), \
                 mock.patch.object(S, "_stt_engine", return_value=object()), \
                 mock.patch.object(S, "_transcribe", return_value="Hey Jarvis, what time is it?"):
             cases["wake word, the owner"] = S.hear(tone(220.0), source="wake_word")
-        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.98)), \
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"), \
+                mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.98)), \
                 mock.patch.object(S, "_stt_engine", return_value=object()), \
                 mock.patch.object(S, "_transcribe", return_value="Hey Jarvis."):
             cases["wake word, awake"] = S.hear(tone(220.0), source="wake_word")
