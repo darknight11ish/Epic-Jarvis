@@ -3,5 +3,5 @@
   "summary": "ask for a desktop update from the phone, and ONE card decides: the same `desktop_update` card the chat already raises, the phone's own fingerprint or PIN to approve it, and the PC's own updater runs only after that yes.",
   "module": "jarvis_update",
   "install": "handler",
-  "stack_order": 191
+  "stack_order": 188
 }
