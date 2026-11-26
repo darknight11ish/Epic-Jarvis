@@ -41,6 +41,16 @@ page its own gate rejects. The figures are written without thousands
 separators, because the checker prints them that way and the gate's patterns
 capture `\\d+`.
 
+A CITATION IN THE DURABLE FORMS IS VERIFIED TOO (architect ruling A,
+2026-11-25). `read_register` checks every row's `source`: the file must exist,
+a `path:line` must be inside it, and a `path::symbol`, a `doc.md#heading` or a
+`changelog:"<bold title>"` must really name a declaration, a heading or a
+changelog bullet title the file carries. A register with a standing citation is
+therefore NOT readable to this tool, and it refuses to write a page from it
+rather than quoting a total that rests on a claim nobody can trace. `symbol:` is
+the seventh `check` kind and `changelog:` the eighth; both are counted like any
+other, and `backend/test_claims.py` proves the counting on a throwaway register.
+
 HOW THE PAGE IS READ. Exactly the way the gate reads it: every run of whitespace
 collapsed to one space (`" ".join(page.split())`), because one of the six
 statements wraps across a line break. The match's position is then mapped back

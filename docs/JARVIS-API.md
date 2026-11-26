@@ -7258,7 +7258,7 @@ quietly shadow another answer:
 
 | the sentence | who answers it |
 |---|---|
-| "connect my calendar", "set up my calendar", "set up a calendar bridge for me", "can you connect directly to external calendars like google or outlook?", "is my calendar connected?", "set up github", "is github set up?" | the **connect-account card** (§162): one card that takes the value on this PC, or the state answered from the store and one real test |
+| "connect my calendar", "set up my calendar", "set up a calendar bridge for me", "can you connect directly to external calendars like google or outlook?", "is my calendar connected?", "set up github", "is github set up?", "connect my gmail" (added 2026-11-25) | the **connect-account card** (§162): one card that takes the value on this PC, or the state answered from the store and one real test |
 | "calendar setup", "sync my calendar with jarvis", "import my ics file into jarvis", "give jarvis access to my calendar" | **this answer** (`calendar_setup`) - the setup shapes the card's grammar declines |
 | "what's on my calendar today", "add a meeting Tuesday 3pm", "add/update/delete a calendar event …" | **`jarvis_google_calendar.answer()`** (§161), asked only after the fast path has declined, so it cannot compete for "connect" |
 
@@ -30848,13 +30848,45 @@ storage half (`jarvis_token_store.py`, Windows Credential Manager) and the card
 half (`§157`) both existed; nothing joined them, and the model had no setup tool,
 so it filled the gap with a generic limitation.
 
-**Phase 1 covers three services, and only these:**
+**Phase 1 covers four services, and only these:**
 
 | service id | what the card asks for | Credential Manager entry | the one real test |
 |---|---|---|---|
 | `calendar_ics` | the private iCal link ("Secret address in iCal format") | `Jarvis Backend/Calendar iCal link` (existed since 2026-09-27) | one `GET` of the link: 200 **and** `BEGIN:VCALENDAR` in the answer |
 | `calendar_caldav` | username + password | `Jarvis Backend/CalDAV username`, `Jarvis Backend/CalDAV password` (**new**) | one `PROPFIND` with Basic auth on the CalDAV address already saved in Settings, Accounts: 200 or 207 |
 | `github` | a personal access token | `Jarvis Backend/GitHub token` (**new**) | `GET https://api.github.com/user`: 200, and the login name GitHub answers with |
+| `gmail` (**added 2026-11-25, DEF-096**) | the mail address + an App Password (NOT the Google password) | `Jarvis Backend/IMAP username`, `Jarvis Backend/IMAP password` (the mail tools' own entries since 2026-10-06) | one IMAP connection to the mail server already saved in Settings (else `imap.gmail.com:993` for a Gmail address): LOGIN, open the mailbox **read-only**, ask how many messages there are, disconnect. No `FETCH` at all - no sender, subject, date or body - and nothing is marked as read |
+
+**The Gmail row, and why it is an App Password and not Google OAuth (2026-11-25,
+DEF-096).** The owner said *"i would like to connect you to my gmail"* and the
+table above held no mail service at all, so the sentence could not raise the
+card. The ruling: for a non-commercial, local-only personal app, Google's
+restricted Gmail scopes either expire every 7 days in "Testing" mode or need an
+external CASA Tier 2 audit for "Production" mode. An App Password (with 2-Step
+Verification on) is durable, needs no cloud redirect and no audit, and fits one
+setup card plus one read test - so **no Google OAuth is built, here or anywhere
+else**. The card's hint says, in Google's own terms, that the password box wants
+an App Password and that Google makes one only while 2-Step Verification is on;
+it is said as Google's rule, never as a measurement of the owner's account.
+
+The two entries are `jarvis_email.IMAP_USER_TARGET` / `IMAP_PASSWORD_TARGET` -
+the pair `jarvis_email.imap_user()` and `imap_password()` already resolve - so
+connecting configures the mailbox the rest of Jarvis reads, with no second store
+and no Settings box of its own. The one test reads a **count**: it fetches no
+message and marks none as read (`jarvis_connect_account._imap_count`), and a
+wrong password answers one plain sentence about app passwords rather than a
+traceback or the server's own reply. **Nothing is sent from this card**: an
+outbound email keeps its own per-email approval card (`send_email`, §…), which
+this action does not touch.
+
+The row has **its own gate action**, `connect_mail` (`[autonomy.tiers]` "ask",
+card words in `jarvis-backend/jarvis_gate.py`'s `_RISK` and in
+`tools/repair_live_backend_gaps.py` for an install that predates it). The card
+may only be raised where that action is "ask" - the card IS the ask -
+`jarvis_connect_account.tier_problem()` refuses to raise it at any other tier,
+and "never" switches it off. The card also states, in the words the owner reads
+before typing anything, that the address and password go to Windows Credential
+Manager on this PC and never into a chat.
 
 The CalDAV username/password and the GitHub token had **no Credential Manager
 entry at all** before this: they were read only from `JARVIS_CALDAV_USER`,
@@ -30869,12 +30901,14 @@ reader for both calendar secrets; `jarvis_research._token()` and
 **How a card is raised - two doors, one implementation.** `jarvis_connect_account.raise_card(service, label)`
 is called by (a) the model's `connect_account` tool, and (b) `jarvis_quick.py`'s
 own sentence grammar ("connect my calendar", "set up github", "is my calendar
-connected?", "connect my email"), which needs no model at all and runs **before**
-the 2026-10-22 Settings-only refusal - the card types the value on this PC, which
-is the same act Settings performs. A sentence naming an account with no test yet
-(email, Notion, Obsidian, the search and chatbot keys, Home Assistant) is answered
-with what CAN be connected, not with a card for something unverifiable. A
-reminder that merely mentions a calendar keeps its own answer.
+connected?", "connect my email", and since 2026-11-25 "connect my Gmail"), which
+needs no model at all and runs **before** the 2026-10-22 Settings-only refusal -
+the card types the value on this PC, which is the same act Settings performs. A
+sentence naming an account with no test yet (email with no provider named,
+Notion, Obsidian, the search and chatbot keys, Home Assistant) is answered with
+what CAN be connected, not with a card for something unverifiable; the email
+answer's own first line names the Gmail card. A reminder that merely mentions a
+calendar keeps its own answer.
 
 **The card's shape (nothing here is or can be a value):**
 
@@ -30938,7 +30972,7 @@ about pairing, and answering it with this card's own "what I cannot connect yet"
 text would be a true sentence about the wrong thing, so the phone's words are not
 in that list and the sentence keeps its own answer.
 
-**Tests.** `backend/test_connect_account.py` (187 checks: the store mapping, the
+**Tests.** `backend/test_connect_account.py` (330 checks: the store mapping, the
 card carrying no value, the model's note stripped of every format character (a
 right-to-left override made it read backwards), a card spent exactly once by two
 threads saving at the same moment, an expired card refused before anything is
@@ -30947,9 +30981,13 @@ an injected request hook - including an absent plain-http rule failing CLOSED
 rather than open - the status sentences, #960's Settings jump on a "not connected
 yet" answer, the tool's refusal of a value, the quick path's sentences (and the
 phone's question NOT reaching this path), the host-only route refusing another
-machine before it reads a single byte of the body, and that this adds no raw-key
-route) and `backend/test_account_secrets.py` (which now
-covers the three new entries - and, in the required `credential-manager` CI job,
+machine before it reads a single byte of the body, that this adds no raw-key
+route, and the Gmail card's own half: the card's words naming the address box and
+the count, no card at any tier but "ask", the save writing the mail module's two
+entries, the exact IMAP conversation (LOGIN, EXAMINE, SEARCH, CLOSE, LOGOUT - and
+no FETCH), a wrong app password answered in one sentence, and no value in the
+receipt file or the chat words) and `backend/test_account_secrets.py` (which now
+covers the four new entries - and, in the required `credential-manager` CI job,
 writes/reads/deletes each one's shape on real Windows under a throwaway name).
 The HUD card is driven in a real browser: `jarvis-desktop/tests/hud.mjs` hands the
 page the host's own card list, clicks Save, and asserts the boxes come from
@@ -37602,7 +37640,7 @@ existing repository) and `github_list`'s `repos` scope are the only rows without
 | Tool | What it does | The request |
 |---|---|---|
 | `github_list` | lists ONE fixed thing: your repositories (`repos`), a repo's pull requests (`pulls`) or issues (`issues`) in a state you name - `open` (the default), `closed` or `all` - or its recent workflow runs (`runs`) | `GET /user/repos`, or `GET /repos/{owner}/{repo}/...` with `state=` on the two list scopes |
-| `github_read_file` | reads ONE file's text, at an optional branch or commit | `GET /repos/{owner}/{repo}/contents/{path}` |
+| `github_read_file` | reads ONE file's text, at an optional branch or commit - or, with `scan: true`, scans ONE repository in a bounded way: it lists at most 12 folders, walks at most 400 entries and reads the first 1,500 characters of at most 10 text files, then states the counts it covered and every file and folder it did NOT read. A public repository scans with no token; a private one is refused in plain words | `GET /repos/{owner}/{repo}/contents/{path}`, or `GET .../contents` plus the folder listings and file reads the scan's own caps allow |
 | `github_ci_status` | how CI went: the newest run for a branch, or for a pull request (whose head commit is read first) - and, when it failed, the failing checks by name plus ONE bounded excerpt of the first failing check's log. **The answer also carries the workflow run's id, its attempt number and the check/job name** (2026-11-22), so a reader can act on it | `GET .../actions/runs`, or `GET .../pulls/{n}` then the runs for that commit; when the newest run failed, `GET .../actions/runs/{id}/jobs` and one job log |
 | `github_comment` | posts ONE comment on an issue or pull request | `POST .../issues/{n}/comments` |
 | `github_open_issue` | opens ONE issue, with a title and an optional body | `POST .../issues` |

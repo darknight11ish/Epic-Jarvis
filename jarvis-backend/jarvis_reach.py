@@ -112,7 +112,8 @@ TOOL_NAMES = {
     # can merge, push, commit, delete or close anything.
     "github_list": "Listing your GitHub repositories, pull requests, issues or runs "
                    "(one card each)",
-    "github_read_file": "Reading one file in a GitHub repository (one card each)",
+    "github_read_file": "Reading one file in a GitHub repository, or scanning one "
+                        "in a bounded way that says what it skipped (one card each)",
     "github_ci_status": "Checking how CI went on GitHub (one card each)",
     "github_comment": "Posting a comment on GitHub (one card each)",
     "github_open_issue": "Opening a GitHub issue (one card each)",

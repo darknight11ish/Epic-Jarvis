@@ -209,7 +209,13 @@ def t_the_notes_answer_is_the_notes_editor_row():
           says_row(reply, "notes-editor", ("title", "where", "asks", "limit")),
           reply[:500])
     check("... with its own limits named, not invented",
-          "no deleting a note" in reply, reply[:500])
+          "a line is never deleted on its own" in reply, reply[:500])
+    # DEF-095 (2026-11-25): the row used to say "no deleting a note", and the
+    # owner was answered "I cannot delete your notes" out of it while deleting a
+    # note had shipped on 2026-11-23. The row now says what the card does.
+    check("... and it no longer claims a note cannot be deleted",
+          "no deleting a note" not in reply and ".trash folder" in reply,
+          reply[:500])
     check("... and nothing from a different note feature",
           "Write a note for you" not in reply, reply[:300])
 

@@ -1265,7 +1265,19 @@ def _prepare_github_list(args: dict):
 
 
 def _prepare_github_read_file(args: dict):
+    """Plan ONE file read, or ONE bounded repository scan (DEF-097, 2026-11-25).
+
+    `scan: true` selects the scan, which is the ONE GitHub read that also works
+    with no token saved (on a public repository), so it deliberately does NOT go
+    through `_github_plan`: that answers "connect GitHub" before the planner runs
+    when no token is saved. Both halves still validate their name before anything
+    is sent, and `jarvis_github.run()` decides from GitHub's own answer whether a
+    private repository needs the token.
+    """
     import jarvis_github as GH
+    if bool((args or {}).get("scan")):
+        r = GH.plan_scan(args)
+        return r, GH.describe(r)
     return _github_plan(GH.plan_read_file, args)
 
 
@@ -3545,13 +3557,19 @@ CONNECT_TOOL = "connect_account"
 def _connect_tool_text() -> str:
     """The connect_account description. Kept under 300 tokens like every tool
     text (backend/test_tool_text.py), and it says the one thing that keeps rule
-    3: never take the value here."""
-    return ("Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the "
-            "owner asks to connect, set up or link one. The OWNER types the token, "
-            "private link or username and password into that card on this PC; it is "
-            "saved into Windows Credential Manager and tested for real. NEVER take a "
-            "password, token or private link in the chat and never pass one here: this "
-            "tool has no field for a value. For any other account say Settings-only.")
+    3: never take the value here.
+
+    2026-11-25 (DEF-096): a mailbox joined the table, so the description names
+    it - otherwise the model would tell the owner email is Settings-only while
+    the card can test a Gmail address. The `service` argument was always the
+    module's own closed vocabulary; the words here only have to point at it."""
+    return ("Raise ONE card that connects a calendar, GitHub or a mail mailbox "
+            "(Gmail) to Jarvis. Use when the owner asks to connect, set up or link "
+            "one. The OWNER types the token, private link or username and password "
+            "into that card on this PC; it is saved into Windows Credential Manager "
+            "and tested for real. NEVER take a password, token or private link in "
+            "the chat and never pass one here: this tool has no field for a value. "
+            "For any other account say Settings-only.")
 
 
 def _run_connect_tool(args: dict) -> dict:
@@ -6724,18 +6742,33 @@ TOOLS: dict = {
     "github_read_file": Tool(
         "github_read_file",
         "Read ONE file's text from a repository the saved GitHub token can see, "
-        "at an optional branch or commit. Read-only: nothing changes. It does "
+        "at an optional branch or commit. "
+        "Or set `scan` to true and SCAN one repository in a bounded way instead: "
+        "it lists the folders, reads the start of a few text files, and says "
+        "exactly how many files and folders were NOT read - a scan, never a copy. "
+        "The scan also works on a public repository with no token saved; a private "
+        "one needs GitHub connected. Read-only: nothing changes. It does "
         "not ask by default; the switchable \"Read your GitHub\" row on "
         "the What asks first page can put that card back. It cannot "
         "write, edit or commit a file.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "path": {"type": "string",
-                     "description": 'the path inside the repository, e.g. "README.md"'},
+                     "description": 'the path inside the repository, e.g. "README.md"; '
+                                    "required unless `scan` is true"},
             "ref": {"type": "string",
-                    "description": "a branch or commit; leave it out for the default"}},
-         "required": ["repo", "path"]},
+                    "description": "a branch or commit; leave it out for the default"},
+            "scan": {"type": "boolean",
+                     "description": "true to scan the whole repository in a bounded "
+                                    "way instead of reading one file"}},
+         "required": ["repo"]},
         _prepare_github_read_file, _run_github),
+    # THE BOUNDED WHOLE-REPOSITORY SCAN (DEF-097, 2026-11-25) is `github_read_file`
+    # with `scan: true`, not a tool of its own: the owner's ask is the ABILITY to
+    # look at a whole repository, and giving it a new tool name would add a new
+    # switch, a new count on the settings page and a new entry in every GitHub
+    # tool list - none of which is the answer. One read door, two shapes, and the
+    # scan's own caps are in `jarvis_github.py`.
     "github_ci_status": Tool(
         "github_ci_status",
         "Call this when the owner asks what CI says, or what checks are failing or "
@@ -12655,7 +12688,7 @@ TOOL_GROUPS = (
     # Connecting an account by talking (2026-10-28): its own group, one member,
     # because raising the card is a single deliberate act and nothing else in
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
-    ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
+    ("connect", "connect a calendar, GitHub or Gmail", (CONNECT_TOOL,)),
     # GitHub: searching it for a library, and (2026-11-03) reading the owner's
     # own and taking the small actions; the cockpit, merge and fix-and-push of
     # 2026-11-10 joined the same group, and the 22:30 ruling's Step 2 added the
@@ -13136,10 +13169,12 @@ TOOL_HINTS = {
     # CONNECT_TOOL (2026-10-28): "connect my calendar", "set up GitHub", "link
     # my calendar". Deliberately narrow: asking what is ON the calendar, or
     # what a token is, must not pull the connect tool in - each pattern needs
-    # the connecting verb AND an account word.
-    "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
+    # the connecting verb AND an account word. `gmail` joined on 2026-11-25
+    # (DEF-096) for the sentences the quick path's grammar does not claim; bare
+    # "email"/"mail" is NOT here, or "send an email" would pull it in.
+    "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|gmail|account)\b",
                         r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
-                        r"github|account)\b"),
+                        r"github|gmail|account)\b"),
     # PHONE_APPS (2026-11-02): the [phone_apps] allow-list itself - "add YouTube
     # Music to my phone apps", "which apps can you open", "remove it from that
     # list", "what is on the allow-list". Deliberately narrow: "open YouTube on
@@ -15087,7 +15122,7 @@ Who you are: Jarvis, the owner's own assistant, living on their PC. Calm, capabl
 - Jarvis Desktop ships real keyboard shortcuts: Alt+Space shows or hides the Jarvis bar, Alt+Shift+N opens a quick note, and Settings, Shortcuts lists the rest; the notes editor has its own keys (Ctrl+B and so on). Never deny having shortcuts, and never claim a Windows shortcut as Jarvis's.
 - You really do keep timers, alarms, reminders and lists on this PC: 'remind me to call Mom at 6pm', 'make a reminder for 30 minutes from now to check my phone' and 'set a timer for 10 minutes' all work. They appear in Brain, Work, Coming up and the HUD's Reminders panel; when one goes off the PC shows a Windows notification while Jarvis is running (an alarm keeps ringing, a reminder or timer shows once), and the phone shows an Android notification while it is connected - the PC is the clock and the phone sets no alarm of its own. If the Jarvis app is closed, no notification appears then, but the job is kept and shows when it opens. Never say you cannot set a reminder or alarm.
 - Jarvis has a real drop-in plug-in system, not only built-in tools: 45 optional plug-ins live as folders under jarvis_plugins beside jarvis_hud.py, added with scripts/add-plugin.ps1 -Name <name> and a restart; the loader raises no card of its own, and an installed plug-in's feature keeps its own one card. Never say Jarvis has no plug-ins.
-- Jarvis has a real Skills menu too: Settings, Skills installs a SKILL.md from a folder or .zip, imports Hermes skills from %USERPROFILE%\\.hermes\\skills, turns one off/on and edits one - each behind ONE approval card; a risky skill is quarantined and never carded; nothing is downloaded or auto-installed. Never say you cannot install skills.
+- Jarvis has a real Skills menu too: Settings, Skills installs a SKILL.md from a folder or .zip, imports Hermes skills from %USERPROFILE%\\.hermes\\skills, turns one on and edits one - each behind ONE approval card; turning one off, and removing one, are immediate; a risky skill is quarantined and never carded; nothing is downloaded or auto-installed. Never say you cannot install skills.
 - Jarvis can really build a small Android app: in a project task it writes a fixed template around your own index.html/app.js/app.css, then Gradle builds it behind ONE app_build_android card and adb installs it behind ONE app_install_android card over the cable. It needs the Android SDK, a Java 17 JDK, its Gradle wrapper files and, for the install, USB debugging; a first build downloads Gradle and the Android Gradle plugin. No Play Store, no release signing. Never say you cannot build Android apps or write code.
 - Jarvis really does keep track of goals on this PC: Brain, Work, Goals stores each goal's own words and a short editable plan of at most 7 steps. Accepting a drafted goal raises ONE ordinary approval card; ticking a step and the weekly check-in raise NO card; every acting step still needs its own card. Nothing ticks a step silently - you tick it, and a step that names a project benchmark is met when that number reaches its target. Never say Jarvis has no goal tracking.
 - Jarvis really does have a read-only price and flight radar (jarvis_price_radar.py): it can read Google Flights' public search page (unofficial and experimental) and keep a local price history with target prices. It is OFF by default ([price_radar] enabled = false in the settings file; no chat approval card for that switch exists yet); this chat can run a read-only lookup when it is on, and there is no app screen yet. It never books, holds a seat, adds to a cart or checks out. Never say you cannot check flight prices - say the radar is off or unwired until it is on, and never invent prices.

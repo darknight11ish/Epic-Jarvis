@@ -101,16 +101,21 @@ sys.path.insert(0, str(HERE))
 
 import jarvis_calendar as CAL  # noqa: E402
 import jarvis_connect_account as C  # noqa: E402
+import jarvis_email as EMAIL  # noqa: E402
 import jarvis_research as RES  # noqa: E402
 import jarvis_scrub as SCRUB  # noqa: E402
 import jarvis_token_store as TS  # noqa: E402
 
 FAILED, PASSED = [], []
 
-#: Every environment variable these three services read. Cleared around every
-#: check that looks at the store, so a variable set in this window cannot make a
-#: test pass for the wrong reason.
-ENVS = (CAL.ICS_URL_ENV, CAL.USER_ENV, CAL.PASSWORD_ENV, RES.TOKEN_ENV)
+#: Every environment variable these services read. Cleared around every check
+#: that looks at the store, so a variable set in this window cannot make a test
+#: pass for the wrong reason.
+ENVS = (CAL.ICS_URL_ENV, CAL.USER_ENV, CAL.PASSWORD_ENV, RES.TOKEN_ENV,
+        # The Gmail row reads the mail connector's own two names (DEF-096), so
+        # a JARVIS_IMAP_* variable set in this window would shadow the store
+        # and make a check pass for the wrong reason.
+        EMAIL.USER_ENV, EMAIL.PASSWORD_ENV)
 
 CANARY = "canary-value-9d41f7-do-not-print"
 
@@ -235,8 +240,13 @@ def t_every_service_field_maps_to_a_real_store_entry():
         "calendar_caldav": {"username": CAL.USER_TARGET,
                             "password": CAL.PASSWORD_TARGET},
         "github": {"token": RES.TOKEN_TARGET},
+        # DEF-096 (2026-11-25): Gmail writes where the MAIL TOOLS ALREADY READ,
+        # so the card configures the mailbox the rest of Jarvis uses and there
+        # is no second store.
+        "gmail": {"address": EMAIL.IMAP_USER_TARGET,
+                  "app_password": EMAIL.IMAP_PASSWORD_TARGET},
     }
-    check("there are exactly the three Phase-1 services",
+    check("there are exactly the four Phase-1 services",
           set(C.SERVICES) == set(want), f"{sorted(C.SERVICES)}")
     for sid, svc in C.SERVICES.items():
         got = C.targets(sid)
@@ -641,6 +651,10 @@ def t_the_module_cannot_write_a_file_or_reach_a_clipboard():
           {m for m in imports if m.startswith("jarvis_")} <=
           {"jarvis_token_store", "jarvis_calendar", "jarvis_research",
            "jarvis_local_http", "jarvis_scrub", "jarvis_accounts",
+           # The Gmail row's two entry names are the MAIL module's own
+           # constants (DEF-096, 2026-11-25): same rule as the calendar's and
+           # GitHub's - every caller passes its OWN target.
+           "jarvis_email",
            # A settings-folder PATH only (the receipt file, 2026-11-08): it
            # stores nothing; Credential Manager is still the only value store.
            "jarvis_framework"},
@@ -896,7 +910,7 @@ def t_status_is_built_from_the_store_and_the_test():
               "not tested just now" in C.status_words("calendar_ics", probe=False),
               C.status_words("calendar_ics", probe=False))
         rows = {r["service"]: r for r in C.status()}
-        check("the status read covers all three services", len(rows) == 3, f"{sorted(rows)}")
+        check("the status read covers all four services", len(rows) == 4, f"{sorted(rows)}")
         check("the GitHub row is honestly not configured",
               rows["github"]["configured"] is False and rows["github"]["connected"] is False)
 
@@ -996,7 +1010,7 @@ def t_the_quick_path_answers_the_owners_sentences():
         # account this card cannot test gets (Notion, here).
         later = Q.answer("connect my notion")
         check("an untestable account is answered with what CAN be connected, and no card claim",
-              later is not None and "I can connect two things" in later.reply and
+              later is not None and "I can connect three things" in later.reply and
               "One card is waiting" not in later.reply, later and later.reply)
         check("the same intent names are not in READ_ONLY_INTENTS",
               "connect_account" not in Q.READ_ONLY_INTENTS)
@@ -1156,7 +1170,7 @@ def t_the_route_is_installed_through_the_secret_handoff_entry_point():
 
 def t_the_required_credential_manager_check_covers_the_new_entries():
     """The required `credential-manager` CI job runs test_token_store.py and
-    test_account_secrets.py against real Windows. The three entries this feature
+    test_account_secrets.py against real Windows. The four entries this feature
     adds are exercised here (by a fake store) and named in the live test's own
     targets table, so a rename cannot pass this suite while the CI job stops
     covering them."""
@@ -1170,8 +1184,8 @@ def t_the_required_credential_manager_check_covers_the_new_entries():
     LIVE.t_caldav_and_github_resolve_through_the_same_mechanism()
     check("the live CI checker's own two connect-account checks pass",
           len(LIVE.FAILED) == before, f"{LIVE.FAILED[before:]}")
-    check("the live CI job also round-trips the three new entries on real Windows",
-          callable(getattr(LIVE, "t_live_the_three_connect_entries_on_real_windows", None)))
+    check("the live CI job also round-trips the four new entries on real Windows",
+          callable(getattr(LIVE, "t_live_the_four_connect_entries_on_real_windows", None)))
     check("... and still round-trips the store itself",
           callable(getattr(LIVE, "t_live_windows_round_trip", None)))
 
@@ -1547,6 +1561,294 @@ def t_a_save_records_the_non_secret_receipt_a_later_chat_reads():
     fresh_cards(lambda: without_env(lambda: with_store(shelf2, run_failed)))
 
 
+# --------------------------------------------------------------------------
+#   11. DEF-096 (2026-11-25): the Gmail card - a real ask, Credential Manager,
+#       and ONE count over IMAP
+# --------------------------------------------------------------------------
+#
+# The owner: "i would like to connect you to my gmail", then "i saved my gmail
+# password. can you access my account now". The card table held a calendar and
+# GitHub, so the sentence could not raise a card. What this holds:
+#
+#   * the card is RAISED, and its words name the address box and what the one
+#     test reads (a count - no sender, subject, date or body);
+#   * a refusal (the action not at tier "ask") raises NO card at all;
+#   * the address and the app password are written to the MAIL module's own two
+#     Credential Manager entries - the ones `jarvis_email` already reads;
+#   * the one real test logs in over IMAP, opens the mailbox read-only, asks how
+#     many messages there are, and FETCHes nothing;
+#   * a wrong app password is a sentence, not a traceback - and the value never
+#     reaches the receipt file, the chat answer or the log scrubber's "hidden"
+#     list in a form that could be printed.
+
+class FakeImap:
+    """`imaplib.IMAP4_SSL`, standing in, recording the whole conversation.
+
+    Only the five calls the card makes exist on it, so a sixth (a FETCH, say)
+    would fail here rather than quietly become part of what this suite allows.
+    """
+
+    made = []
+    refuse_login = False
+
+    def __init__(self, host, port, **kwargs):
+        self.host, self.port, self.kwargs = host, port, kwargs
+        self.calls = []
+        FakeImap.made.append(self)
+
+    def login(self, user, password):
+        self.calls.append(("LOGIN", user, password))
+        if FakeImap.refuse_login:
+            import imaplib
+            raise imaplib.IMAP4.error("LOGIN failed")
+        return "OK", [b"logged in"]
+
+    def select(self, mailbox, readonly=False):
+        self.calls.append(("SELECT", mailbox, readonly))
+        return "OK", [b"3"]
+
+    def search(self, charset, criterion):
+        self.calls.append(("SEARCH", charset, criterion))
+        return "OK", [b"1 2 3"]
+
+    def close(self):
+        self.calls.append(("CLOSE",))
+
+    def logout(self):
+        self.calls.append(("LOGOUT",))
+
+
+def with_imap(cls, fn):
+    """Run `fn` with `imaplib.IMAP4_SSL` replaced, then put it back."""
+    import imaplib
+    real = imaplib.IMAP4_SSL
+    imaplib.IMAP4_SSL = cls
+    try:
+        return fn()
+    finally:
+        imaplib.IMAP4_SSL = real
+
+
+#: The two values the owner would type on the Gmail card. The password is a
+#: canary-shaped string: if it appears anywhere this suite reads, the check that
+#: looks for it fails loudly.
+GMAIL_ADDRESS = "owner.canary@gmail.com"
+GMAIL_SECRET = "app-pw-canary-7f3a9-do-not-print"
+
+
+def t_the_gmail_card_is_raised_and_says_what_it_reads():
+    """The card exists, names the address, and says the test is a count."""
+    def run():
+        card = C.raise_card("gmail", "")
+        check("the Gmail card is raised", card.get("service") == "gmail", card)
+        check("its boxes are the address and the app password",
+              [f["name"] for f in card["fields"]] == ["address", "app_password"],
+              [f["name"] for f in card["fields"]])
+        labels = " ".join(f["label"] for f in card["fields"]).lower()
+        check("the address is named on the card", "gmail address" in labels, labels)
+        check("the password box says it is an APP password, never the account one",
+              "app password" in labels and "not your google password" in labels, labels)
+        hints = " ".join(f["hint"] for f in card["fields"]).lower()
+        check("Google's own rule is on the card: 2-Step Verification first",
+              "2-step verification" in hints, hints)
+        check("... and that Google refuses the normal password over IMAP",
+              "refuses your normal password" in hints, hints)
+        summary = card["summary"].lower()
+        check("the card says what the ONE test reads: a count, and nothing else",
+              "count" in summary and "no message" in summary
+              and "no sender" in summary, card["summary"])
+        check("the card says it is read-only and sends nothing",
+              "read-only" in summary and "nothing is ever sent" in summary,
+              card["summary"])
+        check("the card names the mail module's own two entries",
+              card["store_entries"] == [EMAIL.IMAP_USER_TARGET,
+                                        EMAIL.IMAP_PASSWORD_TARGET],
+              card["store_entries"])
+        check("the card says where the value goes: Credential Manager, this PC",
+              "Credential Manager" in card["stores_where"], card["stores_where"])
+
+    fresh_cards(lambda: without_env(run))
+
+
+def t_a_refused_tier_raises_no_card():
+    """The action this card adds may only exist at tier "ask".
+
+    "never" is the owner switching it off; "auto"/"notify" would store a mail
+    password with nobody asked - so no card is raised, and the answer says why.
+    """
+    def run():
+        for tier in ("auto", "notify", "never"):
+            C.reset_for_tests()
+            try:
+                C.raise_card("gmail", "", tier_of=lambda _action, t=tier: t)
+                said = None
+            except C.ConnectAccountError as exc:
+                said = str(exc)
+            check(f"tier {tier!r} raises no card, and says why in words",
+                  said is not None, said)
+            check(f"... and no card is left waiting after tier {tier!r}",
+                  C.pending_cards() == [], C.pending_cards())
+        check("the refused answer names the action, not a traceback",
+              "connect_mail" in str(C.tier_problem("gmail",
+                                                   lambda _a: "never")),
+              C.tier_problem("gmail", lambda _a: "never"))
+        check("tier 'ask' - the shipped line - raises the card",
+              C.raise_card("gmail", "", tier_of=lambda _a: "ask")["service"] == "gmail")
+        check("the services with no action of their own are untouched",
+              C.tier_problem("github", lambda _a: "never") == ""
+              and C.tier_problem("calendar_ics", lambda _a: "never") == "")
+
+    fresh_cards(lambda: without_env(run))
+
+
+def t_the_gmail_save_writes_the_mail_entries_and_reads_one_count():
+    """The save goes to Credential Manager, then ONE read-only IMAP count.
+
+    Proven against a stand-in `imaplib`, so the exact conversation is asserted:
+    LOGIN with the typed values, EXAMINE (select readonly), SEARCH ALL, close,
+    logout - and nothing that fetches a message.
+    """
+    shelf = StoreShelf()
+
+    def run():
+        try:
+            C.receipts_path().unlink()
+        except OSError:
+            pass
+        card = C.raise_card("gmail", "")
+        FakeImap.made, FakeImap.refuse_login = [], False
+        check("raising the card opens no connection and runs no test",
+              FakeImap.made == [], FakeImap.made)
+        receipt = with_imap(FakeImap, lambda: C.save_card(
+            card["card_id"],
+            {"address": GMAIL_ADDRESS, "app_password": GMAIL_SECRET}))
+        check("the address went to the mail module's own username entry",
+              shelf.wrote(EMAIL.IMAP_USER_TARGET) == [GMAIL_ADDRESS],
+              shelf.wrote(EMAIL.IMAP_USER_TARGET))
+        check("the app password went to the mail module's own password entry",
+              shelf.wrote(EMAIL.IMAP_PASSWORD_TARGET) == [GMAIL_SECRET],
+              shelf.wrote(EMAIL.IMAP_PASSWORD_TARGET))
+        check("nothing else was written anywhere in the store",
+              set(shelf.by_target) == {EMAIL.IMAP_USER_TARGET,
+                                       EMAIL.IMAP_PASSWORD_TARGET},
+              sorted(shelf.by_target))
+        check("ONE connection was opened, to Gmail's own IMAP server",
+              len(FakeImap.made) == 1 and FakeImap.made[0].host == C.GMAIL_IMAP_HOST
+              and FakeImap.made[0].port == 993,
+              [(c.host, c.port) for c in FakeImap.made])
+        calls = FakeImap.made[0].calls
+        check("the server's certificate and name are checked, like every mail read",
+              "ssl_context" in FakeImap.made[0].kwargs and
+              FakeImap.made[0].kwargs.get("timeout") == C.IMAP_TEST_TIMEOUT_S,
+              FakeImap.made[0].kwargs)
+        check("it logged in with the values typed on the card",
+              ("LOGIN", GMAIL_ADDRESS, GMAIL_SECRET) in calls, calls)
+        check("it opened the mailbox READ-ONLY (no flag can be changed)",
+              ("SELECT", "INBOX", True) in calls, calls)
+        check("... the whole conversation is LOGIN, SELECT, SEARCH, CLOSE, LOGOUT",
+              [c[0] for c in calls] == ["LOGIN", "SELECT", "SEARCH", "CLOSE", "LOGOUT"],
+              calls)
+        check("... so there is no FETCH, COPY, MOVE, STORE or EXPUNGE anywhere in it",
+              not {c[0] for c in calls} & {"FETCH", "COPY", "MOVE", "STORE", "EXPUNGE"},
+              calls)
+        check("the mail module itself reads the address back from that entry",
+              EMAIL.imap_user() == GMAIL_ADDRESS, "it did not match")
+        got_password = EMAIL.imap_password()
+        check("... and the app password, through the same resolver",
+              got_password == GMAIL_SECRET, "it did not match")
+        words = receipt["verify_words"].lower()
+        check("the test passed and says what it proved: the count",
+              receipt["verified"] is True and "3 messages" in words, receipt)
+        check("... and it says no message was read and none was marked",
+              "no message was read" in words and "marked as read" in words, words)
+        check("the receipt carries no value",
+              GMAIL_SECRET not in json.dumps(receipt), json.dumps(receipt)[:300])
+        raw = C.receipts_path().read_text(encoding="utf-8")
+        check("the receipt FILE holds no value: it is never a place one can live",
+              GMAIL_SECRET not in raw, raw[:400])
+        sheet = C.receipt_words("gmail")
+        check("the chat answer built from that record carries no value either",
+              GMAIL_SECRET not in sheet and "3 messages" in sheet, sheet)
+        FakeImap.refuse_login = False
+        status = with_imap(FakeImap, lambda: C.status_words("gmail"))
+        check("the saved card reads as connected, from the store and a real test",
+              status.startswith("Gmail (your address and an app password): connected - ")
+              and GMAIL_SECRET not in status, status)
+
+    try:
+        fresh_cards(lambda: without_env(lambda: with_store(shelf, run)))
+    finally:
+        try:
+            C.receipts_path().unlink()
+        except OSError:
+            pass
+
+
+def t_a_wrong_app_password_is_a_sentence_not_a_traceback():
+    """A refused LOGIN answers in words that name the app password."""
+    shelf = StoreShelf()
+
+    def run():
+        card = C.raise_card("gmail", "")
+        FakeImap.made, FakeImap.refuse_login = [], True
+        try:
+            receipt = with_imap(FakeImap, lambda: C.save_card(
+                card["card_id"],
+                {"address": GMAIL_ADDRESS, "app_password": "not-the-app-password"}))
+            crash = None
+        except Exception as exc:            # noqa: BLE001 - a traceback would fail here
+            receipt, crash = {}, f"{type(exc).__name__}: {exc}"
+        check("a refused login does not raise: the save answers with its verdict",
+              crash is None, crash)
+        check("... and the verdict is honest: NOT verified",
+              receipt.get("verified") is False, receipt)
+        words = str(receipt.get("verify_words") or "")
+        check("the answer is one plain sentence about the app password",
+              words.startswith("the mail server refused that address and app password")
+              and "app password" in words, words)
+        check("... it never shows the server's own reply or a traceback",
+              "Traceback" not in words and "imaplib" not in words
+              and "LOGIN failed" not in words, words)
+        check("... and it never carries the value",
+              GMAIL_SECRET not in words and "not-the-app-password" not in words, words)
+        check("the card was still spent exactly once, and no second test ran",
+              len([c for c in FakeImap.made]) == 1, len(FakeImap.made))
+        check("nothing more is offered: no card is waiting after the failed save",
+              C.pending_cards() == [], C.pending_cards())
+
+    fresh_cards(lambda: without_env(lambda: with_store(shelf, run)))
+    try:
+        C.receipts_path().unlink()
+    except OSError:
+        pass
+
+
+def t_a_non_gmail_address_with_no_server_says_where_to_put_it():
+    """A row named Gmail may not guess a server for another provider."""
+    def run():
+        ok, words = C.verify("gmail", {"address": "owner@example.test",
+                                       "app_password": GMAIL_SECRET})
+        check("an address that is not Gmail, with no mail server saved, is refused",
+              ok is False and "Settings, Accounts" in words, words)
+        check("... in a sentence, and it says an address is not a secret",
+              "not a secret" in words, words)
+        check("... and it never carries the value", GMAIL_SECRET not in words, words)
+
+    without_env(run)
+
+
+def t_the_gmail_entries_are_the_mail_modules_own_names():
+    """The card writes where the MAIL TOOLS read: `jarvis_email`'s own two."""
+    check("the Gmail card's entries are the mail module's own names",
+          C.targets("gmail") == {"address": EMAIL.IMAP_USER_TARGET,
+                                 "app_password": EMAIL.IMAP_PASSWORD_TARGET},
+          C.targets("gmail"))
+    check("... and its environment variables are the mail module's own names",
+          C.env_names("gmail") == {"address": EMAIL.USER_ENV,
+                                   "app_password": EMAIL.PASSWORD_ENV},
+          C.env_names("gmail"))
+
+
 if __name__ == "__main__":
     try:
         for fn in (
@@ -1586,6 +1888,12 @@ if __name__ == "__main__":
             t_an_unknown_service_refuses_by_name,
             t_removability_says_the_honest_way,
             t_the_accounts_route_is_read_by_another_machine_and_carries_no_value,
+            t_the_gmail_card_is_raised_and_says_what_it_reads,
+            t_a_refused_tier_raises_no_card,
+            t_the_gmail_save_writes_the_mail_entries_and_reads_one_count,
+            t_a_wrong_app_password_is_a_sentence_not_a_traceback,
+            t_a_non_gmail_address_with_no_server_says_where_to_put_it,
+            t_the_gmail_entries_are_the_mail_modules_own_names,
         ):
             print(f"\n--- {fn.__name__} ---")
             try:

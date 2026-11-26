@@ -95,6 +95,10 @@
       "title": "Jarvis wants to check online for tool updates"
     },
     {
+      "action": "connect_mail",
+      "title": "Jarvis wants to connect your mail account"
+    },
+    {
       "action": "control_browser",
       "title": "Jarvis wants to work a web page for you in a browser"
     },
@@ -861,6 +865,18 @@
       "notice": {
         "title": "Jarvis wants to check online for tool updates",
         "summary": "Jarvis wants to check online for tool updates.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "connect_mail",
+      "notice": {
+        "title": "Jarvis wants to connect your mail account",
+        "summary": "Jarvis wants to connect your mail account.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

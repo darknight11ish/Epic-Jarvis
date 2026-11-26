@@ -1325,7 +1325,7 @@
     },
     {
      "id": "github_read_file",
-     "name": "Reading one file in a GitHub repository (one card each)"
+     "name": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)"
     },
     {
      "id": "github_ci_status",

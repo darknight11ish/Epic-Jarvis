@@ -165,7 +165,11 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # 394. Each pin is that measurement plus the same small
                    # headroom the older entries use; the cost is still paid
                    # only when the `github` group is opened.
-                   "github_pr_scan": 1500, "github_merge_pr": 1660,
+                   # RAISED 1560/1720 on 2026-11-25 (DEF-097): the read row this
+                   # line joins now names the bounded repository scan, and this
+                   # module's own rule measured github_pr_scan 1535 and
+                   # github_merge_pr 1695 on that tree.
+                   "github_pr_scan": 1560, "github_merge_pr": 1720,
                    "github_fix_and_push": 540,
                    # The 2026-11-10 22:30 ruling's actions carry no whole-surface
                    # sentence, but three are a little over the 300 default legitimately:
@@ -204,7 +208,15 @@ PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
                    # measured numbers above did not already cover), github_list
                    # 397, github_workflow 327, github_pr_review 359, github_pr_detail
                    # 359. The cost is still paid only when the group is opened.
-                   "github_read_file": 310, "github_issue_labels": 330,
+                   # RAISED 2026-11-25 by the same rule, for DEF-097: the owner
+                   # asked "can atlas do a full scan of a repo?", so
+                   # `github_read_file` now also carries `scan` - its one
+                   # description says what a bounded scan does and that it works
+                   # on a public repository with no token. Measured on this tree
+                   # with this module's own rule: github_read_file 456. Its two
+                   # siblings below grew because `capabilities_line()` includes
+                   # this read row's words, which now name the scan.
+                   "github_read_file": 480, "github_issue_labels": 330,
                    # my_files (2026-11-05, the read-only repository map): a
                    # sixth action, `map`, joined a tool that already carried six
                    # format names and two "use that" lines. Measured 329 with

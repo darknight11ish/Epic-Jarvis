@@ -535,6 +535,17 @@
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
        "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
+       "windows_hello": false
       }
      ],
      "title": "Email and calendar"
@@ -2578,7 +2589,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -3480,6 +3491,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -5524,7 +5546,7 @@
       "id": "github_read_file",
       "last": null,
       "on": true,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -6422,6 +6444,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -8466,7 +8499,7 @@
       "id": "github_read_file",
       "last": null,
       "on": true,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -9375,6 +9408,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -11421,7 +11465,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -12330,6 +12374,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -14376,7 +14431,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -15282,6 +15337,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -17326,7 +17392,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -18227,6 +18293,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -20271,7 +20348,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -21177,6 +21254,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -23236,7 +23324,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -24138,6 +24226,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -26192,7 +26291,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -27089,6 +27188,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -29133,7 +29243,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -30046,6 +30156,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -32092,7 +32213,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {
@@ -32998,6 +33119,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add, change or delete an event in your Google Calendar",
+       "windows_hello": false
+      },
+      {
+       "action": "connect_mail",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "connect_mail",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect your mail account",
        "windows_hello": false
       }
      ],
@@ -35042,7 +35174,7 @@
       "id": "github_read_file",
       "last": null,
       "on": false,
-      "title": "Reading one file in a GitHub repository (one card each)",
+      "title": "Reading one file in a GitHub repository, or scanning one in a bounded way that says what it skipped (one card each)",
       "waiting": false
      },
      {

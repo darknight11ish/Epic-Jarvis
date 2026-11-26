@@ -771,21 +771,29 @@ PROFILES: dict = {
 
     "github_read_file": {
         "id": "github_read_file",
-        "title": "Read one file from your own GitHub",
+        "title": "Read one file - or scan a whole repository - from your own GitHub",
         "what": "Reads ONE file's text from a repository the saved token can "
                 "see, at an optional branch or commit. GitHub sends the file "
                 "in base64 and Jarvis decodes it, so what comes back is the "
-                "file's text, capped at 40,000 characters.",
+                "file's text, capped at 40,000 characters. With `scan` true it "
+                "instead walks the repository's folders under explicit caps and "
+                "reads the start of a few text files, and its answer always "
+                "states what it did NOT read (DEF-097, 2026-11-25).",
         "gives": [
             "Read one source file, README or config from a repository",
             "Read it at a branch or a commit you name",
             "See the file's own text, never GitHub's JSON envelope",
+            "Scan a whole repository in a bounded way, with the counts it "
+            "covered and the files and folders it skipped",
         ],
         "touches": "network service",
         "limits": [
             "One file per call, cut at 40,000 characters with a marker",
             "A directory, or a file too big for this read, gets a sentence "
             "instead of text",
+            "A scan lists at most 12 folders, walks at most 400 entries and "
+            "reads at most 10 text files (1,500 characters each); it is never a "
+            "copy and never claims the whole repository",
             "Reads only - it cannot edit, commit or write a file",
         ],
         "combines": {
