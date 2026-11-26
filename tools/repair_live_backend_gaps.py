@@ -899,6 +899,53 @@ NOTE_DELETE_NO_RULE = Repair(
         "rule that stops Jarvis ever offering a delete again",
 )
 
+#: Full note control (2026-11-25): the ONE action that really destroys bytes -
+#: emptying the vault's own `.trash` folder. The published base carries its
+#: `_RISK` row ("no"/"local": the files are unlinked, no copy is kept, and
+#: neither app can put one back) and its `_NO_RULE_FROM_DENIAL` entry in the
+#: end-of-file update blocks - the region no patch's hunk claims. The live
+#: install predates both, so without these two repairs
+#: `risk_for("empty_vault_trash")` answers the `_UNKNOWN_RISK` fallback
+#: ("no"/"outbound", classified False): a local deletion warned as leaving the
+#: PC, and a denial offering a standing rule that would stop the command ever
+#: being offered again.
+#:
+#: WHY THE ROWS SIT INSIDE THE LITERALS HERE. This is the LIVE file and no patch
+#: is applied after this write, so the base's end-of-file rule does not bind -
+#: `note-delete` and `note-edit` above use the same shape for the same reason.
+EMPTY_TRASH_RISK = Repair(
+    name="note-empty-trash-risk",
+    filename="jarvis_gate.py",
+    probes=('"empty_vault_trash": ("no", "local",',),
+    anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+    replace_with=(
+        "_RISK: dict[str, tuple[str, str, str]] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-25): emptying the\n"
+        "    # vault's trash. The published base has this row in an end-of-file\n"
+        "    # `_RISK.update` block; this install predates it, so the gate fell\n"
+        "    # back to _UNKNOWN_RISK ('no'/'outbound', classified False). Copied\n"
+        "    # from jarvis-backend/jarvis_gate.py byte for byte.\n"
+        '    "empty_vault_trash": ("no", "local", "deletes every file in your Obsidian vault\'s hidden .trash folder for good - emptying it cannot be undone, no copy is kept, and neither app can put a file back; the card lists every file and how old it is first, and a denial deletes nothing"),\n'
+    ),
+    why="without this row a local, irreversible empty of the vault's own trash "
+        "is recorded as an unclassified action that leaves the PC",
+)
+
+EMPTY_TRASH_NO_RULE = Repair(
+    name="note-empty-trash-no-rule",
+    filename="jarvis_gate.py",
+    probes=('"empty_vault_trash",  # jarvis_notes_edit.py acts only on this card',),
+    anchor="_NO_RULE_FROM_DENIAL = frozenset({\n",
+    replace_with=(
+        "_NO_RULE_FROM_DENIAL = frozenset({\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-25): a denied empty\n"
+        "    # answers that ONE list of files, never a standing rule.\n"
+        '    "empty_vault_trash",  # jarvis_notes_edit.py acts only on this card: a denial answers that one batch of files (2026-11-25)\n'
+    ),
+    why="without this entry a denial would offer to remember 'no' as a standing "
+        "rule that stops Jarvis ever offering to empty the trash again",
+)
+
 #: DEF-068's second half (2026-11-14). The `_RISK` rows above make both cards
 #: approvable, but `jarvis_gate.action_for_tool()` still answers
 #: "unclassified_tool" for the two tools, because `_TOOL_ACTIONS` on this
@@ -1550,6 +1597,7 @@ CONNECT_MAIL_RISK = Repair(
 
 REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               NOTE_DELETE_RISK, NOTE_DELETE_NO_RULE,
+                              EMPTY_TRASH_RISK, EMPTY_TRASH_NO_RULE,
                               PROJECT_GATE_ROWS,
                               DEVICES_CLEANUP_GATE_ROWS,
                               GITHUB_MODE_GATE_ROWS,

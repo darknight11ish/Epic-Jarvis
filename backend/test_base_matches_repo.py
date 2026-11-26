@@ -546,13 +546,28 @@ def t_the_stale_twin_check_agrees_with_the_rule():
 #: request that has not merged into this tree yet: a guarded
 #: `try: import <name> / except ImportError` is the honest way to wire a drop-in
 #: that the published base cannot carry, and this table is how the walk is told
-#: the truth rather than being routed around. Empty since 2026-11-03:
-#: `jarvis_storage_health` was the one entry (PR #1117's own module, imported
-#: that way by `jarvis_self_portrait.py` and `jarvis_asks_first.py`), and it was
+#: the truth rather than being routed around. It was empty from 2026-11-03
+#: (`jarvis_storage_health` was the one entry - PR #1117's own module, imported
+#: that way by `jarvis_self_portrait.py` and `jarvis_asks_first.py` - and it was
 #: deleted when that PR put the module in the shipped set and the base was
-#: re-taken. The check below fails a stale entry, so an entry left behind would
-#: be red rather than quiet.
-OPTIONAL_IMPORTS = {}
+#: re-taken) until 2026-11-26, when the personal data removal tool added the
+#: entry below for exactly that reason. The check below fails a stale entry, so
+#: an entry left behind would be red rather than quiet.
+OPTIONAL_IMPORTS = {
+    #: The personal data removal tool (2026-11-26, PR 1 of 3). The owner's own
+    #: ruling for this slice: "do not register `jarvis_privacy_removal.py` in
+    #: `SHIPPED` until the PR that wires live callers to it". So the base cannot
+    #: carry the module, `jarvis_quick.py` imports it inside a try that catches
+    #: Exception, and the four trigger sentences fall through to the model on a
+    #: base without it - which is exactly what the base did before this PR.
+    #: The entry is deleted by the PR that puts the module in SHIPPED (PR 3),
+    #: the same way the storage entry was deleted by #1117; until then the
+    #: check below proves it is not stale.
+    "jarvis_privacy_removal": "PR 1 of 3 wires the chat caller only; the base does not "
+                              "carry the module until it ships, and jarvis_quick.py's "
+                              "import of it is the guarded try/except Exception that "
+                              "keeps a base without it working",
+}
 
 
 def t_the_base_is_complete_on_its_own():

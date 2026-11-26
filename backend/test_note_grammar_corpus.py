@@ -335,6 +335,65 @@ READ = ("note_read", "note_read_about", "note_search")
 LIST = ("note_list",)
 DELETE_ASK = ("note_delete_ask", "note_delete_refused")
 DELETED = ("note_deleted",)
+#: A merge is a write AND a delete, so it answers either once it has landed or
+#: while its card waits; both are a real answer, a refusal is not.
+MERGED = ("note_merged", "note_merge_waiting")
+
+
+def merge_landed(survivor: str, source: str):
+    """The survivor really carries the other note, and that note is in .trash."""
+    def run(_res):
+        if not here(survivor):
+            return False, f"{survivor} is not there"
+        if not (VAULT / ".trash" / source).is_file():
+            return False, f"{source} is not in .trash"
+        text = read(survivor)
+        if "<!-- merged from" not in text:
+            return False, f"{survivor} carries no merge marker: {text[:200]!r}"
+        return True, ""
+    return run
+
+
+def copied(rel: str):
+    """The copy is really there, and exactly ONE note copy was made."""
+    def run(_res):
+        if not here(rel):
+            return False, f"{rel} is not there: {sorted(p.name for p in VAULT.glob('*.md'))}"
+        if "edit_vault_note" not in GATE["calls"]:
+            return False, f"a copy by chat raised no card: {GATE['calls']}"
+        stuck = sorted(str(p.relative_to(VAULT)) for p in VAULT.rglob("*.md")
+                       if "copy" in p.stem.casefold() and str(p.relative_to(VAULT)) != rel)
+        return (not stuck), f"more than one copy appeared: {stuck}"
+    return run
+
+
+def names_note(want: str):
+    """The reply names the NOTE it is asking about, never the verb's own phrase."""
+    def run(_res):
+        reply = said(_res)
+        if f'"{want}"' not in reply:
+            return False, f"the reply did not name {want!r}: {reply[:200]}"
+        return True, ""
+    return run
+
+
+def searched_for(want: str):
+    """The needle really searched for is `want`, quoted back in the answer."""
+    def run(_res):
+        reply = said(_res)
+        if f'"{want}"' not in reply:
+            return False, f"the reply did not search for {want!r}: {reply[:220]}"
+        return True, ""
+    return run
+
+
+def cards_raised(*wanted: str):
+    """Exactly these gate actions were asked, in order, once each."""
+    def run(_res):
+        got = list(GATE["calls"])
+        return got == list(wanted), f"cards were {got}, wanted {list(wanted)}"
+    return run
+
 
 ROWS = [
     # 1. CREATE
@@ -484,6 +543,38 @@ ROWS = [
      lambda r: (here("Training.md") or here("Workout/Training.md"), "no Training.md")),
     ("move my Trip 2026 note to Archive", ("note_moved", "note_move"),
      lambda r: (here("Archive/Trip 2026.md"), "not in Archive")),
+
+    # 8. FULL NOTE CONTROL (2026-11-25): the verbs that had no sentence, and the
+    #    two sentences that were answered in the wrong lane's words.
+    #
+    # A note merge NEVER in pull-request words, and a pull-request sentence
+    # never in the note lane's - both directions, because the measured bug was
+    # "can you merge two notes" answered by the GitHub lane about merge commits.
+    ("can you merge two notes", ("note_merge_ask",), nothing_written()),
+    ("merge my notes", ("note_merge_ask",), nothing_written()),
+    ("merge my two Newsletter notes", ("note_merge_ask",), nothing_written()),
+    ("can you merge the pull request", ("<not-note>",), nothing_written()),
+    ("merge pull request 12", ("<not-note>",), nothing_written()),
+    ("merge my Shopping note and my Ideas note", MERGED, merge_landed("Shopping.md",
+                                                                     "Ideas.md")),
+    ("merge my Ideas note into my Shopping note", MERGED, trashed("Ideas.md")),
+    ("copy my Shopping note", ("note_copied", "note_copy_waiting"),
+     copied("Shopping copy.md")),
+    ("add this to the top of my Shopping note", ("note_append_ask",),
+     names_note("Shopping")),
+    # SEARCH drops ONE leading article/possessive - and only one, so a phrase
+    # that really starts with "the" keeps its own second "the".
+    ("find my notes about the garden", ("note_search",), searched_for("garden")),
+    ("find my notes about the day after tomorrow", ("note_search",),
+     searched_for("day after tomorrow")),
+    ("search my notes for the doctor", ("note_search",), searched_for("doctor")),
+    # Which notes are PINNED, four ways - a flag read, never a note called
+    # "pinned notes" and never a note read of the wrong note.
+    ("which notes did I pin", ("note_pinned",), nothing_written()),
+    ("my pinned notes", ("note_pinned",), nothing_written()),
+    ("what did I pin", ("note_pinned",), nothing_written()),
+    ("show me the notes I pinned", ("note_pinned",), nothing_written()),
+    ("empty the vault trash", ("note_empty_trash_empty",), nothing_written()),
 ]
 
 
@@ -617,6 +708,118 @@ def alias_writer_cases() -> None:
     check("... and that note's bytes are unchanged", read("flow.md") == flow)
 
 
+# --------------------------------------------------------------------------
+#   The FULL NOTE CONTROL cases that need their own vault
+#   (2026-11-25: the owner's "full control ... with deletions requiring a card")
+# --------------------------------------------------------------------------
+def full_control_cases():
+    """Pinned flags, a real section, a copy, a merge and the trash - through chat.
+
+    The rows above prove ROUTING; these prove the OUTCOME a sentence the owner
+    would really say produces, against a vault built for it. Each case re-seeds,
+    so one failing case cannot make the next one pass by accident.
+    """
+    # --- which notes are pinned: a FLAG read, naming the right note ---------
+    reset_all()
+    put("Pinned note.md", "---\npinned: true\n---\n\nwords\n")
+    put("Unpinned note.md", "---\npinned: false\n---\n\nwords\n")
+    put("Plain.md", "# Plain\n\nwords\n")
+    for text in ("which notes did I pin", "my pinned notes", "what did I pin",
+                 "show me the notes I pinned"):
+        GATE["calls"], GATE["cards"] = [], []
+        res = ask(text)
+        reply = said(res)
+        check(f"{text!r} names the PINNED note", "Pinned note" in reply, reply[:200])
+        check(f"... and never the unpinned one ({text!r})",
+              "Unpinned" not in reply and "Plain" not in reply, reply[:200])
+        check(f"... with no card and no write ({text!r})",
+              GATE["calls"] == [], GATE["calls"])
+
+    # --- one SECTION, and the card says which lines go ----------------------
+    reset_all()
+    put("Workout.md", "# Workout\n\n## Warm-up\nstretch\n\n## Session\nsquats\n")
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("delete the Warm-up section from my Workout note")
+    check("a section delete through chat lands", intent_of(res) in
+          ("note_section_deleted", "note_section_waiting"),
+          f"{intent_of(res)}: {said(res)[:160]}")
+    check("... under ONE ordinary note-edit card",
+          GATE["calls"] == ["edit_vault_note"], GATE["calls"])
+    prompt = GATE["cards"][-1][2] if GATE["cards"] else ""
+    check("... whose own line names the section AND how many lines go",
+          '"Warm-up" section (2 lines)' in prompt, prompt)
+    preview = ((GATE["cards"][-1][1] if GATE["cards"] else {}) or {}).get("preview") or {}
+    check("... and whose detail says WHICH lines",
+          preview.get("lines_from") == 3 and preview.get("lines_to") == 4,
+          preview)
+    body = read("Workout.md")
+    check("... the section is gone and the rest of the note is untouched",
+          "stretch" not in body and "## Session" in body
+          and body.startswith("# Workout\n"), body)
+
+    # --- a COPY, carded, naming the source and the new title ---------------
+    reset_all()
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("copy my Shopping note")
+    check("a copy through chat lands", intent_of(res) in
+          ("note_copied", "note_copy_waiting"),
+          f"{intent_of(res)}: {said(res)[:160]}")
+    check("... and the copy is really there", here("Shopping copy.md"),
+          sorted(p.name for p in VAULT.glob("*.md")))
+    check("... under ONE card, as the owner's brief asks",
+          GATE["calls"] == ["edit_vault_note"], GATE["calls"])
+    prompt = GATE["cards"][-1][2] if GATE["cards"] else ""
+    check("... whose line names the source and the new title",
+          "Shopping.md" in prompt and "Shopping copy.md" in prompt, prompt)
+
+    # --- a MERGE into a named survivor, one delete card --------------------
+    reset_all()
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    put("Ideas.md", "# Ideas\n\n- eggs\n")
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("merge my Ideas note into my Shopping note")
+    check("a merge through chat lands", intent_of(res) in MERGED,
+          f"{intent_of(res)}: {said(res)[:160]}")
+    check("... under ONE card, and it is the DELETE action",
+          GATE["calls"] == ["delete_vault_notes"], GATE["calls"])
+    prompt = GATE["cards"][-1][2] if GATE["cards"] else ""
+    check("... which says which note survives", '"Shopping.md" survives' in prompt,
+          prompt)
+    check("... the absorbed note is in the trash and the survivor carries it",
+          here("Shopping.md") and (VAULT / ".trash" / "Ideas.md").is_file()
+          and "- eggs" in read("Shopping.md"),
+          read("Shopping.md")[:200])
+
+    # --- the TRASH: no card when it is empty, one card when it is not ------
+    reset_all()
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("empty the vault trash")
+    check("an empty trash answers already-empty", intent_of(res) == "note_empty_trash_empty",
+          f"{intent_of(res)}: {said(res)[:160]}")
+    check("... and raised NO card at all", GATE["calls"] == [], GATE["calls"])
+    trash = VAULT / ".trash"
+    trash.mkdir(exist_ok=True)
+    (trash / "Old.md").write_bytes(b"old\n")
+    # `handle_empty_trash` keeps its OWN clock (it is the route, not this
+    # suite's fixed one), so the age that lands on the card is measured from
+    # the real `time.time()` and not from NOW.
+    old = time.time() - 12 * 86400
+    os.utime(trash / "Old.md", (old, old))
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("empty the vault trash")
+    check("a trash with files answers with its own state",
+          intent_of(res) in ("note_trash_emptied", "note_trash_waiting"),
+          f"{intent_of(res)}: {said(res)[:160]}")
+    check("... under ONE card, and it is the empty-trash action",
+          GATE["calls"] == ["empty_vault_trash"], GATE["calls"])
+    prompt = GATE["cards"][-1][2] if GATE["cards"] else ""
+    check("... which names the file, its age and that it cannot be undone",
+          "Old.md" in prompt and "12 days old" in prompt
+          and "cannot be undone" in prompt, prompt)
+    check("... and the file is really gone", not (trash / "Old.md").exists())
+
+
 def main() -> int:
     print(f"note grammar corpus - {len(ROWS)} sentences, clock fixed at "
           f"2026-11-24 21:30 local")
@@ -643,6 +846,7 @@ def main() -> int:
                 good, why = False, f"{type(exc).__name__}: {exc}"
             check(f"... and the vault agrees ({text!r})", good, why)
     alias_writer_cases()
+    full_control_cases()
     print()
     print(f"{len(PASSED)} passed, {len(FAILED)} failed")
     for name in FAILED:

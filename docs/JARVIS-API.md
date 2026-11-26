@@ -33386,6 +33386,97 @@ duplicate refusals and the over-20 cap before any card, and the chat shapes
 line delete, scheduler words). It is not driven on the live PC here: this is a
 repository change, and the deploy is its own pass.
 
+### 170.15 Full note control: copy, merge, a section, and the vault's trash (added 2026-11-25)
+
+The owner's brief: *"i want atlas to have full control and full ability to
+manipulate and change any of my notes, with deletions requiring a card of
+approval"*. Create, append, insert, tag, property, alias, rename, move and
+delete already existed and each keeps its own card; this section adds the four
+verbs that were missing. **No existing card was removed or loosened** - only
+`create` (a brand-new file) is card-free, exactly as before.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notes/copy` | `{"path": "<rel>", "as": "<new title>"}` (`as` optional) | 200 `{"ok": true, "state": "created"\|"saved", "path": "<new rel>", "receipt": "..."}`; a carded copy answers 202 `{"state": "waiting", "id": "<job>"}` first |
+| `POST /api/notes/merge` | `{"into": "<survivor rel>", "paths": ["<rel>", ...]}` | 200 `{"state": "saved", "kind": "merge", "path": "<survivor>", "count": 1, "paths": [...]}`; 202 while the card waits |
+| `POST /api/notes/trash` | `{}` | 200 `{"state": "empty", "count": 0}` when the trash holds nothing (**no card**); otherwise 202 while the card waits, then 200 `{"state": "saved", "count": 3, "paths": [...]}` |
+| `GET /api/notes/trash` | - | 200 `{"count": 3, "bytes": 900, "oldest_days": 12, "files": [{"path", "bytes", "age_days"}], "nudge": ""}` |
+
+**A copy is additive, so it takes the same card rule as `create`.** When the
+owner writes it directly in the editor (`provenance` `typed`/`voice` and
+`X-Jarvis-Client: hud`), the copy is card-free and takes an Undo receipt: a new
+file cannot overwrite or delete anything. Every other caller - the phone, the
+model, and **the chat** - raises ONE `edit_vault_note` card whose own line names
+the SOURCE and the NEW TITLE (`make a copy of Shopping.md at Shopping copy.md
+in your Obsidian vault`). The bytes are copied verbatim, so properties, tags,
+links and words survive; the default name is `<title> copy.md`, then ` copy 2`,
+and a name that is already taken is refused rather than overwritten.
+
+**A merge is a delete for one of the notes, so it is carded as one.** ONE card
+under **`delete_vault_notes`** (the row that says every byte is kept in `.trash`
+and neither app can put the note back - both true here), whose own line names
+the SURVIVOR, every note folded in, and how many lines the survivor gains
+(`merge "Ideas.md" into "Shopping.md" ... "Shopping.md" survives and gains 3
+line(s), and it moves into the vault's .trash folder`). Each absorbed note's
+BODY is appended under one HTML-comment marker naming where it came from (which
+renders as nothing in Obsidian, so the merged note reads as one note and the
+provenance survives in the file). Every note is re-verified against the sha256
+the card named, the absorbed notes are MOVED into `<vault>/.trash/` (never
+written over), and a failure past the first move puts every note back. Up to
+**20** notes fold into one, matching the delete limit.
+
+**Deleting ONE section is the existing route, not a new one.** `POST
+/api/notes/customize` with `{"action": "remove_section", "heading":
+"<section>", "expected_sha256": "<sha>"}` - one `edit_vault_note` card (this is
+a change to one note, the File Guardian copies the old text first, and one Undo
+puts the section back). The card's own line now says **how many lines** go and
+the detail says **which lines**: `lines_from`, `lines_to` and `lines_removed`,
+so "delete the Warm-up section" is never accepted blind. The section's own words
+are not quoted on the card; the hidden-lists rule keeps a note's text off it.
+
+**Emptying the trash is the one note action that really destroys bytes**, so it
+has its own action and its own row: **`empty_vault_trash`**, `("no", "local")`
+at the end of `jarvis-backend/jarvis_gate.py`, and it reaches a live install
+through `tools/repair_live_backend_gaps.py` (never a new patch - the owner's
+ruling of 2026-11-14). Neither `edit_vault_note` ("the old text is copied
+first") nor `delete_vault_notes` ("every byte is kept in `.trash`") can honestly
+describe it. The card lists EVERY file with its name and age in days, plus the
+count, the total size and the words "this cannot be undone". It acts only on
+`<vault>/.trash` (never a dot-folder's parent, never through a link or
+junction), and it refuses - rather than half-emptying - when the folder holds
+more than `MAX_DELETE` (**20**) files, naming the number. An empty trash answers
+"already empty" with **no card at all**: there is nothing to approve.
+
+**The `.trash` nudge is passive.** One quiet line, and only when the trash has
+grown past one of three measured thresholds: over **50 MB**, over **100 files**,
+or holding something older than **90 days**. Below every one of them it says
+nothing at all; it never empties anything, never raises a card and never appears
+twice in one reply. It is appended by the note-status and vault-location
+answers, from `jarvis_notes_edit.trash_state()`, so the numbers cannot differ
+between the card, the chat and `GET /api/notes/trash`.
+
+**The chat sentences** are `merge my Ideas note into my Shopping note` (and
+`merge my A note and my B note`, where the first survives), `copy my Shopping
+note` / `duplicate it as Groceries`, `delete the Warm-up section from my Workout
+note`, `empty the vault trash` (`clear out the trash`), and the four ways of
+asking which notes are pinned (`which notes did I pin`, `my pinned notes`, `what
+did I pin`, `show me the notes I pinned`). A note merge is never answered in
+pull-request words and a pull-request sentence never reaches the note lane.
+
+**Not built, said plainly.** `untitled*` notes are out of scope on purpose (they
+belong to the vault organizer's own feature, deferred 2026-11-25), and no route
+here deletes a note "for good" - only the trash can be emptied, and only behind
+that card. Neither app has a screen for these four verbs yet; they are reached
+through the chat lane and the routes above.
+
+**Proven.** `backend/test_notes_delete.py` (the four routes: the copy card rule
+both ways, the merge card naming the survivor, the all-or-nothing put-back, the
+section card's line count and span, the trash listing with ages, the over-20
+refusal, the empty-trash no-card answer, and the three nudge thresholds with
+their silence below) and `backend/test_note_grammar_corpus.py` (the owner's
+sentences, driven through the real fast path). Not driven on the live PC here:
+this is a repository change, and the deploy is its own pass.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
@@ -35069,6 +35160,38 @@ can Jarvis reach" page), in one short-list group (`settings`), and with their
 own tool-diet hints. Nothing is downloaded, nothing is sent anywhere, and the
 answer carries no file's contents.
 
+**The fast path answers the same six sentences without the model (2026-11-26).**
+The owner's ask was *"full manipulation of every tool and plug in"*, and the
+switch had no fast-path sentence at all: every "turn on/off ... plugin" wording
+went to the local model, so with the model busy, unloaded or asleep the switch
+had no answer. `backend/jarvis_quick.py` now claims four whole-sentence shapes -
+"turn on plugin `<name>`", "turn on the `<name>` plugin" and "enable the
+`<name>` plugin" as `plugin_on`; "turn off plugin `<name>`", "turn off the
+`<name>` plugin" and "disable the `<name>` plugin" as `plugin_off` - plus the
+two reads "which plugins are switched off" (`plugin_off_list`: the complement
+with its count and the sentence that switches one back on) and "is plugin
+`<name>` on" (`plugin_on_state`: the true state, with the loader's own reason
+when it is off). **It is not a second switch**: `_run_plugin_switch` calls
+`jarvis_agent._prepare_plugin_switch`, then the agent's own `_gate_check` under
+this section's `modify_own_code` action, then `_execute_plugin_switch` (on) or
+`_plugin_apply` (off), so the card, its words, its tier and the audit row are
+exactly the ones above. ON is ONE card, raised in a worker thread so the chat
+request is not held open (the answer says one card is waiting; the approved
+write still lands through the same plan). OFF is immediate and cardless, this
+project's rule for every switch - **the fast path deliberately adds no card for
+it**, and its answer says the plugin will not load until it is switched back on
+and names the sentence that undoes it. A name is resolved in the live registry
+`plugin_list` reads; an unknown one is refused and both the words asked for and
+the real names are named, and a space for a hyphen ("notes edit" for
+`notes-edit`) is the one alias the catalogue answers already use. Neither
+direction is live in the running process, and every answer says so. No route,
+no Rust command, no Settings section and no gate row is added, and the six
+sentences cannot take the tool-switch lane's ("turn on the timer tool", and the
+Tools page's own "turn on the plugin list tool" / "turn off the plugin switch
+tool", which stay `settings_tool`), the install lane's ("how do I install a
+plugin") or the list lane's ("what plugins do you have") own sentences - each is
+pinned in both directions.
+
 **Tests.** `backend/test_plugin_switch.py` (110 checks) drives the REAL
 `_one_call` with a fake gate and a throwaway plugin folder - no model, no
 network, no real card, and the owner's own plugin folder is never read or
@@ -35087,6 +35210,14 @@ rewritten. `backend/test_tool_defaults.py`, `test_tool_contract.py`,
 with the two tools added, and the generated fixtures they read
 (`tools/tool_eval/jarvis_tools.json`, `reach-cases.json`,
 `private-aloud-cases.json`) were regenerated by their own generators.
+`backend/test_plugin_chat.py` (121 checks) proves the fast path's six sentences,
+the ON card being byte-for-byte the agent's own, a denied and a timed-out card
+changing nothing, the cardless OFF writing the loader's own marker, the two
+reads answering from the live registry, the other lanes keeping their own
+sentences, and the chat request not being held open; it is hermetic (a throwaway
+plugin folder, config and home) and the owner's own plugin folder is never read
+or written. Two of its rows were run against the tree before the change and
+failed there (26 passed, 41 failed, exit 1).
 
 **What is not proved here.** The switch has not been driven against a real
 `jarvis_hud.py` on the owner's PC (this repository has no HUD): what is proved
@@ -39011,6 +39142,11 @@ outside the PC, and no new route: each is a `Result` with `quick` in
 | "How many notes do I have?" | `self_notes` | `jarvis_notes_edit.handle_list()` - the vault's own count, with `truncated` said as "at least N" |
 | "How many conversations are in my chat history?" | `self_chats` | `jarvis_self_portrait.stores(lock=_private())` - the chat store's SQL COUNT, withheld while App lock or "Hide memory lists" is on |
 | "How many tools do you have switched on right now?" | `tools_inventory` | `jarvis_self_portrait.tool_inventory()` - the answer that already existed; only the counting shape was added to its grammar |
+| "List all of your tools" / "name every tool" | `tools_list_all` | the same `jarvis_self_portrait.tool_inventory()` read, using its `all_names`: every registered tool, one line each, grouped with `jarvis_agent.TOOL_GROUPS` and marked on or off against the live `[tools].enabled`. No cap and no "and N more" - the count answer keeps the cap; this one is the list. Added 2026-11-25 after the owner asked for the complete list, each tool marked on or off |
+| "Which GitHub tools do you have?" / "what note tools are there" / "show me the email tools" | `tools_in_category` | the same partition (`_tool_area_rows`, from `jarvis_agent.CORE_TOOLS` + `TOOL_GROUPS`) filtered to the named group(s), rendered by the same bullet function as the full list. The owner's words are an alias table (`_TOOL_CATEGORY_WORDS`: vault/obsidian, repo/PR/issue, mail/gmail, diary, folder, photo/media, browser, facts, config, android, pc/windows); a word that names no group (pictures/media/audio) answers "no built-in tool" with the nearest real file tool, never a guess |
+| "Which tools are switched off?" | `tools_switched_off` | the complement of the live `[tools].enabled` read, counted and listed with the same bullets; if the settings file cannot be read it says so instead of inventing an off set |
+| "What groups of tools do you have?" / "list your tools by category" | `tools_categories` | every non-empty area with its tool count and how many are on, from the same partition, plus the sentence that says how to ask for one group |
+| "What tools can change my settings?" | `tools_settings` | `jarvis_agent.TOOL_GROUPS`' "settings" group ("change one of Jarvis's own settings"), split into the tools whose own label says "(read-only)" and the rest; the gate's `risk_for` has no read-only tier, so a gate-based split would need a hand-written action list, which the no-second-list rule forbids |
 | "What is my wake word?" | `self_wake` | the live `[voice]` section: `wake_phrase` and `wake_word_enabled` (said as off when off) |
 | "How many projects do I have?" | `self_projects` | `jarvis_projects.get().list()` - the owner's own rows |
 | "Is <setting> on right now?" (the ten D rows) | `feature_state` / `feature_state_setting` / `self_setting_state` / `self_read_aloud` | `jarvis_feature_guide.read_state()` - the one reader that fills `/api/self`'s `settings[].value` and `value_known`; `self_setting_state` maps a name the guide has no exact row for ("the second card's combined big model switch" -> `second_card_combined`) onto `BOOL_SETTINGS` and reads the same function; read-aloud has no switch of its own, so its answer reads `[voice].enabled` and says so |
@@ -42066,3 +42202,161 @@ ordinary "use the General preset" that must not match.
 engine's `load_coder`, and the unasked call staying byte-identical), and
 `backend/test_presets_owner_ui.py`'s "exactly three literal callers" pin names
 the start-up preload as the third, with its reason.
+
+## 233. The personal data removal tool: the mode dial, the tracker, and the cloud consent card (added 2026-11-26, PR 1 of 3)
+
+Personal-data discovery and data-broker removal, as the owner asked for it on
+2026-11-26: `backend/jarvis_privacy_removal.py`, Python standard library only,
+with **no route** in this slice and **no network call of any kind**.
+
+### The mode dial: `privacy-removal.json`
+
+One file in the settings folder, beside `manner.json` and `answer-style.json`,
+holding `{"mode": "local" | "optery_api" | "hybrid", "saved_at": "..."}`.
+**`local` is the default and the only mode that sends nothing anywhere.** A
+missing file, an unreadable one, and one holding a value this build does not
+know all read back as `local`, and the answer says which of those it was.
+
+`JARVIS_CONFIG_DIR` is read **first**, then `OPENJARVIS_CONFIG_DIR`, then the
+framework's `CONFIG_DIR`, then
+`~/.openjarvis` - so a suite that points `JARVIS_CONFIG_DIR` at a temporary
+folder can never touch the owner's real profile, which is the one bug this tool
+must not have. Every path the module builds follows it:
+
+| Path | What it is |
+|---|---|
+| `<config>/privacy-removal.json` | the mode dial |
+| `<config>/privacy/profile.json` | the owner's name, address, phone and email - **outside this repository, never logged** |
+| `<config>/privacy/tracker.db` | the SQLite tracker |
+
+### Changing the mode
+
+`privacy_set_mode` is not a route in this slice: the ONE changeable row is
+`jarvis_settings_registry.MODE_SETTINGS`' `data_removal`, whose setter calls
+`jarvis_privacy_removal.set_mode()`, and `jarvis_quick.py`'s
+`privacy_mode_change` intent calls that same setter. Two doors, one function.
+
+* `local` - applied at once, **no card**, and any waiting consent card is
+  withdrawn. Nothing leaves this PC, so nothing needs a yes.
+* `optery_api`, `hybrid` - **ONE consent card** under the existing
+  `change_own_config` action (tier `ask`). Its own words name the four kinds of
+  detail and the fact that they go to Optery over HTTPS:
+
+  > Switch personal data removal to Optery's cloud API? From then on, your
+  > name, home address, phone number and email address - the details in the
+  > removal profile on this PC - are sent over HTTPS to Optery's API at
+  > optery.com ...
+
+  `202` and `waiting: true` come back at once; the file is written only inside
+  the card's own decision, only on a person's `approved`. **Denied, timed out,
+  withdrawn and refused all leave the mode exactly as it was**, and the card's
+  record (`jarvis_privacy_removal.mode_card_state()`) says which happened, in
+  the owner's words. If the settings file has loosened `change_own_config`
+  below `ask`, the answer is `409` with the tier named, never a cardless
+  change.
+
+No gate row, no tier row and no settings key is added: `change_own_config`
+already carries the `ask` line, the route `jarvis_phone_apps.py` took on
+2026-11-02.
+
+### The tracker: `privacy/tracker.db`
+
+Created with `IF NOT EXISTS`, so a second open finds the rows already there and
+destroys nothing. The three tables are the ones the spec names:
+
+* `brokers` - `broker_id`, `name`, `category`, `method`
+  (`email` | `web_form` | `optery_api` | `official_portal`), `optout_url`,
+  `privacy_email`, `dead_url`, `last_updated`.
+* `requests` - `id`, `broker_id`, `engine` (`local_email` | `optery_api` |
+  `manual`), `status` (`queued`, `sent`, `needs_verify_click`,
+  `pending_window`, `removed`, `blocked_captcha`, `failed`), `request_ref`,
+  `listing_url`, `sent_at`, `verify_after`, `relist_check_at`, `notes`.
+* `official_portals` - the two free official portals, seeded once, each with
+  `done` and `last_checked` for the owner to tick.
+
+`counts()` always answers every status, as `0` when nothing is tracked, plus
+`total`, `brokers` and `manual_todo` (the brokers whose own method ends with
+**him** clicking something and which have no request row). An empty tracker
+answers honestly rather than with a missing key.
+
+### The two free official portals
+
+A guided checklist with the real link, never scraped and never filled in for
+him: **Google Results About You**
+(`https://myactivity.google.com/results-about-you`) removes the search RESULT,
+not the page behind it - the broker's own listing stays until that broker
+deletes it; and **California DROP** (`https://privacy.ca.gov/drop/`), one
+request to every broker registered in California, each of which must process a
+DROP request at least every 45 days. `mark_portal(portal_id, done=True)` ticks
+one and dates it.
+
+### The masked profile
+
+`privacy/profile.json` holds `name`, `address`, `phone`, `email`. Nothing in
+the module formats one of those values into a sentence: `mask_value()` is the
+only path and it keeps **a label and the last four characters** - an address
+masks to its postcode's last four digits, a phone to its last four digits, and
+an **email on its local part only**, never its domain. So a person, an answer
+and a card ever see `Primary address (...2704)`, and the suite searches every
+string the module can produce for the raw values and requires that none appears.
+
+### The self-explainer: `privacy_explain(topic)`
+
+Four topics - `overview`, `pros_cons`, `limits`, `official_portals` - every one
+built from the live state: the mode and where it was set, whether the **Gmail
+App Password** is set (read through `jarvis_email`'s own helpers, so it is the
+password the batch sender will really use), whether an **Optery API key** is set
+(presence only, through `jarvis_token_store.resolve_secret`), and the tracker's
+counts. An unknown topic names the four rather than refusing. `get_prompt_context()`
+is the same facts as a capability card for the model's own grounding - the five
+live facts and the four non-negotiable rules - with **zero raw PII** in it.
+
+### The sentences it claims, and what they are routed to
+
+`jarvis_quick.py` asks `jarvis_privacy_removal.prompt()` before the feature
+answers, and the grammar is whole-sentence, so nothing longer is swallowed:
+
+| Sentence | Intent | Topic |
+|---|---|---|
+| "what is the data removal tool" | `privacy_explain` | `overview` |
+| "how does your personal info removal work" | `privacy_explain` | `overview` |
+| "can you remove my personal info from the internet" | `privacy_explain` | `overview` |
+| "pros and cons of local vs optery" / "should I use local or optery" | `privacy_explain` | `pros_cons` |
+| "what can't the data removal tool do" / "how private is data removal" | `privacy_explain` | `limits` |
+| "what are the official portals for data removal" / "california drop" | `privacy_explain` | `official_portals` |
+| "switch data removal to local" | `privacy_mode_change` | - (`local`: at once, no card) |
+| "use hybrid data removal" | `privacy_mode_change` | - (ONE consent card) |
+
+`privacy_explain` is in `READ_ONLY_INTENTS` and in `_PRIVATE_DETERMINISTIC_READS`
+(it reads and writes nothing, so a private chat gets the real state);
+`privacy_mode_change` is deliberately in **neither** - it changes a setting and
+can raise the consent card.
+
+### What PR 1 deliberately does not do
+
+No email is sent, no broker directory is downloaded, no Optery call is made and
+no Optery key is stored; there is no route, no Settings page and no desktop or
+phone screen. The module is **not** in `_where.SHIPPED` (the owner's ruling:
+only the pull request that wires the live caller may register it), so it is
+named in `backend/test_shipped_modules.py`'s `NOT_SHIPPED` and in its
+`REPO_ONLY_IMPORTS` table with those reasons, and every import of it in
+`jarvis_quick.py` is a guarded `try`/`except` - which keeps the published base,
+which does not carry the module, importing and behaving exactly as before.
+PR 2 adds the directory, the carded batch sender (max 20 brokers per card, 250
+emails a day) and the reply scanner; PR 3 adds the Optery adapter, the
+Credential Manager key and the move into `SHIPPED`.
+
+**Proof.** `backend/test_privacy_removal.py` (174 checks, offline: its own
+temporary `JARVIS_CONFIG_DIR`, a stubbed gate, and the real
+`jarvis_quick.match()`): the default and an unknown value refused; the
+`JARVIS_CONFIG_DIR` order; the schema, its columns and a second open keeping
+every row; the masked profile with the raw values searched for and not found;
+each of the four topics answering from live state and following the tracker's
+real counts; the consent card for BOTH cloud modes, denied changing nothing and
+approved writing the mode, plus the loosened-tier refusal; all seven trigger
+sentences and the two portal ones reaching the intent, and eight neighbouring
+sentences still going where they went before; an empty tracker answering with
+zeros; and **two negative controls** that remove the new `Privacy` row from
+`jarvis_asks_first.TOOL_GROUPS` and the new `data_removal` row from
+`jarvis_settings_registry.MODE_SETTINGS` and require the checks naming them to
+fail.
