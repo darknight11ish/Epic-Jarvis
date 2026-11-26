@@ -188,7 +188,8 @@ WORDS = {
     # The screen-reader name of the button on one message: it contains the
     # visible text, then says which message.
     "fork_label_user": "Fork from here, after your message",
-    "fork_label_assistant": "Fork from here, after Jarvis's answer",
+    # Atlas is the display name (owner's ruling, 2026-11-18); the key stays "jarvis".
+    "fork_label_assistant": "Fork from here, after Atlas's answer",
     "fork_busy": "Forking\u2026",
     "fork_title_of": "Fork of {title}",
     "fork_done": "Forked into \"{title}\".",

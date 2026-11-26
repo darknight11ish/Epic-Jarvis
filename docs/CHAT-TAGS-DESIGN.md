@@ -291,7 +291,7 @@ A user message as fork point is copied without its answer.
 **Words** (fixture `history-cases.json`, `words.fork*`, word for word in both
 apps): button `Fork from here` (`fork`); its hover/help text `fork_title`;
 screen-reader names `Fork from here, after your message` and `Fork from here,
-after Jarvis's answer` (`fork_labels`; both contain the visible text); while
+after Atlas's answer` (`fork_labels`; both contain the visible text); while
 waiting `Forking…`; on success `Forked into "{title}".` (`fork_done`, with the
 title the backend sent); a chat that cannot be forked: the backend's `fork_why`
 (`fork_why_kind`, `fork_why_crisis`), else `This chat cannot be forked.`

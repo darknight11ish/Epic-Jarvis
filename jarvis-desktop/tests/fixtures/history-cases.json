@@ -144,7 +144,7 @@
     "fork": "Fork from here",
     "fork_title": "Start a new chat that begins with everything up to this message.",
     "fork_label_user": "Fork from here, after your message",
-    "fork_label_assistant": "Fork from here, after Jarvis's answer",
+    "fork_label_assistant": "Fork from here, after Atlas's answer",
     "fork_busy": "Forking…",
     "fork_title_of": "Fork of {title}",
     "fork_done": "Forked into \"{title}\".",
@@ -1432,7 +1432,7 @@
   ],
   "fork_labels": {
     "user": "Fork from here, after your message",
-    "assistant": "Fork from here, after Jarvis's answer"
+    "assistant": "Fork from here, after Atlas's answer"
   },
   "fork_error_cases": [
     {
