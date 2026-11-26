@@ -311,18 +311,21 @@ def t_two_phrases_one_front_end():
                       0.0 <= score <= 1.0, score)
             W.reload()
 
-        # The transcript check follows the phrase, both ways round.
+        # The transcript check follows the phrase, both ways round. Since
+        # 2026-11-26 the shipped phrase ALSO accepts the old spoken name, one
+        # way only; its own matrix is t_the_old_spoken_name_is_a_one_way_alias.
         with mock.patch.object(W, "phrase", return_value="hey_atlas"):
             check("hey_atlas: \"Hey Atlas, ...\" is accepted",
                   W.split_wake("Hey Atlas, what time is it?") == (True, "what time is it?"))
-            check("hey_atlas: a transcript that says Jarvis is NOT accepted",
-                  W.split_wake("Hey Jarvis, what time is it?") == (False, ""))
+            check("hey_atlas: \"Hey Jarvis, ...\" is accepted as the legacy alias",
+                  W.split_wake("Hey Jarvis, what time is it?") == (True, "what time is it?"))
             check("hey_atlas: Atlas mid-sentence is not a wake",
                   W.split_wake("I read about Atlas in a book.") == (False, ""))
-        check("hey_jarvis: \"Hey Jarvis, ...\" is still accepted",
-              W.split_wake("Hey Jarvis, what time is it?") == (True, "what time is it?"))
-        check("hey_jarvis: a transcript that says Atlas is NOT accepted",
-              W.split_wake("Hey Atlas, what time is it?") == (False, ""))
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("hey_jarvis: \"Hey Jarvis, ...\" is still accepted",
+                  W.split_wake("Hey Jarvis, what time is it?") == (True, "what time is it?"))
+            check("hey_jarvis: a transcript that says Atlas is NOT accepted",
+                  W.split_wake("Hey Atlas, what time is it?") == (False, ""))
 
         # A phrase this build does not know: refused, and it names the two it has.
         with mock.patch.object(W, "phrase", return_value="hey_atlantis"):
@@ -352,6 +355,77 @@ def t_two_phrases_one_front_end():
                 vst = W.verifier_status()
                 check("...and the status says why, in words",
                       not vst["trained"] and "different wake phrase" in str(vst["why"]), vst)
+
+
+# ----------------------- 10b. the old spoken name, one way only --
+
+def t_the_old_spoken_name_is_a_one_way_alias():
+    """The owner's ruling, 2026-11-26: configured `hey_atlas` accepts
+    "Hey Jarvis" as a LEGACY ALIAS, and configured `hey_jarvis` does NOT
+    accept "Hey Atlas".
+
+    Each row is a different promise, so the matrix is one table:
+
+      hey_atlas  + "hey jarvis ..."  -> accepted   the gap this closes: the PC
+                                                   re-reads every clip and used
+                                                   to refuse a transcript that
+                                                   did not start with its own
+                                                   phrase
+      hey_atlas  + "hey atlas ..."   -> accepted   unchanged
+      hey_jarvis + "hey atlas ..."   -> rejected   that PC has the OLD acoustic
+                                                   model loaded, so "Atlas" is
+                                                   not a hearing it has; taking
+                                                   the words would claim one
+      hey_jarvis + "hey jarvis ..."  -> accepted   unchanged
+      unknown    + either name       -> rejected   with no name and no words
+
+    There is no expiry and no switch to prove: the alias is not a setting.
+    What a surface SAYS does not change either - the reported phrase stays the
+    PC's own configured phrase (`status()["title"]`, `phrase_title()`)."""
+    with Env():
+        rows = (
+            ("hey_atlas", "Hey Jarvis, what time is it?", (True, "what time is it?")),
+            ("hey_atlas", "Hey Atlas, what time is it?", (True, "what time is it?")),
+            ("hey_jarvis", "Hey Atlas, what time is it?", (False, "")),
+            ("hey_jarvis", "Hey Jarvis, what time is it?", (True, "what time is it?")),
+            ("hey_atlantis", "Hey Atlas, what time is it?", (False, "")),
+            ("hey_atlantis", "Hey Jarvis, what time is it?", (False, "")),
+        )
+        for cfg, said, want in rows:
+            with mock.patch.object(W, "phrase", return_value=cfg):
+                got = W.split_wake(said)
+                check(f"{cfg} + {said!r} -> {want}", got == want, f"got {got}")
+
+        # The alias is the same shape as the phrase's own name, in every
+        # position that name may take - it is not a looser rule of its own.
+        with mock.patch.object(W, "phrase", return_value="hey_atlas"):
+            check("hey_atlas: the legacy name after a cue word counts too",
+                  W.split_wake("so anyway hey Jarvis what's the weather")
+                  == (True, "what's the weather"))
+            check("hey_atlas: \"Okay Jarvis.\" alone is a wake with no words",
+                  W.split_wake("Okay Jarvis.") == (True, ""))
+            check("hey_atlas: the legacy name mid-sentence is not a wake",
+                  W.split_wake("I watched a film where the computer was called Jarvis.")
+                  == (False, ""))
+
+        # ...and it is ONE WAY: the reverse wiring is not there. `hey_jarvis`
+        # has no atlas pattern at all, so no wording of Atlas can wake it.
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("hey_jarvis: \"Okay Atlas.\" is refused, cue word and all",
+                  W.split_wake("Okay Atlas.") == (False, ""))
+            check("hey_jarvis: the atlas name mid-sentence is refused too",
+                  W.split_wake("I read about Atlas in a book.") == (False, ""))
+
+        # What a surface SAYS is the PC's own phrase, alias or not.
+        for cfg, title in (("hey_atlas", "Hey Atlas"), ("hey_jarvis", "Hey Jarvis")):
+            with mock.patch.object(W, "phrase", return_value=cfg):
+                st = W.status()
+                check(f"{cfg}: the reported phrase and title are its own",
+                      st["phrase"] == cfg and st["title"] == title
+                      and W.phrase_title() == title, st)
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("...so a hey_jarvis PC still says \"Hey Jarvis\", never Atlas",
+                  "Atlas" not in W.status()["title"] and "Atlas" not in W.phrase_title())
 
 
 # ------------------------------------------------------------ 3. order --
@@ -1107,6 +1181,7 @@ def t_real_models():
 if __name__ == "__main__":
     for fn in (t_streaming_does_not_depend_on_chunk_size, t_the_transcript_check,
                t_two_phrases_one_front_end,
+               t_the_old_spoken_name_is_a_one_way_alias,
                t_order_wake_switched_off_runs_nothing, t_order_no_phrase_no_owner_check,
                t_order_not_the_owner_is_never_transcribed,
                t_order_the_owner_is_heard_and_the_phrase_removed, t_follow_up_window,
