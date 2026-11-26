@@ -3896,6 +3896,176 @@ def section_bounded_cloud():
     REC.end("PASS", "the escalated answer is bounded and a medium question stays local")
 
 
+# ---- the note verbs the owner asked for ------------------------------------
+def _cards_naming(token):
+    """Every pending card whose words mention `token` (lowercase), read only."""
+    status, doc, _, _err = http_json("/api/pending", timeout=10)
+    if status != 200 or not isinstance(doc, dict):
+        return None
+    out = []
+    for card in doc.get("pending") or []:
+        if not isinstance(card, dict):
+            continue
+        blob = " ".join(str(card.get(key) or "")
+                        for key in ("detail", "prompt", "action")).lower()
+        if token in blob:
+            out.append(card)
+    return out
+
+
+def _trash_count(vault):
+    trash = Path(vault) / ".trash"
+    if not trash.is_dir():
+        return 0
+    try:
+        return sum(1 for child in trash.iterdir())
+    except OSError:
+        return 0
+
+
+def section_note_power():
+    """The owner's note asks, field-tested against the deployed build.
+
+    Measured on 0.2.507 before any of this existed: "find my notes about the
+    garden" searched the literal "the garden" and found nothing, "which notes
+    did I pin" reached no lane at all, and "can you merge two notes" was
+    answered in pull-request words. Each row below is one of those, and a row
+    whose feature is not in the deployed build reports SKIP-by-info rather than
+    a pass, so a build that never had the work cannot look green here.
+    """
+    REC.header("NOTE POWER",
+               "search with an article, pin listing, duplicate scan, note merge, "
+               "and the vault trash asked about but never emptied",
+               "an Obsidian vault, and a build that carries the later note work")
+    if not STATE["ready"]:
+        return REC.skip("preflight failed")
+    vault, why = vault_path()
+    if vault is None:
+        return REC.skip(why)
+
+    # A throwaway note of our own, so the search row has a known target.
+    name = MARKER + "-POWER"
+    token = MARKER + "-POWER-" + STAMP[-4:]
+    turn = chat(f"create a note called {name} with content {token}",
+                timeout=180, provenance=True)
+    answer = turns_spend_answer(turn)
+    quick = (turn.route or {}).get("quick")
+    files = find_vault_note(name)
+    if not files and (quick == "note_create_ask" or "approval" in answer.lower()
+                      or "waiting" in answer.lower()):
+        approved, card_id, card_why = approve_own_card([MARKER])
+        REC.info(f"note-create card: approved={approved} id={card_id or '-'} "
+                 f"({card_why})")
+        if approved:
+            time.sleep(1.0)
+            files = find_vault_note(name)
+    if not files:
+        REC.end("SKIP", "no throwaway note could be created, so the note rows "
+                        "cannot be asked without touching the owner's notes")
+        return
+    REC.info(f"the throwaway note is {files[0]}")
+
+    ok = True
+    try:
+        # 1. The article bug: an article in the question must not reach the search.
+        asked = f"find my notes about the {name.lower()}"
+        row = chat(asked, timeout=180, provenance=True)
+        got = turns_spend_answer(row)
+        row_quick = (row.route or {}).get("quick")
+        print(f"\n  article search: {asked}")
+        print(f"  quick={row_quick!r}  A: {' '.join(got.split())[:300]}")
+        ok &= REC.expect(
+            "a search sentence with an article still finds the note",
+            row_quick == "note_search" and name.lower() in got.lower(),
+            f"quick={row_quick!r} answer={' '.join(got.split())[:200]!r}")
+
+        # 2. The pin listing: it must be a deterministic lane, not the raw list.
+        row = chat("which notes did I pin", timeout=180, provenance=True)
+        got = turns_spend_answer(row)
+        row_quick = (row.route or {}).get("quick")
+        print(f"\n  pins: which notes did I pin")
+        print(f"  quick={row_quick!r}  A: {' '.join(got.split())[:300]}")
+        if row_quick is None:
+            REC.info("the pin listing is not in this build - row not counted")
+        else:
+            ok &= REC.expect(
+                "the pin listing answers as a pin listing, not as the whole list",
+                "pin" in f"{row_quick} {got}".lower()
+                or "favourite" in f"{row_quick} {got}".lower(),
+                f"quick={row_quick!r} answer={' '.join(got.split())[:200]!r}")
+
+        # 3. Duplicate scanning: must say what it covered, and never claim it cannot.
+        row = chat("find duplicate notes", timeout=180, provenance=True)
+        got = turns_spend_answer(row)
+        row_quick = (row.route or {}).get("quick")
+        print(f"\n  duplicates: find duplicate notes")
+        print(f"  quick={row_quick!r}  A: {' '.join(got.split())[:300]}")
+        if row_quick is None:
+            REC.info("duplicate scanning is not in this build - row not counted")
+        else:
+            scanned = re.search(r"\b\d[\d,]*\b", got) is not None
+            ok &= REC.expect(
+                "the duplicate answer says how many notes it looked at",
+                scanned, f"answer={' '.join(got.split())[:200]!r}")
+            ok &= REC.expect(
+                "the duplicate answer never claims it cannot look for copies",
+                not re.search(r"\bi (?:can ?not|can't|cannot)\b", got, re.I),
+                f"answer={' '.join(got.split())[:200]!r}")
+
+        # 4. The merge collision: a note merge is never a pull request.
+        row = chat("can you merge two notes", timeout=180, provenance=True)
+        got = turns_spend_answer(row)
+        row_quick = (row.route or {}).get("quick")
+        print(f"\n  merge: can you merge two notes")
+        print(f"  quick={row_quick!r}  A: {' '.join(got.split())[:300]}")
+        ok &= REC.expect(
+            "a note-merge question is never answered in pull-request terms",
+            not re.search(r"pull request|merge commit|\bthe pull r", got, re.I),
+            f"quick={row_quick!r} answer={' '.join(got.split())[:240]!r}")
+
+        # 5. Emptying the trash asks first, and this battery never approves it.
+        before = _trash_count(vault)
+        row = chat("empty the vault trash", timeout=180, provenance=True)
+        got = turns_spend_answer(row)
+        row_quick = (row.route or {}).get("quick")
+        print(f"\n  trash: empty the vault trash (and it must NOT be approved)")
+        print(f"  quick={row_quick!r}  A: {' '.join(got.split())[:300]}")
+        if row_quick is None and not _cards_naming("trash"):
+            REC.info("the empty-trash card is not in this build - row not counted")
+        else:
+            ours = _cards_naming("trash")
+            ok &= REC.expect(
+                "emptying the trash raises a card instead of doing it",
+                bool(ours), f"cards naming trash: {0 if ours is None else len(ours)}")
+            after = _trash_count(vault)
+            ok &= REC.expect(
+                "the battery left the trash exactly as it found it",
+                after == before, f"{before} -> {after}")
+
+        # 6. A small trash folder is never mentioned (the Q6 nudge stays quiet).
+        row = chat("what notes do you have", timeout=180, provenance=True)
+        got = turns_spend_answer(row)
+        print(f"\n  trash silence: what notes do you have")
+        print(f"  A: {' '.join(got.split())[:300]}")
+        if before <= 100:
+            ok &= REC.expect(
+                "a small trash folder is not mentioned in a note answer at all",
+                "trash" not in got.lower(),
+                f"{before} item(s) in .trash, answer={' '.join(got.split())[:200]!r}")
+    finally:
+        for path in files:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        left = find_vault_note(name)
+        REC.info(f"cleanup: {len(left)} throwaway note(s) left")
+
+    REC.end("PASS" if ok else "FAIL",
+            "every note row answered as the product says it will"
+            if ok else "a note row did not hold - see the failing line")
+
+
 #: The battery's sections, in the order one run executes them. A module-level
 #: constant so a test can prove a section is REGISTERED without reading this
 #: file's source text (a source read is a counted source pin).
@@ -3911,6 +4081,7 @@ SECTIONS = [
     section_presets,
     section_notes,
     section_favourites,
+    section_note_power,
     section_cloud_settings,
     section_defects,
     section_pictures,
