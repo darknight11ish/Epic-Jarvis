@@ -309,6 +309,19 @@ def t_the_pm4_section_is_registered_in_the_battery():
     check("... and one run executes it", F.section_pm4 in F.SECTIONS)
 
 
+def t_the_note_power_section_is_registered_in_the_battery():
+    """The note rows the owner asked for must actually run in a field test.
+
+    Without this, the section could exist and never execute, and a build whose
+    duplicate scan or pin listing was broken would still read as a clean run.
+    """
+    check("the NOTE POWER section exists",
+          callable(getattr(F, "section_note_power", None)))
+    check("... and one run executes it", F.section_note_power in F.SECTIONS)
+    check("... and it is the section the field test expects",
+          F.section_note_power.__name__ == "section_note_power")
+
+
 def t_efficiency_spend_is_an_estimated_range_with_a_hard_ceiling():
     """Ruling 5.4: the expectation is a RANGE; only the $0.05 ceiling FAILs.
 
