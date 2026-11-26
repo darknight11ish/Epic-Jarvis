@@ -761,6 +761,380 @@ def t_the_lane_lists_its_new_answers():
           sorted(Q.READ_ONLY_INTENTS & {"note_delete_waiting", "note_deleted"}))
 
 
+# --------------------------------------------------------------------------
+# 8. FULL NOTE CONTROL (2026-11-25): copy, merge, a section, and the trash
+# --------------------------------------------------------------------------
+# The owner's brief: "i want atlas to have full control and full ability to
+# manipulate and change any of my notes, with deletions requiring a card of
+# approval". The four verbs that were missing are pinned here at the ROUTE and
+# CARD level; `backend/test_note_grammar_corpus.py` pins the sentences.
+def t_the_empty_trash_action_is_its_own_and_the_gate_knows_it():
+    check("emptying the trash is its own gate action",
+          E.EMPTY_TRASH_ACTION == "empty_vault_trash"
+          and E.EMPTY_TRASH_ACTION not in (E.DELETE_ACTION, E.ACTION),
+          E.EMPTY_TRASH_ACTION)
+    row = REAL_GATE.risk_for(E.EMPTY_TRASH_ACTION)
+    check("... the gate classifies it (no unclassified fallback on the card)",
+          row["classified"] is True, row)
+    check("... it cannot be undone", row["reversible"] == "no", row)
+    check("... and nothing leaves this PC", row["reach"] == "local", row)
+    check("... its words say it is for good, not that a copy is kept",
+          "cannot be undone" in row["why"] and "no copy is kept" in row["why"],
+          row["why"])
+    check("... a denial answers that one batch, not a standing rule",
+          E.EMPTY_TRASH_ACTION in REAL_GATE._NO_RULE_FROM_DENIAL)
+    check("... the card has written words a Windows Hello prompt can name",
+          CW.has_written_title(E.EMPTY_TRASH_ACTION) is True)
+    check("... and they say what really goes",
+          "trash" in CW.title_for(E.EMPTY_TRASH_ACTION).lower()
+          and "for good" in CW.title_for(E.EMPTY_TRASH_ACTION).lower(),
+          CW.title_for(E.EMPTY_TRASH_ACTION))
+    check("... the written words differ from a reversible note delete",
+          CW.title_for(E.EMPTY_TRASH_ACTION) != CW.title_for(E.DELETE_ACTION),
+          (CW.title_for(E.EMPTY_TRASH_ACTION), CW.title_for(E.DELETE_ACTION)))
+
+
+def t_a_copy_names_the_source_and_the_new_title_on_its_card():
+    reset_all()
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    before = read("Shopping.md")
+    code, out = E.handle_copy({"path": "Shopping.md"}, by="chat",
+                              client="chat", provenance="typed",
+                              gate_check=gate_check, wait_s=5)
+    check("a copy from another client answers 200 and lands",
+          code == 200 and out.get("state") in ("saved", "created"), (code, out))
+    check("... it raised exactly ONE card, under the ordinary note edit",
+          GATE["calls"] == [E.ACTION], GATE["calls"])
+    action, detail, prompt = GATE["cards"][-1]
+    check("... the card names the SOURCE", "Shopping.md" in prompt, prompt)
+    check("... and the NEW title", "Shopping copy.md" in prompt, prompt)
+    check("... the detail names both too",
+          detail.get("source") == "Shopping.md" and detail.get("path") == "Shopping copy.md",
+          detail)
+    check("... the copy is really there, byte for byte",
+          here("Shopping copy.md") and read("Shopping copy.md") == before)
+    check("... and the source is untouched", read("Shopping.md") == before)
+
+    # The owner writing directly in the editor takes no card: a new file is
+    # additive, exactly as `create` has been since 2026-10-31.
+    reset_all()
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    code, out = E.handle_copy({"path": "Shopping.md", "as": "Groceries"},
+                              provenance="typed", client="hud", wait_s=5)
+    check("a copy the owner asks for in the editor is card-free",
+          GATE["calls"] == [] and code == 200, (code, out, GATE["calls"]))
+    check("... and it takes the name it was given, capitals and all",
+          here("Groceries.md"), sorted(p.name for p in VAULT.glob("*.md")))
+    check("... with an undo receipt, because a copy IS a new note",
+          out.get("state") == "created" and bool(out.get("receipt")), out)
+
+
+def t_a_merge_names_the_survivor_and_every_note_on_the_card():
+    reset_all()
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    put("Ideas.md", "# Ideas\n\n- eggs\n")
+    put("Notes.md", "# Notes\n\ncall the plumber\n")
+    code, out = E.handle_merge({"into": "Shopping.md", "paths": ["Ideas.md", "Notes.md"]},
+                               gate_check=gate_check, wait_s=5)
+    check("a merge answers 200 and lands", code == 200 and out.get("state") == "saved",
+          (code, out))
+    check("... it raised exactly ONE card, under the delete action",
+          GATE["calls"] == [E.DELETE_ACTION], GATE["calls"])
+    action, detail, prompt = GATE["cards"][-1]
+    check("... the card says WHICH note survives", '"Shopping.md" survives' in prompt,
+          prompt)
+    check("... it names both notes that go", '"Ideas.md"' in prompt
+          and '"Notes.md"' in prompt, prompt)
+    check("... and says they move into the trash",
+          ".trash" in prompt, prompt)
+    check("... the detail names the survivor and every path",
+          detail.get("survivor") == "Shopping.md"
+          and detail.get("paths") == ["Ideas.md", "Notes.md"], detail)
+    check("... and says there is no undo, and that it deletes",
+          detail.get("undo") is False and detail.get("deletes") is True, detail)
+    check("... both notes are gone from the vault and kept in the trash",
+          not here("Ideas.md") and not here("Notes.md")
+          and trashed("Ideas.md") and trashed("Notes.md"))
+    merged = read("Shopping.md").decode("utf-8")
+    check("... the survivor really carries both bodies", "- eggs" in merged
+          and "call the plumber" in merged, merged)
+    check("... behind a marker that renders as nothing in Obsidian",
+          '<!-- merged from "Ideas" -->' in merged
+          and '<!-- merged from "Notes" -->' in merged, merged)
+    check("... and the answer names where they went",
+          "Ideas.md" in str(out.get("message")) and ".trash" in str(out.get("message")),
+          out.get("message"))
+
+
+def t_a_denied_merge_writes_nothing():
+    reset_all()
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    put("Ideas.md", "# Ideas\n\n- eggs\n")
+    before = (read("Shopping.md"), read("Ideas.md"))
+    GATE.update(allowed=False, outcome="denied")
+    code, out = E.handle_merge({"into": "Shopping.md", "paths": ["Ideas.md"]},
+                               gate_check=gate_check, wait_s=5)
+    check("a denied merge answers 200 with a denied state",
+          code == 200 and out.get("state") == "denied", (code, out))
+    check("... in the module's own words",
+          out.get("message") == "You said no, so no note was merged and nothing moved.",
+          out.get("message"))
+    check("... nothing was written, in either note",
+          read("Shopping.md") == before[0] and read("Ideas.md") == before[1])
+    check("... and no trash folder was made at all",
+          not (VAULT / ".trash").exists())
+
+
+def t_a_merge_refuses_more_than_the_delete_limit():
+    reset_all()
+    put("Shopping.md")
+    names = []
+    for i in range(E.MAX_MERGE + 1):
+        put(f"Extra{i}.md")
+        names.append(f"Extra{i}.md")
+    code, out = E.handle_merge({"into": "Shopping.md", "paths": names},
+                               gate_check=gate_check, wait_s=5)
+    check("a merge of more notes than the limit is refused before any card",
+          code == 400 and GATE["calls"] == [], (code, out, GATE["calls"]))
+    check("... and the sentence names the limit",
+          str(E.MAX_MERGE) in str(out.get("error")), out.get("error"))
+
+
+def t_deleting_a_section_shows_which_lines_go():
+    reset_all()
+    put("Workout.md", "# Workout\n\n## Warm-up\nstretch\n\n## Session\nsquats\n")
+    sha = hashlib.sha256(read("Workout.md")).hexdigest()
+    code, out = E.handle_customize({"path": "Workout.md", "action": "remove_section",
+                                    "heading": "Warm-up", "expected_sha256": sha},
+                                   gate_check=gate_check, wait_s=5)
+    check("a section delete answers 200 and lands",
+          code == 200 and out.get("state") == "saved", (code, out))
+    check("... it raised exactly ONE card, under the ordinary note edit",
+          GATE["calls"] == [E.ACTION], GATE["calls"])
+    action, detail, prompt = GATE["cards"][-1]
+    check("... the card names the section", '"Warm-up"' in prompt, prompt)
+    check("... it says HOW MANY lines go", "(2 lines)" in prompt, prompt)
+    preview = detail.get("preview") or {}
+    check("... the detail says WHICH lines go",
+          preview.get("lines_removed") == 2 and preview.get("lines_from") == 3
+          and preview.get("lines_to") == 4, preview)
+    check("... the same span is spelled out in words", "lines 3-4" in str(preview.get("note")),
+          preview.get("note"))
+    check("... the section really went", "stretch" not in read("Workout.md").decode("utf-8"),
+          read("Workout.md"))
+    check("... and the rest of the note is untouched",
+          "## Session" in read("Workout.md").decode("utf-8")
+          and read("Workout.md").decode("utf-8").startswith("# Workout\n"))
+
+
+def t_emptying_the_trash_lists_every_file_with_its_age():
+    reset_all()
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    (trash / "Old.md").write_bytes(b"old words\n")
+    (trash / "sub").mkdir(exist_ok=True)
+    (trash / "sub" / "Deeper.md").write_bytes(b"deeper\n")
+    old = time.time() - 40 * 86400
+    os.utime(trash / "Old.md", (old, old))
+    code, out = E.handle_empty_trash(gate_check=gate_check, wait_s=5)
+    check("emptying the trash answers 200 and lands",
+          code == 200 and out.get("state") == "saved", (code, out))
+    check("... it raised exactly ONE card, under its own action",
+          GATE["calls"] == [E.EMPTY_TRASH_ACTION], GATE["calls"])
+    action, detail, prompt = GATE["cards"][-1]
+    for name in ("Old.md", "sub/Deeper.md"):
+        check(f"... the card names {name}", name in prompt, prompt)
+    check("... with each file's age in days", "(40 days old)" in prompt
+          and "(0 days old)" in prompt, prompt)
+    check("... the count and the size", "2 file(s)" in prompt and "byte" in prompt, prompt)
+    check("... and the words that matter most",
+          "cannot be undone" in prompt, prompt)
+    check("... the detail carries every file and age",
+          detail.get("files") == ["Old.md", "sub/Deeper.md"]
+          and detail.get("ages") == [40, 0], detail)
+    check("... it says there is no undo, and that it deletes",
+          detail.get("undo") is False and detail.get("deletes") is True, detail)
+    check("... every file really is gone", not (trash / "Old.md").exists()
+          and not (trash / "sub" / "Deeper.md").exists(),
+          sorted(str(p) for p in trash.rglob("*")))
+    check("... and the note folders of the vault were never touched",
+          VAULT.joinpath(".obsidian").is_dir())
+
+
+def t_an_empty_trash_is_already_empty_and_raises_no_card():
+    reset_all()
+    code, out = E.handle_empty_trash(gate_check=gate_check, wait_s=5)
+    check("an empty trash answers 200 with its own state",
+          code == 200 and out.get("state") == "empty", (code, out))
+    check("... it says it is already empty",
+          "already empty" in str(out.get("message")), out.get("message"))
+    check("... and NO card was raised, because there is nothing to approve",
+          GATE["calls"] == [], GATE["calls"])
+
+
+def t_emptying_the_trash_refuses_past_the_limit_rather_than_half_emptying():
+    reset_all()
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    for i in range(E.MAX_DELETE + 1):
+        (trash / f"f{i}.md").write_bytes(b"x")
+    code, out = E.handle_empty_trash(gate_check=gate_check, wait_s=5)
+    check("a trash past the limit is refused before any card",
+          code == 400 and GATE["calls"] == [], (code, out, GATE["calls"]))
+    check("... the sentence names the count and the limit",
+          str(E.MAX_DELETE + 1) in str(out.get("error"))
+          and str(E.MAX_DELETE) in str(out.get("error")), out.get("error"))
+    check("... and NOTHING was deleted - never half-empty",
+          len(list(trash.glob("*.md"))) == E.MAX_DELETE + 1)
+
+
+def t_a_denied_empty_trash_deletes_nothing():
+    reset_all()
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    (trash / "Old.md").write_bytes(b"old\n")
+    GATE.update(allowed=False, outcome="denied")
+    code, out = E.handle_empty_trash(gate_check=gate_check, wait_s=5)
+    check("a denied empty answers 200 with a denied state",
+          code == 200 and out.get("state") == "denied", (code, out))
+    check("... in the module's own words",
+          out.get("message") == ("You said no, so the vault's trash folder was "
+                                 "left exactly as it was."), out.get("message"))
+    check("... and every file is still there",
+          (trash / "Old.md").is_file())
+
+
+def t_the_trash_changed_while_the_card_waited_deletes_nothing():
+    reset_all()
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    (trash / "A.md").write_bytes(b"a\n")
+    GATE.update(entered=threading.Event(), release=threading.Event())
+    got = {}
+
+    def run():
+        got["out"] = E.handle_empty_trash(gate_check=gate_check, wait_s=0.05)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    GATE["entered"].wait(5)
+    (trash / "B.md").write_bytes(b"b\n")        # the card is on screen
+    GATE["release"].set()
+    thread.join(10)
+    code, out = got.get("out", (0, {}))
+    check("a trash that changed while the card waited stops the empty",
+          out.get("state") == "failed", (code, out))
+    check("... in words that say to ask again",
+          "changed while the card waited" in str(out.get("message")),
+          out.get("message"))
+    check("... and NOTHING was deleted", (trash / "A.md").is_file()
+          and (trash / "B.md").is_file())
+
+
+def t_the_trash_nudge_is_silent_until_it_has_earned_it():
+    reset_all()
+    check("the three thresholds are the owner's, in the module",
+          (E.TRASH_NUDGE_BYTES, E.TRASH_NUDGE_FILES, E.TRASH_NUDGE_DAYS)
+          == (50 * 1024 * 1024, 100, 90),
+          (E.TRASH_NUDGE_BYTES, E.TRASH_NUDGE_FILES, E.TRASH_NUDGE_DAYS))
+    check("no trash at all says nothing", E.trash_nudge() == "", E.trash_nudge())
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    now = time.mktime(time.strptime("2026-11-25 18:00:00", "%Y-%m-%d %H:%M:%S"))
+    # A handful of recent, small files: the normal state after a few mistakes.
+    for i in range(5):
+        (trash / f"s{i}.md").write_bytes(b"x")
+    check("a small trash says nothing at all",
+          E.trash_nudge(now=now) == "", E.trash_nudge(now=now))
+    # Exactly on two of the three lines is still below them.
+    for i in range(95):
+        (trash / f"n{i}.md").write_bytes(b"x")
+    check("exactly 100 files is still below the line",
+          E.trash_nudge(now=now) == "", E.trash_nudge(now=now))
+    (trash / "n100.md").write_bytes(b"x")
+    said = E.trash_nudge(now=now)
+    check("101 files speaks, and names the count", "101 files" in said, said)
+    for p in trash.glob("n*.md"):
+        p.unlink()
+    for p in trash.glob("s*.md"):
+        p.unlink()
+    # Size: exactly 50 MB is silent, 51 MB speaks.
+    big = trash / "big.bin"
+    with open(big, "wb") as fh:
+        fh.truncate(50 * 1024 * 1024)
+    check("exactly 50 MB is still below the line",
+          E.trash_nudge(now=now) == "", E.trash_nudge(now=now))
+    with open(big, "wb") as fh:
+        fh.truncate(51 * 1024 * 1024)
+    said = E.trash_nudge(now=now)
+    check("51 MB speaks, and says MB", "MB" in said, said)
+    big.unlink()
+    # Age: exactly 90 days is silent, 91 speaks.
+    one = trash / "old.md"
+    one.write_bytes(b"x")
+    exactly = now - 90 * 86400
+    os.utime(one, (exactly, exactly))
+    check("a file exactly 90 days old is still below the line",
+          E.trash_nudge(now=now) == "", E.trash_nudge(now=now))
+    later = now - 91 * 86400 - 1
+    os.utime(one, (later, later))
+    said = E.trash_nudge(now=now)
+    check("a file 91 days old speaks, and says how old", "91 days old" in said, said)
+    check("... and the nudge names the carded command, never acting itself",
+          'Say "empty the vault trash"' in said, said)
+
+
+def t_the_nudge_never_appears_twice_in_one_reply():
+    reset_all()
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    for i in range(101):
+        (trash / f"f{i}.md").write_bytes(b"x")
+    marker = ".trash folder has"
+    for label, reply in (("the note-count answer", Q._self_notes_words()),
+                         ("the vault-location answer",
+                          Q._run_note_location({"context": "vault"}).reply)):
+        check(f"{label} carries the ONE nudge line", marker in reply, reply[:300])
+        check(f"... and only once ({label})", reply.count(marker) == 1, reply[:300])
+    # And a small trash keeps every reply silent about it.
+    for p in trash.glob("f*.md"):
+        p.unlink()
+    check("a small trash is not mentioned by the note count",
+          marker not in Q._self_notes_words(), Q._self_notes_words())
+    location = Q._run_note_location({"context": "vault"}).reply
+    check("... nor by the vault location", marker not in location, location)
+
+
+def t_the_trash_route_reads_without_changing_anything():
+    reset_all()
+    trash = VAULT / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
+    (trash / "Old.md").write_bytes(b"12345")
+    old = time.time() - 5 * 86400
+    os.utime(trash / "Old.md", (old, old))
+    code, out = E.handle_trash_status()
+    check("GET /api/notes/trash answers 200",
+          code == 200 and out.get("count") == 1, (code, out))
+    check("... with the count, the bytes and the oldest age",
+          out.get("bytes") == 5 and out.get("oldest_days") == 5, out)
+    check("... every file with its own age",
+          out.get("files") == [{"path": "Old.md", "bytes": 5, "age_days": 5}], out)
+    check("... and no nudge, because five days is not worth one",
+          out.get("nudge") == "", out)
+    check("... it raised no card and deleted nothing",
+          GATE["calls"] == [] and (trash / "Old.md").is_file(), GATE["calls"])
+
+
+def t_the_full_control_answers_are_listed_correctly():
+    for name in ("note_pinned", "note_merge_ask", "note_empty_trash_ask"):
+        check(f"{name} is in the read-only intent list",
+              name in Q.READ_ONLY_INTENTS, name)
+    for name in ("note_merged", "note_copied", "note_section_deleted",
+                 "note_trash_emptied"):
+        check(f"{name} is NOT listed as read-only",
+              name not in Q.READ_ONLY_INTENTS, name)
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("t_") and callable(v)]

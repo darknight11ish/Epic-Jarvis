@@ -760,29 +760,28 @@ def _save_change_words(old_text: str, new_text: str, rel: str) -> tuple:
 
     A card whose whole sentence is "overwrite Shopping.md (412 bytes)" can be
     answered blind, and the owner's rule is that a body change must be visible
-    on the card. So the words state the body line count that is going away and
-    the first line that differs, before and after. The counts are of the BODY
-    (what follows any front matter), because "this replaces 14 lines of the body
-    of X" is a fact about the owner's words, not about a `---` block.
+    on the card. So the words state BOTH sizes and how many body lines are
+    going and coming, which is enough to see the change is real without
+    repeating the words: the note's own text never goes on a card or into its
+    detail (the hidden-lists rule, and the same reason a delete names files and
+    not contents). The counts are of the BODY (what follows any front matter),
+    because "14 lines of the body of X" is a fact about the owner's words, not
+    about a `---` block.
     """
-    _opened, _front, old_body, _why = _split_frontmatter(str(old_text or ""))
-    _opened2, _front2, new_body, _why2 = _split_frontmatter(str(new_text or ""))
+    old = str(old_text or "")
+    new = str(new_text or "")
+    _opened, _front, old_body, _why = _split_frontmatter(old)
+    _opened2, _front2, new_body, _why2 = _split_frontmatter(new)
     old_lines = _lines(old_body)
     new_lines = _lines(new_body)
-    first_old, first_new = "", ""
-    for i in range(max(len(old_lines), len(new_lines))):
-        one = old_lines[i] if i < len(old_lines) else ""
-        two = new_lines[i] if i < len(new_lines) else ""
-        if one != two:
-            first_old, first_new = _line_body(one), _line_body(two)
-            break
-    preview = _preview(first_old, first_new, note="the first line that changes")
-    detail = {"path": rel, "action": "replace the whole text of a note",
-              "lines_before": len(old_lines), "lines_after": len(new_lines),
-              "bytes": len(str(new_text or "").encode("utf-8", "surrogatepass")),
-              "preview": _card_preview(preview)}
-    prompt = (f"replace the body of {rel} in your Obsidian vault: this replaces "
-              f"{len(old_lines)} line(s) of the body with {len(new_lines)} line(s)")
+    old_bytes = len(old.encode("utf-8", "surrogatepass"))
+    new_bytes = len(new.encode("utf-8", "surrogatepass"))
+    detail = {"path": rel, "action": "replace a note's whole body",
+              "bytes_before": old_bytes, "bytes_after": new_bytes,
+              "lines_before": len(old_lines), "lines_after": len(new_lines)}
+    prompt = (f"replace the whole body of {rel} in your Obsidian vault: "
+              f"{old_bytes} bytes / {len(old_lines)} body line(s) replaced by "
+              f"{new_bytes} bytes / {len(new_lines)} body line(s)")
     return prompt, detail
 
 
@@ -2680,11 +2679,24 @@ def _remove_section(text: str, heading: str, rel: str = ""):
     if why:
         return text, "", {}, why
     removed = text[start:end]
-    count = len(_lines(removed))
-    first = _line_body(_lines(removed)[0]) if removed else ""
+    gone = _lines(removed)
+    count = len(gone)
+    first = _line_body(gone[0]) if gone else ""
+    # WHICH LINES GO is on the card, not only how many (the owner's brief for
+    # 2026-11-25: "delete a section of a note - carded, shows which lines go").
+    # The span is named by its 1-based line numbers in the note as it stands now,
+    # because that is what the owner can see in Obsidian before answering. The
+    # section's own words are NOT quoted here: the hidden-lists rule keeps a
+    # note's text off a card, and the heading (which the owner just named) is the
+    # only line already in the request.
+    first_no = text[:start].count("\n") + 1
+    last_no = first_no + count - 1
+    where = f"line {first_no}" if count == 1 else f"lines {first_no}-{last_no}"
     preview = _preview(first, "", note=(f'the whole "{title}" section is removed '
-                                       f"({count} line{'s' if count != 1 else ''})"))
+                                       f"({where})"))
     preview["lines_removed"] = count
+    preview["lines_from"] = first_no
+    preview["lines_to"] = last_no
     fresh = text[:start] + text[end:]
     where = (" from " + rel) if rel else ""
     said = (f'Deleted the "{_split_clip(title)}" section ({count} line'
@@ -3044,7 +3056,13 @@ def handle_customize(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     elif action in ("remove_section", "delete_section"):
         head = str(body.get("heading") or body.get("section") or "").strip()
         new_text, said, preview, why = _remove_section(text, head, rel)
-        card = f'delete the "{_split_clip(head)}" section from'
+        # The card's own line says HOW MANY lines go and WHERE, so "delete the
+        # Warm-up section" is never accepted blind - the count and the line span
+        # are on the card, and the detail carries both as fields.
+        gone = int(preview.get("lines_removed") or 0)
+        card = (f'delete the "{_split_clip(head)}" section ({gone} line'
+                f'{"s" if gone != 1 else ""}) from' if gone
+                else f'delete the "{_split_clip(head)}" section from')
     elif action in ("set_property", "remove_property"):
         key = str(body.get("key") or "").strip()
         value = str(body.get("value") or "")

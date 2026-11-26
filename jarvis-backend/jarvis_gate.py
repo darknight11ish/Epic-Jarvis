@@ -3680,3 +3680,38 @@ _TOOL_ACTIONS.update({
     # action above, so its card is the mode's own and never `unclassified_tool`.
     "github_mode": "github_mode",
 })
+
+# --------------------------------------------------------------------------
+#   Emptying the vault's trash (jarvis_notes_edit.py, 2026-11-25)
+# --------------------------------------------------------------------------
+# THE ROWS ARE HERE, AT THE END OF THE FILE, for the reason every block above
+# gives: nearly every line inside `_RISK`, `_TOOL_ACTIONS` and
+# `_NO_RULE_FROM_DENIAL` is an earlier patch's hunk context, and the end of this
+# file is the one region no patch's hunk claims. Both updates run at import,
+# before any `check()` call, so the gate sees the rows exactly as if they sat
+# inside the literals. NO NEW PATCH, per the owner's ruling of 2026-11-14:
+# `unknown-risk-approvable.patch` must stay the last patch that writes this
+# file, and this block is what keeps that true.
+#
+# WHAT IT IS. The owner asked for "full control and full ability to manipulate
+# and change any of my notes, with deletions requiring a card of approval". The
+# notes editor already moves a deleted note into the vault's own `.trash` folder
+# (`delete_vault_notes`, 2026-11-23); this is the ONE action that really destroys
+# bytes: it deletes every file in that folder for good. So it is its own row,
+# not `delete_vault_notes` - that row's words promise every byte is kept, and a
+# card that said so here would be false.
+#
+# WHY "no" AND "local". There is no copy and no undo: the files are unlinked.
+# Nothing leaves the PC, so the reach is local. "no" is what sends the card to
+# Windows Hello on the PC and to the asking phone's own signed approval - the
+# owner's "a card of approval" for a deletion that cannot be taken back.
+#
+# WHY `_NO_RULE_FROM_DENIAL`. A denial answers the ONE card it was shown for -
+# "not this, not now" - and must not write a standing rule that stops Jarvis
+# ever offering the command again. The owner may say yes to the next one.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "empty_vault_trash",  # jarvis_notes_edit.py acts only on this card: a denial answers that one batch of files (2026-11-25)
+}
+_RISK.update({
+    "empty_vault_trash": ("no", "local", "deletes every file in your Obsidian vault's hidden .trash folder for good - emptying it cannot be undone, no copy is kept, and neither app can put a file back; the card lists every file and how old it is first, and a denial deletes nothing"),
+})

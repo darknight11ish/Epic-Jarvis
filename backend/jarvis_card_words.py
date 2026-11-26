@@ -364,6 +364,13 @@ TITLES = {
     # them; this line is what the Windows Hello prompt is titled from, so the
     # action could not be approved at all without it.
     "delete_vault_notes": "delete notes from your Obsidian vault",
+    # Emptying the vault's own .trash folder (jarvis_notes_edit.py, 2026-11-25;
+    # the owner's "full control ... with deletions requiring a card of
+    # approval"). This is the ONE note action that really destroys bytes: the
+    # files are unlinked, there is no Undo and no File Guardian copy (the trash
+    # IS the copy), so the words say "for good" - a Windows Hello prompt titled
+    # from this line must not read like the reversible delete above it.
+    "empty_vault_trash": "empty your Obsidian vault's .trash folder for good",
     # --- picture conversion (jarvis_image_convert.py, 2026-11-18): ONE card per
     # file written - pictures into one PDF, or one picture into another format.
     "convert_images": "make a PDF from pictures, or change a picture's format",
@@ -618,6 +625,9 @@ SUMMARY = {
     # Deleting notes (2026-11-23): one card for the whole batch. The card's own
     # line names every note; this glance stays short.
     "delete_vault_notes": "delete notes from your Obsidian vault",
+    # Emptying the vault's .trash folder (2026-11-25): irreversible, so the
+    # glance says "for good" in six words instead of the delete's nine.
+    "empty_vault_trash": "empty your vault's trash for good",
     # Picture conversion (jarvis_image_convert.py, 2026-11-18): ONE new file,
     # one card. The title says which way in the full card; the glance stays at
     # nine words.

@@ -33344,6 +33344,97 @@ duplicate refusals and the over-20 cap before any card, and the chat shapes
 line delete, scheduler words). It is not driven on the live PC here: this is a
 repository change, and the deploy is its own pass.
 
+### 170.15 Full note control: copy, merge, a section, and the vault's trash (added 2026-11-25)
+
+The owner's brief: *"i want atlas to have full control and full ability to
+manipulate and change any of my notes, with deletions requiring a card of
+approval"*. Create, append, insert, tag, property, alias, rename, move and
+delete already existed and each keeps its own card; this section adds the four
+verbs that were missing. **No existing card was removed or loosened** - only
+`create` (a brand-new file) is card-free, exactly as before.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notes/copy` | `{"path": "<rel>", "as": "<new title>"}` (`as` optional) | 200 `{"ok": true, "state": "created"\|"saved", "path": "<new rel>", "receipt": "..."}`; a carded copy answers 202 `{"state": "waiting", "id": "<job>"}` first |
+| `POST /api/notes/merge` | `{"into": "<survivor rel>", "paths": ["<rel>", ...]}` | 200 `{"state": "saved", "kind": "merge", "path": "<survivor>", "count": 1, "paths": [...]}`; 202 while the card waits |
+| `POST /api/notes/trash` | `{}` | 200 `{"state": "empty", "count": 0}` when the trash holds nothing (**no card**); otherwise 202 while the card waits, then 200 `{"state": "saved", "count": 3, "paths": [...]}` |
+| `GET /api/notes/trash` | - | 200 `{"count": 3, "bytes": 900, "oldest_days": 12, "files": [{"path", "bytes", "age_days"}], "nudge": ""}` |
+
+**A copy is additive, so it takes the same card rule as `create`.** When the
+owner writes it directly in the editor (`provenance` `typed`/`voice` and
+`X-Jarvis-Client: hud`), the copy is card-free and takes an Undo receipt: a new
+file cannot overwrite or delete anything. Every other caller - the phone, the
+model, and **the chat** - raises ONE `edit_vault_note` card whose own line names
+the SOURCE and the NEW TITLE (`make a copy of Shopping.md at Shopping copy.md
+in your Obsidian vault`). The bytes are copied verbatim, so properties, tags,
+links and words survive; the default name is `<title> copy.md`, then ` copy 2`,
+and a name that is already taken is refused rather than overwritten.
+
+**A merge is a delete for one of the notes, so it is carded as one.** ONE card
+under **`delete_vault_notes`** (the row that says every byte is kept in `.trash`
+and neither app can put the note back - both true here), whose own line names
+the SURVIVOR, every note folded in, and how many lines the survivor gains
+(`merge "Ideas.md" into "Shopping.md" ... "Shopping.md" survives and gains 3
+line(s), and it moves into the vault's .trash folder`). Each absorbed note's
+BODY is appended under one HTML-comment marker naming where it came from (which
+renders as nothing in Obsidian, so the merged note reads as one note and the
+provenance survives in the file). Every note is re-verified against the sha256
+the card named, the absorbed notes are MOVED into `<vault>/.trash/` (never
+written over), and a failure past the first move puts every note back. Up to
+**20** notes fold into one, matching the delete limit.
+
+**Deleting ONE section is the existing route, not a new one.** `POST
+/api/notes/customize` with `{"action": "remove_section", "heading":
+"<section>", "expected_sha256": "<sha>"}` - one `edit_vault_note` card (this is
+a change to one note, the File Guardian copies the old text first, and one Undo
+puts the section back). The card's own line now says **how many lines** go and
+the detail says **which lines**: `lines_from`, `lines_to` and `lines_removed`,
+so "delete the Warm-up section" is never accepted blind. The section's own words
+are not quoted on the card; the hidden-lists rule keeps a note's text off it.
+
+**Emptying the trash is the one note action that really destroys bytes**, so it
+has its own action and its own row: **`empty_vault_trash`**, `("no", "local")`
+at the end of `jarvis-backend/jarvis_gate.py`, and it reaches a live install
+through `tools/repair_live_backend_gaps.py` (never a new patch - the owner's
+ruling of 2026-11-14). Neither `edit_vault_note` ("the old text is copied
+first") nor `delete_vault_notes` ("every byte is kept in `.trash`") can honestly
+describe it. The card lists EVERY file with its name and age in days, plus the
+count, the total size and the words "this cannot be undone". It acts only on
+`<vault>/.trash` (never a dot-folder's parent, never through a link or
+junction), and it refuses - rather than half-emptying - when the folder holds
+more than `MAX_DELETE` (**20**) files, naming the number. An empty trash answers
+"already empty" with **no card at all**: there is nothing to approve.
+
+**The `.trash` nudge is passive.** One quiet line, and only when the trash has
+grown past one of three measured thresholds: over **50 MB**, over **100 files**,
+or holding something older than **90 days**. Below every one of them it says
+nothing at all; it never empties anything, never raises a card and never appears
+twice in one reply. It is appended by the note-status and vault-location
+answers, from `jarvis_notes_edit.trash_state()`, so the numbers cannot differ
+between the card, the chat and `GET /api/notes/trash`.
+
+**The chat sentences** are `merge my Ideas note into my Shopping note` (and
+`merge my A note and my B note`, where the first survives), `copy my Shopping
+note` / `duplicate it as Groceries`, `delete the Warm-up section from my Workout
+note`, `empty the vault trash` (`clear out the trash`), and the four ways of
+asking which notes are pinned (`which notes did I pin`, `my pinned notes`, `what
+did I pin`, `show me the notes I pinned`). A note merge is never answered in
+pull-request words and a pull-request sentence never reaches the note lane.
+
+**Not built, said plainly.** `untitled*` notes are out of scope on purpose (they
+belong to the vault organizer's own feature, deferred 2026-11-25), and no route
+here deletes a note "for good" - only the trash can be emptied, and only behind
+that card. Neither app has a screen for these four verbs yet; they are reached
+through the chat lane and the routes above.
+
+**Proven.** `backend/test_notes_delete.py` (the four routes: the copy card rule
+both ways, the merge card naming the survivor, the all-or-nothing put-back, the
+section card's line count and span, the trash listing with ages, the over-20
+refusal, the empty-trash no-card answer, and the three nudge thresholds with
+their silence below) and `backend/test_note_grammar_corpus.py` (the owner's
+sentences, driven through the real fast path). Not driven on the live PC here:
+this is a repository change, and the deploy is its own pass.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
