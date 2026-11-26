@@ -1265,7 +1265,19 @@ def _prepare_github_list(args: dict):
 
 
 def _prepare_github_read_file(args: dict):
+    """Plan ONE file read, or ONE bounded repository scan (DEF-097, 2026-11-25).
+
+    `scan: true` selects the scan, which is the ONE GitHub read that also works
+    with no token saved (on a public repository), so it deliberately does NOT go
+    through `_github_plan`: that answers "connect GitHub" before the planner runs
+    when no token is saved. Both halves still validate their name before anything
+    is sent, and `jarvis_github.run()` decides from GitHub's own answer whether a
+    private repository needs the token.
+    """
     import jarvis_github as GH
+    if bool((args or {}).get("scan")):
+        r = GH.plan_scan(args)
+        return r, GH.describe(r)
     return _github_plan(GH.plan_read_file, args)
 
 
@@ -6724,18 +6736,33 @@ TOOLS: dict = {
     "github_read_file": Tool(
         "github_read_file",
         "Read ONE file's text from a repository the saved GitHub token can see, "
-        "at an optional branch or commit. Read-only: nothing changes. It does "
+        "at an optional branch or commit. "
+        "Or set `scan` to true and SCAN one repository in a bounded way instead: "
+        "it lists the folders, reads the start of a few text files, and says "
+        "exactly how many files and folders were NOT read - a scan, never a copy. "
+        "The scan also works on a public repository with no token saved; a private "
+        "one needs GitHub connected. Read-only: nothing changes. It does "
         "not ask by default; the switchable \"Read your GitHub\" row on "
         "the What asks first page can put that card back. It cannot "
         "write, edit or commit a file.",
         {"type": "object", "properties": {
             "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
             "path": {"type": "string",
-                     "description": 'the path inside the repository, e.g. "README.md"'},
+                     "description": 'the path inside the repository, e.g. "README.md"; '
+                                    "required unless `scan` is true"},
             "ref": {"type": "string",
-                    "description": "a branch or commit; leave it out for the default"}},
-         "required": ["repo", "path"]},
+                    "description": "a branch or commit; leave it out for the default"},
+            "scan": {"type": "boolean",
+                     "description": "true to scan the whole repository in a bounded "
+                                    "way instead of reading one file"}},
+         "required": ["repo"]},
         _prepare_github_read_file, _run_github),
+    # THE BOUNDED WHOLE-REPOSITORY SCAN (DEF-097, 2026-11-25) is `github_read_file`
+    # with `scan: true`, not a tool of its own: the owner's ask is the ABILITY to
+    # look at a whole repository, and giving it a new tool name would add a new
+    # switch, a new count on the settings page and a new entry in every GitHub
+    # tool list - none of which is the answer. One read door, two shapes, and the
+    # scan's own caps are in `jarvis_github.py`.
     "github_ci_status": Tool(
         "github_ci_status",
         "Call this when the owner asks what CI says, or what checks are failing or "

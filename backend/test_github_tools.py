@@ -5203,6 +5203,144 @@ def t_github_search_runs_the_real_path_against_a_fake_transport():
               and tiers.get("search_the_web") == "ask")
 
 
+# --------------------------------------------------------------------------
+#   DEF-097 (2026-11-25): the bounded repository scan
+# --------------------------------------------------------------------------
+#
+# The owner's question: "can atlas do a full scan of a repo?". The answer is a
+# bounded scan that says what it did NOT read, so these checks are about the two
+# halves of that sentence: the caps it enforces, and the coverage it reports.
+
+def t_the_bounded_repository_scan_covers_and_skips():
+    repo = "darknight11ish/Epic-Jarvis"
+
+    # THE PLAN: a read under the normal read gate, ONE root step, and the caps
+    # printed on its own card. It sends nothing.
+    r = GH.plan_scan({"repo": repo})
+    check("a scan plans under the read gate", r.action == GH.ACTION_INSPECT, r.action)
+    check("... and is a scan, not a file read", r.scan is True and not r.scan_ref)
+    check("... with ONE planned step, the repository's root listing",
+          len(r.steps) == 1 and r.steps[0].path.endswith("/contents"),
+          [s.path for s in r.steps])
+    card = GH.describe(r)
+    check("the card names the repository", repo in card, card[:200])
+    check("... and both bounds, before anything is sent",
+          f"at most {GH.SCAN_MAX_FOLDERS} folders" in card
+          and f"at most {GH.SCAN_MAX_FILES} text files" in card, card[:400])
+    try:
+        GH.plan_scan({"repo": ""})
+    except GH.GitHubError as exc:
+        check("a scan with no repository is refused in words",
+              "repository" in str(exc) and "Nothing was sent" in str(exc), str(exc))
+    else:
+        check("a scan with no repository is refused in words", False)
+
+    # THE TOOL DOOR: `github_read_file` with `scan: true` builds that plan even
+    # with NO token saved - the one GitHub read that works on a public repo.
+    with _Token(""):
+        state, text = AG.TOOLS["github_read_file"].prepare(
+            {"repo": repo, "scan": True})
+        check("scan: true through the tool is a Request, not the no-token answer",
+              not isinstance(state, AG._GitHubNoToken)
+              and getattr(state, "scan", False) is True, repr(state))
+        check("... and its card is built", bool(str(text).strip()), text[:120])
+        plain = AG.TOOLS["github_read_file"].prepare(
+            {"repo": repo, "path": "README.md"})[0]
+        check("without scan it is still the ONE-file read (or the no-token answer)",
+              isinstance(plain, AG._GitHubNoToken)
+              or getattr(plain, "scan", True) is False, repr(plain))
+
+    # A PUBLIC SCAN WITH NO TOKEN: GitHub serves it, every call is a GET to
+    # api.github.com with no Authorization header, and the walk stops at its caps.
+    root = [
+        {"type": "file", "path": "README.md"},
+        {"type": "file", "path": "logo.png"},
+        {"type": "dir", "path": "backend"},
+    ] + [{"type": "file", "path": f"root{i}.txt"} for i in range(12)]
+    backend = [{"type": "file", "path": "backend/jarvis_github.py"}] + [
+        {"type": "file", "path": f"backend/f{i}.py"} for i in range(15)]
+    def _contents(call):
+        """One fake contents server: the root, one folder, and any text file."""
+        url = str(call["url"]).split("?")[0]
+        if url.endswith("/contents"):
+            return 200, json.dumps(root)
+        rel = url.split("/contents/", 1)[-1]
+        if rel == "backend":
+            return 200, json.dumps(backend)
+        if rel == "README.md":
+            return 200, _file_envelope("R" * 5000)
+        if rel == "logo.png":
+            return 200, _file_envelope("\x89PNG\x00binary")
+        if rel.endswith((".txt", ".py")):
+            return 200, _file_envelope("T" * 4000)
+        return 404, "{}"
+
+    fake = Routed([("/contents", _contents)])
+    with _Token(""):
+        out = GH.run(r, fetch=fake, approved=True)
+    text = str((out or {}).get("text") or "")
+    check("a public scan runs with no token and no card", out.get("ok") is True,
+          out)
+    check("... and says which repository it scanned", f"Scan of {repo}" in text,
+          text[:200])
+    check("... and how many files it READ, against the cap",
+          f"I read the text of {GH.SCAN_MAX_FILES} of them - my cap is "
+          f"{GH.SCAN_MAX_FILES} files" in text, text[-700:])
+    check("... and that every file after the cap was SKIPPED, by count",
+          "NOT read:" in text and f"beyond the {GH.SCAN_MAX_FILES}-file cap" in text,
+          text[-700:])
+    check("... and never claims the whole repository",
+          "this is not the whole repository" in text, text[-300:])
+    check("... and the answer stays bounded",
+          len(text) < (GH.SCAN_MAX_FILES * (GH.SCAN_FILE_CHARS + 300) + 3000),
+          len(text))
+    check("... and a long file is cut, not printed whole",
+          "(cut here)" in text and "R" * 5000 not in text, len(text))
+    check("every scan call is a GET to api.github.com",
+          fake.methods() and all(m == "GET" for m in fake.methods())
+          and all(u.startswith(GH.GITHUB_API + "/") for u in fake.urls()),
+          (fake.methods()[:3], fake.urls()[:2]))
+    check("a public scan sends NO Authorization header at all",
+          all("Authorization" not in c["headers"] for c in fake.calls),
+          [list(c["headers"]) for c in fake.calls[:2]])
+    check("the walk stops inside its own request cap",
+          len(fake.calls) <= GH.SCAN_MAX_FOLDERS + GH.SCAN_MAX_READS,
+          (len(fake.calls), GH.SCAN_MAX_FOLDERS, GH.SCAN_MAX_READS))
+
+    # A BINARY FILE IS COUNTED AS SKIPPED, not shown as noise.
+    binary = Routed([
+        ("/contents/README.md", (200, _file_envelope("a real readme"))),
+        ("/contents/logo.png", (200, _file_envelope("\x89PNG\x00binary"))),
+        ("/contents", (200, json.dumps([
+            {"type": "file", "path": "README.md"},
+            {"type": "file", "path": "logo.png"}]))),
+    ])
+    with _Token(""):
+        out = GH.run(r, fetch=binary, approved=True)
+    text = str((out or {}).get("text") or "")
+    check("a binary file is skipped and counted, never decoded into the answer",
+          "1 binary file" in text and "\x89PNG" not in text, text[-500:])
+
+    # A PRIVATE REPOSITORY WITHOUT A TOKEN IS REFUSED IN PLAIN WORDS.
+    closed = Routed([])
+    with _Token(""):
+        out = GH.run(r, fetch=closed, approved=True)
+    error = str((out or {}).get("error") or "")
+    check("a private repository with no token is refused, not guessed at",
+          out.get("ok") is False, out)
+    check("... in words that name the missing token", "no GitHub token" in error,
+          error)
+    check("... and the private possibility", "private" in error, error)
+    check("... and say nothing was read", "Nothing was read" in error, error)
+    # WITH a token, the same 404 keeps the module's existing missing/private words.
+    with _Token():
+        out = GH.run(r, fetch=closed, approved=True)
+    error = str((out or {}).get("error") or "")
+    check("with a token, a 404 keeps the existing missing-or-private sentence",
+          out.get("ok") is False and "private" in error and "no such repository" in error,
+          error)
+
+
 if __name__ == "__main__":
     print(f"  file  {HERE / 'jarvis_github.py'}")
     print(f"  file  {GATE_BASE}")
@@ -5225,6 +5363,7 @@ if __name__ == "__main__":
                    t_every_tier_is_ask_and_the_tables_are_joined,
                    t_every_write_declares_and_names_its_tier,
                    t_a_file_read_shows_the_files_text_not_the_envelope,
+                   t_the_bounded_repository_scan_covers_and_skips,
                    t_the_answer_is_bounded_and_unapproved_runs_send_nothing,
                    t_create_repo_is_one_carded_call_before_any_network,
                    t_create_repo_body_is_exactly_what_the_card_showed,

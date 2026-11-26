@@ -329,6 +329,8 @@ VALID = (
     ("plan_rerun", GH.plan_rerun, {"repo": REPO, "run_id": "123456"}),
     ("plan_create_repo", GH.plan_create_repo, {"name": "Fitness-Band"}),
     ("plan_scan_prs", GH.plan_scan_prs, {"repo": REPO}),
+    # DEF-097 (2026-11-25): the bounded repository scan's root listing.
+    ("plan_scan", GH.plan_scan, {"repo": REPO}),
     ("plan_merge_pr", GH.plan_merge_pr,
      {"repo": REPO, "number": "1116", "head_sha": SHA, "title": "Fix it",
       "base_ref": "main"}),

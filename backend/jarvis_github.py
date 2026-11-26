@@ -294,6 +294,67 @@ CUT_ANSWER = ("GitHub's answer was longer than Jarvis reads in one go, so "
 #: out, and the model gets the top of it plus a plain note.
 MAX_FILE_CHARS = 40_000
 
+# --------------------------------------------------------------------------
+#   THE BOUNDED REPOSITORY SCAN (DEF-097, 2026-11-25)
+# --------------------------------------------------------------------------
+#
+# The owner's question of 2026-11-25: "can atlas do a full scan of a repo? if not
+# do research on what github repos have these tools to add to atlas". Every read
+# here is bounded (`github_read_file` gives the first `MAX_FILE_CHARS` of ONE
+# file), so there was no way to look at a repository as a whole. This is that
+# look, and every number below is the boundary the answer must state: the scan is
+# NOT the repository, and it says so in its own words.
+#
+# The file list is walked through the contents API, not the recursive git tree:
+# a tree answer for this repository would be over `MAX_BYTES` and could never be
+# parsed, and a walk is what "with an explicit cap" means. The caps are on the
+# folder listings, the entries walked, the file reads and the characters read,
+# so one call is bounded on every axis.
+
+#: How many folder listings one scan may read (the repository root counts as
+#: one). A folder beyond this is one of the things the answer says it skipped.
+SCAN_MAX_FOLDERS = 12
+
+#: How many file and folder names one scan walks before it stops collecting.
+#: It is a second cap because a big folder is one listing and a thousand names.
+SCAN_MAX_ENTRIES = 400
+
+#: How many files' text one scan reads, and how much of each. The two together
+#: are the size of the answer's data half; a binary file is skipped by name
+#: before either number is spent, so at most this many TEXT files are read.
+SCAN_MAX_FILES = 10
+SCAN_FILE_CHARS = 1_500
+
+#: The extensions a scan tries the text of FIRST. A file with no extension is
+#: tried too (a README, a Makefile, a LICENSE). A file that turns out binary is
+#: not shown: it is COUNTED as skipped instead, because showing a PNG's bytes as
+#: characters reads like a garbled file.
+SCAN_TEXT_EXTENSIONS = (
+    ".c", ".cfg", ".conf", ".cpp", ".cs", ".css", ".csv", ".go", ".gradle",
+    ".h", ".hpp", ".html", ".ini", ".java", ".js", ".json", ".jsx", ".kt",
+    ".kts", ".lock", ".lua", ".md", ".mjs", ".ps1", ".py", ".rb", ".rs",
+    ".sh", ".sql", ".svg", ".toml", ".ts", ".tsx", ".txt", ".xml", ".yaml",
+    ".yml",
+)
+
+#: The file names a scan reads first, before any other text file, because they
+#: are the repository's own account of itself.
+SCAN_FIRST_NAMES = ("readme.md", "readme.rst", "readme.txt", "readme")
+
+#: One scan reads the text of at most `SCAN_MAX_FILES` files; this is how many
+#: REQUESTS it may spend, so a file that turned out binary is skipped by the
+#: count without letting the scan walk through the whole repository.
+SCAN_MAX_READS = SCAN_MAX_FILES + 4
+
+#: The sentence a scan with no saved token gives when GitHub will not show the
+#: repository. GitHub answers 404 for a private repository and for a name that
+#: does not exist, deliberately, so the honest answer names both possibilities.
+SCAN_PRIVATE_WORDS = (
+    'Jarvis did not scan "{repo}": no GitHub token is saved on this PC, and '
+    'GitHub shows a public repository without one. That repository is either '
+    'private or its owner/name is wrong. Save a token with "connect my GitHub" '
+    'and a private repository can be scanned. Nothing was read.')
+
 #: The longest comment or issue body this module will put on a card. The gate
 #: keeps 4,000 characters for a whole card (`jarvis_agent._GATE_DETAIL_LIMIT`),
 #: and a card that would be cut is refused rather than shown in part - so the
@@ -689,6 +750,7 @@ NEVER_WORDS = ("Jarvis can never force-push, squash-merge or rebase, use an "
 #: the Reach page and the claims register.
 CAPABILITIES = (
     {"tool": "github_list", "kind": "read", "gate": ACTION_INSPECT,
+     "short": "list your repositories, or one repo's pull requests, issues or runs",
      "words": "read your repositories, or one repository's pull requests or "
               "issues in a state you pick (open by default), or its recent "
               "workflow runs",
@@ -697,13 +759,22 @@ CAPABILITIES = (
      "limit": "one fixed list of at most 20 - never an address the model writes",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_read_file", "kind": "read", "gate": ACTION_INSPECT,
+     "short": "read one file, or scan a repo in a bounded way and say what it skipped",
      "words": "read ONE file's text from a repository, at a branch or commit if "
-              "you name one",
-     "card_fields": ("the repository", "the path", "the branch"),
-     "limit": "the first 40,000 characters; a directory or a link is said plainly",
+              "you name one - or scan ONE repository in a bounded way (list its "
+              "folders, read the start of a few text files, and say exactly how "
+              "many files and folders were NOT read)",
+     "card_fields": ("the repository", "the path", "the branch",
+                     "whether it is a file read or a scan"),
+     "limit": (f"a file read gives the first 40,000 characters; a scan lists at most "
+               f"{SCAN_MAX_FOLDERS} folders, walks {SCAN_MAX_ENTRIES} entries, reads "
+               f"the first {SCAN_FILE_CHARS:,} characters of at most "
+               f"{SCAN_MAX_FILES} text files, names every skipped file and folder, "
+               f"is never a copy, and works on a public repository with no token"),
      "default_state": "off",
      "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_ci_status", "kind": "read", "gate": ACTION_INSPECT,
+     "short": "say how the newest CI run ended, and name what failed",
      "words": "read how the newest CI run ended for a repository, a branch or a "
               "pull request and, when it failed, name the failing checks with "
               "one bounded excerpt of the first failing check's log",
@@ -712,6 +783,7 @@ CAPABILITIES = (
               "failed; it never re-runs anything by itself",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_pr_scan", "kind": "read", "gate": ACTION_INSPECT,
+     "short": "say which open pull requests can merge, and what blocks them",
      "words": "read every open pull request and say which are merge-ready, "
               "blocked, conflicted, running or draft, which required check is "
               "holding each one, and each one's full 40-character head commit, "
@@ -720,6 +792,7 @@ CAPABILITIES = (
      "limit": "read-only by construction: no body, no method but GET",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_pr_detail", "kind": "read", "gate": ACTION_INSPECT,
+     "short": "read one pull request in full: diff, commits, comments, reviews",
      "words": "read ONE pull request in full: its title, body, state, draft "
               "and mergeable flags, its head commit and base branch, then its "
               "changed files with their unified diff, its commits, its comments "
@@ -733,6 +806,7 @@ CAPABILITIES = (
               "and every text is bounded",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_comment", "kind": "write", "gate": ACTION_COMMENT,
+     "short": "post one comment on an issue or pull request",
      "words": "post ONE comment on an issue or pull request, as you",
      "card_fields": ("the repository", "the issue or pull request number",
                      "the whole comment text"),
@@ -740,12 +814,14 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": ("edit_comment",), "two_stage_kind": None},
     {"tool": "github_open_issue", "kind": "write", "gate": ACTION_OPEN_ISSUE,
+     "short": "open one new issue",
      "words": "open ONE new issue on a repository, as you",
      "card_fields": ("the repository", "the title", "the whole body"),
      "limit": "title 200 characters, body 2,000; it cannot close or edit it",
      "default_state": "off",
      "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_rerun_workflow", "kind": "write", "gate": ACTION_RERUN,
+     "short": "run one existing workflow run again",
      "words": "run ONE existing workflow run again, with the same code and "
               "settings it ran with before",
      "card_fields": ("the repository", "the run number"),
@@ -753,6 +829,7 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": ("workflow_dispatch",), "two_stage_kind": None},
     {"tool": "github_create_repo", "kind": "write", "gate": ACTION_CREATE_REPO,
+     "short": "create one new, empty repository on your account",
      "words": "create ONE new, empty repository on your own account",
      "card_fields": ("the name", "whether it is private", "the description"),
      "limit": "your own account only (POST /user/repos), nothing pushed into it, "
@@ -760,6 +837,7 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": ("delete_repository",), "two_stage_kind": None},
     {"tool": "github_merge_pr", "kind": "write", "gate": ACTION_MERGE,
+     "short": "merge one pull request, merge commit only, pinned to its head",
      "words": "merge ONE pull request with a MERGE COMMIT, pinned to the exact "
               "40-character head commit the card showed",
      "card_fields": ("the repository", "the pull request number",
@@ -785,6 +863,7 @@ CAPABILITIES = (
                        "auto_merge", "bypass_required_checks", "approve_pr"),
      "two_stage_kind": None},
     {"tool": "github_fix_and_push", "kind": "write", "gate": ACTION_FIX_PUSH,
+     "short": "copy a failing PR, write one file, push to its own branch",
      "extra_gates": (ACTION_FIX_WRITE,),
      "words": "copy a failing pull request into an isolated scratch folder on "
               "this PC, write ONE file of the fix there on its own card, then "
@@ -808,6 +887,7 @@ CAPABILITIES = (
      "absolute_bans": ("force_push", "delete_branch", "push_to_main"),
      "two_stage_kind": "prepare_write_then_push"},
     {"tool": "github_open_pr", "kind": "write", "gate": ACTION_OPEN_PR,
+     "short": "push one new branch and open one pull request from it",
      "words": "copy a repository at a base branch into an isolated scratch "
               "folder on this PC, make a NEW branch there, then push that branch "
               "and open ONE pull request from it into the base branch, on a "
@@ -828,6 +908,7 @@ CAPABILITIES = (
      "absolute_bans": ("force_push", "push_to_main", "delete_branch"),
      "two_stage_kind": "prepare_then_open"},
     {"tool": "github_workflow", "kind": "write", "gate": ACTION_WORKFLOW,
+     "short": "cancel one run, or re-run only its failed jobs",
      "words": "cancel ONE in-progress workflow run, or re-run only the FAILED "
               "jobs of ONE finished run",
      "card_fields": ("the repository", "the run number",
@@ -839,6 +920,7 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": ("workflow_dispatch",), "two_stage_kind": None},
     {"tool": "github_issue_labels", "kind": "write", "gate": ACTION_ISSUE_LABELS,
+     "short": "add or remove labels on one issue or pull request",
      "words": "add and/or remove labels on ONE issue or pull request, showing "
               "the exact add and remove sets",
      "card_fields": ("the repository", "the issue or pull request number",
@@ -850,6 +932,7 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_edit_pr", "kind": "write", "gate": ACTION_EDIT_PR,
+     "short": "edit one pull request's title or body",
      "words": "edit ONE pull request's title and/or body, showing the exact "
               "before and after",
      "card_fields": ("the repository", "the pull request number",
@@ -860,6 +943,7 @@ CAPABILITIES = (
               "pull request is not still the one the card showed",
      "default_state": "off", "absolute_bans": (), "two_stage_kind": None},
     {"tool": "github_pr_review", "kind": "write", "gate": ACTION_PR_REVIEW,
+     "short": "post one review: comment or request changes, never approve",
      "words": "post ONE pull request review with the COMMENT or REQUEST_CHANGES "
               "verdict and the whole review text, never an approval",
      "card_fields": ("the repository", "the pull request number",
@@ -872,6 +956,7 @@ CAPABILITIES = (
      "default_state": "off",
      "absolute_bans": ("approve_pr",), "two_stage_kind": None},
     {"tool": "github_issue_state", "kind": "write", "gate": ACTION_ISSUE_STATE,
+     "short": "close or reopen one issue",
      "words": "close ONE issue, or reopen ONE closed issue, on its own card "
               "showing the issue's title and the direction, with an optional "
               "reason",
@@ -1229,6 +1314,11 @@ class Request:
       `ci`            True for `github_ci_status`. `run()` reads the newest run
                       and, when it failed, that run's jobs and ONE bounded log
                       tail, instead of one plain list.
+      `scan`          True for `github_scan_repo` (DEF-097). `run()` walks the
+                      repository's folder listings and reads a bounded slice of a
+                      few text files instead of one plain list, and may do it
+                      with NO token when the repository is public. `scan_ref` is
+                      the branch it was asked to scan, or "" for the default.
     """
 
     action: str                   # which gate action decides it
@@ -1266,6 +1356,8 @@ class Request:
     ci: bool = False              # github_ci_status: newest run, then its jobs
     runs_list: bool = False       # github_list: the runs LIST, not one CI answer
     refs: tuple = ()              # branch names the card names, checked first
+    scan: bool = False            # github_scan_repo: the bounded folder walk
+    scan_ref: str = ""            # github_scan_repo: the branch it scans, or ""
 
     def urls(self) -> tuple:
         return tuple(s.url() for s in self.steps)
@@ -1524,6 +1616,10 @@ def describe(r: Request) -> str:
         lines.append("The GitHub token saved on this PC is sent to api.github.com "
                      "for the pull request and to github.com for the git push, "
                      "and nowhere else; it is never shown.")
+    elif r.scan:
+        lines.append("If a GitHub token is saved on this PC it is sent to "
+                     "api.github.com and nowhere else, and it is never shown. "
+                     "Without one this reads only what GitHub shows publicly.")
     else:
         lines.append("The GitHub token saved on this PC is sent to api.github.com "
                      "and nowhere else; it is never shown.")
@@ -1693,6 +1789,99 @@ def capabilities_text() -> str:
     lines.append("")
     lines.append(f"The absolute never list: {NEVER_WORDS}")
     return "\n".join(lines)
+
+
+#: How long the SHORT inventory may be, in characters and in lines (DEF-097,
+#: 2026-11-25). The owner's words about the old answer were "this response is
+#: way too long", so the short form is BOUNDED in the code as well as by its
+#: shape: `backend/test_github_self_knowledge.py` asserts both numbers, and a
+#: future line that pushes it over has to say so out loud.
+CAPABILITIES_SHORT_MAX_CHARS = 2_400
+CAPABILITIES_SHORT_MAX_LINES = 30
+
+#: The ONE sentence that turns the short list into the long answer. The phone's
+#: and the desktop's copy of the answer both end with it, so a person always
+#: knows the next move without the list itself being long. It names no tool, so
+#: every tool's name still appears exactly once in the short list.
+CAPABILITIES_SHORT_TAIL = ('Say a tool\'s name for the detail, or "more GitHub '
+                           'tool detail" for the whole list.')
+
+
+def capabilities_short() -> str:
+    """The inventory the owner asked for: ONE line per tool, then the offer.
+
+    THE MEASURED FAILURE (DEF-097, 2026-11-25). "What GitHub tools do you have?"
+    answered with `capabilities_text()`: seventeen paragraphs, each naming a
+    card's fields and its limit. The owner's words were "this response is way
+    too long". This is the answer he asked for instead - one line per tool, the
+    tool's own name first, then the detail left one sentence away.
+
+    EVERY ROW IS STILL THE ONE HOME. The line is the row's own `short` phrase,
+    and the names and the counts are read from `CAPABILITIES`; the tail is the
+    fixed sentence above. Nothing here is a second inventory, so a tool added to
+    the tuple cannot be missing from the list, and a tool removed cannot linger.
+    """
+    reads = [c for c in CAPABILITIES if c["kind"] == "read"]
+    writes = [c for c in CAPABILITIES if c["kind"] == "write"]
+    lines = [f"GitHub: {_count_word(len(reads))} reads and "
+             f"{_count_word(len(writes))} writes, one line each:"]
+    for c in CAPABILITIES:
+        lines.append(f"  - {c['tool']}: {c.get('short') or c['words']}")
+    lines.append("")
+    lines.append(CAPABILITIES_SHORT_TAIL)
+    return "\n".join(lines)
+
+
+def _one_capability_text(c: dict) -> str:
+    """ONE row of `CAPABILITIES`, in full: what it does, its card and its limit."""
+    kind = str(c.get("kind") or "read")
+    card = "when it asks" if kind == "read" else "on its own card"
+    lines = [f"{c['tool']} ({kind}): {c['words']}."]
+    lines.append(f"What it shows {card}: {_card_shows(c)}.")
+    lines.append(f"Limit: {c['limit']}.")
+    if c.get("two_stage_kind") == "prepare_write_then_push":
+        lines.append("This is a three-stage flow: prepare, write and push, each "
+                     "with its own card.")
+    elif c.get("two_stage_kind") == "prepare_then_open":
+        lines.append("This is a two-stage flow: prepare, then open, each with its "
+                     "own card.")
+    bans = _bans_words(c)
+    if bans:
+        lines.append(bans.strip())
+    lines.append(f"It ships {c.get('default_state') or 'off'}: switch it on under "
+                 f"Settings, What asks first, in the GitHub tools group.")
+    return "\n".join(lines)
+
+
+def capabilities_detail(which: str = "") -> str:
+    """The LONG form: one tool's row by name, or the whole text for "more".
+
+    The short list ends with an offer, and this is the door behind it. A name
+    that is not in the inventory raises `KeyError` (through `capabilities_for`)
+    rather than guessing, and the caller answers with the short list again.
+    """
+    wanted = str(which or "").strip().lower()
+    if wanted in ("", "more", "all", "everything", "full"):
+        return capabilities_text()
+    return _one_capability_text(capabilities_for(wanted))
+
+
+def scan_words() -> str:
+    """What the bounded repository scan really does, with its numbers derived.
+
+    The deterministic capability answer for "can you scan a repo?" is built from
+    the SAME constants the scan enforces, so the sentence cannot promise a
+    bigger scan than the tool performs - which is the whole point of the shape
+    (DEF-097: an inventory that implies a full read is not acceptable).
+    """
+    return (f"Yes - I can scan ONE repository you name, in a bounded way, and I "
+            f"say what I did not read. I list at most {SCAN_MAX_FOLDERS} folders, "
+            f"walk at most {SCAN_MAX_ENTRIES} entries, and read the first "
+            f"{SCAN_FILE_CHARS:,} characters of at most {SCAN_MAX_FILES} text "
+            f"files. The answer then names every file and folder I skipped. It is "
+            f"a scan, never a copy: nothing is downloaded whole, and nothing on "
+            f"GitHub changes. A public repository scans with no GitHub token; a "
+            f"private one needs \"connect my GitHub\" first.")
 
 
 def capabilities_line() -> str:
@@ -2815,6 +3004,263 @@ def plan_read_file(args: Optional[dict] = None) -> Request:
         touches="Nothing on GitHub changes; this only reads one file.",
         repo=repo,
     )
+
+
+def plan_scan(args: Optional[dict] = None) -> Request:
+    """Scan ONE repository in a bounded way (DEF-097, 2026-11-25).
+
+    The owner's question: "can atlas do a full scan of a repo?". Every other read
+    here gives one list or one file; this is the whole-repository look that did
+    not exist. It is deliberately NOT a full scan and its card says so: the
+    folder walk, the entries it may collect, the files it reads and the
+    characters per file are all capped by the constants above, and its answer
+    names every file and folder the caps left out.
+
+    The plan is ONE step - the repository root's own folder listing - because the
+    rest of the walk is decided by the answers as they arrive (a folder name is
+    fetched text; `_scan_folder_path` rebuilds the address from it under this
+    module's own host and refuses any name that is not a plain relative path).
+    Nothing is sent by this function.
+    """
+    args = args or {}
+    repo = _check_repo(args.get("repo"), read=True)
+    ref = _check_ref(args["ref"]) if str(args.get("ref") or "").strip() else ""
+    query = f"?ref={urllib.parse.quote(ref, safe='')}" if ref else ""
+    step = Step("GET", f"{_repo_path(repo)}/contents{query}")
+    where = f" at {ref}" if ref else ""
+    return Request(
+        ACTION_INSPECT,
+        (f"Jarvis will scan {repo}{where} in a bounded way: list at most "
+         f"{SCAN_MAX_FOLDERS} folders, walk at most {SCAN_MAX_ENTRIES} entries, "
+         f"and read the first {SCAN_FILE_CHARS:,} characters of at most "
+         f"{SCAN_MAX_FILES} text files. It will say what it did NOT read."),
+        (step,),
+        touches=("Nothing on GitHub changes; this only reads. It is a scan, not a "
+                 "copy: no whole repository is downloaded."),
+        repo=repo,
+        scan=True,
+        scan_ref=ref,
+    )
+
+
+def _scan_folder_path(repo: str, folder: str, ref: str) -> str:
+    """The address for ONE folder inside `repo`, built from our own host only.
+
+    `folder` comes from a fetched listing, so it is DATA: every segment is
+    checked to be a plain name (no empty, "." or ".." segment, no backslash, no
+    colon) and is then percent-encoded, and the whole address is assembled by
+    this module from `_repo_path`. A name that is not one of those returns "",
+    and the scan says that folder was skipped rather than sending anywhere.
+    """
+    text = str(folder or "").strip()
+    if not text or text.startswith("/") or "\\" in text or ":" in text:
+        return ""
+    parts = text.split("/")
+    if any(not p or p in (".", "..") for p in parts):
+        return ""
+    quoted = "/".join(urllib.parse.quote(p, safe="") for p in parts)
+    query = f"?ref={urllib.parse.quote(ref, safe='')}" if ref else ""
+    return f"{_repo_path(repo)}/contents/{quoted}{query}"
+
+
+def _scan_file_text(doc) -> tuple:
+    """(the file's text, "" or why it is not text) for one contents answer.
+
+    The contents API gives a file's bytes base64-encoded. A binary file (an
+    image, a program, anything that is not UTF-8 or that carries a NUL) is NOT
+    shown and NOT guessed at: it is skipped, and the skip is counted. This is
+    the same rule `_file_words` already applies to one file, kept as its own
+    small reader so the scan can skip a file without spending its answer on it.
+    """
+    if not isinstance(doc, dict):
+        return "", "GitHub did not send one file's text"
+    if str(doc.get("encoding") or "") != "base64" or not isinstance(
+            doc.get("content"), str):
+        return "", "it is a link, a folder or too large for this read"
+    try:
+        raw = base64.b64decode(str(doc["content"]))
+    except (ValueError, TypeError):
+        return "", "this PC could not decode it"
+    if b"\x00" in raw:
+        return "", "it is a binary file"
+    try:
+        decoded = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return "", "it is a binary file"
+    return decoded, ""
+
+
+def _scan_candidate_key(path: str) -> tuple:
+    """A stable, useful order: the repository's own account of itself first.
+
+    A README is the one file that explains a repository, so root READMEs come
+    first, then other text files by their distance from the root, then the
+    remaining files alphabetically. The order is derived from the path alone, so
+    two scans of the same repository read the same files.
+    """
+    low = str(path or "").lower()
+    name = low.rsplit("/", 1)[-1]
+    ext = os.path.splitext(name)[1]
+    first = 0 if name in SCAN_FIRST_NAMES else 1
+    depth = low.count("/")
+    textish = 0 if (not ext or ext in SCAN_TEXT_EXTENSIONS) else 1
+    return (first, textish, depth, low)
+
+
+def _scan_coverage(repo: str, ref: str, *, listed: int, entries: int,
+                   found: int, read: int, binaries: int, unreadable: int,
+                   unread: int, folders_left: int, cut_folders: int,
+                   chars: int, entry_cut: bool) -> str:
+    """The last paragraph of a scan: exactly what it covered and what it did not.
+
+    THIS IS THE CONTROL. A scan that only showed some text would read like a
+    description of the whole repository, which is what DEF-097 refuses. Every
+    number is either a fact the walk counted or one of the caps above, and the
+    sentence never says "all" about anything it did not walk and read.
+    """
+    where = f" at {ref}" if ref else ""
+    listed_bit = (f"I listed {listed} folder{'s' if listed != 1 else ''} (my cap "
+                  f"is {SCAN_MAX_FOLDERS})")
+    if entry_cut:
+        listed_bit += (f" and stopped at my cap of {SCAN_MAX_ENTRIES} entries")
+    said = (f"Scan of {repo}{where}: {listed_bit}, and found {found} file"
+            f"{'s' if found != 1 else ''}.")
+    said += (f" I read the text of {read} of them - my cap is {SCAN_MAX_FILES} "
+             f"files, the first {SCAN_FILE_CHARS:,} characters of each, "
+             f"{chars:,} characters in all.")
+    skips = []
+    if unread:
+        skips.append(f"{unread} file{'s' if unread != 1 else ''} beyond the "
+                     f"{SCAN_MAX_FILES}-file cap")
+    if binaries:
+        skips.append(f"{binaries} binary file{'s' if binaries != 1 else ''}")
+    if unreadable:
+        skips.append(f"{unreadable} file{'s' if unreadable != 1 else ''} GitHub "
+                     f"would not send")
+    if folders_left:
+        skips.append(f"at least {folders_left} folder{'s' if folders_left != 1 else ''}"
+                     f" the {SCAN_MAX_FOLDERS}-folder cap left unlisted")
+    if cut_folders:
+        skips.append(f"{cut_folders} folder listing{'s' if cut_folders != 1 else ''} "
+                     f"too long to read")
+    skips.append(f"the rest of every file after {SCAN_FILE_CHARS:,} characters")
+    said += " NOT read: " + "; ".join(skips) + "."
+    said += (" Nothing on GitHub changed, and this is not the whole repository - "
+             "it is everything above and nothing more.")
+    return said
+
+
+def _run_scan(r: Request, fetch: Callable, token: str, headers: dict) -> dict:
+    """Walk a repository's folders, read a bounded slice, and report the skips.
+
+    THE TOKEN IS OPTIONAL HERE, and that is the one difference from every other
+    reader in this module: a public repository is readable with no token, and
+    the owner asked for exactly that. A saved token is used when there is one
+    (and then a private repository works); with no token a 404 is GitHub saying
+    either "private" or "no such repository", and that is what the answer says.
+    The host is still only api.github.com, the walk is still capped on every
+    axis, and nothing here writes anywhere.
+    """
+    root = f"{_repo_path(r.repo)}/contents"
+    queue = [""]
+    listed = entries = cut_folders = 0
+    entry_cut = False
+    files = []
+    seen_dirs = set()
+    folders_left = 0
+    while queue and listed < SCAN_MAX_FOLDERS:
+        folder = queue.pop(0)
+        if folder in seen_dirs:
+            continue
+        seen_dirs.add(folder)
+        if folder:
+            path = _scan_folder_path(r.repo, folder, r.scan_ref)
+            if not path:
+                cut_folders += 1
+                continue
+        else:
+            path = root + (f"?ref={urllib.parse.quote(r.scan_ref, safe='')}"
+                           if r.scan_ref else "")
+        doc, status, err, cut = _read_part(fetch, path, headers, token)
+        if status == 404:
+            if not token and not listed:
+                return {"ok": False, "error": SCAN_PRIVATE_WORDS.format(repo=r.repo)}
+            if not listed:
+                return {"ok": False, "error": _missing_repo_words(r.repo)}
+            cut_folders += 1
+            continue
+        if status == 0:
+            return {"ok": False, "error": _unverified_words(
+                f'"{r.repo}"', "api.github.com did not answer from this PC")}
+        if 300 <= status < 400:
+            return {"ok": False, "error": _redirected_repo_words(r.repo)}
+        if cut:
+            cut_folders += 1
+            if not listed:
+                return {"ok": False, "error": CUT_ANSWER}
+            continue
+        if err or not isinstance(doc, list):
+            if not listed:
+                return {"ok": False, "error": err or _unreadable()}
+            cut_folders += 1
+            continue
+        listed += 1
+        for item in doc:
+            if not isinstance(item, dict):
+                continue
+            if entries >= SCAN_MAX_ENTRIES:
+                entry_cut = True
+                break
+            kind = str(item.get("type") or "")
+            item_path = str(item.get("path") or "").strip()
+            if not item_path:
+                continue
+            entries += 1
+            if kind == "dir":
+                if item_path not in seen_dirs:
+                    queue.append(item_path)
+            elif kind == "file":
+                files.append(item_path)
+        if entry_cut:
+            break
+    folders_left = len([f for f in queue if f not in seen_dirs])
+
+    ordered = sorted(files, key=_scan_candidate_key)
+    texts = []
+    binaries = unreadable = attempts = chars = 0
+    for file_path in ordered:
+        if len(texts) >= SCAN_MAX_FILES or attempts >= SCAN_MAX_READS:
+            break
+        attempts += 1
+        path = _scan_folder_path(r.repo, file_path, r.scan_ref)
+        if not path:
+            unreadable += 1
+            continue
+        doc, status, err, cut = _read_part(fetch, path, headers, token)
+        if status != 200 or cut or err:
+            unreadable += 1
+            continue
+        text, why = _scan_file_text(doc)
+        if not text:
+            if "binary" in why:
+                binaries += 1
+            else:
+                unreadable += 1
+            continue
+        cleaned = _clean_github_text(text, limit=SCAN_FILE_CHARS)
+        if not cleaned:
+            texts.append(f"--- {file_path} ---\n(empty file)")
+            continue
+        chars += min(len(text), SCAN_FILE_CHARS)
+        texts.append(f"--- {file_path} ---\n{cleaned}")
+    unread = max(0, len(ordered) - len(texts) - binaries - unreadable)
+    body = "\n\n".join(texts) if texts else "(no text file was read)"
+    coverage = _scan_coverage(
+        r.repo, r.scan_ref, listed=listed, entries=entries, found=len(files),
+        read=len(texts), binaries=binaries, unreadable=unreadable,
+        unread=unread, folders_left=folders_left, cut_folders=cut_folders,
+        chars=chars, entry_cut=entry_cut)
+    return {"ok": True, "text": body + "\n\n" + coverage}
 
 
 def plan_ci(args: Optional[dict] = None) -> Request:
@@ -4305,12 +4751,21 @@ def _default_fetch(method: str, url: str, *, headers: dict,
 
 
 def _headers(token: str) -> dict:
-    return {
+    """The headers for one api.github.com request.
+
+    An EMPTY token means "no credential on this PC" and sends NO Authorization
+    header at all (the bounded public scan is the one caller that can work that
+    way, DEF-097). Every other caller passes a real token, so nothing else
+    changes.
+    """
+    headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": USER_AGENT,
         "X-GitHub-Api-Version": API_VERSION,
-        "Authorization": f"Bearer {token}",
     }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 def _fetched(answer) -> tuple:
@@ -4722,6 +5177,19 @@ def run(r: Request, *, fetch: Optional[Callable] = None,
         # it changes nothing on GitHub, and the separate carded push is the only
         # thing that can send a commit anywhere.
         return _run_fix_write(r, git=git or _default_git)
+    if r.scan:
+        # THE ONE READ THAT MAY RUN WITHOUT A TOKEN (DEF-097, 2026-11-25). A
+        # public repository is readable with no credential, and the owner asked
+        # for a scan that works on one. A saved token is still used when there is
+        # one, so a private repository works; `_headers("")` sends no
+        # Authorization header at all rather than an empty one.
+        token = ""
+        try:
+            token = str(_token() or "")
+        except Exception:                    # noqa: BLE001 - no store is "no token"
+            token = ""
+        fetch = fetch or _default_fetch_full
+        return _run_scan(r, fetch, token, _headers(token))
     try:
         token = _need_token()
     except GitHubError as exc:
