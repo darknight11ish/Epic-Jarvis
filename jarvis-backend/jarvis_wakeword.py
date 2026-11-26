@@ -1055,10 +1055,22 @@ def split_wake(text: str) -> tuple:
     "hey_atlas", "jarvis" for "hey_jarvis". A phrase this build does not know
     accepts neither, so a typo in the config cannot wake on the wrong word."""
     text = text or ""
-    name = _NAMES.get(phrase()) or _NO_NAME
+    #: The configured phrase's name, PLUS any other known name as a LEGACY
+    #: alias (the owner's ruling of 2026-11-26): an existing PC is never
+    #: silently re-pointed, so a transcript may still say "Jarvis" after the
+    #: build started shipping "Atlas", and the second opinion must not throw
+    #: that away. A phrase this build does not know still matches nothing, so
+    #: a typo in the config can never wake on some other phrase's word.
+    name = _NAMES.get(phrase())
+    if name is None:
+        # An unknown phrase accepts NO name at all - never the other phrase's.
+        names = [_NO_NAME]
+    else:
+        names = [name] + [other for other in _NAMES.values()
+                          if other is not name]
     words = list(re.finditer(r"[A-Za-z']+", text))
     for i, m in enumerate(words):
-        if not name.match(m.group(0).lower()):
+        if not any(n.match(m.group(0).lower()) for n in names):
             continue
         prev = words[i - 1].group(0).lower() if i else ""
         if i <= 1 or prev in _CUES:
