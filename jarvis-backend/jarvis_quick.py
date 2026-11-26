@@ -21579,6 +21579,19 @@ _NOTE_MERGE_ASK = re.compile(
     r"(?:can|could|would|will)\s+you\s+(?:please\s+)?merge\s+"
     r"(?:(?:my|the|two|2|some|any)\s+)*(?:notes?|note\s+files?)\b.*"
     r"|merge\s+(?:(?:my|the|two|2|some|any)\s+)*notes?\s*[.!?]?$", re.I)
+#: The SHORT form the owner types: "merge Ideas and Shopping" and "merge my two
+#: notes Ideas and Shopping". Neither puts the note noun where `_NOTE_MERGE_LIST`
+#: needs it (after the names, or at all), so on 2026-11-26 both fell to the model
+#: while "merge my Ideas note into my Shopping note" worked. It is deliberately
+#: NOT a general "merge <anything>": the names must still be JOINED by one of
+#: `_NOTE_MERGE_SPLIT`'s words, so "merge Ideas into Shopping" stays unclaimed
+#: here (that shape names a SURVIVOR and is `_NOTE_MERGE_INTO`'s to take, and it
+#: is pinned as still reaching no lane), and "merge my notes" / "merge two
+#: notes" keep their ask. The leading "my two notes" of the longer form is the
+#: sentence pointing at its notes, not part of a title, so it is taken off here.
+_NOTE_MERGE_SHORT = re.compile(
+    r"merge\s+(?:(?:my|the|these|those|both|two|2|some|any)\s+)*"
+    r"(?:notes?\s+)?(?P<names>.+?)\s*[.!?]?$", re.I)
 #: A count in front of a note name in a merge sentence ("my two Newsletter
 #: notes") is a count, not part of the title.
 _NOTE_MERGE_COUNT = re.compile(
@@ -22301,6 +22314,24 @@ def _note_control_asking(s: str) -> Optional[Intent]:
             tries = _note_merge_tries(m.group("names"))
             if tries:
                 return Intent("note_merge", {"tries": tries, "into": ""})
+        # "merge Ideas and Shopping" / "merge my two notes Ideas and Shopping":
+        # the short form, read only when the names are really JOINED by a
+        # splitting word (so "merge Ideas into Shopping" is not claimed here).
+        m = _NOTE_MERGE_SHORT.fullmatch(s)
+        if m and _NOTE_MERGE_SPLIT.search(m.group("names")):
+            # BOTH readings go to the runner, the whole phrase as ONE name FIRST
+            # and the split second. That is what keeps the ambiguity honest: a
+            # note really called "Ideas and Shopping" resolves as one note, and
+            # `_run_note_merge` asks which notes to merge (a one-note merge is
+            # no request) instead of the split being assumed. Only when no such
+            # note exists does the two-name reading run, and its card names the
+            # survivor before anything changes.
+            readings = [[n for n in names
+                         if n and n.casefold() not in _NOTE_MERGE_FILLER]
+                        for names in _note_merge_names(m.group("names"))]
+            readings = [names for names in readings if names]
+            if any(len(names) >= 2 for names in readings):
+                return Intent("note_merge", {"tries": readings, "into": ""})
         # "merge my notes" and "merge two notes" name no note: ask which ones,
         # in the note lane's own words, and never look up a note called "my".
         if _NOTE_MERGE_ASK.fullmatch(s) or _NOTE_MERGE_INTO.fullmatch(s) \
@@ -28800,8 +28831,10 @@ _TOOL_CATEGORY_PATTERNS = tuple(re.compile(p) for p in (
     r"(?:what\s+can|what\s+do)\s+(?:the|your|my)\s+"
     r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
     r"(?:tools?|functions?|abilities?)\s+(?:do|have)\s*\??$",
-    # "which tools work on notes"
-    r"which\s+(?:tools?|functions?)\s+(?:work|works|are\s+used)\s+"
+    # "which tools work on notes" / "what tools work on notes". The owner's own
+    # words at the live app were the "what" form, and it reached no lane on
+    # 2026-11-26 while "which" already did; the two are the same question.
+    r"(?:which|what)\s+(?:tools?|functions?)\s+(?:work|works|are\s+used)\s+"
     r"(?:on|for|with)\s+(?:the\s+|my\s+|your\s+)?"
     r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s*\??$",
 ))
