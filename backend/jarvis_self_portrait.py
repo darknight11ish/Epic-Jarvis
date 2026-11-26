@@ -665,6 +665,15 @@ def tool_inventory() -> dict:
         "The settings file could not be read, so which tools are offered is unknown.")
     return {"registered": len(registered) if registered is not None else None,
             "registered_names": registered or [],
+            # ALL of the names, for an answer that must LIST every tool rather
+            # than count them (2026-11-25: the owner asked "list all of your
+            # tools" and got 30 named plus "and 17 more"). Same content as
+            # `registered_names` today and deliberately kept beside it: that key
+            # is what the portrait's own readers and three suites already use,
+            # and a caller that needs "every tool" should not have to know the
+            # key is named for the count. A PC that cannot read the registry
+            # answers [] here rather than a name list nobody measured.
+            "all_names": registered or [],
             "enabled": len(enabled) if enabled is not None else None,
             "enabled_names": enabled or [],
             "source": ("jarvis_agent.TOOLS and "
