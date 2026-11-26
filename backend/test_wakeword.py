@@ -11,7 +11,10 @@ No network, no microphone. What it proves:
      five scores, as openWakeWord does (a stand-in model, so this runs
      without the model files).
   2. The transcript check: "hey Jarvis, ..." counts, "...called Jarvis" does
-     not, and the words after the phrase are what Jarvis is asked.
+     not, and the words after the phrase are what Jarvis is asked. Since
+     2026-11-26 the shipped phrase ALSO accepts the old spoken name - ONE WAY
+     ONLY, and `t_the_old_spoken_name_is_a_one_way_alias` proves the whole
+     matrix (including through hear(), the PC's own refusal).
   3. The ORDER in hear() for a wake-word clip - each later step is made to
      raise if it is reached: switched off -> nothing runs; no phrase -> no
      owner check, no speech-to-text; not the owner -> no speech-to-text.
@@ -426,6 +429,36 @@ def t_the_old_spoken_name_is_a_one_way_alias():
         with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
             check("...so a hey_jarvis PC still says \"Hey Jarvis\", never Atlas",
                   "Atlas" not in W.status()["title"] and "Atlas" not in W.phrase_title())
+
+        # End to end through hear(), because the ruling is about the PC's own
+        # refusal and not only about the helper: a clip the spotter heard, from
+        # the owner, transcribed with the OLD name comes back as words on a
+        # hey_atlas PC - and is still dropped on a hey_jarvis one.
+        turn_on()
+        samples, _ = S._read_wav(tone(220.0))
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
+
+        def heard_as(configured, transcript):
+            with mock.patch.object(W, "phrase", return_value=configured), \
+                    mock.patch.object(W, "spot",
+                                      return_value=W.Spot(True, heard=True, score=0.97)), \
+                    mock.patch.object(S, "_stt_engine", return_value=object()), \
+                    mock.patch.object(S, "_transcribe", return_value=transcript):
+                return S.hear(tone(220.0), source="wake_word").as_dict()
+
+        h = heard_as("hey_atlas", "Hey Jarvis, what time is it?")
+        check("hear() on a hey_atlas PC takes the words after an old-name transcript",
+              h["owner"] and h["wake_heard"] and h["text"] == "what time is it?", h)
+        h = heard_as("hey_atlas", "Hey Atlas, what time is it?")
+        check("hear() on a hey_atlas PC takes its own name as before",
+              h["owner"] and h["wake_heard"] and h["text"] == "what time is it?", h)
+        h = heard_as("hey_jarvis", "Hey Atlas, what time is it?")
+        check("hear() on a hey_jarvis PC still refuses an Atlas transcript, and says why",
+              h["owner"] and not h["wake_heard"] and h["text"] == ""
+              and "ignored" in str(h["reason"]), h)
+        h = heard_as("hey_jarvis", "Hey Jarvis, what time is it?")
+        check("hear() on a hey_jarvis PC takes its own name as before",
+              h["owner"] and h["wake_heard"] and h["text"] == "what time is it?", h)
 
 
 # ------------------------------------------------------------ 3. order --
