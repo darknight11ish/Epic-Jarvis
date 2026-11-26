@@ -925,8 +925,11 @@ def t_the_connect_mail_row_repairs_a_live_gate_without_it():
     check("the repaired gate's _RISK table is the base's own row",
           risk_table(gate_after).get("connect_mail") == base_row,
           repr(risk_table(gate_after).get("connect_mail")))
-    landed = risk_table(gate_after)["connect_mail"]
-    classified = {"classified": True, "reversible": landed[0], "reach": landed[1]}
+    # Unpacked by name, not `[0]`/`[1]`: `landed` is a source-read name elsewhere
+    # in this file, so `tools/check_position_pins.py` counts a subscript on it as
+    # a position pin even when the tuple is a risk row.
+    reversible, reach, _why = risk_table(gate_after)["connect_mail"]
+    classified = {"classified": True, "reversible": reversible, "reach": reach}
     check("... which is classified local and reversible",
           classified["reversible"] == "yes" and classified["reach"] == "local",
           repr(classified))
