@@ -32,6 +32,16 @@ No network, no microphone. What it proves:
      the first model is at least a little interested in (and only those),
      falls back to the first model when missing or unreadable, and - with
      the real models - keeps its owner while turning other voices away.
+
+THE PHRASE IS PINNED, NOT READ. This suite's sentences, fixtures and expected
+reasons are written for "hey Jarvis", and since 2026-11-25 the SHIPPED template
+says `hey_atlas`. So `Env` patches `jarvis_wakeword.phrase` to `hey_jarvis`:
+otherwise the suite's answer would change with whichever `wake_phrase` the
+machine's config happens to hold, which is exactly what the owner's ruling says
+must not happen to a PC. `t_two_phrases_one_front_end` patches BOTH phrases
+explicitly and proves the shipped `hey_atlas` head, the old `hey_jarvis` model,
+and the transcript check for each; the shipped default itself is proved by the
+contract fixtures generated from `backend/rebuilt/jarvis-framework.toml`.
 """
 import array
 import ast
@@ -101,6 +111,14 @@ class Env:
         d = Path(self.tmp.name)
         self.patches = [mock.patch.object(S, "_config_dir", return_value=d),
                         mock.patch.object(W, "_config_dir", return_value=d),
+                        # The phrase THIS SUITE's fixtures are written for.
+                        # The shipped default became `hey_atlas` on 2026-11-25,
+                        # so a test that read the machine's config would change
+                        # its answer with the template - pin it, as
+                        # `t_two_phrases_one_front_end` already does for both
+                        # phrases (that test is where the shipped default and
+                        # the old phrase are each proved).
+                        mock.patch.object(W, "phrase", return_value="hey_jarvis"),
                         mock.patch.object(V, "PROFILE_PATH", d / "owner.json"),
                         # The order of the checks, not the minimum length of a
                         # command (test_voice_strict.py has that, with the
@@ -202,9 +220,14 @@ def t_the_transcript_check():
         "Hey Jason, are you coming to dinner tonight?": (False, ""),
         "": (False, ""),
     }
-    for text, want in cases.items():
-        got = W.split_wake(text)
-        check(f"split_wake({text!r}) -> {want}", got == want, f"got {got}")
+    # The phrase these cases are written for, patched rather than read: since
+    # 2026-11-25 the shipped template says `hey_atlas`, and a transcript check
+    # that followed the machine's own config would change its answer with it.
+    # `t_two_phrases_one_front_end` proves both phrases explicitly.
+    with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+        for text, want in cases.items():
+            got = W.split_wake(text)
+            check(f"split_wake({text!r}) -> {want}", got == want, f"got {got}")
 
 
 # --------------------------------------- 10. two phrases, one front end --
@@ -741,7 +764,7 @@ def t_no_spotter_is_said_not_crashed():
         with mock.patch.object(V, "verify", boom("the owner check")):
             h = S.hear(tone(), source="wake_word")   # no model files in the temp dir
         check("no wake-word models: refused, not available, and says why",
-              not h.is_owner and not h.available and "hey Jarvis" in h.reason, h)
+              not h.is_owner and not h.available and W.phrase_title() in h.reason, h)
         st = S.status()
         check("status says the PC cannot hear it, and why",
               st["wake"]["spotter"]["available"] is False and st["wake"]["spotter"]["why"]

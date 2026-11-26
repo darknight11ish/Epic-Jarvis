@@ -184,13 +184,17 @@ export function lastTrainingLine(last, status) {
       return null;
     case "enrolled": {
       const wake = String(l.wake_check || "");
+      // The PC's own check is for the phrase THIS PC reports, not a fixed
+      // word: a PC left on `hey_jarvis` must read "Hey Jarvis" here
+      // (2026-11-25).
+      const phrase = phraseOf(status);
       let suffix = "";
-      if (wake.startsWith("built")) suffix = " Its \"hey Atlas\" check was built too.";
-      else if (wake.startsWith("kept")) suffix = " Its \"hey Atlas\" check is the one you had.";
-      else if (wake.startsWith("being built")) suffix = " Its \"hey Atlas\" check is being built from the same sentences.";
+      if (wake.startsWith("built")) suffix = ` Its "${phrase}" check was built too.`;
+      else if (wake.startsWith("kept")) suffix = ` Its "${phrase}" check is the one you had.`;
+      else if (wake.startsWith("being built")) suffix = ` Its "${phrase}" check is being built from the same sentences.`;
       else if (wake.trim()) {
         const why = wake.replace(/^not built/, "").replace(/^[:\s]+/, "").replace(/\.$/, "");
-        suffix = ` Its "hey Atlas" check was not built (${why}).`;
+        suffix = ` Its "${phrase}" check was not built (${why}).`;
       }
       return `Last training was approved: ${plural(count(l.samples), "sample")} ${l.added === true ? "in the voice print now" : "saved"}.${suffix}`;
     }

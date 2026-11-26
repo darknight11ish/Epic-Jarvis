@@ -242,19 +242,19 @@ object StrictVoice {
         Choice(
             VoiceStrict.WAKE_ONE,
             "One detector (default)",
-            "One detector listens for \"hey Atlas\", as before. Your voice is still checked every " +
+            "One detector listens for \"Hey Atlas\", as before. Your voice is still checked every " +
                 "time before anything is written down or done.",
         ),
         Choice(
             VoiceStrict.WAKE_BOTH,
             "Two detectors must agree",
-            "A second, differently built detector (microWakeWord) must also hear \"hey Atlas\" " +
+            "A second, differently built detector (microWakeWord) must also hear \"Hey Atlas\" " +
                 "within a second. Fewer false wake-ups; it may miss you a little more often. " +
                 "Measure it on your PC first (the backend README, \"Better voice\").",
         ),
     )
 
-    const val WAKE_CONFIRM_TITLE = "Second \"hey Atlas\" check"
+    const val WAKE_CONFIRM_TITLE = "Second \"Hey Atlas\" check"
 
     /**
      * Which stronger voice-ID model the PC uses (the same day). The measured

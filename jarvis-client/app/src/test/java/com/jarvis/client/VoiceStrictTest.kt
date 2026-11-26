@@ -389,8 +389,13 @@ class VoiceStrictTest {
             "jarvis-desktop/src/voice-training.js not found above ${System.getProperty("user.dir")}"
         }.readText()
         val list = requireNotNull(
-            Regex("""TEST_SENTENCES\s*=\s*Object\.freeze\(\[(.*?)\]\)""", RegexOption.DOT_MATCHES_ALL).find(js),
-        ) { "TEST_SENTENCES not found in voice-training.js" }.groupValues[1]
+            // Since 2026-11-25 the desktop keeps the phrase as a `{p}` slot
+            // (the copy follows the PC's reported phrase); this test compares
+            // the phone's shipped phrase to the desktop's shipped one, so fill
+            // the slot with that phrase before reading the sentences.
+            Regex("""TEST_SENTENCE_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\)""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "TEST_SENTENCE_TEMPLATES not found in voice-training.js" }.groupValues[1]
+            .replace("{p}", "Hey Atlas")
         val desktop = Regex(""""((?:[^"\\]|\\.)*)"""").findAll(list).map { it.groupValues[1] }.toList()
         assertEquals(20, desktop.size)
         assertEquals(desktop, StrictVoice.MEASURE_SENTENCES)
@@ -857,10 +862,10 @@ class VoiceStrictTest {
             java.io.File(dir, "jarvis-desktop/src/settings.html").takeIf { it.isFile }?.let { html = it }
             dir = dir.parentFile
         }
-        val js = requireNotNull(found).readText().replace("\\\"", "\"")
+        val js = requireNotNull(found).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
         val block = requireNotNull(
-            Regex("""HANDS_FREE\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
-        ) { "HANDS_FREE not found in voice-training.js" }.groupValues[1]
+            Regex("""HANDS_FREE_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "HANDS_FREE_TEMPLATES not found in voice-training.js" }.groupValues[1]
         for (c in StrictVoice.HANDS_FREE) {
             assertTrue(c.detail, block.contains(c.detail))
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)")}\""))
@@ -1011,10 +1016,10 @@ class VoiceStrictTest {
             java.io.File(dir, "jarvis-desktop/src/settings.html").takeIf { it.isFile }?.let { html = it }
             dir = dir.parentFile
         }
-        val js = requireNotNull(found).readText().replace("\\\"", "\"")
+        val js = requireNotNull(found).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
         val block = requireNotNull(
-            Regex("""HANDS_FREE_SCREEN\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
-        ) { "HANDS_FREE_SCREEN not found in voice-training.js" }.groupValues[1]
+            Regex("""HANDS_FREE_SCREEN_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "HANDS_FREE_SCREEN_TEMPLATES not found in voice-training.js" }.groupValues[1]
         for (c in StrictVoice.HANDS_FREE_SCREEN) {
             assertTrue(c.detail, block.contains(c.detail))
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (recommended)")}\""))
@@ -1116,10 +1121,10 @@ class VoiceStrictTest {
                 .takeIf { it.isFile }?.let { screen = it }
             dir = dir.parentFile
         }
-        val text = requireNotNull(js).readText().replace("\\\"", "\"")
+        val text = requireNotNull(js).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
         val block = requireNotNull(
-            Regex("""HANDS_FREE_LIVE\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(text),
-        ) { "HANDS_FREE_LIVE not found in voice-training.js" }.groupValues[1]
+            Regex("""HANDS_FREE_LIVE_TEMPLATES\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(text),
+        ) { "HANDS_FREE_LIVE_TEMPLATES not found in voice-training.js" }.groupValues[1]
         for (c in StrictVoice.HANDS_FREE_LIVE) {
             assertTrue(c.detail, block.contains(c.detail))
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)")}\""))
@@ -1222,18 +1227,19 @@ class VoiceStrictTest {
                 .takeIf { it.isFile }?.let { screen = it }
             dir = dir.parentFile
         }
-        val js = requireNotNull(found).readText().replace("\\\"", "\"")
-        for ((name, list) in listOf("WAKE_CONFIRM" to StrictVoice.WAKE_CONFIRM, "VOICE_ID_MODEL" to StrictVoice.VOICE_ID_MODEL)) {
+        val js = requireNotNull(found).readText().replace("\\\"", "\"").replace("{p}", "Hey Atlas")
+        for ((jsName, list) in listOf("WAKE_CONFIRM_TEMPLATES" to StrictVoice.WAKE_CONFIRM,
+                                      "VOICE_ID_MODEL" to StrictVoice.VOICE_ID_MODEL)) {
             val block = requireNotNull(
-                Regex("""$name\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
-            ) { "$name not found in voice-training.js" }.groupValues[1]
+                Regex("""$jsName\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+            ) { "$jsName not found in voice-training.js" }.groupValues[1]
             for (c in list) {
                 assertTrue(c.detail, block.contains(c.detail))
                 assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)").removeSuffix(" (recommended)")}\""))
             }
         }
         val page = requireNotNull(html).readText()
-        assertTrue(page.contains(">Second \"hey Atlas\" check<") && page.contains(">Voice-ID model<"))
+        assertTrue(page.contains(">Second \"Hey Atlas\" check<") && page.contains(">Voice-ID model<"))
         val src = requireNotNull(screen).readText()
         for ((guard, name) in listOf("strict.wakeConfirm" to "WAKE_CONFIRM", "strict.voiceIdModel" to "VOICE_ID_MODEL")) {
             val at = src.indexOf("if ($guard.isNotBlank()) {")

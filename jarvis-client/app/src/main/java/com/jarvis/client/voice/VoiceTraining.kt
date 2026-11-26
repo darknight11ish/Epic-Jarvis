@@ -83,7 +83,7 @@ object VoiceTraining {
     /** The first screen, word for word. */
     const val INTRO =
         "Jarvis only listens to your voice. Read these 12 short sentences so it learns what you " +
-            "sound like, and how you say \"hey Atlas\". It takes about two minutes."
+            "sound like, and how you say \"" + OrtWakeModels.WAKE_PHRASE + "\". It takes about two minutes."
 
     const val INTRO_DETAIL =
         "Find a quiet spot and speak normally, at the distance you usually hold the phone. " +
@@ -259,7 +259,7 @@ object VoiceTraining {
     /** What the ONE card does, in the owner's words. */
     const val CLEAR_WHAT_IT_DOES =
         "Deletes every saved voice print on your PC (one per microphone you trained), " +
-            "the \"hey Atlas\" check built from those recordings, and the small notes it " +
+            "the \"Hey Atlas\" check built from those recordings, and the small notes it " +
             "kept from learning your voice in Live. It does not delete your custom speaking " +
             "voices, your chat history or your phone pairing. ONE card approves it: nothing " +
             "is deleted until you say yes, and voice commands and Jarvis Live are refused " +
@@ -371,8 +371,11 @@ object VoiceTraining {
 
     private fun wakeCheckSuffix(wakeCheck: String): String = when {
         wakeCheck.isBlank() -> ""
-        wakeCheck.startsWith("built") -> " Its \"hey Atlas\" check was built too."
-        else -> " Its \"hey Atlas\" check was not built (" +
+        // The phrase comes from the ONE constant beside the model file, so
+        // this sentence cannot name a phrase the phone's own spotter lacks.
+        wakeCheck.startsWith("built") ->
+            " Its \"${OrtWakeModels.WAKE_PHRASE}\" check was built too."
+        else -> " Its \"${OrtWakeModels.WAKE_PHRASE}\" check was not built (" +
             wakeCheck.removePrefix("not built").trimStart(':', ' ').trimEnd('.') + ")."
     }
 

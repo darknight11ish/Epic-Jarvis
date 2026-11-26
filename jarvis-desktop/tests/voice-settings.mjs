@@ -151,7 +151,7 @@ await check("a print made with another voice check: train again, here or on the 
 await check("a training approved on its card: how it ended, with the PC's reason for the \"hey Atlas\" check", async () => {
   const last = C.trained_by_card.gate.training.last;
   assert.equal(W.lastTrainingLine(last),
-    "Last training was approved: 3 samples saved. Its \"hey Atlas\" check was not built " +
+    "Last training was approved: 3 samples saved. Its \"Hey Atlas\" check was not built " +
     "(the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword " +
     "and ~/.openjarvis/wakeword)).");
   // The phone's other outcomes, word for word.

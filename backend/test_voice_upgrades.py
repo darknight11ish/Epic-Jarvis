@@ -41,6 +41,7 @@ import tempfile
 import traceback
 import types
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -1186,8 +1187,13 @@ def t_the_candidate_fails_closed():
         except ValueError as exc:
             check("a model of the wrong shape is refused, in words", "needs [1, 16, 96]" in str(exc),
                   str(exc))
-        check("spot() never uses the candidate: today's model is the one loaded",
-              W.model_paths()["wake"].endswith("hey_jarvis_v0.1.onnx"))
+        # Today's head for this bake-off is the hey_jarvis one (`_wake_dir`
+        # copies it), so pin the phrase: since 2026-11-25 the shipped default
+        # is `hey_atlas`, and this check is about spot() using today's model,
+        # not about which phrase the machine's config holds.
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            check("spot() never uses the candidate: today's model is the one loaded",
+                  W.model_paths()["wake"].endswith("hey_jarvis_v0.1.onnx"))
     finally:
         W.model_dir = orig
         W.reload()
@@ -1200,19 +1206,24 @@ def t_both_heads_score_the_same_windows():
     orig = W.model_dir
     try:
         d = _wake_dir()
-        W.reload()
-        cur = W._load()
-        cand = W.load_head(d / W.CANDIDATE_FILE)
-        heads = B.Heads(W, cur, cand, 0.5, None)
-        x = np.random.default_rng(0).standard_normal(16000 * 3).astype(np.float32) * 0.05
-        sc = heads.score(x, 16000)
-        check("the same model on the same windows gives the same scores",
-              len(sc["cur"]) == len(sc["cand"]) > 20 and np.allclose(sc["cur"], sc["cand"]))
-        check("the first five scores after a start are ignored, as upstream does",
-              sc["cur"][:5] == [0.0] * 5)
-        ref = W._clip_steps(cur, x, 16000)[0]
-        check("today's scores are exactly spot()'s", np.allclose(ref, sc["cur"]))
-        check("time per step is measured for both", all(v >= 0 for v in heads.ms_per_step()))
+        # The stand-in candidate IS today's hey_jarvis head (`_wake_dir`), so
+        # the phrase is pinned: since 2026-11-25 the shipped default is
+        # `hey_atlas`, and a test that read it would compare two different
+        # heads and fail for the right reason on the wrong premise.
+        with mock.patch.object(W, "phrase", return_value="hey_jarvis"):
+            W.reload()
+            cur = W._load()
+            cand = W.load_head(d / W.CANDIDATE_FILE)
+            heads = B.Heads(W, cur, cand, 0.5, None)
+            x = np.random.default_rng(0).standard_normal(16000 * 3).astype(np.float32) * 0.05
+            sc = heads.score(x, 16000)
+            check("the same model on the same windows gives the same scores",
+                  len(sc["cur"]) == len(sc["cand"]) > 20 and np.allclose(sc["cur"], sc["cand"]))
+            check("the first five scores after a start are ignored, as upstream does",
+                  sc["cur"][:5] == [0.0] * 5)
+            ref = W._clip_steps(cur, x, 16000)[0]
+            check("today's scores are exactly spot()'s", np.allclose(ref, sc["cur"]))
+            check("time per step is measured for both", all(v >= 0 for v in heads.ms_per_step()))
     finally:
         W.model_dir = orig
         W.reload()

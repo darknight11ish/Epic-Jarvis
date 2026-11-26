@@ -112,23 +112,37 @@ class WakePhraseCopyTest {
             "OrtWakeModels.WAKE_FILE no longer loads the atlas head - the copy below would be false",
             models.contains("WAKE_FILE = \"hey_atlas.onnx\""),
         )
+        val phrase = wakePhrase()
+        // The constant and the file must name the SAME head: "Hey Atlas" ->
+        // "hey_atlas" -> "hey_atlas.onnx". If one moves without the other,
+        // the phone's sentences and its own spotter disagree.
+        val stem = Regex("WAKE_FILE\\s*=\\s*\"([^\"]+)\\.onnx\"").find(models)
+        assertTrue("OrtWakeModels.WAKE_FILE is gone", stem != null)
+        assertEquals(
+            "WAKE_FILE and WAKE_PHRASE name different heads",
+            stem!!.groupValues[1], phrase.lowercase().replace(" ", "_"),
+        )
         val settings = code(text("ui/screens/VoiceSwitchesPlate.kt"))
         assertTrue(
-            "Settings' phone line no longer says the phone waits until it hears \"Hey Atlas\"",
-            settings.contains("""the phone until it hears \"Hey Atlas\""""),
+            "Settings' phone line no longer binds to OrtWakeModels.WAKE_PHRASE",
+            settings.contains("OrtWakeModels.WAKE_PHRASE"),
         )
         assertTrue(
-            "Settings' phone line no longer says it heard \"Hey Atlas\"",
-            settings.contains("""Heard \"Hey Atlas\" - listening to what you say next."""),
+            "Settings' phone line no longer says the phone waits until it hears the phrase",
+            settings.contains("the phone until it hears"),
+        )
+        assertTrue(
+            "Settings' phone line no longer says it heard the phrase",
+            settings.contains("Heard \\\""),
         )
         val resume = code(text("data/WakeResume.kt"))
         assertTrue(
-            "the restart notice no longer names \"Hey Atlas\" as what is off",
-            resume.contains("\"\\\"Hey Atlas\\\" is off since the phone restarted\""),
+            "the restart notice no longer binds to OrtWakeModels.WAKE_PHRASE",
+            resume.contains("OrtWakeModels.WAKE_PHRASE"),
         )
-        assertTrue(
-            "the back-on line no longer says listening for \"Hey Atlas\"",
-            resume.contains("\"Listening for \\\"Hey Atlas\\\" on this phone again.\""),
+        assertFalse(
+            "the restart notice types the phrase again instead of binding it",
+            resume.contains("\"$phrase\""),
         )
         val strings = xmlText(SourceFile.read("jarvis-client/app/src/main/res/values/strings.xml"))
         for (name in listOf("channel_wake_name", "channel_wake_desc", "wake_listening_title",
@@ -139,8 +153,8 @@ class WakePhraseCopyTest {
             assertTrue("$name is gone from strings.xml", at >= 0)
             val block = strings.substring(at).substringBefore("</string>")
             assertTrue(
-                "$name no longer names \"Hey Atlas\": $block",
-                block.contains("""\"Hey Atlas\""""),
+                "$name no longer names \"$phrase\": $block",
+                block.contains("\\\"$phrase\\\""),
             )
         }
     }

@@ -5732,6 +5732,26 @@ what is missing is only the Settings screen agreeing about who turned it off.
   `backend/jarvis_feature_catalogue.py` and kept byte-identical to the source by
   `tools/check_feature_list.py`, so renaming the row is its own change to that
   source, not this one.
+- **The desktop's wake-phrase copy is DERIVED from the PC's own report since
+  2026-11-25** (the Principal Architect's Q1/Q2 ruling that day). Every
+  sentence in Settings -> Voice that names the phrase reads
+  `status.wake.title` (else `wake.phrase`): `jarvis-desktop/src/voice-training.js`'s
+  `phraseOf` is the one reader, ONE `DEFAULT_WAKE_PHRASE` covers only the moment
+  before the first status answer, and `voice-settings.js` / `voice-panel.js`
+  take the phrase from it. So a fresh install (whose shipped
+  `jarvis-framework.toml` says `hey_atlas`) reads "Hey Atlas", and **a PC whose
+  own file still says `hey_jarvis` reads "Hey Jarvis"** and moves only through
+  the explicit switch in Settings - the installer never rewrites that file, so
+  an update cannot re-point a working PC. The phone is the other half: its
+  plates bind to ONE `OrtWakeModels.WAKE_PHRASE` constant beside `WAKE_FILE`
+  (the phone owns its model, so its own listening sentences name what its
+  spotter hears), and `WakePhraseCopyTest` holds the constant, the file name
+  and the plates to each other. Product labels that are not about a PC's
+  setting (the bar's wake chip, `README.md`, the generated feature row) name
+  Atlas, the shipped phrase. What is **not** derived: the bar's live
+  "Listening for ..." line, which the bar page cannot read the status for
+  (`get_voice_status` is settings-only), so it stays a product label - a
+  follow-up, not a claim that it follows the PC.
 
 ## 9. Where the backend lives
 

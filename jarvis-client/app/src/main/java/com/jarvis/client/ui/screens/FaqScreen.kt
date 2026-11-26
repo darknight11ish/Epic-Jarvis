@@ -81,7 +81,7 @@ private val FAQS = listOf(
         // which runs a language model on the phone but is NOT speech and is
         // not the normal chat - so it is named at the end, not denied.
         "For the normal chat, only small sound models. They listen " +
-            "for the \"hey Atlas\" wake word, for the end of your sentence, " +
+            "for the \"Hey Atlas\" wake word, for the end of your sentence, " +
             "and for \"stop\" while Atlas is talking. They only listen for " +
             "sounds: none of them turns speech into words. Everything else " +
             "for that chat runs on your PC: checking it is your voice, " +
@@ -94,9 +94,9 @@ private val FAQS = listOf(
             "off until you set it up.",
     ),
     Faq(
-        "How do I use \"hey Atlas\"?",
+        "How do I use \"Hey Atlas\"?",
         "It is off until you turn it on, in two steps. First, in Settings, " +
-            "under Voice, tap Turn on \"hey Atlas\" and approve the card that " +
+            "under Voice, tap Turn on \"Hey Atlas\" and approve the card that " +
             "appears - that lets your desktop accept it. Then tap Listen on " +
             "this phone. While that is on, the microphone stays open (Android " +
             "shows its microphone dot and a notification), a small model on " +
