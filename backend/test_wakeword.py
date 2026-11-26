@@ -292,14 +292,14 @@ def t_two_phrases_one_front_end():
         with mock.patch.object(W, "phrase", return_value="hey_atlas"):
             check("hey_atlas: \"Hey Atlas, ...\" is accepted",
                   W.split_wake("Hey Atlas, what time is it?") == (True, "what time is it?"))
-            check("hey_atlas: a transcript that says Jarvis is NOT accepted",
-                  W.split_wake("Hey Jarvis, what time is it?") == (False, ""))
+            check("hey_atlas: a transcript that says Jarvis is still accepted (legacy alias)",
+        W.split_wake("Hey Jarvis, what time is it?") == (True, "what time is it?"))
             check("hey_atlas: Atlas mid-sentence is not a wake",
                   W.split_wake("I read about Atlas in a book.") == (False, ""))
         check("hey_jarvis: \"Hey Jarvis, ...\" is still accepted",
               W.split_wake("Hey Jarvis, what time is it?") == (True, "what time is it?"))
-        check("hey_jarvis: a transcript that says Atlas is NOT accepted",
-              W.split_wake("Hey Atlas, what time is it?") == (False, ""))
+        check("hey_jarvis: a transcript that says Atlas is still accepted (legacy alias)",
+        W.split_wake("Hey Atlas, what time is it?") == (True, "what time is it?"))
 
         # A phrase this build does not know: refused, and it names the two it has.
         with mock.patch.object(W, "phrase", return_value="hey_atlantis"):
