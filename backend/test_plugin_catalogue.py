@@ -153,6 +153,14 @@ NO_PATCH = {
     # chat already raises (`desktop_update`), which is why this list grows and
     # the patch stack does not.
     "update",
+    # The typed answer's layout (2026-11-25, jarvis_answer_style.py; the
+    # owner's "if atlas has a long response can it be put with bullet points"
+    # and "adjust it in the settings and adjust it through chat"): its
+    # GET/POST /api/answer-style routes come from its own install(), called by
+    # the drop-in loader, so the folder is the whole of its wiring and no patch
+    # is added to `jarvis_hud.py` - the same shape the read-aloud switch took
+    # the day before it.
+    "answer-style",
 }
 
 

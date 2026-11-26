@@ -2186,6 +2186,14 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if got is not None:
         return got
 
+    # --- the typed answer's layout (jarvis_answer_style.py, 2026-11-25) --------
+    # The owner asked for bullet points on a long answer, "and adjust it in the
+    # settings and adjust it through chat". After the "from now on ..." phrase,
+    # whose own runner reaches the same setting through _answer_style_cmd.
+    got = _answer_style_cmd(s)
+    if got is not None:
+        return got
+
     # --- personality presets (2026-10-22) ---------------------------------------
     got = _personality(s)
     if got is not None:
@@ -5699,7 +5707,58 @@ def _from_now_on(s: str) -> Optional[Intent]:
         return Intent("thinking_from_now_on", {"level": "off"})
     if _TO_THINK_AUTO.fullmatch(tail):
         return Intent("thinking_from_now_on", {"level": "auto"})
+    # "From now on, use bullet points" is the same dial as the bare sentence,
+    # through the same matcher and the same runner (jarvis_answer_style.py).
+    got = _answer_style_cmd(tail)
+    if got is not None:
+        return got
     return Intent("manner_from_now_on", {"manner": None})
+
+
+# --- the typed answer's layout (jarvis_answer_style.py, 2026-11-25) ---------
+#
+# The owner's ask: "if atlas has a long response can it be put with bullet
+# points", and "make sure I can adjust it in the settings and adjust it
+# through chat". These are the chat halves - the bare sentences and, above,
+# the same ones after "from now on ...". Whole sentences only, like every
+# other command here: a question that merely MENTIONS bullet points ("how do
+# I use bullet points in GitHub markdown?") is not a command and must fall
+# through to the model untouched (pinned in test_answer_style.py both ways).
+#
+# The three style ids are jarvis_answer_style's own (auto / bullets / prose),
+# never a second set of names here; the reply is that module's `said()` line,
+# so chat and Settings cannot drift.
+_AS_BULLETS = re.compile(
+    r"(?:please\s+)?(?:always\s+)?(?:use|give\s+me|write|answer\s+(?:in|with)|"
+    r"format\s+(?:it\s+|them\s+|answers\s+)?(?:in|with|as))\s+"
+    r"bullets?(?:\s+points?)?(?:\s+for\s+(?:lists?|answers?))?"
+    r"|(?:please\s+)?always\s+bullets?(?:\s+points?)?"
+    r"|(?:please\s+)?bullets?(?:\s+points?)?\s+(?:please|for\s+(?:lists?|answers?))")
+_AS_PROSE = re.compile(
+    r"(?:please\s+)?(?:use|give\s+me|write|answer\s+(?:in|with))\s+"
+    r"(?:plain|ordinary|normal)\s+(?:paragraphs?|prose|text|sentences?)"
+    r"|(?:please\s+)?(?:no|without|stop\s+using|don'?t\s+use|never\s+use)\s+"
+    r"(?:more\s+)?bullets?(?:\s+points?)?"
+    r"|(?:please\s+)?(?:plain|ordinary|normal)\s+(?:paragraphs?|prose|text)")
+_AS_AUTO = re.compile(
+    r"(?:please\s+)?(?:use\s+)?bullets?(?:\s+points?)?\s+"
+    r"when\s+(?:it|they|the\s+answer)\s+helps?"
+    r"|(?:please\s+)?(?:use\s+)?bullets?(?:\s+points?)?\s+only\s+when\s+(?:it\s+)?helps?"
+    r"|(?:please\s+)?bullets?(?:\s+points?)?\s+when\s+needed")
+
+
+def _answer_style_cmd(s: str) -> Optional[Intent]:
+    """"use bullet points" / "always use bullet points" / "no bullet points" /
+    "plain paragraphs" / "bullet points when it helps" - the typed answer's
+    layout, changed at once, no card either way."""
+    text = s.strip().rstrip(".!?")
+    if _AS_AUTO.fullmatch(text):
+        return Intent("answer_style_set", {"style": "auto"})
+    if _AS_BULLETS.fullmatch(text):
+        return Intent("answer_style_set", {"style": "bullets"})
+    if _AS_PROSE.fullmatch(text):
+        return Intent("answer_style_set", {"style": "prose"})
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -29668,6 +29727,28 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
     return Result(_from_now_on_said(manner, temporary), n)
 
 
+#: Said when a PC's backend does not have jarvis_answer_style.py yet.
+ANSWER_STYLE_MISSING = (
+    "Your PC's Jarvis cannot change how an answer is laid out yet - run "
+    "apply-patches.ps1 on the PC.")
+
+
+def _run_answer_style_set(f: dict) -> Result:
+    """"use bullet points" / "always use bullet points" / "no bullet points" /
+    "plain paragraphs" / "bullet points when it helps" (the owner's ask of
+    2026-11-25): applies at once, no card either way - it changes only how a
+    TYPED answer is laid out, never a spoken one and never what Jarvis does,
+    asks or remembers. jarvis_answer_style.handle_set() owns the words, so
+    this sentence, the Settings picker and the agent's note cannot drift."""
+    n = "answer_style_set"
+    try:
+        import jarvis_answer_style as AS
+    except Exception:
+        return Result(ANSWER_STYLE_MISSING, n)
+    _ok, _style, said = AS.handle_set({"style": f.get("style")})
+    return Result(said, n)
+
+
 def _switch_words(title: str) -> str:
     """The sentence that really switches to a preset - ONE copy for both
     answers that offer it (the status words and the describe words).
@@ -33105,6 +33186,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_animal(n, f, peer, local, conversation=conversation)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
+    if n == "answer_style_set":
+        return _run_answer_style_set(f)
     if n == "personality_set":
         return _run_personality_set(f, conversation, temporary)
     if n == "personality_dial":

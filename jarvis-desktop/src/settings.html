@@ -1193,6 +1193,25 @@
             <legend class="label">Answers</legend>
             <div id="mn-choices"></div>
           </fieldset>
+          <!-- ── Long answers (2026-11-25; answer-style-settings.js,
+               src-tauri/src/answer_style.rs get_answer_style/set_answer_style;
+               backend jarvis_answer_style.py, GET/POST /api/answer-style).
+               Bullet points when an answer has several parts, always bullet
+               points, or plain paragraphs - the owner's "if atlas has a long
+               response can it be put with bullet points", "and adjust it in the
+               settings and adjust it through chat". Wording/layout only, never
+               what Jarvis does, asks or remembers, and NEVER a spoken answer
+               (it is read aloud); a change is cardless either way and held on a
+               stale link like every other setting. The three labels and the
+               reasons are the PC's own (jarvis_answer_style.LABEL / WHY), so
+               the phone and a chat sentence read the same words. -->
+          <h3 class="subhead" id="as-title">Long answers</h3>
+          <p class="note" id="as-detail">When an answer has several parts, Jarvis can lay them out as bullet points instead of one long paragraph. Spoken answers are never bulleted - they are read aloud.</p>
+          <fieldset class="theme-list" id="as-list">
+            <legend class="label">Answer layout</legend>
+            <div id="as-choices"></div>
+          </fieldset>
+          <p class="status" id="as-status" role="status"></p>
           <p class="note" id="mn-spoken"></p>
           <!-- Humour (the owner's decision, 2026-09-27): a second, independent
                switch on this same screen - off to start. Same route, no card
@@ -4185,6 +4204,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="answer-style-settings.js"></script>
     <script type="module" src="antislop-settings.js"></script>
     <script type="module" src="calendar-settings.js"></script>
     <script type="module" src="voiceprint-settings.js"></script>

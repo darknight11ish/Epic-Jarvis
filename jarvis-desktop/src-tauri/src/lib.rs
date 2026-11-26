@@ -28,6 +28,10 @@ pub mod asks_first;
 pub mod attention;
 pub mod autostart;
 pub mod read_aloud;
+// The typed answer's layout (2026-11-25; jarvis_answer_style.py, GET/POST
+// /api/answer-style): bullet points when an answer has several parts, always
+// bullets, or plain paragraphs. Settings window only; cardless both ways.
+pub mod answer_style;
 // The auto Wi-Fi reconnect (2026-11-08; the owner's ask that it default on and be
 // changeable in Settings or chat): every 2 hours while this PC has no internet,
 // try a saved password-protected Wi-Fi network it already knows. Settings only,
@@ -1534,6 +1538,8 @@ pub fn run() {
             antislop::set_antislop,
             read_aloud::get_read_aloud,
             read_aloud::set_read_aloud,
+            answer_style::get_answer_style,
+            answer_style::set_answer_style,
             // The auto Wi-Fi reconnect switch (2026-11-08): GET/POST
             // /api/wifi-reconnect through jarvis_wifi.py. A read and ONE change,
             // cardless in both directions: OFF stops the two-hourly attempt at

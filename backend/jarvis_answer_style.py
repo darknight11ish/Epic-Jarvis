@@ -134,14 +134,15 @@ def normalize_style(value) -> str:
     if text in STYLES:
         return text
     if text in ("auto", "automatic", "sometimes", "when it helps", "default",
-                "bullet points when it helps"):
+                "bullet points when it helps",
+                "bullet points when it helps (default)"):
         return AUTO
     if text in ("bullet", "bulleted", "bullets", "bullet points", "list",
                 "lists", "always", "always bullet points",
-                "points", "bulleted list"):
+                "points", "bulleted list", "always bullet points for a list"):
         return BULLETS
     if text in ("prose", "paragraph", "paragraphs", "plain", "plain text",
-                "never", "no bullets", "sentences"):
+                "never", "no bullets", "sentences", "plain paragraphs, never bullets"):
         return PROSE
     return ""
 
@@ -222,3 +223,122 @@ def handle_set(payload) -> tuple[bool, str, str]:
     except OSError as exc:
         return False, current(), f"I could not save that: {exc}"
     return True, style, said(style)
+
+
+# --------------------------------------------------------------------------
+#   The route (GET the three choices, POST one change) - installed by the
+#   loader, exactly like jarvis_read_aloud.py's own route
+# --------------------------------------------------------------------------
+
+STATE_PATH = "/api/answer-style"
+
+
+def state() -> dict:
+    """The setting as both apps draw it: the three choices, their labels and
+    their one-line reasons, and the one in force. Read fresh every time."""
+    chosen = current()
+    return {
+        "ok": True,
+        "style": chosen,
+        "title": TITLE,
+        "detail": DETAIL,
+        "default": DEFAULT,
+        "choices": [{"id": s, "label": LABEL[s], "why": WHY[s]} for s in STYLES],
+    }
+
+
+def handle_get(route: str, query: str = "") -> tuple:
+    """GET /api/answer-style -> (200, the state). A read; nothing is written."""
+    if route != STATE_PATH:
+        return 404, {"ok": False, "error": "not_found"}
+    return 200, state()
+
+
+def handle_post(route: str, body: object) -> tuple:
+    """POST /api/answer-style {"style": "auto"|"bullets"|"prose"} -> (200, state).
+
+    Cardless either way: it changes only how a typed answer is laid out.
+    A made-up value is refused in words, never silently defaulted.
+    """
+    if route != STATE_PATH:
+        return 404, {"ok": False, "error": "not_found"}
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "bad_body",
+                     "message": "the request body must be a JSON object"}
+    unknown = sorted(set(body) - {"style"})
+    if unknown:
+        return 400, {"ok": False, "error": "unknown_setting",
+                     "message": f"the answer layout has no setting called "
+                                f"{unknown[0]}"}
+    ok, style, message = handle_set(body.get("style"))
+    if not ok:
+        return 400, {"ok": False, "error": "bad_value", "message": message,
+                     "style": style}
+    out = state()
+    out["said"] = message
+    return 200, out
+
+
+def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+    """Wrap `handler_cls.do_GET`/`do_POST` so this module answers its own route.
+
+    Every other request goes straight to the original, untouched - the same
+    shape `jarvis_read_aloud.install()` and `jarvis_antislop.install()` use,
+    and the reason this feature needs no patch: `plugins/ready/answer-style/
+    plugin.json` names this module and `jarvis_plugins.py` makes the call the
+    patch would have made.
+    """
+    get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    if getattr(get0, "_jarvis_answer_style", False):
+        return "answer-style   the typed answer layout (already on)"
+
+    from urllib.parse import urlsplit
+
+    def _allowed(self) -> bool:
+        try:
+            if not origin_ok(self):
+                self._send(403, {"error": "cross-origin request refused"})
+                return False
+            if not token_ok(self):
+                self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+                return False
+        except Exception:
+            self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            return False
+        return True
+
+    def do_GET(self):
+        parts = urlsplit(str(getattr(self, "path", "") or ""))
+        route = parts.path.rstrip("/")
+        if route != STATE_PATH:
+            return get0(self)
+        if not _allowed(self):
+            return None
+        try:
+            code, out = handle_get(route, parts.query)
+        except Exception as exc:                  # noqa: BLE001 - never a traceback page
+            code, out = 503, {"ok": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    def do_POST(self):
+        parts = urlsplit(str(getattr(self, "path", "") or ""))
+        route = parts.path.rstrip("/")
+        if route != STATE_PATH:
+            return post0(self)
+        if not _allowed(self):
+            return None
+        try:
+            body = json.loads(read_body(self) or b"{}")
+        except Exception:
+            body = None
+        try:
+            code, out = handle_post(route, body)
+        except Exception as exc:                  # noqa: BLE001 - never a traceback page
+            code, out = 503, {"ok": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    do_GET._jarvis_answer_style = True
+    do_POST._jarvis_answer_style = True
+    handler_cls.do_GET = do_GET
+    handler_cls.do_POST = do_POST
+    return "answer-style   the typed answer layout (GET/POST /api/answer-style)"

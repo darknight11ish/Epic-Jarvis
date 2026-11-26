@@ -624,6 +624,14 @@ fn main() {
             // rule keeps a private answer on screen whatever it says.
             "get_read_aloud",
             "set_read_aloud",
+            // The typed answer's layout (2026-11-25; jarvis_answer_style.py,
+            // GET/POST /api/answer-style): "Long answers" - bullet points when
+            // an answer has several parts, always bullets, or plain paragraphs.
+            // ONE cardless read and ONE cardless write for Settings. It changes
+            // only how a TYPED answer is laid out (a spoken answer is never
+            // bulleted), opens no way out of the PC and takes no action.
+            "get_answer_style",
+            "set_answer_style",
             // The auto Wi-Fi reconnect (2026-11-08; JARVIS-API section 204,
             // backend/jarvis_wifi.py). Settings only: the switch, the PC's own
             // sentence and its last result. PC-only by the backend's own rule;

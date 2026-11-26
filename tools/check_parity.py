@@ -182,6 +182,18 @@ CLASSIFICATION = {
     # speakers. Backend: jarvis_read_aloud.py, installed by the read-aloud
     # ready plug-in; desktop: src/read-aloud.js + src-tauri/src/read_aloud.rs.
     "/api/read-aloud": ("deliberate", "The automatic read-aloud switch controls the DESKTOP HUD's own speakers for voice-turn answers; it is PC-only. The phone has its own on-device switch for remembered answers (MemoryAloud) and its own per-answer Read out loud action, and never calls this route, so no phone change can silence or unmute the PC by accident (ARCHITECTURE section 8, JARVIS-API read-aloud section)."),
+    # The typed answer's layout (2026-11-25; the owner's "if atlas has a long
+    # response can it be put with bullet points", "and adjust it in the settings
+    # and adjust it through chat"). Backend: jarvis_answer_style.py, installed by
+    # the answer-style ready plug-in. Desktop: Settings, How Jarvis talks, Long
+    # answers (src-tauri/src/answer_style.rs get_answer_style/set_answer_style,
+    # src/answer-style-settings.js). Phone: no picker yet, and it needs none to
+    # change the value - every phone chat turn already sends the sentence that
+    # changes the SAME PC-wide setting ("use bullet points", "no bullet
+    # points", "bullet points when it helps"), through the existing chat route.
+    # A phone-side picker is the remaining screen slice; the reason the route is
+    # the desktop's own is recorded in ARCHITECTURE section 8.
+    "/api/answer-style": ("deliberate", "The typed answer's layout is one PC-wide setting behind a three-choice picker in the desktop's Settings; the phone changes the same value through the chat sentences its every chat turn already sends, so no phone build has been shipped for this route. Desktop: Settings, How Jarvis talks, Long answers (answer_style.rs get_answer_style/set_answer_style, answer-style-settings.js). Phone: through chat only; a phone-side picker is the remaining slice (ARCHITECTURE section 8)."),
 
     # The auto Wi-Fi reconnect (2026-11-08; the owner's ask that it default on
     # and be changeable in Settings or chat): PC-only. It reads/repairs THIS

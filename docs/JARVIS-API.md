@@ -38449,7 +38449,7 @@ POST /api/voice/utterance?source=live can now answer a clip it DROPPED as backgr
 alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
 - **
 eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
-- **ok and owner are 
+- **ok and owner are
 alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
 - **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
 - **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
@@ -42062,3 +42062,50 @@ ordinary "use the General preset" that must not match.
 engine's `load_coder`, and the unasked call staying byte-identical), and
 `backend/test_presets_owner_ui.py`'s "exactly three literal callers" pin names
 the start-up preload as the third, with its reason.
+
+## 233. How a typed answer is laid out: bullet points, plain paragraphs, or only when it helps (2026-11-25)
+
+The owner asked: *"if atlas has a long response can it be put with bullet points"*, and *"make sure I can adjust it in the settings and adjust it through chat if i want to"*. One setting, three styles, one file on the PC - `answer-style.json` beside `manner.json` - and the same value is read by the chat lane, the desktop's Settings and both apps' chat sentences.
+
+- `auto` (the default): a one-line answer stays a sentence; an answer with three or more separate parts, or one that would run past about four sentences, opens with one short plain sentence and then puts each part on its own `- ` line.
+- `bullets`: any answer with more than one part is bulleted, however short.
+- `prose`: **no note at all** - 0 tokens, and the request bytes are exactly what the model got before this module existed. That is what makes the setting fully reversible.
+
+### 233.1 What reaches the model, and where
+
+`jarvis_agent.with_style_note(msgs)` (called from `dress_messages`) inserts the module's `note_message()` as one system message **just before the newest user message**, so `keep_rules_first` still finds the Jarvis rules first. It runs only on a TYPED turn:
+
+- **never on a spoken turn** - `SPOKEN_NOTE` forbids lists outright, because everything a spoken turn writes is read aloud;
+- **never on a conversation's first question** - that request stays `[rules] + the question`, byte for byte, which `backend/test_agent.py` pins and the warm-up prefix is measured from. The note starts with the first follow-up turn.
+
+The note never enters the caller's own `messages`: a new list is returned, so the relay/cloud path - which sends the caller's messages untouched - cannot see it.
+
+### 233.2 The route
+
+`GET /api/answer-style` answers the three choices with the PC's own labels and reasons, and the one in force:
+
+```json
+{"ok": true, "style": "auto", "title": "Long answers", "detail": "...", "default": "auto",
+ "choices": [{"id": "auto", "label": "Bullet points when it helps (default)", "why": "..."}, ...]}
+```
+
+`POST /api/answer-style {"style": "auto" | "bullets" | "prose"}` changes it: **200** with the new state and a `said` sentence, **400** for a value nobody offered (the three options are named) or a field the setting does not have, **401/403** behind the token and the origin check like every other route. No approval card in either direction: it changes only how a typed answer is laid out. Aliases an owner actually types ("bullet points", "plain", "paragraphs", "when it helps", "always") are accepted; a made-up value is refused, never silently defaulted.
+
+The route is installed by the ready plug-in `plugins/ready/answer-style` naming `jarvis_answer_style.install()`, so no patch is added to `jarvis_hud.py`. `list-plugins.ps1` shows it, and `tools/reconcile_live_backend.py` installs it on a live PC like the other drop-in folders.
+
+### 233.3 Through chat
+
+`backend/jarvis_quick.py` claims these whole sentences and runs them through `jarvis_answer_style.handle_set()`, answering with the module's own sentence:
+
+- "use bullet points" / "always use bullet points" / "answer in bullet points" / "give me bullet points" -> `bullets`
+- "no bullet points" / "no more bullet points" / "plain paragraphs" / "use plain paragraphs" -> `prose`
+- "bullet points when it helps" -> `auto`
+- any of them after "from now on, ..." (the existing phrase runs the same matcher)
+
+A question that merely mentions bullet points ("how do I use bullet points in GitHub markdown?", "does GitHub support bullet points") is **not** a command and falls through to the model; `backend/test_answer_style.py` pins both directions.
+
+### 233.4 The desktop control
+
+Settings -> How Jarvis talks -> **Long answers** (`src-tauri/src/answer_style.rs` `get_answer_style`/`set_answer_style`, drawn by `src/answer-style-settings.js`) is a three-choice radio group whose labels and reasons are the PC's own. The phone has no picker in this slice; it changes the same PC-wide value through the chat sentences above, and `docs/ARCHITECTURE.md` section 8 records that as one-sided on purpose. `tools/check_parity.py` classifies the route `deliberate`.
+
+**Not done in this slice:** no model was asked to write a bulleted answer, so the note's effect on real output is unmeasured until the owner sees it on his PC.
