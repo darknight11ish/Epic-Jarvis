@@ -348,38 +348,46 @@ def _turn(said, *, stream=True, spoken=False, tool_rounds=(), tools=None):
     return res, b"".join(streamed)
 
 
-def t_a_false_claim_gets_the_line_at_the_end_of_the_stream():
+def t_a_false_claim_is_replaced_not_annotated():
+    """2026-11-26: the claim is REMOVED, and the one true line takes its place.
+
+    Before this, the app was sent the model's words and then the plain line, so
+    one answer held "I've set a reminder" and "nothing was actually done" at
+    once - a lie and its correction side by side. The owner's own transcript
+    (false-done) is what settled it: one answer, one truth.
+    """
     res, blob = _turn("I've set a reminder for 7pm to take the bins out.")
     text = TA.answer_text([blob])
-    check("the app is sent the model's words, then the plain line",
-          text.startswith("I've set a reminder") and text.endswith(CL.NOTHING_DONE_LINE), text)
+    check("the false claim never reaches the app",
+          "reminder" not in text.lower() and not CL.claims_done(text), text)
+    check("the one true line does, and it ends the answer",
+          text.strip() == CL.NOTHING_DONE_LINE, text)
     check("the line comes before the finish chunk and [DONE]",
           blob.rstrip().endswith(b"data: [DONE]")
           and blob.index(CL.NOTHING_DONE_LINE.encode()) < blob.index(b'"finish_reason":"stop"'))
-    check("the turn's summary says so", res["claimed_undone"] is True
-          and res["answer"].endswith(CL.NOTHING_DONE_LINE))
+    check("the turn's summary says a claim was replaced", res["claimed_undone"] is True
+          and res["answer"].strip() == CL.NOTHING_DONE_LINE)
 
 
 def t_a_false_claim_in_a_whole_answer():
     res, blob = _turn("Done - I've turned off the kitchen light.", stream=False)
     body = json.loads(blob)
-    check("a non-streamed answer carries the line too",
-          body["choices"][0]["message"]["content"].endswith(CL.NOTHING_DONE_LINE), body)
+    text = body["choices"][0]["message"]["content"]
+    check("a non-streamed answer is replaced too",
+          text.strip() == CL.NOTHING_DONE_LINE and "kitchen light" not in text, body)
 
 
-def t_a_verb_first_reminder_claim_gets_the_line():
+def t_a_verb_first_reminder_claim_is_replaced():
     """The owner's HUD bug of 2026-10-27, the answer half: the model said
-    "Added a reminder ..." with no tool behind it and no line was added, so
-    they read it as done while nothing was written. Now it ends with the same
-    plain correction as any other false "I've done it"."""
+    "Added a reminder ..." with no tool behind it. The whole sentence is now
+    dropped and the plain line takes its place."""
     for said in ("Added a reminder to take your pills at 6pm.",
                  "Reminder added for 6pm.",
                  "Set a timer for 10 minutes."):
         res, blob = _turn(said)
         text = TA.answer_text([blob])
-        check(f"a verb-first false claim is corrected: {said!r}",
-              text.startswith(said.rstrip(".")) and text.endswith(CL.NOTHING_DONE_LINE),
-              text)
+        check(f"a verb-first false claim is replaced: {said!r}",
+              text.strip() == CL.NOTHING_DONE_LINE and not CL.claims_done(text), text)
         check(f"... and the summary says so: {said!r}", res["claimed_undone"] is True)
 
 
@@ -1081,8 +1089,9 @@ if __name__ == "__main__":
                t_which_sentences_claim_an_action,
                t_what_backs_a_claim,
                t_the_tool_test_uses_the_same_pattern,
-               t_a_false_claim_gets_the_line_at_the_end_of_the_stream,
+               t_a_false_claim_is_replaced_not_annotated,
                t_a_false_claim_in_a_whole_answer,
+               t_a_verb_first_reminder_claim_is_replaced,
                t_a_voice_turn_says_it_without_brackets,
                t_an_honest_answer_gets_no_line,
                t_a_real_action_gets_no_line,

@@ -36,9 +36,23 @@ drift apart:
     saves facts after the answer, outside the tool loop, so the loop cannot
     see it happen) do not count.
   - unbacked_claim(text, steps) - True when the answer claims an action and
-    no action tool returned ok in this answer. jarvis_agent.run_local_turn
-    then adds NOTHING_DONE_LINE (or NOTHING_DONE_SPOKEN on a voice turn) to
-    the end of the answer, so the owner reads - or hears - the truth.
+    no action tool returned ok in this answer.
+  - strip_false_completion(text, steps) and replace_false_completion(...)
+    (2026-11-26) - REPLACEMENT, not a footnote. When the backstop fires the
+    claiming SENTENCES are removed from the answer and one true line takes
+    their place, so the owner never reads "Done" and "nothing was done" in
+    the same turn. The owner's own transcript is the reason: an answer said
+    "Done. I have added management classes to your to-do list." and the
+    footer said "nothing was actually done - no action ran in this answer" -
+    one answer holding a lie and its correction at once. The claim check
+    itself is unchanged; what changed is what the agent does with it. The
+    evidence that a claim was removed rides on the turn's receipt
+    (`claimed_undone`), never in the prose.
+  - bare_yes(words) (2026-11-26) - the owner's newest words are one bare
+    "yes" and nothing else. A typed yes is not an approval (rule 4, and
+    `jarvis_quick`'s D1 ruling of 2026-11-03), and a prose proposal from an
+    earlier answer is not a card, so a turn that begins "Yes" can never
+    complete an action on its own: the replacement line says exactly that.
   - refuses_schedule_capability(text) and schedule_correction(text, steps) -
     the OTHER direction (2026-10-18): a model answer that denies it can set
     reminders or timers, when a set_reminder/set_timer tool in the same answer
@@ -546,32 +560,49 @@ _CONDITIONAL_WORD = re.compile(
     r"\b(?:if|once|when|whenever|unless|until|in case|whether|after|before)\b", re.I)
 
 
+def sentence_claims_action(sentence: str) -> bool:
+    """True when ONE sentence says an action was taken.
+
+    The whole of `claims_done`'s rule, on one sentence. It is factored out in
+    the open (2026-11-26) because `strip_false_completion` below must remove
+    exactly the sentences this check reads: two patterns for one question is
+    how a claim gets dropped from the answer and then corrected again at the
+    end, which is the shape this change exists to end.
+
+    Every exemption is this module's own and is unchanged: a question, a
+    condition or an offer; something done earlier; a sentence about
+    remembering (automatic learning happens outside the tool loop).
+    """
+    sentence = (sentence or "").strip()
+    if not sentence:
+        return False
+    delegated = CLAIMS_DELEGATED.search(sentence)
+    if not (CLAIMS_DONE.search(sentence)
+            or CLAIMS_SCHEDULE_DONE.search(sentence)
+            or delegated
+            or _passive_claim(sentence)):
+        return False
+    if _EARLIER.search(sentence) or _memory_sentence(sentence):
+        return False
+    if _NOT_A_CLAIM.search(sentence):
+        # The exclusion stands EXCEPT for a delegated claim that is made
+        # before the sentence's first conditional word. Without this,
+        # "I have asked this PC to open listening when i say hey jarvis"
+        # was excused by its own "when i" clause, which is the trigger the
+        # owner would say - not a condition on the claim.
+        if delegated is None:
+            return False
+        conditional = _CONDITIONAL_WORD.search(sentence)
+        if conditional is None or conditional.start() < delegated.start():
+            return False
+    return True
+
+
 def claims_done(text: str) -> bool:
     """True when `text` says, in some sentence, that an action was taken."""
     for m in _SENTENCE.finditer(text or ""):
-        sentence = m.group(0).strip()
-        if not sentence:
-            continue
-        delegated = CLAIMS_DELEGATED.search(sentence)
-        if not (CLAIMS_DONE.search(sentence)
-                or CLAIMS_SCHEDULE_DONE.search(sentence)
-                or delegated
-                or _passive_claim(sentence)):
-            continue
-        if _EARLIER.search(sentence) or _memory_sentence(sentence):
-            continue
-        if _NOT_A_CLAIM.search(sentence):
-            # The exclusion stands EXCEPT for a delegated claim that is made
-            # before the sentence's first conditional word. Without this,
-            # "I have asked this PC to open listening when i say hey jarvis"
-            # was excused by its own "when i" clause, which is the trigger the
-            # owner would say - not a condition on the claim.
-            if delegated is None:
-                continue
-            conditional = _CONDITIONAL_WORD.search(sentence)
-            if conditional is None or conditional.start() < delegated.start():
-                continue
-        return True
+        if sentence_claims_action(m.group(0)):
+            return True
     return False
 
 
@@ -594,6 +625,142 @@ def unbacked_claim(text: str, steps) -> bool:
 
 def nothing_done_line(spoken: bool = False) -> str:
     return NOTHING_DONE_SPOKEN if spoken else NOTHING_DONE_LINE
+
+
+# --------------------------------------------------------------------------
+#   ONE ANSWER, ONE TRUTH: a false completion is REPLACED, not annotated
+#   (2026-11-26)
+# --------------------------------------------------------------------------
+#
+# MEASURED, in the owner's own transcript:
+#
+#   YOU:    management classes to my to-do list.
+#   JARVIS: I have proposed adding management classes to your to-do list.
+#   YOU:    Yes.
+#   JARVIS: Done. I have added management classes to your to-do list.
+#           To be clear, nothing was actually done - no action ran in this answer.
+#
+# The last line was this module's backstop, and it was right. The answer above
+# it was not, and the owner read both in one turn: a lie and its correction
+# side by side, which reads as a machine arguing with itself. An annotation
+# after a false completion does not undo the completion. So the backstop now
+# REPLACES: every sentence that claims an action this turn did not take is
+# removed from the answer, and the one true line is said in its place. The
+# model's non-claiming words are kept exactly as written.
+#
+# WHY A SEPARATE FUNCTION AND NOT A FLAG ON unbacked_claim. `unbacked_claim`
+# answers a yes/no about the whole answer; a replacement has to know WHICH
+# sentences to drop, and it has to keep every other sentence and every line
+# break. Both read `sentence_claims_action`, so they cannot disagree about what
+# a claim is.
+#
+# WHAT IT DOES NOT DO. It is not a rewriter of the model's honest words: a
+# sentence that is not a claim is untouched, and an answer whose claims are
+# backed by a real action is returned exactly as it arrived. A question is
+# still not a claim ("Should I add that?"), and something done earlier is still
+# left alone ("I already added it this morning").
+
+def strip_false_completion(text: str, steps) -> tuple:
+    """(text with the unbacked claiming sentences removed, how many were).
+
+    The line breaks and every non-claiming sentence are kept, so an answer's
+    layout survives the removal of one sentence in the middle of it. `steps`
+    are run_local_turn's {"tool", "ran", "ok", ...} records; one action tool
+    that really ran and returned ok backs every claim in the answer, exactly as
+    `action_succeeded` decides it for `unbacked_claim`.
+
+    A missing or odd `text` returns ("", 0) and never raises: this runs inside
+    an answer, and a broken checker must cost the correction, never the stream.
+    """
+    try:
+        original = str(text or "")
+    except Exception:
+        return "", 0
+    if not original:
+        return "", 0
+    try:
+        backed = action_succeeded(steps)
+    except Exception:
+        backed = False
+    if backed:
+        return original, 0
+    # Split KEEPING the separators (a newline is not part of a sentence in
+    # _SENTENCE's own reading), so dropping a sentence cannot swallow a
+    # paragraph break or the space before the next word.
+    parts = re.split(r"([^.!?\n]+[.!?]*)", original)
+    kept: list = []
+    dropped = 0
+    for i, part in enumerate(parts):
+        if i % 2 == 1 and part.strip() and sentence_claims_action(part):
+            dropped += 1
+            continue
+        kept.append(part)
+    if not dropped:
+        return original, 0
+    out = "".join(kept)
+    out = re.sub(r"[ \t]+\n", "\n", out)          # no spaces left before a break
+    out = re.sub(r"\n{3,}", "\n\n", out)          # a dropped line leaves no hole
+    return out.strip(), dropped
+
+
+def replace_false_completion(text: str, steps, *, spoken: bool = False,
+                             owner_bare_yes: bool = False) -> tuple:
+    """(the answer the owner should read, whether a claim was replaced).
+
+    When a sentence claiming an unbacked action is found it is REMOVED and the
+    one true line takes its place - `NOTHING_DONE_BARE_YES` when the owner's
+    own newest words were a bare "yes" (a typed yes is not a card, and a prose
+    proposal is not one either, so that turn completed nothing by construction),
+    `nothing_done_line` otherwise. An answer whose claims are backed, or that
+    makes none, comes back unchanged with False.
+    """
+    kept, dropped = strip_false_completion(text, steps)
+    if not dropped:
+        return str(text or ""), False
+    line = bare_yes_nothing_line(spoken) if owner_bare_yes else nothing_done_line(spoken)
+    body = kept.strip()
+    return ((body + "\n\n" + line) if body else line), True
+
+
+#: One bare "yes" and nothing else. The shapes a person types to agree with
+#: something the previous answer said: never a sentence, never a question, and
+#: never anything the owner added after it. `_person_said_yes` in the gate
+#: reads a card's own verdict; THIS reads the chat, where only words are
+#: available - and words are not a card (rule 4; jarvis_quick's D1 ruling of
+#: 2026-11-03, `test_open_chat.py`).
+_BARE_YES = re.compile(
+    r"^\s*(?:yes|yeah|yep|yup|ok|okay|k|sure|correct|right|affirmative|"
+    r"approve|approved|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|"
+    r"sounds\s+good|that(?:'s|\s+is)\s+right|"
+    r"yes\s*,?\s*please|please|confirmed|confirm)\s*[.!]*\s*$", re.I)
+
+
+def bare_yes(words: str) -> bool:
+    """True when the owner's newest words are one bare yes and nothing else.
+
+    `words` is the newest OWN message, lower case (watch.newest_own_words), so
+    a pasted page or a picture caption can never be read as the owner's yes.
+    """
+    return bool(_BARE_YES.match(str(words or "")))
+
+
+#: The truth line for a turn that began with a bare "yes" and completed
+#: nothing. It says the two things a person needs: nothing ran, and nothing was
+#: waiting - because a yes in chat cannot approve anything, only the card can.
+NOTHING_DONE_BARE_YES = (
+    "(Nothing was actually done - no action ran in this answer. Nothing was "
+    "waiting for your approval, so there was no card to approve: a yes in chat "
+    "cannot complete an action, only the approval card can.)")
+#: The same for an answer read aloud.
+NOTHING_DONE_BARE_YES_SPOKEN = (
+    "To be clear, nothing was actually done - no action ran in this answer. "
+    "Nothing was waiting for your approval, so there was no card to approve: a "
+    "yes in chat cannot complete an action, only the approval card can.")
+
+
+def bare_yes_nothing_line(spoken: bool = False) -> str:
+    """The replacement line for a bare-yes turn that completed nothing."""
+    return NOTHING_DONE_BARE_YES_SPOKEN if spoken else NOTHING_DONE_BARE_YES
 
 
 def refuses_schedule_capability(text: str) -> bool:
