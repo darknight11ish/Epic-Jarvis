@@ -1027,7 +1027,7 @@ await check("better voice: two detectors at once, back to one is a card; the new
   await live.close();
 
   assert.match(VT.settingWaitingLine({ setting: "wake_confirm", value: "one" }, WHERE),
-    /^Waiting for your approval to change the second "hey Atlas" check to "One detector"\./);
+    /^Waiting for your approval to change the second "[Hh]ey Atlas" check to "One detector"\./);
   const card = { ...S.balanced.gate.training.last, setting: "voice_id_model", value: "resnet221" };
   assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, S.strong_ready),
     "You chose the measured model again while the card waited, so approving it changed nothing.");
