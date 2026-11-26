@@ -4072,7 +4072,7 @@ private fun Reply(
     val readAloudUnlocked by com.jarvis.client.JarvisRuntime.readAloudUnlocked.collectAsState()
     val text = reply()
     // The per-message menu (the owner's request of 2026-10-27): opened from
-    // the chevron on this answer's own "Jarvis" line, and closed by any row in
+    // the chevron on this answer's own "Atlas" line, and closed by any row in
     // it. `remember(text)` so a different answer never inherits an open menu.
     var menuOpen by remember(text) { mutableStateOf(false) }
     // The same menu, asked for in words instead of with the chevron (the
@@ -4125,7 +4125,7 @@ private fun Reply(
                 // Copy and Share appear - so a half-written answer never
                 // offers to be marked or pinned.
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Kicker("Jarvis", color = if (streaming) LocalAccent.current else null)
+                    Kicker("Atlas", color = if (streaming) LocalAccent.current else null)
                     if (!streaming && text.isNotBlank()) {
                         Spacer(Modifier.weight(1f))
                         MessageActionsButton(
@@ -4417,7 +4417,7 @@ private fun Reply(
                 // chat that has this"). The two marks are unchanged - one per
                 // answer, tap again to take it back, never a change to memory -
                 // and now live in [MessageMenu], behind the chevron on this
-                // answer's own "Jarvis" line above, beside Pin message.
+                // answer's own "Atlas" line above, beside Pin message.
             }
             // Follow-ups carry the conversation so far, so there has to be a
             // plain way to start again without it. Not while an answer is
@@ -4554,7 +4554,7 @@ private fun ThreadFold(
             // of 2026-10-27: a menu "on each chat that has this"), so a pin can
             // be taken from any answer in the thread and not only the newest.
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Kicker("Jarvis")
+                Kicker("Atlas")
                 if (pins != null) {
                     Spacer(Modifier.weight(1f))
                     MessageActionsButton(
@@ -4645,7 +4645,7 @@ internal data class PinMenu(
 }
 
 /**
- * The chevron at the end of an answer's own "Jarvis" line - the one control
+ * The chevron at the end of an answer's own "Atlas" line - the one control
  * that opens [MessageMenu] (the owner's request of 2026-10-27: "put a carrot
  * that opens a menu on each chat that has this").
  *

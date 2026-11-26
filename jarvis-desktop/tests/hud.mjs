@@ -885,7 +885,7 @@ await check("with Ollama up and no OpenJarvis, Send reaches /api/chat and shows 
   assert.equal(chats.length, 1, "the page never POSTed /api/chat - still gated on :8000?");
   assert.equal(chats[0].messages.at(-1).content, "hi");
   assert.ok(log.some((m) => m.who === "you" && m.body === "hi"), JSON.stringify(log));
-  assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
+  assert.ok(log.some((m) => m.who === "Atlas" && m.body === "Hello from the backend."), JSON.stringify(log));
   assert.deepEqual(problems, []);
 });
 
@@ -950,11 +950,11 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.ok(log.some((m) => m.who === "you" && m.body === "hi"), JSON.stringify(log));
   // The reply is a labelled sample, never an answer in Jarvis's voice.
   const after = log.slice(log.findIndex((m) => m.who === "you"));
-  assert.ok(!after.some((m) => m.who === "jarvis"),
+  assert.ok(!after.some((m) => m.who === "Atlas"),
     `an offline sample was shown as Jarvis answering: ${JSON.stringify(after)}`);
   const sample = after.find((m) => /sample reply/.test(m.who || ""));
   assert.ok(sample, `no reply labelled as a sample: ${JSON.stringify(after)}`);
-  assert.match(sample.who, /not from jarvis/i);
+  assert.match(sample.who, /not from Atlas/i);
   assert.match(sample.body, /^This is a sample reply, not an answer\./);
   assert.doesNotMatch(sample.body, /\bsir\b|\bI am\b|\bI will\b/, "a sample written as Jarvis speaking");
 });
@@ -997,7 +997,7 @@ await check("a live read that says the model is UP unfreezes Send", async () => 
   const after = log.slice(at);
   assert.ok(!after.some((m) => /sample reply/.test(m.who || "")),
     `still a sample reply after the model came up: ${JSON.stringify(after)}`);
-  assert.ok(after.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."),
+  assert.ok(after.some((m) => m.who === "Atlas" && m.body === "Hello from the backend."),
     `the real answer was not shown: ${JSON.stringify(after)}`);
   assert.deepEqual(problems, []);
 });
@@ -2686,7 +2686,7 @@ await check("the HUD page holds no token, and every request it makes goes throug
   assert.equal(held.stored, null);
   assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
   assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
-  assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
+  assert.ok(log.some((m) => m.who === "Atlas" && m.body === "Hello from the backend."), JSON.stringify(log));
   // The shell commands this page is known to call. `live_status` joined the
   // list on 2026-10-27 with the owner's Live button in the left rail: it is a
   // READ of the session's own state (which device owns it, whether it is on),
@@ -3962,11 +3962,11 @@ for (const c of FIXTURE.cases) {
     await page.close();
     assert.deepEqual(problems, []);
     const after = log.slice(log.findIndex((m) => m.who === "you"));
-    const answer = after.find((m) => m.who === "jarvis");
+    const answer = after.find((m) => m.who === "Atlas");
     const system = after.find((m) => m.who === "system");
     if (c.expect.error) {
       assert.ok(system, `no error shown: ${JSON.stringify(after)}`);
-      assert.equal(system.body, `Jarvis could not answer: ${c.expect.error}`);
+      assert.equal(system.body, `Atlas could not answer: ${c.expect.error}`);
       assert.ok(!state.includes("done"), "a failed turn must not be marked finished");
       return;
     }

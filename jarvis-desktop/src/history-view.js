@@ -103,7 +103,7 @@ export const FORK_NO = "This chat cannot be forked.";
 export const FORK_ERROR_FALLBACK = "Your PC did not fork that chat.";
 const FORK_LABELS = Object.freeze({
   user: "Fork from here, after your message",
-  assistant: "Fork from here, after Jarvis's answer",
+  assistant: "Fork from here, after Atlas's answer",
 });
 const FORK_ERRORS = Object.freeze({
   bad_request: "Choose a message in this chat to fork from.",
@@ -920,7 +920,7 @@ export function readSearch(answer) {
  */
 export function renderSnippet(box, snippet, { el }) {
   box.replaceChildren();
-  const who = snippet.role === "assistant" ? "Jarvis: " : snippet.role === "title" ? "" : "You: ";
+  const who = snippet.role === "assistant" ? "Atlas: " : snippet.role === "title" ? "" : "You: ";
   if (who) box.append(el("span", "search-who", who));
   if (snippet.before) box.append("…");
   for (const p of snippet.parts) {
@@ -1042,7 +1042,7 @@ export function renderTranscript(box, conv, { el, onCopy = null, fork = null, ma
     head.append(el("span", "history-who", support
       ? SUPPORT_WHO[t.provenance] || SUPPORT_WHO.support_note
       : chatbot ? CHATBOT_WHO[t.provenance] || CHATBOT_WHO.chatbot_note
-        : t.role === "user" ? "You" : "Jarvis"));
+        : t.role === "user" ? "You" : "Atlas"));
     const when = whenLine(t.at);
     if (when) head.append(el("span", "history-when", when));
     const from = t.role === "user" ? provenanceWords(t.provenance) : "";

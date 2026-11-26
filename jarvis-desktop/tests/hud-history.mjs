@@ -545,7 +545,7 @@ check("the copied text is the transcript, plain and without markup", () => {
       { role: "assistant", text: "We ship on Friday." },
     ],
   });
-  assert.equal(copied, "You: What did we decide?\n\nJarvis: We ship on Friday.");
+  assert.equal(copied, "You: What did we decide?\n\nAtlas: We ship on Friday.");
   assert.doesNotMatch(copied, /<[a-z!/]/i, "the copied text carries HTML");
   assert.doesNotMatch(copied, /[<>]/, "the copied text carries an angle bracket");
   // The page hands it to writeText - never write(ClipboardItem), which is

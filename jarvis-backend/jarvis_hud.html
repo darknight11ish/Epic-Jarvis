@@ -620,7 +620,7 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
 }
 /* A sample reply while offline: dashed and gold like the offline banner,
-   never the ice-blue of a real answer, and labelled as not from Jarvis. */
+   never the ice-blue of a real answer, and labelled as not from Atlas. */
 .msg.sample .who{color:var(--gold);}
 .msg.sample .body{
   background:none; border:1px dashed rgb(var(--warn-rgb) / .45); color:var(--dim); font-size:13px;
@@ -7680,6 +7680,20 @@ function attachRecall(node, trace){
   $("log").scrollTop = $("log").scrollHeight;
 }
 
+/* THE ASSISTANT'S DISPLAY NAME (the owner's ruling, 2026-11-18): the product
+ * is Atlas wherever a person reads it. `role` stays the INTERNAL KEY - the
+ * PC's own turns, the `.msg.jarvis` styling and every addMessage() call site
+ * still say "jarvis" - and only the `.who` line a person reads changes. The
+ * wake phrase is NOT this label: the shipped spotter still hears "Hey
+ * Jarvis", so the wake copy moves with the model, not with this map. */
+const ROLE_NAMES = Object.freeze({
+  user: "you",
+  jarvis: "Atlas",
+  sample: "sample reply \u00b7 not from Atlas",
+  system: "system",
+});
+function roleName(role){ return ROLE_NAMES[role] || "system"; }
+
 function addMessage(role, text, at){
   const el = document.createElement("div");
   el.className = "msg " + role;
@@ -7692,8 +7706,7 @@ function addMessage(role, text, at){
     const seconds = Number(at);
     if (Number.isFinite(seconds) && seconds > 0) el.setAttribute("data-at", String(Math.round(seconds)));
   }
-  const who = role === "user" ? "you" : role === "jarvis" ? "jarvis"
-            : role === "sample" ? "sample reply \u00b7 not from jarvis" : "system";
+  const who = roleName(role);
   el.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
   el.querySelector(".body").textContent = text;
   $("log").appendChild(el);
@@ -7702,13 +7715,13 @@ function addMessage(role, text, at){
 }
 
 // Offline, the page still answers Send - but with a SAMPLE, never in
-// Jarvis's voice. These used to be written as Jarvis ("I am running in
+// Atlas's voice. These used to be written as the assistant ("I am running in
 // demo mode, sir"), rendered in the same box as a real answer and read
 // aloud, so a canned line looked and sounded like the assistant replying.
-// Now it is labelled "sample reply - not from jarvis", styled like the
+// Now it is labelled "sample reply - not from Atlas", styled like the
 // offline banner rather than like an answer, and not spoken.
 function sampleReply(){
-  return "This is a sample reply, not an answer. Jarvis is not connected " +
+  return "This is a sample reply, not an answer. Atlas is not connected " +
     "(the notice at the top of this window says what is missing), so " +
     "nothing you type here reaches it. Once it is running, reload this " +
     "window and your messages will get real answers.";
@@ -7811,7 +7824,7 @@ async function send(){
   // false is the page KNOWING it cannot talk: boot's own read failed, or a
   // landed read said the PC's model is down. null is "no read has landed
   // yet", and that is not offline - Send tries the PC for real rather than
-  // putting a "Jarvis is not connected" sample in the box on a guess. This
+  // putting an "Atlas is not connected" sample in the box on a guess. This
   // used to be `!S.online`, true for both, and the frozen copy meant a model
   // that came back still answered with samples.
   if(S.online === false){
@@ -8087,7 +8100,7 @@ async function send(){
     const why = err && err.name === "AbortError" ? "the request was cancelled or timed out" : (err.message || String(err));
     // The PC's own sentence (Ollama not running, a model not installed) is
     // not "could not reach": Jarvis was reached and said what is wrong.
-    addMessage("system", (err && err.fromServer ? "Jarvis could not answer: " : "Could not reach Jarvis: ") + why);
+    addMessage("system", (err && err.fromServer ? "Atlas could not answer: " : "Could not reach Atlas: ") + why);
     reactor.set("idle");
     return;
   }
@@ -9267,7 +9280,7 @@ async function paintHost(){
       // ever wrote `S.online`, so a window that booted while the model was down
       // stayed on sample replies for the rest of the session however healthy
       // the PC became - the owner's HUD that night: status row green, no
-      // banner, and every answer still "sample reply · not from jarvis".
+      // banner, and every answer still "sample reply · not from Atlas".
       // Only a real boolean is taken (a landed read that does not mention the
       // model is not a verdict), and only when it CHANGED, so boot's own read
       // and this beat's read cannot paint the chip twice for one truth.
