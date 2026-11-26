@@ -290,6 +290,23 @@ it quotes the venue back with the padded window and the sentence to say, and
 is only taken when it follows a locative word, so "what is a parking minimum"
 stays the model's.
 
+TURNING A PLUG-IN ON OR OFF BY TALKING (2026-11-26, the owner's "full
+manipulation of every tool and plug in"). "turn on plugin <name>", "enable the
+<name> plugin", "turn off plugin <name>", "disable the <name> plugin", "which
+plugins are switched off" and "is plugin <name> on" are answered here now.
+Listing and adding a plug-in already were; the switch had no fast-path sentence
+at all, so with the model busy it had no answer. The action is the AGENT'S OWN,
+not a second switch: `jarvis_agent._prepare_plugin_switch`, then its own
+`jarvis_gate` card under the existing `modify_own_code` tier, then
+`_execute_plugin_switch` (ON) or `_plugin_apply` (OFF) - so the card, its words,
+its tier and the audit record are the ones that already exist, and nothing here
+writes a marker itself. ON is ONE card (the project's rule for code that runs at
+start-up); OFF is immediate and cardless, its own recorded rule for every
+switch. Both change nothing until the next start, and every answer says so. A
+name is looked up in the LIVE registry `plugin_list` reads; an unknown one is
+refused and both the words asked for and the real names are named. The two reads
+are in READ_ONLY_INTENTS and answer from that same registry.
+
 ITS OWN MEASURED FACTS, AND ITS HARD SAFETY RULES (2026-11-06, the pass-2
 self-awareness test: 135 questions, 54 PASS / 32 PARTIAL / 49 FAIL). Two
 families failed because the LOCAL MODEL answered them from imagination while
@@ -1756,7 +1773,13 @@ def _match(text, now: float, conversation: Optional[str] = None,
     # --- plug-ins, before the reminder capability family (2026-10-31): "how
     # do I add a plugin" is a plug-in question, not "how do I ask for a
     # reminder".
-    got = _plugins_question(text)
+    # The SWITCH sentences run FIRST and by `s` (the tidied sentence), because
+    # `_plugins_question` reads the raw wording and must keep its own answers:
+    # "which plugins are switched off" used to reach it and come back as the
+    # whole list (2026-11-26).
+    got = _plugin_switch_intent(s)
+    if got is None:
+        got = _plugins_question(text)
     if got is not None:
         return got
     # The Skills menu question (2026-11-09): before the reminder family, which
@@ -9973,6 +9996,123 @@ def _plugin_installed_sentence(name: str, installed) -> str:
             ", ".join(near) + ".")
 
 
+# --------------------------------------------------------------------------
+#   Switching ONE plug-in on or off by talking (2026-11-26)
+# --------------------------------------------------------------------------
+# THE OWNER'S ASK: "full manipulation of every tool and plug in". Listing the
+# plug-ins and adding one were already answered here (`plugin_list`,
+# `plugin_install`); TURNING ONE ON OR OFF had no fast-path sentence at all -
+# the switch guard below handed every "turn on/off ... plugin" sentence to the
+# model, which is no answer at all when the model is slow, unloaded or asleep.
+# These are whole-sentence shapes and nothing else is claimed:
+#
+#   "turn on plugin <name>" / "enable the <name> plugin"   -> plugin_on
+#   "turn off plugin <name>" / "disable the <name> plugin"  -> plugin_off
+#   "which plugins are switched off"                        -> plugin_off_list
+#   "is plugin <name> on"                                   -> plugin_on_state
+#
+# THE ACTION IS THE AGENT'S OWN, not a second switch. `_run_plugin_switch` calls
+# `jarvis_agent._prepare_plugin_switch`, then the agent's own `_gate_check`
+# under the SAME `modify_own_code` action the model's `plugin_switch` tool uses,
+# then `jarvis_agent._execute_plugin_switch` (ON) or `_plugin_apply` (OFF). The
+# card, its words, its tier and the gate's audit record are therefore exactly
+# the ones that already exist (jarvis_agent.py's plugin block, 2026-11-02, and
+# docs/JARVIS-API.md section 181): nothing here writes a marker itself, and
+# nothing here approves anything.
+#
+# ON IS CARDED, OFF IS IMMEDIATE AND CARDLESS - the project's own on/off rule,
+# recorded for 2026-11-02 in docs/DECISIONS.md. ON waits on its ONE card in a
+# worker thread and this lane answers "one approval card is waiting" without
+# holding the chat request open, the same shape the carded settings use; a
+# denial, a timeout or a loosened tier changes nothing.
+#
+# THE NAME IS THE REGISTRY'S, NEVER A GUESS. `_plugin_lookup` looks the owner's
+# words up in the LIVE registry `jarvis_agent._plugin_rows` reads (the same
+# `jarvis_plugins` folders `plugin_list` shows) - exact name first, then the one
+# alias the catalogue answers already use (spaces for hyphens). A miss is
+# refused and the answer names both the words it looked for and the real names.
+# The reads (`plugin_off_list`, `plugin_on_state`) answer from that same
+# registry and are in READ_ONLY_INTENTS: no card, no write, no model.
+_PLUGIN_SPOKEN_NAME = r"(?P<name>[a-z0-9][a-z0-9 _-]{0,63}?)"
+
+#: The word for one of these folders, spelled the way the owner may type or say
+#: it: "plugin" and "plug-in" are the same thing here.
+_PLUGIN_WORD = r"plug-?in"
+
+#: ON, in the owner's own five shapes.
+_PLUGIN_ON_PATTERNS = (
+    re.compile(rf"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+"
+               rf"{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}"),
+    re.compile(rf"(?:turn|switch)\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}\s+on"),
+    re.compile(rf"enable\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"enable\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+{_PLUGIN_WORD}"),
+)
+#: OFF, the same five shapes the other way.
+_PLUGIN_OFF_PATTERNS = (
+    re.compile(rf"(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+"
+               rf"{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}"),
+    re.compile(rf"(?:turn|switch)\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"{_PLUGIN_WORD}\s+off"),
+    re.compile(rf"disable\s+(?:the\s+|my\s+)?{_PLUGIN_WORD}\s+{_PLUGIN_SPOKEN_NAME}"),
+    re.compile(rf"disable\s+(?:the\s+|my\s+)?{_PLUGIN_SPOKEN_NAME}\s+{_PLUGIN_WORD}"),
+)
+#: "which plug-ins are switched off" - the complement, with a count. It must be
+#: read BEFORE `_plugins_question`, whose generic "what/which plug-ins" shape
+#: used to answer it with the whole list (measured before this change).
+_PLUGIN_OFF_LIST = re.compile(
+    r"(?:which|what)\s+plug-?ins?\s+(?:are|is|were|have\s+been)\s+"
+    r"(?:currently\s+|now\s+)?(?:"
+    r"(?:switched|turned)\s+off"
+    r"|disabled"
+    r"|off"
+    r")\b")
+#: "is plug-in <name> on" - the true state, read from the registry. Two
+#: patterns rather than one alternation: `re` refuses the same group name twice
+#: in one expression.
+_PLUGIN_ON_STATE_PATTERNS = (
+    re.compile(rf"is\s+(?:the\s+)?{_PLUGIN_WORD}\s+{_PLUGIN_SPOKEN_NAME}\s+"
+               rf"(?:on|switched\s+on|running)\b"),
+    re.compile(rf"is\s+(?:the\s+)?{_PLUGIN_SPOKEN_NAME}\s+{_PLUGIN_WORD}\s+"
+               rf"(?:on|switched\s+on|running)\b"),
+)
+
+
+def _plugin_spoken_name(words: str) -> str:
+    """The owner's own words for one plug-in, tidied to a name to look up."""
+    return " ".join(str(words or "").strip().lower().split())
+
+
+def _plugin_switch_intent(s: str) -> Optional[Intent]:
+    """The intent for one plug-in switch/read sentence, or None.
+
+    `s` is the sentence as `normalize_spoken_command` leaves it (lower-cased,
+    polite lead-ins and trailing punctuation gone). WHOLE sentences only, by
+    `fullmatch`, so an ordinary sentence that merely mentions a plug-in keeps
+    `_plugins_question`'s own answer (and the model's, before it).
+    """
+    for pattern in _PLUGIN_ON_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m:
+            return Intent("plugin_on", {"name": _plugin_spoken_name(m.group("name"))})
+    for pattern in _PLUGIN_OFF_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m:
+            return Intent("plugin_off", {"name": _plugin_spoken_name(m.group("name"))})
+    if _PLUGIN_OFF_LIST.fullmatch(s):
+        return Intent("plugin_off_list")
+    for pattern in _PLUGIN_ON_STATE_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m:
+            return Intent("plugin_on_state",
+                          {"name": _plugin_spoken_name(m.group("name"))})
+    return None
+
+
 def _plugins_question(raw) -> Optional[Intent]:
     """Plug-in capability questions, from the RAW sentence (2026-10-31)."""
     text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
@@ -10089,6 +10229,15 @@ def _skills_menu_question(raw) -> Optional[Intent]:
 
 
 def _run_plugins(name: str, f: dict, surface: str) -> "Result":
+    # The four sentences of 2026-11-26 run FIRST: each reads the LIVE registry
+    # through the agent (`_plugin_registry_rows`), so reading the catalogue's
+    # installed names for them would be a second, needless look at the folder.
+    if name in ("plugin_on", "plugin_off"):
+        return _run_plugin_switch(name, str(f.get("name") or ""))
+    if name == "plugin_off_list":
+        return _run_plugin_off_list()
+    if name == "plugin_on_state":
+        return _run_plugin_on_state(str(f.get("name") or ""))
     installed = _plugin_installed_names(_plugin_entries())
     if name == "plugin_list":
         if surface == "phone":
@@ -10110,6 +10259,297 @@ def _run_plugins(name: str, f: dict, surface: str) -> "Result":
     if name == "plugin_install":
         return Result(_plugin_install_sentence(), "plugin_install")
     return Result(_plugin_list_sentence(installed), "plugin_list")
+
+
+#: How long the fast path waits for a carded plug-in switch before it answers
+#: "one approval card is waiting". The gate blocks on a person, so a chat
+#: request must not: the same shape `jarvis_note_capture.capture(wait_s=...)`
+#: uses, and long enough for the card row to exist before the app reads the
+#: pending list.
+PLUGIN_SWITCH_WAIT_S = 1.5
+
+#: The answer after the ONE ON card has been raised and is still waiting. It
+#: says the same moment the agent's own answers do: a plug-in is loaded at
+#: start-up, so neither direction is live in the process that is already running.
+PLUGIN_ON_WAITING = (
+    "One approval card is waiting for your yes: switching the {name!r} plug-in on. "
+    "Nothing has changed yet. If you approve it, the plug-in loads the next time "
+    "Jarvis starts - I cannot restart Jarvis for you. If you say no, nothing "
+    "changes.")
+
+#: The plain answer when this PC's backend has no `jarvis_agent.py` to ask.
+PLUGIN_SWITCH_MISSING = (
+    "Your PC's Jarvis cannot switch plug-ins yet - run apply-patches.ps1 on the PC.")
+
+
+def _plugin_agent():
+    """`jarvis_agent`, or None - the module that OWNS the plug-in switch."""
+    try:
+        import jarvis_agent
+        return jarvis_agent
+    except Exception:                        # noqa: BLE001 - module absent
+        return None
+
+
+def _plugin_gate():
+    """The agent's own fail-closed gate, or None.
+
+    ONE seam, so a suite can stand in for the real card exactly as the agent's
+    own suites do (`jarvis_agent._one_call(checker=...)`); the shipped path
+    always reads `jarvis_agent._gate_check`, never a second wrapper.
+    """
+    AG = _plugin_agent()
+    return getattr(AG, "_gate_check", None) if AG is not None else None
+
+
+def _plugin_registry_rows() -> dict:
+    """The LIVE plug-in registry, as the agent's own `plugin_list` reads it.
+
+    `jarvis_agent._plugin_rows` is the one reader: it discovers the folders
+    with `jarvis_plugins` and folds in the loader's own `status()`, so a
+    plug-in's state and the reason it is off can never disagree between the
+    list tool and this fast path. READ ONLY: it imports nothing and writes
+    nothing.
+    """
+    AG = _plugin_agent()
+    if AG is None:
+        return {"ok": False, "error": PLUGIN_SWITCH_MISSING}
+    try:
+        rows = AG._plugin_rows()
+    except Exception as exc:                 # noqa: BLE001 - the registry
+        return {"ok": False,
+                "error": (f"I cannot read the plug-in folder on this PC just now "
+                          f"({type(exc).__name__}).")}
+    if not isinstance(rows, dict) or not rows.get("ok"):
+        said = ""
+        if isinstance(rows, dict):
+            said = str(rows.get("error") or "").strip()
+        return {"ok": False,
+                "error": said or "I cannot read the plug-in folder on this PC just now."}
+    return rows
+
+
+def _plugin_rows_by_name(rows: dict) -> dict:
+    """{name: row} from one registry answer, in the registry's own names."""
+    out = {}
+    for row in (rows.get("plugins") or []):
+        if isinstance(row, dict) and row.get("name"):
+            out[str(row["name"])] = row
+    return out
+
+
+def _plugin_lookup(words: str, rows: dict) -> tuple:
+    """(the registry's own name for what the owner said, "") or ("", why not).
+
+    Exact name first, any case (what the agent's own `_plugin_check` accepts),
+    then the ONE alias the catalogue answers already use: the same words with
+    spaces where the folder has hyphens (or hyphens where it has spaces). A
+    miss is a refusal, never a nearest-match guess, and it names the words it
+    looked for - the same rule `jarvis_agent._plugin_check` holds itself to.
+    """
+    asked = _plugin_spoken_name(words)
+    if not asked:
+        return "", ("Which plug-in? Name the one you mean, exactly as "
+                    "\"plugin list\" shows it.")
+    by_name = _plugin_rows_by_name(rows)
+    if not by_name:
+        return "", ("There are no plug-in folders on this PC, so there is no "
+                    "plug-in to name.")
+    hits = [name for name in by_name if name.lower() == asked]
+    if len(hits) == 1:
+        return hits[0], ""
+    if len(hits) > 1:
+        return "", (f"more than one plug-in folder is called {asked!r} (they differ "
+                    f"only in capitals), so I cannot tell which one you mean")
+    variants = {asked.replace(" ", "-"), asked.replace("-", " ")}
+    hits = sorted(name for name in by_name if name.lower() in variants)
+    if len(hits) == 1:
+        return hits[0], ""
+    if len(hits) > 1:
+        return "", (f"more than one plug-in matches {asked!r} ({', '.join(hits)}), "
+                    f"so I cannot tell which one you mean")
+    return "", (f"There is no plug-in called {asked!r} on this PC. The plug-ins "
+                f"here are: {', '.join(sorted(by_name))}.")
+
+
+def _plugin_said(result) -> str:
+    """The plain answer for one finished switch: the agent's own message, or
+    its own refusal as a sentence that says nothing was changed."""
+    result = result if isinstance(result, dict) else {}
+    said = str(result.get("message") or "").strip()
+    if said:
+        return said
+    problem = " ".join(str(result.get("error") or "").split())
+    if not problem:
+        return "Nothing was changed - the plug-in switch gave no answer."
+    problem = problem[:1].upper() + problem[1:]
+    if not problem.endswith((".", "!", "?")):
+        problem += "."
+    low = problem.lower()
+    if "nothing was changed" in low or "nobody was asked" in low:
+        return problem
+    return problem + " Nothing was changed."
+
+
+def _plugin_denied_said(verdict) -> str:
+    """The answer when the gate did not allow the card - in the gate's own
+    outcome words, never a claim that something happened."""
+    outcome = str(getattr(verdict, "outcome", None) or "")
+    reason = " ".join(str(getattr(verdict, "reason", "") or "").split())
+    if outcome == "denied":
+        return ("Nothing was changed - you said no to the card, so the plug-in "
+                "stays off.")
+    if outcome == "timed_out":
+        return ("Nothing was changed - nobody answered the card before it timed "
+                "out, so the plug-in stays off.")
+    said = "Nothing was changed - the card was not approved"
+    return said + (f" ({reason})." if reason else ".")
+
+
+def _plugin_switch_ask(AG, gate, args: dict, state, plan_text: str,
+                       box: dict) -> None:
+    """The worker behind a carded ON: the agent's OWN gate, then its OWN write.
+
+    `state` and `plan_text` are exactly what `_prepare_plugin_switch` produced
+    before the card existed, so the write lands on the plugin and folder the
+    card named. A person's yes is the only thing that reaches `execute`: a
+    denial, a timeout, or a loosened tier with nobody asked leaves the disk
+    untouched.
+    """
+    try:
+        prompt = AG._gate_prompt(AG.PLUGIN_SWITCH_TOOL, args)
+        verdict = gate(AG.PLUGIN_TOGGLE_ACTION, {"text": plan_text}, prompt)
+        if not getattr(verdict, "allowed", False):
+            box["result"] = {"ok": False, "message": _plugin_denied_said(verdict)}
+        elif not AG._a_person_said_yes(verdict):
+            # EVERY carded write is in NEEDS_A_PERSON; this is the belt that
+            # still refuses when a settings file loosens `modify_own_code`.
+            vtier = getattr(verdict, "tier", None) or "unknown"
+            vaction = getattr(verdict, "action", None) or AG.PLUGIN_TOGGLE_ACTION
+            why = (AG.NEEDS_A_PERSON.get(AG.PLUGIN_SWITCH_TOOL)
+                   or getattr(AG, "OUTSIDE_PROGRAM_WHY", ""))
+            box["result"] = {
+                "ok": False,
+                "message": "I did not switch the plug-in on. " + AG.NOBODY_ASKED_WORDS.format(
+                    name=AG.PLUGIN_SWITCH_TOOL, why=why, action=vaction),
+                "gate": AG.NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
+        else:
+            box["result"] = AG._execute_plugin_switch(args, state)
+    except Exception as exc:                 # noqa: BLE001 - said, never hidden
+        box["result"] = {"ok": False,
+                         "error": (f"the plug-in switch raised "
+                                   f"{type(exc).__name__}: {exc}")}
+    finally:
+        box["done"] = True
+
+
+def _run_plugin_switch(intent: str, plugin: str) -> "Result":
+    """ONE named plug-in on or off, through the AGENT'S prepare -> gate ->
+    execute path - never a second switch mechanism.
+
+    OFF is immediate and cardless (the project's own on/off rule), ON raises the
+    ONE existing `modify_own_code` card in a worker thread and this lane answers
+    "waiting" instead of holding the chat request open. Nothing is written
+    before a person says yes, and a denial changes nothing.
+    """
+    AG = _plugin_agent()
+    gate = _plugin_gate()
+    if AG is None or gate is None:
+        return Result(PLUGIN_SWITCH_MISSING, intent)
+    rows = _plugin_registry_rows()
+    if not rows.get("ok"):
+        return Result(str(rows.get("error") or PLUGIN_SWITCH_MISSING), intent)
+    real, _why = _plugin_lookup(plugin, rows)
+    action = "on" if intent == "plugin_on" else "off"
+    args = {"plugin": real or _plugin_spoken_name(plugin), "action": action}
+    try:
+        state, plan_text = AG._prepare_plugin_switch(args)
+    except Exception as exc:                 # noqa: BLE001 - said, never hidden
+        return Result(f"The plug-in switch could not be prepared "
+                      f"({type(exc).__name__}), so nothing was changed.", intent)
+    if isinstance(state, AG._PluginRefused):
+        return Result(_plugin_said({"ok": False, "error": state.problem}), intent)
+    if isinstance(state, AG._PluginNoChange):
+        return Result(_plugin_said(dict(state.listed)), intent)
+    if isinstance(state, AG._PluginOffNow):
+        # OFF: the agent's own writer, at once - the owner's rule for every
+        # switch ("turning it off is immediate"). No card exists for this half.
+        try:
+            written = AG._plugin_apply(state.state)
+        except Exception as exc:             # noqa: BLE001 - said, never hidden
+            return Result(f"The plug-in could not be switched off "
+                          f"({type(exc).__name__}), so nothing was changed.", intent)
+        return Result(_plugin_said(written), intent)
+    # ON: the plan became the ONE card. It waits for a person in a worker so the
+    # chat request is not held open; an approval applies the SAME plan.
+    box: dict = {}
+    worker = threading.Thread(target=_plugin_switch_ask,
+                              args=(AG, gate, args, state, plan_text, box),
+                              name="jarvis-plugin-switch", daemon=True)
+    try:
+        worker.start()
+    except Exception:                        # noqa: BLE001 - the thread
+        return Result("I could not raise the approval card, so nothing was "
+                      "changed.", intent)
+    worker.join(timeout=PLUGIN_SWITCH_WAIT_S)
+    if box.get("done"):
+        return Result(_plugin_said(box.get("result")), intent)
+    return Result(PLUGIN_ON_WAITING.format(name=args["plugin"]), intent)
+
+
+def _run_plugin_off_list() -> "Result":
+    """"which plug-ins are switched off" - the complement, with a count."""
+    rows = _plugin_registry_rows()
+    if not rows.get("ok"):
+        return Result(str(rows.get("error") or PLUGIN_SWITCH_MISSING),
+                      "plugin_off_list")
+    plugins = [p for p in (rows.get("plugins") or []) if isinstance(p, dict)]
+    folder = str(rows.get("folder") or "")
+    if rows.get("folder_exists") is False:
+        return Result(f"There is no plug-in folder at {folder}, so no plug-in is "
+                      f"installed and none is switched off.", "plugin_off_list")
+    if not plugins:
+        return Result("There are no plug-ins on this PC, so none is switched off.",
+                      "plugin_off_list")
+    off = sorted(str(p.get("name")) for p in plugins if not p.get("on"))
+    total = len(plugins)
+    if not off:
+        return Result(f"None - all {total} plug-ins on this PC are switched on.",
+                      "plugin_off_list")
+    head = (f"{len(off)} of the {total} plug-ins on this PC are switched off: "
+            f"{', '.join(off)}.")
+    return Result(head + " Say \"turn on plugin <name>\" to switch one back on.",
+                  "plugin_off_list")
+
+
+def _run_plugin_on_state(plugin: str) -> "Result":
+    """"is plug-in <name> on" - the TRUE state, from the live registry."""
+    rows = _plugin_registry_rows()
+    if not rows.get("ok"):
+        return Result(str(rows.get("error") or PLUGIN_SWITCH_MISSING),
+                      "plugin_on_state")
+    real, why = _plugin_lookup(plugin, rows)
+    if not real:
+        said = why[:1].upper() + why[1:] if why else "Which plug-in?"
+        return Result(said, "plugin_on_state")
+    row = _plugin_rows_by_name(rows).get(real) or {}
+    label = f"the {real!r} plug-in"
+    reason = str(row.get("why") or "").strip().rstrip(".")
+    if row.get("on"):
+        if reason:
+            # Still running, but something about it is not healthy any more
+            # (its folder has gone since start-up): the loader's own sentence.
+            return Result(f"Yes - {label} is switched on. "
+                          f"{reason[:1].upper() + reason[1:]}.", "plugin_on_state")
+        return Result(f"Yes - {label} is switched on: it loaded when Jarvis "
+                      f"started.", "plugin_on_state")
+    if reason[:1].isupper():
+        # The loader's own sentence ("Jarvis has not run its plugin loader ...")
+        # reads as its own sentence, not as the tail of ours.
+        return Result(f"No - {label} is not on. {reason}.", "plugin_on_state")
+    if reason:
+        return Result(f"No - {label} is not on: it is {reason}.", "plugin_on_state")
+    return Result(f"No - {label} is not on in this process.", "plugin_on_state")
 
 
 
@@ -34185,8 +34625,13 @@ _PROJECT_INTENTS = frozenset({"project_working", "project_next", "project_blocki
 _ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_needs",
                               "android_build_install"})
 
-#: The plug-in answers (2026-10-31): fixed words, no card.
-_PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plugin_install"})
+#: The plug-in answers (2026-10-31): fixed words, no card. Since 2026-11-26 the
+#: two SWITCH intents are here too - they route to `_run_plugins` like the rest,
+#: but they are deliberately NOT in READ_ONLY_INTENTS: each one can raise a card
+#: or change what runs. The two reads are, and they are.
+_PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about",
+                             "plugin_install", "plugin_on", "plugin_off",
+                             "plugin_off_list", "plugin_on_state"})
 
 #: The reminders capability answers (2026-10-31): fixed words, no card.
 #: Read-only intents answered deterministically even in a PRIVATE chat
@@ -34284,6 +34729,12 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # halves are done ... they differ") is why this lane exists, so a private
     # chat gets the real comparison rather than the same guess.
     "update_state",
+    # The two plug-in READS (2026-11-26): which plug-ins are switched off and
+    # whether one named plug-in is on. Both read THIS PC's live registry
+    # (`jarvis_agent._plugin_rows`, the same one `plugin_list` shows) and write
+    # nothing, so a private chat gets the truth instead of a model's guess. The
+    # two CHANGES (`plugin_on`, `plugin_off`) are deliberately NOT here.
+    "plugin_off_list", "plugin_on_state",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -34364,6 +34815,12 @@ READ_ONLY_INTENTS = frozenset({
     "project_working", "project_next", "project_blocking",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    # The two plug-in READS (2026-11-26): "which plug-ins are switched off" and
+    # "is plug-in X on" read the live registry and write nothing, so neither may
+    # take away what "cancel that" would undo. The two CHANGES (`plugin_on`,
+    # `plugin_off`) are deliberately ABSENT - one raises the modify_own_code
+    # card, the other writes the loader's own marker.
+    "plugin_off_list", "plugin_on_state",
     "skill_menu_info",
     # Any of its own tools, in depth (2026-11-04): it reads a fixed dossier in
     # this repository and calls nothing - the module has no setter, no card and

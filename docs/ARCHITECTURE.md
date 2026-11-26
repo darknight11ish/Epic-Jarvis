@@ -3400,7 +3400,13 @@ backend routes, in both directions; the rest are listed here only.
   EXISTING `modify_own_code` card, already listed on the "What asks first" page
   in its "Jarvis's own code" group, so no new page row was invented either; the
   feature itself is on both apps' Features pages (`features/features.json`,
-  `plugin-switch`). `backend/test_plugin_switch.py` holds both halves.
+  `plugin-switch`). `backend/test_plugin_switch.py` holds both halves. **Since
+  2026-11-26 the fast path answers the same six sentences too** (`plugin_on`,
+  `plugin_off`, `plugin_off_list`, `plugin_on_state` in
+  `backend/jarvis_quick.py`, JARVIS-API §181): it is the same ability through
+  the same card, still with no route, no Rust command, no app screen and no new
+  permission path, so `tools/check_parity.py` stays clean and the one-sided
+  part is still the screen.
 
 - **A question on a reminder is ANSWERED on both apps and CREATED only on the
   PC, and that is one-sided on purpose** (2026-11-02, the owner's ask;
