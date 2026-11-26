@@ -21621,7 +21621,11 @@ def _run_note_merge(f: dict) -> Result:
         if why:
             first_why = first_why or why
             continue
-        if len(paths) < 2:
+        # "... into my Shopping note" names the survivor, so ONE source note is
+        # a complete request; only a list with no survivor needs two names
+        # (2026-11-25: this counted the survivor's own note as a missing name,
+        # so "merge my Ideas note into my Shopping note" asked for two notes).
+        if len(paths) < 2 and not into:
             return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
         if len(paths) - 1 > _notes_delete_max():
             return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")

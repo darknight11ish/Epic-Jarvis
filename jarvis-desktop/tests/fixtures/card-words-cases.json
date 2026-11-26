@@ -195,6 +195,10 @@
       "title": "Jarvis wants to read your email"
     },
     {
+      "action": "empty_vault_trash",
+      "title": "Jarvis wants to empty your Obsidian vault's .trash folder for good"
+    },
+    {
       "action": "enable_reading_tool",
       "title": "Jarvis wants to offer a tool to the AI model"
     },
@@ -1164,6 +1168,18 @@
         "full": "reads your mail on this PC through your own account; sends nothing and changes nothing. nothing has happened yet.",
         "body": "reads your mail on this PC through your own account; sends nothing and changes nothing. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "empty_vault_trash",
+      "notice": {
+        "title": "Jarvis wants to empty your Obsidian vault's .trash folder for good",
+        "summary": "Jarvis wants to empty your vault's trash for good.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }

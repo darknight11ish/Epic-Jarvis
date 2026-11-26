@@ -3597,6 +3597,24 @@ backend routes, in both directions; the rest are listed here only.
   no app caller), not in a `todo` queue for a phone or desktop half; no such
   half is owed.
 
+- **The four full-note-control verbs are chat-and-route only, on purpose**
+  (2026-11-25; the owner's *"full control and full ability to manipulate and
+  change any of my notes, with deletions requiring a card of approval"*, and the
+  same reasoning as the delete paragraph above). Copying, merging, deleting one
+  section and emptying the vault's trash are built and documented (JARVIS-API
+  section 170.15) and **no app draws a screen for any of them**: the chat
+  sentence is the door both apps already have, `jarvis_quick` calls each route's
+  own handler in process inside the `/api/chat` turn the HUD and the phone
+  already share, and every write raises its ONE card there. A screen would be a
+  second approval surface for the same act - and for the merge and the empty,
+  an act neither app can undo - which is the thing to avoid, not a missing half.
+  All three routes are named in `tools/check_parity.py`'s `BACKEND_ONLY` with
+  that reason. The one side that DOES differ is deliberate and is the copy's
+  card rule, not a screen: a copy the owner makes directly in the editor is
+  card-free (create's own rule, because a brand-new file cannot overwrite or
+  delete anything), while the same copy asked for in chat or from the phone
+  raises the card - one rule, applied to whoever asked.
+
 - **Routing a typed "was this answer right?" is the HUD page's and the phone's
   alone, not the desktop's main chat window** (2026-11-01; the field-test gap:
   the words were being sent to the model and answered conversationally instead

@@ -1497,7 +1497,21 @@ GROUPS = (
                             # app switch (it is not on LOOSE), so the honest note is
                             # NOTE_FILE - loosening this one is a hand edit, not an
                             # app setting.
-                            "delete_vault_notes"]),
+                            "delete_vault_notes",
+                            # Emptying the vault's own .trash folder
+                            # (jarvis_notes_edit.py, 2026-11-25; the owner's "full
+                            # control ... with deletions requiring a card of
+                            # approval"). This is the ONE note action that really
+                            # destroys bytes - the files are unlinked, no Undo, no
+                            # File Guardian copy (the trash IS the copy) - so its
+                            # risk row is ("no", "local") and its own card lists
+                            # every file with its age before anything goes. Its
+                            # tier is the shipped "ask" line, and it is NOT in
+                            # MUST_ASK for the same reason as the two rows above:
+                            # the module raises its card through jarvis_gate.check
+                            # and does not refuse a looser tier itself. No app
+                            # switch either, so the honest note is NOTE_FILE.
+                            "empty_vault_trash"]),
     ("Timers and reminders", ["fixed:timers", "todo_add", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",
                               # reminder-actions.patch (2026-10-27): a reminder

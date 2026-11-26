@@ -1524,6 +1524,19 @@ def match(text, now: Optional[float] = None,
     for key in ("name", "tname", "folder", "new", "old", "target", "tag", "title"):
         if got is not None and got.f.get(key):
             got.f[key] = _restore(text, got.f[key])
+    # The 2026-11-25 FULL NOTE CONTROL verbs keep names in three more keys: the
+    # section a delete removes (`heading`), the survivor a merge keeps (`into`),
+    # and the title a copy is given (`as`). They were NOT restored, so the card
+    # read 'delete the "warm-up" section' and a copy asked for as "Groceries"
+    # landed as groceries.md - the matching form, not the owner's capitals
+    # (measured 2026-11-25). A merge's names ride in `tries`, a list of name
+    # lists, so each one is restored too.
+    for key in ("heading", "into", "as"):
+        if got is not None and isinstance(got.f.get(key), str) and got.f.get(key):
+            got.f[key] = _restore(text, got.f[key])
+    if got is not None and isinstance(got.f.get("tries"), list):
+        got.f["tries"] = [[_restore(text, one) for one in names]
+                          for names in got.f["tries"] if isinstance(names, list)]
     # The template's own name is the LAST match in its sentence ("save my
     # workout log as a template called My workout" has two); the first
     # occurrence is the source note, not the new template.
@@ -17400,14 +17413,25 @@ def _self_notes_words(sources: Optional[dict] = None) -> str:
     count = data.get("count")
     if isinstance(count, int) and not isinstance(count, bool):
         if count == 0:
-            return "You have no notes in your vault yet."
-        if data.get("truncated"):
+            # An EMPTY vault can still hold a huge trash (everything was deleted
+            # and never emptied), so the one quiet line belongs here too - the
+            # answer would otherwise hide it exactly when it matters most.
+            said = "You have no notes in your vault yet."
+            tail = ""
+        elif data.get("truncated"):
             said = ("You have at least " + f"{count:,}" + " notes in your vault (the "
                     "list stops at " + f"{count:,}" + ")")
+            tail = ". Brain, Notes lists them."
         else:
             said = ("You have " + f"{count:,}" + " note"
                     + ("" if count == 1 else "s") + " in your vault")
-        return said + ". Brain, Notes lists them."
+            tail = ". Brain, Notes lists them."
+        # The ONE quiet line about a trash that has grown worth emptying (the
+        # owner's ruling of 2026-11-25): it is passive, it names the carded
+        # command, it is silent on a small trash, and this is the note-STATUS
+        # answer, so it is never said twice in one reply.
+        line = _trash_nudge_line()
+        return said + tail + (" " + line if line else "")
     why = str(data.get("why") or "").strip()
     return ("I cannot read your notes right now"
             + (f" ({why})" if why else "")
@@ -20654,6 +20678,159 @@ _NOTE_MOVE = re.compile(
 NOTE_WRITE_BATCH_SAID = (
     "I change one note at a time, so nothing was written: name ONE note, like "
     "\"add milk to my Shopping note\".")
+
+
+# ---------------------------------------------------------------------------
+#   FULL NOTE CONTROL (2026-11-25) - the verbs that had no sentence
+# ---------------------------------------------------------------------------
+# The owner's words: "i want atlas to have full control and full ability to
+# manipulate and change any of my notes, with deletions requiring a card of
+# approval". Every verb here is answered by the notes editor's OWN route (one
+# card, one File Guardian copy, one Undo where an undo exists); this block only
+# turns a sentence into the right route call. Nothing here writes a file itself.
+#
+# NO NAME IS EVER GUESSED. Each runner resolves the note through `_find_note`
+# (the editor's ONE resolver) and REFUSES, naming what it looked for, when there
+# is no such note. That is the difference between "full control" and "writes to
+# whatever file has a similar name".
+#
+# NOTHING HERE TREATS `untitled` NOTES SPECIALLY. That is a separate feature
+# (the vault organizer's), ruled out of this change on 2026-11-25, so a note
+# called "Untitled 3" is merged, copied or renamed by exactly the same code as
+# any other note.
+#
+# ONE CARD PER DESTRUCTIVE ACT, AND THE CARD IS THE WHOLE TRUTH:
+#   rewrite  -> edit_vault_note, and the card says how many body lines it replaces
+#   section  -> edit_vault_note, and the card names the section and its line count
+#   merge    -> delete_vault_notes, because a note leaves the vault (to .trash)
+#   copy     -> no card for a direct owner write (a new note is additive), else one
+#   trash    -> empty_vault_trash, which lists every file and its age
+
+#: The words that make a sentence about MERGING A PULL REQUEST rather than a
+#: note. `can you merge two notes` was answered by the GitHub lane ("ONE approval
+#: card per merge, and merge commit only") before this guard existed (measured
+#: 2026-11-25). Both directions are pinned by test: a note-merge sentence never
+#: reaches the GitHub lane, and a pull-request sentence never reaches this one.
+_GITHUB_MERGE_NOUN = re.compile(
+    r"\b(?:pull\s+request|pull\s+req|pr|prs|merge\s+commit|squash|rebase|"
+    r"branch|repo|repository|github|ci|checks?|review)\b|#\d", re.I)
+_NOTE_MERGE_VERB = re.compile(r"\bmerg(?:e|es|ing)\b", re.I)
+_NOTE_MERGE_INTO = re.compile(
+    r"merge\s+(?:my\s+|the\s+)?(?P<names>.+?)\s+notes?\s+(?:in)?to\s+"
+    r"(?:my\s+|the\s+)?(?P<into>.+?)(?:\s+note)?\s*[.!?]?$", re.I)
+_NOTE_MERGE_LIST = re.compile(
+    r"merge\s+(?:my\s+|the\s+)?(?P<names>.+?)\s+notes?\s*[.!?]?$", re.I)
+_NOTE_MERGE_ASK = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?merge\s+"
+    r"(?:(?:my|the|two|2|some|any)\s+)*(?:notes?|note\s+files?)\b.*"
+    r"|merge\s+(?:(?:my|the|two|2|some|any)\s+)*notes?\s*[.!?]?$", re.I)
+#: A count in front of a note name in a merge sentence ("my two Newsletter
+#: notes") is a count, not part of the title.
+_NOTE_MERGE_COUNT = re.compile(
+    r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|both|all|some)\s+",
+    re.I)
+#: The words a merge sentence uses to POINT AT its notes instead of naming them.
+#: "merge my notes" names no note, and "merge two notes" is a question about the
+#: verb - both used to reach the resolver and answer 'I could not find a note
+#: called "my"' / '"two"' (measured 2026-11-25, after `normalise()` had already
+#: taken "can you " off the front). A name in this set is never a note.
+_NOTE_MERGE_FILLER = frozenset({
+    "my", "the", "a", "an", "your", "our", "their", "both", "all", "some", "any",
+    "these", "those", "them", "one", "two", "2", "three", "four", "five", "six",
+    "seven", "eight", "nine", "ten", "note", "notes", "note file", "note files",
+})
+#: The sentence's own noun on the end of a name: "my Workout note" names Workout.
+#: It is the same strip `_note_merge_names` already does to a whole phrase, kept
+#: in ONE place so every new lane strips exactly the same thing (2026-11-25: the
+#: section lane looked for a note literally called "Workout note").
+_NOTE_NAME_TAIL = re.compile(r"\s+notes?$", re.I)
+_NOTE_MERGE_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
+#: A merge splits on "and" but a TITLE may hold one ("Salt and Pepper"), so the
+#: whole phrase is tried first and the split list is the fallback - the same
+#: order `_delete_phrases` keeps.
+
+_NOTE_REWRITE = re.compile(
+    r"(?:rewrite|reword)\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note\s+"
+    r"(?:to\s+say|saying|so\s+it\s+says|with|as)\s+(?P<text>.+)$"
+    r"|replace\s+the\s+(?:text|body|contents?)\s+of\s+(?:my\s+|the\s+)?"
+    r"(?P<name2>.+?)\s+note\s+(?:with|to)\s+(?P<text2>.+)$", re.I)
+
+_NOTE_COPY = re.compile(
+    r"(?:copy|duplicate|clone)\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note"
+    r"(?:\s+(?:to|as|into|called|named)\s+(?P<alias>.+?))?\s*[.!?]?$", re.I)
+
+_NOTE_SECTION_DELETE = re.compile(
+    r"(?:delete|remove|cut|drop|take)\s+(?:out\s+)?(?:the\s+|my\s+)?"
+    r"(?P<head>.+?)\s+section\s+(?:from|out\s+of|in)\s+(?:my\s+|the\s+)?"
+    r"(?P<name>.+?)\s*[.!?]?$", re.I)
+
+#: "add this to the top of my Shopping note" and its family. The POSITION is the
+#: verb's, never part of the note's name: before this pattern existed the append
+#: reader took the whole tail as the name and asked "What should I add to \"top
+#: of my Shopping\"?" (measured 2026-11-25).
+_NOTE_INSERT_TOP = re.compile(
+    r"(?:add|put|insert|write)\s+(?P<text>.+?)\s+(?:at|to|in)\s+the\s+"
+    r"(?P<where>top|start|beginning|bottom|end)\s+of\s+(?:my\s+|the\s+)?"
+    r"(?P<name>.+?)\s*[.!?]?$", re.I)
+#: "add this to the top of my Shopping note" names no words to add - "this"
+#: points at something the chat does not have. The position is understood, so the
+#: sentence asks WHAT to add to the right note instead of inserting the pronoun
+#: as if it were the text (2026-11-25).
+_NOTE_PRONOUN_PAYLOAD = frozenset({"this", "that", "it", "these", "those",
+                                   "them", "something"})
+
+_NOTE_TRASH_EMPTY = re.compile(
+    r"(?:empty|clear(?:\s+out)?|clean\s+out|purge|wipe(?:\s+out)?)\s+"
+    r"(?:out\s+)?(?:the\s+|my\s+)?(?:vault'?s?\s+|obsidian\s+)?"
+    r"(?:trash|\.trash|deleted\s+notes)(?:\s+(?:folder|bin|out))?"
+    r"\s*[.!?]?$", re.I)
+_NOTE_TRASH_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:empty|clear(?:\s+out)?|"
+    r"purge)\s+(?:the\s+|my\s+)?(?:vault'?s?\s+|obsidian\s+)?"
+    r"(?:trash|\.trash|deleted\s+notes)(?:\s+(?:folder|bin))?\s*\??$", re.I)
+
+#: Listing what is PINNED, in the four ways the owner says it (2026-11-25).
+#: `pinned` is its own frontmatter property (a note can be pinned and not a
+#: favourite), so this reads that flag and nothing else; it is a READ: no card,
+#: no write, and with the lists hidden it names nothing.
+_NOTE_PINNED_LIST = re.compile(
+    r"(?:which|what)\s+notes?\s+(?:did\s+i\s+pin|are\s+pinned|have\s+i\s+pinned|"
+    r"do\s+i\s+have\s+pinned)\b.*"
+    r"|what\s+did\s+i\s+pin\b.*"
+    r"|(?:my|the|all)\s+pinned\s+notes?\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|my\s+|all\s+)?pinned\s+notes?\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?notes?\s+(?:that\s+)?i\s+pinned\b.*",
+    re.I)
+
+#: A merge sentence names notes; with no "into", the FIRST one named survives
+#: and the rest are folded in. Said once so the card and the reply agree.
+NOTE_MERGE_ASK_SAID = (
+    'Name the notes to merge, like "merge my Ideas note into my Shopping note", '
+    "and I will show you on one card which note survives before anything "
+    "changes.")
+#: A merge is a delete for one of the notes, so its card needs a person. Said
+#: while the card waits, the same way a delete's waiting line does.
+NOTE_MERGE_WAITING_SAID = (
+    "Waiting for your yes on the approval card: it is confirmed with Windows "
+    "Hello, or with your phone's own fingerprint. {said}")
+NOTE_COPY_DONE_SAID = "Copied it. You can undo it."
+NOTE_REWRITE_ASK_SAID = (
+    'Say it as "rewrite my Shopping note to say ..." and I will show you the new '
+    "text on one card before anything is written.")
+NOTE_SECTION_ASK_SAID = (
+    'Name the section and the note, like "delete the Warm-up section from my '
+    'workout log", and I will show you exactly what goes on one card.')
+NOTE_TRASH_EMPTY_ASK_SAID = (
+    "Yes - say \"empty the vault trash\" and I will list every file in your "
+    "vault's .trash folder on one card, with its age, before anything is "
+    "deleted. Emptying it cannot be undone.")
+NOTE_PINNED_NONE_SAID = (
+    "No notes in your vault are pinned right now, so there is nothing to list.")
+NOTE_PINNED_HIDDEN_SAID = (
+    "Your lists are hidden on this PC, so I will not list which notes are "
+    "pinned. Tap Show and confirm it is you, then ask again.")
+NOTE_TRASH_EMPTY_SAID = "The vault's trash folder is already empty."
+
 #: A STANDING INSTRUCTION ABOUT A NAME is not a batch of notes (2026-11-24).
 #: The owner wrote: "Make a note called mood log and favorite. And every time I
 #: refer to mood log, I'm referring to this particular note." - ONE note, one
@@ -20905,7 +21082,24 @@ def _filed_location(vault) -> str:
     return str(_LAST_FILED.get("file") or "")
 
 
-def _run_note_location(f: dict, hidden: bool = False) -> Result:
+def _trash_nudge_line() -> str:
+    """ONE quiet line about a trash worth emptying, or "" - never a card.
+
+    The owner's ruling of 2026-11-25: the empty-trash card gains a PASSIVE
+    nudge only. `jarvis_notes_edit.trash_state` owns the three thresholds
+    (50 MB, 100 files, a file older than 90 days) and answers "" below every one
+    of them, so a small trash says nothing at all; this function never empties,
+    never raises a card and never runs twice in one reply (it is appended once,
+    at the one call site).
+    """
+    try:
+        import jarvis_notes_edit as E
+        return str(E.trash_nudge() or "").strip()
+    except Exception:                       # noqa: BLE001 - a nicety, never a rule
+        return ""
+
+
+def _note_location_words(f: dict, hidden: bool = False) -> Result:
     """Where the vault is, and where the last filed note went. Read-only, no card.
 
     The system KNOWS the configured vault root and the path it just wrote, so it
@@ -20950,6 +21144,15 @@ def _run_note_location(f: dict, hidden: bool = False) -> Result:
     return Result(
         f"Your notes live in your Obsidian vault, at {vault_text}. Quick captures "
         "go into today's daily note inside it.", "note_location")
+
+
+def _run_note_location(f: dict, hidden: bool = False) -> Result:
+    """The vault answer, plus the ONE passive trash line when it has earned it."""
+    got = _note_location_words(f, hidden)
+    line = _trash_nudge_line()
+    if line:
+        got.reply = got.reply + " " + line
+    return got
 
 
 def _run_note_alias(f: dict) -> Result:
@@ -21163,6 +21366,362 @@ def _run_note_tag(f: dict) -> Result:
         said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
         return Result(said, "note_tag_refused")
     return _note_write_result(body, "note_tagged", "note_tag_waiting", "note_tag_refused")
+
+
+def _note_merge_names(raw: str) -> list:
+    """Every way one merge sentence could name its notes, most literal first."""
+    text = str(raw or "").strip().rstrip(".!?").strip()
+    text = re.sub(r"^(?:the|my|a|an|those|these|both|all|some)\s+", "", text, flags=re.I)
+    text = _NOTE_MERGE_COUNT.sub("", text).strip()
+    text = _NOTE_NAME_TAIL.sub("", text).strip()
+    if not text:
+        return []
+    whole = [text.strip().strip('"').strip("'")]
+    parts = [p.strip().strip('"').strip("'") for p in _NOTE_MERGE_SPLIT.split(text)]
+    parts = [re.sub(r"^(?:the|my|a|an)\s+", "", p, flags=re.I).strip()
+             for p in parts if p.strip()]
+    # "Shopping note and my Ideas note" splits to "Shopping note" / "Ideas note":
+    # the noun belongs to the sentence, not to the second name.
+    parts = [(_NOTE_NAME_TAIL.sub("", p).strip() or p) for p in parts]
+    if len(parts) > 1 and all(parts):
+        return [whole, parts]
+    return [whole]
+
+
+def _note_name_only(raw: str) -> str:
+    """A note name with the sentence's own "note"/"notes" noun taken off the end.
+
+    "the top of my Shopping note" names Shopping; "delete the Warm-up section
+    from my Workout note" names Workout. A name that is ONLY that noun ("my
+    notes") is left exactly as written, so nothing is invented here.
+    """
+    text = str(raw or "").strip().strip('"').strip("'").strip()
+    bare = _NOTE_NAME_TAIL.sub("", text).strip()
+    return bare or text
+
+
+def _note_merge_tries(raw: str, at_least: int = 2) -> list:
+    """The name lists a merge sentence really names, filler words dropped.
+
+    Empty when the sentence names fewer than `at_least` notes - which is the
+    honest reading of "merge my notes" and of "merge two notes" (a question about
+    the verb, after `normalise()` has taken "can you " off the front). Returning
+    [] makes the caller ASK which notes, instead of looking for a note called
+    "my". `at_least=1` is for the "... into X" form, where ONE source note is a
+    complete request because X is the survivor.
+    """
+    out = []
+    for names in _note_merge_names(raw):
+        kept = [n for n in names if n and n.casefold() not in _NOTE_MERGE_FILLER]
+        if len(kept) >= at_least and kept not in out:
+            out.append(kept)
+    return out
+
+
+def _note_control_asking(s: str) -> Optional[Intent]:
+    """The five verbs of 2026-11-25 that had no sentence, or None.
+
+    Read BEFORE the append lane (which used to swallow "add this to the top of
+    my Shopping note" as a note called "top of my Shopping"), before the delete
+    lane (which swallowed "delete the Warm-up section from my workout log" as a
+    note called "workout section from my workout") and before the GitHub merge
+    lane (which answered "can you merge two notes" with pull-request words).
+    """
+    # --- emptying the vault's trash ---------------------------------------
+    if _NOTE_TRASH_CAPABILITY.fullmatch(s):
+        return Intent("note_empty_trash", {"ask": True})
+    if _NOTE_TRASH_EMPTY.fullmatch(s):
+        return Intent("note_empty_trash", {"ask": False})
+    # --- merging notes (never a pull request) ------------------------------
+    if _NOTE_MERGE_VERB.search(s) and not _GITHUB_MERGE_NOUN.search(s):
+        m = _NOTE_MERGE_INTO.fullmatch(s)
+        if m:
+            tries = _note_merge_tries(m.group("names"), at_least=1)
+            if tries:
+                return Intent("note_merge", {"tries": tries,
+                                             "into": _note_name_only(m.group("into"))})
+            return Intent("note_merge_ask")
+        m = _NOTE_MERGE_LIST.fullmatch(s)
+        if m:
+            tries = _note_merge_tries(m.group("names"))
+            if tries:
+                return Intent("note_merge", {"tries": tries, "into": ""})
+        # "merge my notes" and "merge two notes" name no note: ask which ones,
+        # in the note lane's own words, and never look up a note called "my".
+        if _NOTE_MERGE_ASK.fullmatch(s) or _NOTE_MERGE_INTO.fullmatch(s) \
+                or _NOTE_MERGE_LIST.fullmatch(s):
+            return Intent("note_merge_ask")
+    # --- rewriting a note's whole body -------------------------------------
+    m = _NOTE_REWRITE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        text = (m.group("text") or m.group("text2") or "").strip()
+        if name and text:
+            return Intent("note_rewrite", {"name": name, "text": text})
+    # --- copying a note ----------------------------------------------------
+    m = _NOTE_COPY.fullmatch(s)
+    if m:
+        name = m.group("name").strip()
+        if name and name.casefold() not in _NOTE_NAME_EMPTY:
+            return Intent("note_copy", {"name": name,
+                                        "as": (m.group("alias") or "").strip()})
+    # --- deleting ONE section of a note ------------------------------------
+    m = _NOTE_SECTION_DELETE.fullmatch(s)
+    if m:
+        head = m.group("head").strip()
+        name = _note_name_only(m.group("name"))
+        if head and name:
+            return Intent("note_section_delete", {"name": name, "heading": head})
+    # --- adding a line at a POSITION ---------------------------------------
+    m = _NOTE_INSERT_TOP.fullmatch(s)
+    if m:
+        text = m.group("text").strip()
+        # The position words are the VERB's, never the note's name: "the top of
+        # my Shopping note" names Shopping (2026-11-25, measured as the append
+        # lane asking "What should I add to \"top of my Shopping\"?").
+        name = _note_name_only(m.group("name"))
+        where = m.group("where").strip().lower()
+        if text and name:
+            # "bottom"/"end" is the append lane's own promise (words added at the
+            # end of the note), so it keeps that route; the front of the note is
+            # the insert route's new `top` mode.
+            if where in ("bottom", "end"):
+                return None
+            # "add this to the top of my note" has no words of its own to add:
+            # ask for them, naming the note and not the position.
+            if text.casefold() in _NOTE_PRONOUN_PAYLOAD:
+                return Intent("note_append_ask", {"name": name})
+            return Intent("note_insert", {"name": name, "mode": "top",
+                                          "target": "top", "text": text})
+    return None
+
+
+def _run_note_rewrite(f: dict) -> Result:
+    """\"rewrite my X note to say ...\" - one card, the old body's lines named."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    text = str(f.get("text") or "").strip()
+    if not name or not text:
+        return Result(NOTE_REWRITE_ASK_SAID, "note_rewrite_refused")
+    path, why, _title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_rewrite_refused")
+        return Result(why, "note_rewrite_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_rewrite_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_save({"path": path, "text": text,
+                                    "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be rewritten ({type(exc).__name__}), so "
+                      "nothing was written.", "note_rewrite_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was written.") if isinstance(body, dict) else "Nothing was written."
+        return Result(said, "note_rewrite_refused")
+    return _note_write_result(body, "note_rewritten", "note_rewrite_waiting",
+                              "note_rewrite_refused")
+
+
+def _run_note_section_delete(f: dict) -> Result:
+    """\"delete the Warm-up section from my workout log\" - one card, lines named."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    heading = str(f.get("heading") or "").strip()
+    if not name or not heading:
+        return Result(NOTE_SECTION_ASK_SAID, "note_section_refused")
+    path, why, _title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_section_refused")
+        return Result(why, "note_section_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_section_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_customize(
+            {"path": path, "action": "remove_section", "heading": heading,
+             "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The section could not be deleted ({type(exc).__name__}), so "
+                      "nothing was changed.", "note_section_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_section_refused")
+    return _note_write_result(body, "note_section_deleted", "note_section_waiting",
+                              "note_section_refused")
+
+
+def _run_note_copy(f: dict) -> Result:
+    """\"copy my X note\" - additive, so a direct owner write needs no card."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    if not name:
+        return Result('Say it as "copy my Shopping note", and I will duplicate it.',
+                      "note_copy_refused")
+    path, why, _title = _find_note(name)
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_copy_refused")
+        return Result(why, "note_copy_refused")
+    # A copy makes a NEW note, but the owner's brief for this wave asks for it
+    # CARDED, so the chat path is not "the owner writing directly in the
+    # editor": `client` says "chat", which keeps the ONE `edit_vault_note` card
+    # (its words name both files). The editor's own POST route still decides for
+    # itself - only a direct HUD write there is card-free, exactly as create is.
+    request = {"path": path, "provenance": "typed", "client": "chat"}
+    alias = str(f.get("as") or "").strip()
+    if alias:
+        request["as"] = alias
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_copy(request, by="chat", wait_s=1.5,
+                                   provenance="typed", client="chat")
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be copied ({type(exc).__name__}), so "
+                      "nothing was written.", "note_copy_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was written.") if isinstance(body, dict) else "Nothing was written."
+        return Result(said, "note_copy_refused")
+    return _note_write_result(body, "note_copied", "note_copy_waiting",
+                              "note_copy_refused")
+
+
+def _run_note_merge(f: dict) -> Result:
+    """\"merge my two Newsletter notes\" - ONE card naming the survivor and the rest."""
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    tries = [t for t in (f.get("tries") or []) if isinstance(t, list) and t]
+    if not tries:
+        return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+    into = str(f.get("into") or "").strip()
+    first_why = ""
+    for names in tries:
+        paths, why = [], ""
+        for name in names:
+            path, bad, _title = _find_note(str(name or ""))
+            if path is None:
+                if bad == "not_found":
+                    why = NOTE_NOT_FOUND_SAID.format(name=name).replace(
+                        "Nothing was written", "Nothing was merged")
+                else:
+                    why = str(bad or "").replace("so nothing was changed",
+                                                 "so nothing was merged")
+                    if "nothing was merged" not in why:
+                        why = (why.strip() + " Nothing was merged.").strip()
+                break
+            if path not in paths:
+                paths.append(path)
+        if why:
+            first_why = first_why or why
+            continue
+        # "... into my Shopping note" names the survivor, so ONE source note is
+        # a complete request; only a list with no survivor needs two names
+        # (2026-11-25: this counted the survivor's own note as a missing name,
+        # so "merge my Ideas note into my Shopping note" asked for two notes).
+        if len(paths) < 2 and not into:
+            return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+        if len(paths) - 1 > _notes_delete_max():
+            return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+        survivor = ""
+        if into:
+            survivor, bad, _title = _find_note(into)
+            if survivor is None:
+                return Result(
+                    (NOTE_NOT_FOUND_SAID.format(name=into)
+                     if bad == "not_found" else str(bad)).replace(
+                        "Nothing was written", "Nothing was merged"),
+                    "note_merge_refused")
+        if not survivor:
+            survivor = paths[0]
+        sources = [p for p in paths if p != survivor]
+        if not sources:
+            return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+        try:
+            import jarvis_notes_edit as E
+            code, out = E.handle_merge({"into": survivor, "paths": sources},
+                                       by="chat", wait_s=1.5)
+        except Exception as exc:            # noqa: BLE001
+            return Result(f"The notes could not be merged "
+                          f"({type(exc).__name__}), so nothing was merged.",
+                          "note_merge_refused")
+        if code not in (200, 202):
+            said = str((out or {}).get("error") or "Nothing was merged.") if isinstance(out, dict) else "Nothing was merged."
+            return Result(said, "note_merge_refused")
+        result = _note_write_result(out, "note_merged", "note_merge_waiting",
+                                    "note_merge_refused")
+        if getattr(result, "intent", "") == "note_merge_waiting":
+            return Result(NOTE_MERGE_WAITING_SAID.format(said=result.reply),
+                          "note_merge_waiting")
+        return result
+    return Result(first_why or NOTE_MERGE_ASK_SAID, "note_merge_refused")
+
+
+def _run_note_empty_trash(f: dict) -> Result:
+    """\"empty the vault trash\" - ONE card listing every file and its age."""
+    if f.get("ask"):
+        return Result(NOTE_TRASH_EMPTY_ASK_SAID, "note_empty_trash_ask")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_empty_trash(by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The trash could not be emptied ({type(exc).__name__}), so "
+                      "nothing was deleted.", "note_empty_trash_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was deleted.") if isinstance(body, dict) else "Nothing was deleted."
+        return Result(said, "note_empty_trash_refused")
+    if str((body or {}).get("state") or "") == "empty":
+        return Result(NOTE_TRASH_EMPTY_SAID, "note_empty_trash_empty")
+    result = _note_write_result(body, "note_trash_emptied", "note_trash_waiting",
+                                "note_empty_trash_refused")
+    if getattr(result, "intent", "") == "note_trash_waiting":
+        return Result(NOTE_MERGE_WAITING_SAID.format(said=result.reply),
+                      "note_trash_waiting")
+    return result
+
+
+def _run_note_pinned(_f: Optional[dict] = None) -> Result:
+    """Which notes carry `pinned: true` - read-only, cardless, names the notes.
+
+    `pinned` is its own frontmatter property in this project (a note can be
+    pinned and not a favourite), so this reads that flag and nothing else. It
+    reuses `jarvis_notes`' own listing machinery - `_vault_notes` applies the
+    editor's hidden-folder / "Protected from Jarvis" / in-vault rules, and
+    `_frontmatter_is_true` is the closed-YAML reader `_favourite_notes` uses -
+    and reads only each note's FIRST BYTES, never its body words. No new
+    storage, no card, no write.
+    """
+    if _notes_hidden():
+        return Result(NOTE_PINNED_HIDDEN_SAID, "note_pinned_hidden")
+    titles = []
+    try:
+        import jarvis_notes as N
+        root, why = N.vault_root()
+        if root is None:
+            return Result("The notes could not be read on this PC"
+                          + (f" ({why})" if why else "") + ".", "note_pinned")
+        rows = N._vault_notes(root)
+        for row in rows:
+            try:
+                with open(row["full"], "rb") as fh:
+                    head = fh.read(N.RESOLVE_HEAD_BYTES)
+            except OSError:                  # one unreadable note, never the list
+                continue
+            if N._frontmatter_is_true(head.decode("utf-8", "replace"),
+                                      ("pinned",)):
+                titles.append(str(row.get("title") or ""))
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result("The notes could not be read on this PC.", "note_pinned")
+    if not titles:
+        return Result(NOTE_PINNED_NONE_SAID, "note_pinned")
+    return Result("You have {0} pinned note(s): {1}.".format(
+        len(titles), "; ".join('"' + t + '"' for t in titles)), "note_pinned")
 
 
 def _run_note_rename(f: dict) -> Result:
@@ -21980,6 +22539,17 @@ def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
         return Intent("note_referral", {"alias": alias})
     if alias:
         s = command
+    # FULL NOTE CONTROL (2026-11-25): the verbs that had no sentence - rewrite a
+    # whole body, copy a note, delete one section, merge two notes, empty the
+    # vault's trash - and a POSITION phrase that must not become part of a
+    # note's name. Read HERE, before the batch/delete/append lanes below and
+    # before the GitHub lane, because each of those used to swallow one of these
+    # sentences first ("can you merge two notes" was answered in pull-request
+    # words; "add this to the top of my Shopping note" asked what to add to a
+    # note called "top of my Shopping").
+    got = _note_control_asking(s)
+    if got is not None:
+        return got
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
@@ -22849,6 +23419,12 @@ def _notes_chat(s: str) -> Optional[Intent]:
     The content questions come first, so "what do my notes say about milk" is a
     search rather than a note called "say about milk".
     """
+    # Which notes are PINNED, asked four ways (2026-11-25). It runs before every
+    # read shape below, because "show me the notes I pinned" was being read as
+    # "show me the notes [called what?]" and answered as a note read. It is a
+    # flag read: no card, no write, and with the lists hidden it names nothing.
+    if _NOTE_PINNED_LIST.fullmatch(s):
+        return Intent("note_pinned")
     m = _NOTE_WROTE.fullmatch(s) or _NOTE_SAY_ABOUT.fullmatch(s)
     if m:
         return Intent("note_read_about", {"needle": m.group(1).strip(" \"'")})
@@ -22998,7 +23574,7 @@ def _run_note_read_about(needle: str) -> Result:
     than one note. "find my notes about X" stays a SEARCH (titles only), so the
     two questions keep the two answers the product already gives them.
     """
-    want = str(needle or "").strip()
+    want = _note_search_needle(needle)
     if not want:
         return Result('What should I look for? Say "what did I write about milk".',
                       "note_read_about")
@@ -23025,7 +23601,27 @@ def _run_note_read_about(needle: str) -> Result:
     return Result(said, "note_read_about")
 
 
+#: The words a search sentence uses to POINT AT its subject instead of naming
+#: it: "find my notes about the garden" is a search for "garden", not for the
+#: literal five characters "the garden". Only the FIRST one is dropped, and only
+#: one of them, so "the day after tomorrow" searches "day after tomorrow" and a
+#: phrase that really starts with a second "the" keeps it (2026-11-25:
+#: `chat_search_notes` is a substring match, so the article made it find nothing).
+_NOTE_SEARCH_LEAD = re.compile(r"^(?:the|a|an|my|our|their)\s+", re.I)
+
+
+def _note_search_needle(raw: str) -> str:
+    """The words to search for: one leading article/possessive removed, nothing else."""
+    text = " ".join(str(raw or "").replace("\u2019", "'").split()).strip(' "')
+    text = text.strip("'").strip()
+    if not text:
+        return ""
+    stripped = _NOTE_SEARCH_LEAD.sub("", text, count=1).strip()
+    return stripped or text
+
+
 def _run_note_search(needle: str) -> Result:
+    needle = _note_search_needle(needle)
     if not str(needle or "").strip():
         return Result('What should I search your notes for? Say "search my notes '
                       'for milk".', "note_search")
@@ -32751,6 +33347,26 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_append(f)
     if n == "note_tag":
         return _run_note_tag(f)
+    # The five FULL-CONTROL verbs of 2026-11-25 that had no chat sentence, plus
+    # the pinned-note read. Every write lands on the notes editor's OWN route
+    # (one card each where a card is owed, one File Guardian copy, one Undo
+    # where an undo exists) - nothing here writes a file itself, and no name is
+    # ever guessed: each runner resolves the note through `_find_note` and
+    # refuses, naming what it looked for, when there is no such note.
+    if n == "note_rewrite":
+        return _run_note_rewrite(f)
+    if n == "note_copy":
+        return _run_note_copy(f)
+    if n == "note_section_delete":
+        return _run_note_section_delete(f)
+    if n == "note_merge":
+        return _run_note_merge(f)
+    if n == "note_merge_ask":
+        return Result(NOTE_MERGE_ASK_SAID, "note_merge_ask")
+    if n == "note_empty_trash":
+        return _run_note_empty_trash(f)
+    if n == "note_pinned":
+        return _run_note_pinned(f)
     if n == "note_rename":
         return _run_note_rename(f)
     if n == "note_move":
@@ -34024,6 +34640,12 @@ READ_ONLY_INTENTS = frozenset({
     # delete's own WAITING and DONE results are deliberately NOT here.
     "note_delete_ask", "note_delete_refused", "note_line_delete_refused",
     "obsidian_style_refused", "note_make_refused", "note_list", "note_read_about",
+    # Full note control (2026-11-25): the pinned-note READ names flags and
+    # changes nothing, and the two ASK answers ("can you merge two notes?",
+    # "can you empty the trash?") raise no card either - so none may clear what
+    # "cancel that" would undo. Every write/merge/copy/trash RESULT is
+    # deliberately absent.
+    "note_pinned", "note_merge_ask", "note_empty_trash_ask",
     # The card-free create's capability answer and the where-is-my-vault answer
     # (2026-10-31): both only read the vault setting and change nothing.
     "note_create_capability", "note_location",
