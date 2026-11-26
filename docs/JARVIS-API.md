@@ -42407,7 +42407,7 @@ zeros; and **two negative controls** that remove the new `Privacy` row from
 `jarvis_settings_registry.MODE_SETTINGS` and require the checks naming them to
 fail.
 
-## 234. The personal data removal engine: the broker directory, the carded batch sender, the reply scanner and the manual checklist (added 2026-11-26, PR 2 of 3)
+## 235. The personal data removal engine: the broker directory, the carded batch sender, the reply scanner and the manual checklist (added 2026-11-26, PR 2 of 3)
 
 The local engine the owner asked for in section 5 item 2 of the spec, in the
 same `backend/jarvis_privacy_removal.py` (Python standard library only - it now
