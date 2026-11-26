@@ -574,7 +574,7 @@ await check("the search box asks the PC to search what was SAID, and shows a sni
   await page.close();
   assert.deepEqual(titles.map((t) => t.trim()), ["Dentist on Tuesday", "Weekend plan"],
     "found by words said inside the chat, not in the title");
-  assert.match(snippet, /^Jarvis: Tuesday at 3, on Mill Road\./);
+  assert.match(snippet, /^Atlas: Tuesday at 3, on Mill Road\./);
   assert.equal(marks.trim(), "Mill");
   assert.match(text, /Nothing is saved and nothing is sent to the AI/);
   assert.match(text, /2 conversations match/);
@@ -738,7 +738,7 @@ await check("opening one shows it read-only, with where pasted, shared or clipbo
   assert.deepEqual(opened, ["c0nv-phone-0001"]);
   assert.equal(turns.length, 6);
   assert.doesNotMatch(turns[0], /pasted|shared|clipboard|typed/, "typed words were labelled");
-  assert.match(turns[1], /^Jarvis/);
+  assert.match(turns[1], /^Atlas/);
   assert.match(turns[2], /shared from another app/);
   assert.match(turns[3], /pasted/);
   assert.match(turns[4], /from clipboard/);

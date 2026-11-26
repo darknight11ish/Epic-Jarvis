@@ -41,8 +41,8 @@ object ChatFork {
     /** The button's screen-reader name after the owner's own message. */
     const val LABEL_USER = "Fork from here, after your message"
 
-    /** The button's screen-reader name after one of Jarvis's kept answers. */
-    const val LABEL_ASSISTANT = "Fork from here, after Jarvis's answer"
+    /** The button's screen-reader name after one of Atlas's kept answers. */
+    const val LABEL_ASSISTANT = "Fork from here, after Atlas's answer"
 
     /** Shown on the button while the request runs. */
     const val BUSY = "Forking…"

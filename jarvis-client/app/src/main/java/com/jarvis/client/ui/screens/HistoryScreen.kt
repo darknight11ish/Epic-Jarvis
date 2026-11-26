@@ -2480,7 +2480,7 @@ private fun Conversation(
                             support -> ChatLog.supportWho(turn.provenance)
                             chatbot -> ChatLog.chatbotWho(turn.provenance)
                             mine -> "You"
-                            else -> "Jarvis"
+                            else -> "Atlas"
                         },
                     )
                     if (support && turn.provenance == "support_company") {

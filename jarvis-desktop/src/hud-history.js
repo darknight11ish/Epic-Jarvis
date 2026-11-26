@@ -446,13 +446,15 @@ import {
    * ------------------------------------------------------------------ */
 
   /** The role word a transcript line starts with: the owner's own words are
-   *  "You", Jarvis's are "Jarvis". The PC keeps no other roles in a chat
+   *  "You", the assistant's are "Atlas" (the owner's ruling, 2026-11-18: the
+   *  product is Atlas wherever a person reads it; the PC's own role key stays
+   *  "assistant"). The PC keeps no other roles in a chat
    *  (JARVIS-API section 18); an unexpected one is its own name, never a
    *  guess at whose words they are. */
   function roleWord(role) {
     var r = norm(role);
     if (r === "user") return "You";
-    if (r === "assistant") return "Jarvis";
+    if (r === "assistant") return "Atlas";
     return r ? r.charAt(0).toUpperCase() + r.slice(1) : "Turn";
   }
 
