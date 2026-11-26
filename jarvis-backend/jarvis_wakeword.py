@@ -42,9 +42,14 @@ The model file ships beside this module (`backend/wakeword/hey_atlas.onnx`,
 wakes with the new phrase without downloading anything. `hey_jarvis` is NOT
 removed: a PC that still has `hey_jarvis_v0.1.onnx` and the old phrase set keeps
 waking exactly as before, and the shipped default stays `hey_jarvis` so nothing
-re-points itself without the owner's word. The phone keeps `hey_jarvis` only -
-docs/ARCHITECTURE.md section 8 says why (its assets and spotter would have to be
-rebuilt together, and that is not this change).
+re-points itself without the owner's word. **The phone hears it too (2026-11-25):**
+`jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx` is the same bytes,
+`OrtWakeModels.WAKE_FILE` names it, and the phone's own spotter runs the same
+front end on it, so both surfaces carry the same file and the same hash -
+`test_voice_upgrades.py` proves that rather than asserting the old absence. The
+phone's copy of openWakeWord's `hey_jarvis_v0.1.onnx` stays in the APK although
+no phone code loads it: it is this repository's only real copy of those bytes and
+the two wake-word suites build a fake PC model folder from it.
 
 The pre-trained openWakeWord files are CC BY-NC-SA 4.0 (non-commercial,
 share-alike, attribution) - allowed by rule 5, recorded in
@@ -176,14 +181,17 @@ PHRASE_MODELS = {
 }
 #: What the phrase is called on screen ("Hey Atlas").
 PHRASE_TITLES = {"hey_atlas": "Hey Atlas", "hey_jarvis": "Hey Jarvis"}
-#: The phrases this PC can run. The phone ships `hey_jarvis` only
-#: (assets/wakeword/); see docs/ARCHITECTURE.md section 8.
+#: The phrases this PC can run. Both heads are on both surfaces since
+#: 2026-11-25 - the PC downloads both and the phone's APK carries both - so
+#: this is no longer a PC-only list.
 PC_PHRASES = ("hey_atlas", "hey_jarvis")
-#: The phrases whose model the phone's APK also carries. "hey_atlas" is NOT
-#: here on purpose (2026-11-25): the phone's assets, its WAKE_FILE constant
-#: and its spotter would all have to be rebuilt together, and that was not
-#: done in the change that shipped the model. One-sided, written down.
-PHONE_PHRASES = ("hey_jarvis",)
+#: The phrases whose model the phone's APK also carries (2026-11-25): BOTH.
+#: `OrtWakeModels.WAKE_FILE` names the atlas head, so that is the one the
+#: phone's spotter actually scores; openWakeWord's jarvis head is carried for
+#: the repository's own suites and for nothing the phone runs.
+#: docs/ARCHITECTURE.md section 8 records it, and test_voice_upgrades.py
+#: asserts every pinned file is in the phone's assets with the pinned hash.
+PHONE_PHRASES = ("hey_atlas", "hey_jarvis")
 #: The phrase the shipped framework template sets. Unchanged on purpose
 #: (2026-11-25): a new phrase is switched on by the owner, never by an update.
 DEFAULT_PHRASE = "hey_jarvis"

@@ -236,7 +236,13 @@ def t_two_phrases_one_front_end():
         check("the shipped file is the one KNOWN_FILES pins, and it is in this repository",
               shipped.is_file() and W.sha256_file(shipped) == W.KNOWN_FILES["hey_atlas.onnx"]["sha256"],
               str(shipped))
-        check("the phone ships hey_jarvis only", W.PHONE_PHRASES == ("hey_jarvis",), W.PHONE_PHRASES)
+        check("the phone carries both heads, and hears the atlas one",
+              W.PHONE_PHRASES == ("hey_atlas", "hey_jarvis"), W.PHONE_PHRASES)
+        phone_atlas = ASSETS / "hey_atlas.onnx"
+        check("the phone's own copy of the atlas head is the shipped file",
+              phone_atlas.is_file()
+              and W.sha256_file(phone_atlas) == W.KNOWN_FILES["hey_atlas.onnx"]["sha256"],
+              str(phone_atlas))
 
         # The old phrase, untouched: no new file needed for it. The phrase is
         # patched rather than read, so this test answers the same on a PC

@@ -125,10 +125,10 @@ fun ReadinessScreen(
     wakeWord: WakeWord = WakeWord.UNKNOWN,
     /** A card to turn it on is waiting for the owner. */
     wakeWordPending: Boolean = false,
-    /** What this phone's own "hey Jarvis" listener is doing. */
+    /** What this phone's own "Hey Atlas" listener is doing. */
     phoneListening: WakeListen = WakeListen.Off,
     /**
-     * Opens Settings, Voice, where the switches (turn "hey Jarvis" on or off,
+     * Opens Settings, Voice, where the switches (turn "Hey Atlas" on or off,
      * Listen on this phone, interrupting, "One moment", the "I heard you"
      * sound) now are. Null hides the button.
      */

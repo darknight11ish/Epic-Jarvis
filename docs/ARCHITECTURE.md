@@ -5689,34 +5689,43 @@ what is missing is only the Settings screen agreeing about who turned it off.
   route, and the page's own pairing sheet says the rest. A blank, wildcard,
   loopback or home-network address gets the card's plain "nothing for the phone
   to reach" sentence and no picture.
-- **The "Hey Atlas" wake model is the PC's alone for now, and that is one-sided
-  on purpose** (2026-11-25; `backend/jarvis_wakeword.py`'s `PHRASE_MODELS`,
+- **The "Hey Atlas" wake model is on BOTH surfaces since 2026-11-25, and the
+  phone hears it too** (`backend/jarvis_wakeword.py`'s `PHRASE_MODELS`,
   `KNOWN_FILES` and `PHONE_PHRASES`; the owner's ruling of 2026-11-21: *"Once
   the custom Hey Atlas model passes local false-accept testing, swap the string
   in one PR"*). The owner's trained head ships in this repository at
   `backend/wakeword/hey_atlas.onnx` (215,964 bytes, SHA-256 `0DBE0AA5…`) and the
   patcher puts it beside `jarvis_wakeword.py`, so **the PC can hear "Hey Atlas"**
-  once `[voice] wake_phrase = "hey_atlas"` is set. **The phone cannot and does
-  not:** its `assets/wakeword/` holds openWakeWord's `hey_jarvis_v0.1.onnx`, its
-  `OrtWakeModels.WAKE_FILE` names that file, and its `WakeWordService` loads the
-  three assets by that constant - so giving the phone the new phrase means
-  rebuilding the assets, that constant, its licence/notice files and its spotter
-  together, then driving it on a real phone. **That was not done in this change,
-  and shipping the file into the APK without that work would be the worst of the
-  three options** (a 211 KB model no code loads, or two detectors on one screen -
-  the module's own comment forbids the second). So the phone keeps listening for
-  "hey Jarvis", its two wake sentences keep saying so on purpose, and
-  `backend/test_voice_upgrades.py` now asserts the one-sidedness explicitly: the
-  three openWakeWord files are in both apps at `v0.5.1`, `hey_atlas.onnx` is in
-  this repository and in the base, and **it is asserted ABSENT from the phone's
-  assets**. What is NOT one-sided: the phrase string itself is on both apps -
-  `Wake phrase: Hey Atlas.` is what Settings and Platform checks state, because
-  that is the product's spoken name and the model for it now ships; the line
-  under it reports what the PC is actually set to (`jarvis_wakeword.status()`
-  carries `phrase` and `title`), so a PC still on the old phrase says so rather
-  than being described wrongly. `tools/check_parity.py` has nothing to classify:
-  no route, no control and no permission changed on either side. The phone half
-  is a named follow-up, not a hidden difference.
+  once `[voice] wake_phrase = "hey_atlas"` is set. **The phone carries the same
+  bytes:** `jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx`,
+  identical SHA-256, is what `OrtWakeModels.WAKE_FILE` names, and
+  `WakeWordService` loads the assets by that constant - so the phone's own
+  spotter scores the Atlas head on openWakeWord's unchanged front end, and its
+  own wake sentences ("until it hears "Hey Atlas"", the listening notification,
+  the restart notice) now say so truthfully. `backend/test_voice_upgrades.py`
+  asserts **every** pinned file is in the phone's assets with the pinned hash
+  and that the phone loads the atlas head by name; the earlier version of this
+  note recorded the opposite (the model was the PC's alone and the test asserted
+  the file ABSENT from the phone) - that one-sidedness is closed, and the
+  decision that closes it is `decisions.d/2026-11-25-hey-atlas-reaches-the-phone.md`.
+  **Two things are deliberately not "finished" by this:** (1) the two devices
+  must agree on the phrase, because `jarvis_speech.hear()` requires the
+  transcript to start with the configured phrase's name, so a PC still on
+  `wake_phrase = "hey_jarvis"` refuses a clip the phone woke on - the PC's
+  shipped default stays `hey_jarvis` on purpose and the owner switches it; (2)
+  the phone's copy of openWakeWord's `hey_jarvis_v0.1.onnx` stays in the APK
+  although no phone code loads it - it is this repository's only real copy of
+  those bytes and the two wake-word suites build a fake PC model folder from it.
+  `tools/check_parity.py` has nothing to classify: no route, no control and no
+  permission changed on either side. **NOT measured:** no phone microphone was
+  driven, so this is the model, the asset and the code path proven by tests -
+  not a device field test, and the 0.1 false-accepts-per-hour bar is still
+  unmeasured on both devices. The wake-word row of the generated feature list
+  (`features/features.json` -> the phone's `assets/features.json`) still reads
+  "Say "Hey Jarvis"": that file is generated data pinned by SHA-256 in
+  `backend/jarvis_feature_catalogue.py` and kept byte-identical to the source by
+  `tools/check_feature_list.py`, so renaming the row is its own change to that
+  source, not this one.
 
 ## 9. Where the backend lives
 

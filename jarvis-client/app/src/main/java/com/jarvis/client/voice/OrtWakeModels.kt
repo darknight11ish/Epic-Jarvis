@@ -6,7 +6,9 @@ import ai.onnxruntime.OrtSession
 import java.nio.FloatBuffer
 
 /**
- * The three openWakeWord models, run by ONNX Runtime on this phone.
+ * The three wake-word models, run by ONNX Runtime on this phone: openWakeWord's
+ * own front end (melspectrogram and embedding) and the head that is scored on
+ * top of it.
  *
  * ONNX Runtime comes from Maven Central (`com.microsoft.onnxruntime:
  * onnxruntime-android`), pinned to 1.22.0 in build.gradle.kts on purpose:
@@ -85,7 +87,21 @@ class OrtWakeModels private constructor(
         /** The files in `assets/wakeword/`, and on the PC in `voice-models\wakeword`. */
         const val MEL_FILE = "melspectrogram.onnx"
         const val EMB_FILE = "embedding_model.onnx"
-        const val WAKE_FILE = "hey_jarvis_v0.1.onnx"
+
+        /**
+         * The owner's trained "Hey Atlas" head (2026-11-25). The first two
+         * files are openWakeWord's front end and are unchanged; only the head
+         * differs, and the PC runs the same file through the same steps
+         * (`backend/jarvis_wakeword.py`, `PHRASE_MODELS["hey_atlas"]`), so one
+         * threshold still means one thing on both. Its SHA-256 is pinned in
+         * `jarvis_wakeword.KNOWN_FILES` and checked against this copy by
+         * `backend/test_voice_upgrades.py`.
+         *
+         * `hey_jarvis_v0.1.onnx` is still in the folder: no code here loads it,
+         * but it is this repository's only real copy of openWakeWord's pinned
+         * bytes and two backend suites build a fake PC model folder from it.
+         */
+        const val WAKE_FILE = "hey_atlas.onnx"
 
         /** Throws if a model will not load; the caller says so and stops. */
         fun load(mel: ByteArray, emb: ByteArray, wake: ByteArray): OrtWakeModels {

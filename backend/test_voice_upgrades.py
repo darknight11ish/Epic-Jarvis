@@ -1092,39 +1092,39 @@ def t_real_pocket():
 # ------------------------------------------------------------ "hey Jarvis" --
 
 def t_one_file_one_hash_both_apps():
-    """One file, one hash - per surface, which is the truth since 2026-11-25.
+    """One file, one hash - on BOTH surfaces, since 2026-11-25.
 
-    The three openWakeWord files are in BOTH apps and pinned to v0.5.1. The
-    owner's "Hey Atlas" head is the PC's alone: it ships in this repository
-    (`backend/wakeword/`) and NOT in the phone's APK, because the phone's
-    assets and its spotter would have to be rebuilt together and that was not
-    done (docs/ARCHITECTURE.md section 8). This test says that out loud rather
-    than pretending the phone carries a file it does not."""
-    phone_files = ([W.MODEL_FILES["melspectrogram"], W.MODEL_FILES["embedding"]]
-                   + [W.PHRASE_MODELS[p] for p in W.PHONE_PHRASES])
-    for name in phone_files:
-        info = W.KNOWN_FILES[name]
+    Every model this project pins is in the phone's APK and behind the PC's
+    spotter: the three openWakeWord files, and the owner's trained "Hey Atlas"
+    head. The phone's own copy is
+    `jarvis-client/app/src/main/assets/wakeword/`, `OrtWakeModels.WAKE_FILE`
+    names the atlas file, and `WakeWordService` loads the assets by that
+    constant - so the phone hears the same phrase the PC does once the PC is
+    switched, with the same front end and the same threshold. This test says
+    that out loud: every pinned file must be in the phone's assets with the
+    pinned SHA-256, and the atlas head must be in this repository and in the
+    published base byte for byte. It used to assert the opposite (that the
+    atlas file was ABSENT from the phone) while the phone heard only
+    "hey Jarvis"; docs/ARCHITECTURE.md section 8 records the change."""
+    for name, info in W.KNOWN_FILES.items():
         p = ASSETS / name
         check(f"the phone's {name} is the pinned file", p.is_file() and sha(p) == info["sha256"])
-        check(f"{name}: publisher, version and licence recorded",
-              info["publisher"] and info["version"] == "v0.5.1" and "CC BY-NC-SA" in info["licence"])
+        check(f"{name}: publisher and licence recorded",
+              info["publisher"] and "CC BY-NC-SA" in info["licence"])
+    check("the phone carries both heads, and its spotter hears the atlas one",
+          W.PHONE_PHRASES == ("hey_atlas", "hey_jarvis"), W.PHONE_PHRASES)
 
-    pc_only = [n for n in W.KNOWN_FILES if n not in phone_files]
-    check("the PC has one model the phone does not carry", pc_only == ["hey_atlas.onnx"], pc_only)
-    for name in pc_only:
-        info = W.KNOWN_FILES[name]
-        here = REPO / "backend" / "wakeword" / name
-        base = REPO / "jarvis-backend" / name
-        check(f"the PC's {name} is in this repository and is the pinned file",
-              here.is_file() and sha(here) == info["sha256"], str(here))
-        check(f"{name}: the published base holds the same bytes",
-              base.is_file() and base.read_bytes() == here.read_bytes(), str(base))
-        check(f"{name}: publisher, version and licence recorded, and it is not "
-              f"passed off as openWakeWord's v0.5.1",
-              info["publisher"] and info["version"] != "v0.5.1"
-              and "CC BY-NC-SA" in info["licence"])
-        check(f"{name}: the phone's assets do NOT carry it (one-sided, said so)",
-              not (ASSETS / name).exists())
+    info = W.KNOWN_FILES["hey_atlas.onnx"]
+    here = REPO / "backend" / "wakeword" / "hey_atlas.onnx"
+    base = REPO / "jarvis-backend" / "hey_atlas.onnx"
+    check("the owner's own model is in this repository and is the pinned file",
+          here.is_file() and sha(here) == info["sha256"], str(here))
+    check("the published base holds the same bytes",
+          base.is_file() and base.read_bytes() == here.read_bytes(), str(base))
+    check("the phone's copy and the PC's copy are the same file, byte for byte",
+          (ASSETS / "hey_atlas.onnx").read_bytes() == here.read_bytes())
+    check("hey_atlas.onnx: it is NOT passed off as openWakeWord's v0.5.1",
+          info["version"] != "v0.5.1", info["version"])
 
     readme = (HERE / "README.md").read_text(encoding="utf-8")
     check("the PC's install line checks the same hashes",
@@ -1132,7 +1132,7 @@ def t_one_file_one_hash_both_apps():
     kt = (REPO / "jarvis-client/app/src/main/java/com/jarvis/client/voice/OrtWakeModels.kt"
           ).read_text(encoding="utf-8")
     check("the phone loads the pinned head by name",
-          f'WAKE_FILE = "{W.PHRASE_MODELS["hey_jarvis"]}"' in kt)
+          f'WAKE_FILE = "{W.PHRASE_MODELS["hey_atlas"]}"' in kt)
     tool = (REPO / "tools" / "train_wakeword.py").read_text(encoding="utf-8")
     check("the training tool and the PC pin the same livekit-wakeword commit",
           f'LIVEKIT_COMMIT = "{W.LIVEKIT_COMMIT}"' in tool)

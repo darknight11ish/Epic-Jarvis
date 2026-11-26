@@ -6109,8 +6109,21 @@ when `[voice] wake_phrase = "hey_atlas"`, and it **refuses to use the file at
 all** if its SHA-256 is not the one above, so a half-copied model says so
 instead of scoring nonsense. Setting `wake_phrase = "hey_jarvis"` keeps the old
 model and the old phrase working, which is what the shipped template still
-sets: nothing re-points itself without your word. The phone still ships and
-listens for `hey_jarvis` only - `docs/ARCHITECTURE.md` section 8 says why.
+sets: nothing re-points itself without your word.
+
+**The phone carries the same file too (2026-11-25):**
+`jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx` is byte for byte
+that model, `OrtWakeModels.WAKE_FILE` names it, and the phone's own spotter
+scores it on the same front end - so a phone build from this branch hears "Hey
+Atlas" and `backend/test_voice_upgrades.py` checks both copies against one
+SHA-256. **The two devices must agree on the phrase:** the PC re-reads every
+clip, `jarvis_speech.hear()` requires the transcript to start with the
+configured phrase's name, so a PC still on `wake_phrase = "hey_jarvis"` will
+refuse a clip the phone woke on. Switch the PC to `wake_phrase = "hey_atlas"`
+when the phone is updated. The phone keeps openWakeWord's `hey_jarvis_v0.1.onnx`
+in its assets although no phone code loads it: it is this repository's only real
+copy of those bytes and the two wake-word suites build a fake PC model folder
+from it.
 
 **6. Put the new code on the PC**, from this repository's folder. It copies
 in `jarvis_speech.py` and the new `jarvis_wakeword.py` (backing up older

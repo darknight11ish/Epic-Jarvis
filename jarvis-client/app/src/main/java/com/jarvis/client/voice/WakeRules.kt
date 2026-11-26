@@ -13,10 +13,10 @@ object WakeRules {
 
     /** What the listener does with the desktop's answer to a wake-word clip. */
     enum class Verdict {
-        /** "Hey Jarvis, ..." from the owner, transcribed: answered like push-to-talk. */
+        /** "Hey Atlas, ..." from the owner, transcribed: answered like push-to-talk. */
         ANSWER,
 
-        /** "Hey Jarvis." on its own: record the next sentence and send that. */
+        /** "Hey Atlas." on its own: record the next sentence and send that. */
         AWAKE,
 
         /** Not addressed to Jarvis, or not the owner: dropped without a word. */
@@ -26,7 +26,7 @@ object WakeRules {
         STOP,
 
         /**
-         * "Hey Jarvis" was heard from the owner, but the command after it was
+         * "Hey Atlas" was heard from the owner, but the command after it was
          * too short to check: show the PC's own sentence ([Heard.message]),
          * send nothing. The desktop's quickbar does the same (main.js,
          * "voice-heard"). A short clip WITHOUT the phrase could be anyone in
@@ -45,7 +45,7 @@ object WakeRules {
     }
 
     /**
-     * Whether this phone may listen for "hey Jarvis" at all. Null means yes;
+     * Whether this phone may listen for "Hey Atlas" at all. Null means yes;
      * otherwise the sentence to show.
      *
      * docs/WAKE-WORD.md §4 step 5: a wake-word capture is never made while the
@@ -55,9 +55,9 @@ object WakeRules {
      */
     fun mayListen(answered: Boolean, status: VoiceStatus): String? = when {
         !answered ->
-            "The desktop has not answered, so this phone cannot tell whether \"hey Jarvis\" is on."
+            "The desktop has not answered, so this phone cannot tell whether \"Hey Atlas\" is on."
         !status.wakeWordOn ->
-            "\"Hey Jarvis\" is off on your desktop. Turn it on first - it asks for your approval."
+            "\"Hey Atlas\" is off on your desktop. Turn it on first - it asks for your approval."
         else -> null
     }
 
@@ -69,7 +69,7 @@ object WakeRules {
     fun mayPost(answered: Boolean, status: VoiceStatus, stale: Boolean): String? =
         mayListen(answered, status)
             ?: if (stale) {
-                "Heard \"hey Jarvis\", but the link to your desktop is down, so nothing was sent."
+                "Heard \"Hey Atlas\", but the link to your desktop is down, so nothing was sent."
             } else {
                 null
             }
@@ -98,7 +98,7 @@ object WakeRules {
         enabled && pending ->
             "A card to turn it on is waiting. ${Approvals.WHERE} Nothing changes until you do."
         enabled ->
-            "The desktop did not raise an approval card, so \"hey Jarvis\" is still off. " +
+            "The desktop did not raise an approval card, so \"Hey Atlas\" is still off. " +
                 "Its settings may not allow it (change_own_config must be \"ask\")."
         else ->
             // The honest version of the failure the re-read exists for.

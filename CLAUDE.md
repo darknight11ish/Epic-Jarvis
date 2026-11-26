@@ -137,16 +137,24 @@ still forbidding "in training" / "being trained". The full evidence, the route
 that trained it and what is still unmeasured are in
 `decisions.d/2026-11-25-hey-atlas-wake-model-ships.md`.
 
-**What is left one-sided, and must stay honest.** The **phone** still ships and
-listens for openWakeWord's `hey_jarvis` only, so the sentences that describe
-*that phone's own listening* keep saying "hey jarvis" on purpose: changing them
-would be the false claim, not the fix. Its assets, `OrtWakeModels.WAKE_FILE` and
-its spotter have to be rebuilt together and driven on a real phone, and
-`docs/ARCHITECTURE.md` section 8 records why that was not done with the model.
-The **PC's** default `[voice] wake_phrase` is still `"hey_jarvis"` in the shipped
-template, so an update never re-points a working PC; "Hey Atlas" is switched on
-with `wake_phrase = "hey_atlas"`. **Do not claim the 0.1 false-accepts-per-hour
-bar is met** - it is unmeasured, and no microphone has been driven.
+**The phone hears it too, since 2026-11-25.** The APK carries the same bytes
+(`jarvis-client/app/src/main/assets/wakeword/hey_atlas.onnx`),
+`OrtWakeModels.WAKE_FILE` names that file, and the phone's own spotter scores it
+on openWakeWord's unchanged front end - so the sentences that describe *that
+phone's own listening* ("until it hears "Hey Atlas"", the listening
+notification, the restart notice) say "Hey Atlas" and are true now. The
+sentences that said "hey jarvis" **on purpose** while the phone's model was
+openWakeWord's are gone; if one comes back the copy is lying again.
+`docs/ARCHITECTURE.md` section 8 records the change and what it does not prove.
+Two things still decide the phrase, and neither has moved: the **PC's** default
+`[voice] wake_phrase` is still `"hey_jarvis"` in the shipped template, so an
+update never re-points a working PC - "Hey Atlas" is switched on with
+`wake_phrase = "hey_atlas"`, and **the PC must agree with the phone**, because
+the PC re-reads every clip and refuses one whose transcript does not start with
+its own configured phrase. **Do not claim the 0.1 false-accepts-per-hour bar is
+met** - it is unmeasured, and **no phone microphone has been driven**: the phone
+half is proven by tests (the asset, the constant, the copy), not by a device
+field test.
 
 
 ## The five rules that are not negotiable

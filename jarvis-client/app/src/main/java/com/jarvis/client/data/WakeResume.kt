@@ -1,7 +1,7 @@
 package com.jarvis.client.data
 
 /**
- * "\"Hey Jarvis\" is off since the phone restarted - tap to turn it back on."
+ * "\"Hey Atlas\" is off since the phone restarted - tap to turn it back on."
  * (the owner's choice of 2026-09-28, "Phone conveniences"; docs/JARVIS-API.md
  * section 81.1). The idea is Dicio's (GPL - the idea only, no code).
  *
@@ -23,12 +23,12 @@ object WakeResume {
     const val BOOT = "android.intent.action.BOOT_COMPLETED"
     const val UPDATED = "android.intent.action.MY_PACKAGE_REPLACED"
 
-    const val TITLE_BOOT = "\"Hey Jarvis\" is off since the phone restarted"
-    const val TITLE_UPDATED = "\"Hey Jarvis\" is off since Jarvis was updated"
+    const val TITLE_BOOT = "\"Hey Atlas\" is off since the phone restarted"
+    const val TITLE_UPDATED = "\"Hey Atlas\" is off since Jarvis was updated"
     const val TEXT = "Tap to turn it back on. Jarvis never opens the microphone by itself."
 
     /** Said on Home once listening is back on from the notification. */
-    const val BACK_ON = "Listening for \"hey Jarvis\" on this phone again."
+    const val BACK_ON = "Listening for \"Hey Atlas\" on this phone again."
 
     /**
      * Whether to post the notice after [action]. Only for a restart or an

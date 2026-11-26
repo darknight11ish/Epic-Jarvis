@@ -25,9 +25,9 @@ import com.jarvis.client.voice.MicBargeIn
 import com.jarvis.client.voice.OneMoment
 
 /**
- * "Hey Jarvis": the desktop's switch, and this phone's own listening.
+ * "Hey Atlas": the desktop's switch, and this phone's own listening.
  *
- * The "hey Jarvis" switches, in Settings, under Voice (moved from Platform
+ * The "Hey Atlas" switches, in Settings, under Voice (moved from Platform
  * checks by the settings audit of 2026-09-30, so they sit with the other voice
  * settings, as on the desktop's #voice; Checks keeps a short status card,
  * [WakeWordSummaryCard], that opens this).
@@ -146,8 +146,8 @@ internal fun WakeWordSwitchesCard(
                 WakeListen.Listening ->
                     "This phone is listening. The microphone stays open - Android shows its " +
                         "microphone dot and a notification the whole time - but nothing leaves " +
-                        "the phone until it hears \"hey Jarvis\". It also uses some battery."
-                WakeListen.Heard -> "Heard \"hey Jarvis\" - listening to what you say next."
+                        "the phone until it hears \"Hey Atlas\". It also uses some battery."
+                WakeListen.Heard -> "Heard \"Hey Atlas\" - listening to what you say next."
                 WakeListen.Paused -> "Paused while the talk button has the microphone."
                 is WakeListen.Failed -> "This phone stopped listening: ${phone.why}"
             },
@@ -185,10 +185,10 @@ internal fun WakeWordSwitchesCard(
             )
         }
 
-        // "Interrupting Jarvis": ONE setting, for "hey Jarvis" replies and
+        // "Interrupting Jarvis": ONE setting, for "Hey Atlas" replies and
         // Jarvis Live alike (the owner's answer of 2026-09-28 merged "Interrupt
         // Jarvis while it talks" and "Interrupting Jarvis in Live"). Shown
-        // whether or not "hey Jarvis" is on - it matters in Live too. This
+        // whether or not "Hey Atlas" is on - it matters in Live too. This
         // phone's own; no card either way.
         if (interrupt != null && onInterrupt != null) {
             Gap(12)
@@ -260,7 +260,7 @@ internal fun WakeWordSwitchesCard(
             )
         }
 
-        // Not tied to "hey Jarvis": it is about any spoken question, the
+        // Not tied to "Hey Atlas": it is about any spoken question, the
         // talk button's too. This phone's own switch; the desktop has its own.
         if (oneMoment != null && onOneMoment != null) {
             Gap(12)

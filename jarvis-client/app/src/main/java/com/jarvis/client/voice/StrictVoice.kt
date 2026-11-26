@@ -232,9 +232,10 @@ object StrictVoice {
      * "Better voice" (the owner's group, 2026-09-28): a second "hey Atlas"
      * detector on the PC that must agree with the first. One is the default
      * (today's behaviour, marked "(default)"); two is the stricter choice and
-     * applies at once; going back to one asks first. It checks every "hey
-     * Jarvis" clip on the PC - this phone's too - so the phone's own listener
-     * is unchanged. Two cannot be chosen while the PC does not have the
+     * applies at once; going back to one asks first. It checks every "Hey
+     * Atlas" clip on the PC - this phone's too, which hears the same phrase
+     * now. The setting changes nothing on the phone itself: one detector
+     * there, as before. Two cannot be chosen while the PC does not have the
      * second detector ([blockedWhy]).
      */
     val WAKE_CONFIRM: List<Choice> = listOf(
