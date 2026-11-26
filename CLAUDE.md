@@ -153,7 +153,13 @@ it (`decisions.d/2026-11-25-the-shipped-wake-phrase-is-hey-atlas.md`). `hey_jarv
 is still a phrase this build knows, and **an existing PC is never re-pointed** -
 the installer does not overwrite `jarvis-framework.toml`, so a PC left on
 `wake_phrase = "hey_jarvis"` keeps waking and says so in its own sentences; moving
-it is that one line. **The PC must agree with the phone**, because the PC re-reads
+it is that one line. **The desktop's copy follows the PC** (the same day's Q1/Q2
+ruling): Settings -> Voice reads the phrase from `/api/voice/status`
+(`wake.title`, else `wake.phrase`), with ONE `DEFAULT_WAKE_PHRASE` only before
+the first answer - so a PC left on `hey_jarvis` reads "Hey Jarvis" there while a
+fresh one reads "Hey Atlas", and the product's labels (the bar chip, README) and
+the phone's plates (`OrtWakeModels.WAKE_PHRASE`, one constant beside `WAKE_FILE`)
+say Atlas. **The PC must agree with the phone**, because the PC re-reads
 every clip and refuses one whose transcript does not start with its own configured
 phrase - so a PC still on the old phrase refuses a phone wake on Atlas until the
 line is changed. **Do not claim the 0.1 false-accepts-per-hour bar is
