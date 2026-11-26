@@ -2243,6 +2243,18 @@ def _match(text, now: float, conversation: Optional[str] = None,
     got = _self_accounts(s)
     if got is not None:
         return got
+    # --- one category of tools, the group list, and the other side of the
+    # switch (2026-11-26) --------------------------------------------------
+    # The owner drove "which github tools do you have", "what note tools are
+    # there", "show me the email tools", "what groups of tools do you have",
+    # "list your tools by category" and "which tools are switched off" at the
+    # live app and every one fell to the model, which has no registry to read.
+    # AFTER the GitHub self-answers on purpose: "what github tools do you have"
+    # already has its own answer there (with the cards), and "which github tools
+    # do you have" does not, so the word order decides which owner answers.
+    got = _self_tools_categories(s)
+    if got is not None:
+        return got
     # --- the two pre-push review gates (2026-11-10, wave 16E) ----------------
     # "review my branch" and "check the records before I push" are answered from
     # `jarvis_review` and never by the model: a review the model narrates is a
@@ -10253,8 +10265,17 @@ def _tool_profile(s: str) -> Optional[Intent]:
 
     None on every other sentence - which is every sentence this path did not
     answer before it existed - so the model keeps the turn.
+
+    A CATEGORY question is not one tool's dossier (2026-11-26): "what can the
+    files tools do" was read here as a question about `my_files` (the word
+    "files" is in its name), so the group question never got the group answer.
+    `_self_tools_categories` is asked first; when it claims the sentence this
+    lane declines and the later category answer owns it. The singular "what does
+    the calculator tool do" matches neither category shape and keeps this lane.
     """
     if not _TOOL_SAID.search(s or ""):
+        return None
+    if _self_tools_categories(s) is not None:
         return None
     subject = _tool_ask(s)
     if subject is None:
@@ -26934,6 +26955,70 @@ def _tool_area_rows(names) -> list:
     return rows
 
 
+def _tool_rows_text(names, on, *, heading: bool = True) -> str:
+    """The grouped bullet blocks every tool-list answer shares.
+
+    One `- <label> — on|off` line per tool, under a plain `Area:` heading, an
+    empty line between areas - the shape the owner asked for and the one the
+    chat pane draws (it keeps line breaks). `on` is the set of switched-on
+    names, or None when the settings file could not be read (then no mark is
+    printed at all, because a guess is worse than a blank). `heading=False`
+    prints the same bullets with no area line, for a caller that already says
+    the subject once (the settings answer's two halves).
+    """
+    blocks = []
+    for area, area_names in _tool_area_rows(names):
+        lines = [area + ":"] if heading else []
+        if on is None:
+            lines += [f"- {_tool_label(n)}" for n in area_names]
+        else:
+            lines += [f"- {_tool_label(n)} — {'on' if n in on else 'off'}"
+                      for n in area_names]
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def _read_tool_inventory():
+    """`jarvis_self_portrait.tool_inventory()`, or the suite fixture.
+
+    One reader for every tool-list answer, so the count answer, the full list,
+    a category list and the switched-off list cannot read two different
+    inventories. `_MEASURED_FIXTURE["tools"]` is the suite's seam; production
+    never sets it.
+    """
+    if _MEASURED_FIXTURE is not None and _MEASURED_FIXTURE.get("tools") is not None:
+        return dict(_MEASURED_FIXTURE["tools"])
+    try:
+        import jarvis_self_portrait as SP
+        return SP.tool_inventory()
+    except Exception:                       # noqa: BLE001 - older PC
+        return None
+
+
+def _inventory_names(inv) -> list:
+    """Every registered tool name, from an inventory dict, or []."""
+    if not isinstance(inv, dict):
+        return []
+    return [str(n) for n in (inv.get("all_names") or inv.get("registered_names") or ())
+            if str(n or "").strip()]
+
+
+def _inventory_on(inv):
+    """The set of switched-on names, or None when the file could not be read.
+
+    `enabled` is a COUNT and `enabled_names` is the NAMES; a count with no names
+    is not a usable read either, so it answers None rather than marking every
+    tool off (which would be a guess).
+    """
+    if not isinstance(inv, dict) or inv.get("enabled") is None:
+        return None
+    offered = [str(n) for n in (inv.get("enabled_names") or ())
+               if str(n or "").strip()]
+    if not offered and inv.get("enabled"):
+        return None
+    return set(offered)
+
+
 def _run_tools_list_all(intent: Intent) -> Result:
     """"List all of your tools" - the COMPLETE inventory, one tool per line.
 
@@ -26954,40 +27039,25 @@ def _run_tools_list_all(intent: Intent) -> Result:
     reads, so a test can pin the names and the on/off split without depending on
     tonight's settings file. Production never sets it.
     """
-    inv = None
-    if _MEASURED_FIXTURE is not None and _MEASURED_FIXTURE.get("tools") is not None:
-        inv = dict(_MEASURED_FIXTURE["tools"])
+    inv = _read_tool_inventory()
     if inv is None:
-        try:
-            import jarvis_self_portrait as SP
-            inv = SP.tool_inventory()
-        except Exception:                   # noqa: BLE001 - older PC
-            return Result(SELF_TOOLS_MISSING, intent.name)
+        return Result(SELF_TOOLS_MISSING, intent.name)
     registered = inv.get("registered")
     if not isinstance(registered, int):
         return Result(SELF_TOOLS_MISSING, intent.name)
-    names = [str(n) for n in (inv.get("all_names") or inv.get("registered_names") or ())
-             if str(n or "").strip()]
+    names = _inventory_names(inv)
     if not names:
         return Result(
             f"I have {registered} tools built in, but I cannot read their names "
             f"on this PC just now - so I will not pretend to list them.",
             intent.name)
-    enabled = inv.get("enabled")
-    offered = [str(n) for n in (inv.get("enabled_names") or ())
-               if str(n or "").strip()]
-    on = None
-    if enabled is not None and (offered or not enabled):
-        # `enabled` is a COUNT and `offered` is the NAMES. A count with no names
-        # is not a usable read either, so it is said rather than marking every
-        # tool off - which would be a guess.
-        on = set(offered)
+    on = _inventory_on(inv)
     total = len(names)
     missing = max(0, registered - total)
     said = []
     if on is None:
-        why = ("the settings file did not answer" if enabled is None else
-               "the settings file gave a count but not the names")
+        why = ("the settings file did not answer" if inv.get("enabled") is None
+               else "the settings file gave a count but not the names")
         said.append(f"{registered} tools built in. I cannot read which of them "
                     f"are switched on - {why}, so no tool below is marked on or "
                     f"off and I will not guess.")
@@ -27002,19 +27072,348 @@ def _run_tools_list_all(intent: Intent) -> Result:
         said.append(f"The registry names {total} of them; the other {missing} "
                     f"could not be read, so they are missing from the list below "
                     f"- not switched off.")
-    blocks = []
-    for area, area_names in _tool_area_rows(names):
-        lines = [area + ":"]
-        if on is None:
-            lines += [f"- {_tool_label(n)}" for n in area_names]
-        else:
-            lines += [f"- {_tool_label(n)} — {'on' if n in on else 'off'}"
-                      for n in area_names]
-        blocks.append("\n".join(lines))
-    said.append("\n\n".join(blocks))
+    said.append(_tool_rows_text(names, on))
     if on is not None:
         said.append(f"That is all {registered} - nothing is left off the list. "
                     f"The switches are in Settings, \"What asks first\".")
+    return Result("\n\n".join(said), intent.name)
+
+
+# --------------------------------------------------------------------------
+#   One category of tools, the other side of the switch, and the group list
+#   (2026-11-26, the owner's follow-up)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED GAP. The owner drove these at the live app and every one fell to
+# the model: "which github tools do you have", "what note tools are there",
+# "show me the email tools", "what groups of tools do you have", "list your
+# tools by category", "which tools are switched off", "which tools work on
+# notes". The model has no tool registry to read, so the answers were guesses.
+#
+# WHERE THE GROUPS COME FROM. Not a second list. The AREAS are the ones
+# `_tool_area_rows` already builds from `jarvis_agent.CORE_TOOLS` and
+# `jarvis_agent.TOOL_GROUPS` - the tool registry's own grouping, which
+# `test_short_tool_list.py` already forces to hold every tool in exactly one
+# group or the core, so the categories partition all 90 by construction. Only
+# the owner's WORDS are typed here (`_TOOL_CATEGORY_WORDS`), because a word list
+# is exactly what an alias table is for and no registry owns "vault" meaning
+# notes. The alternatives were checked and are worse for this question:
+# `jarvis_asks_first.TOOL_GROUPS` are the Settings switch panels (8 groups, 43
+# of them under "Jarvis's own tools", and 6 tools in no panel at all), so
+# "which github tools" would answer with forty-three unrelated tools;
+# `jarvis_tool_profiles.FAMILIES` is a real partition but keeps GitHub inside
+# "coding" (24 tools), so the same question would list shell_exec and the
+# Android builder. Both are still read here for what they own - the profiles'
+# labels are the tool labels this answer prints.
+
+#: (the area(s) the word means, the owner's words for it). An empty area tuple
+#: is a real answer, not a bug: there is no pictures/audio TOOL in the registry,
+#: and the honest answer to "what photo tools do you have" is "none", with the
+#: nearest file tool named - never a guess and never a silent nothing.
+_TOOL_CATEGORY_WORDS = (
+    (("Notes",),
+     ("note", "notes", "vault", "vaults", "obsidian", "logseq", "joplin")),
+    (("GitHub",),
+     ("github", "repo", "repos", "repository", "repositories", "pull request",
+      "pull requests", "pr", "prs", "issue", "issues")),
+    (("Email",), ("email", "emails", "mail", "gmail", "inbox")),
+    (("Calendar",), ("calendar", "calendars", "diary", "schedule", "schedules")),
+    (("Files and documents",),
+     ("file", "files", "document", "documents", "folder", "folders")),
+    ((), ("picture", "pictures", "photo", "photos", "screenshot", "screenshots",
+          "image", "images", "media", "audio")),
+    (("The web",), ("web", "search", "browser", "internet", "online")),
+    (("Memory",), ("memory", "memories", "remember", "fact", "facts")),
+    (("Settings",), ("setting", "settings", "config", "configuration",
+                     "preference", "preferences")),
+    (("Phone and messages",),
+     ("phone", "phones", "android", "mobile", "sms", "text", "texts",
+      "text message", "text messages")),
+    # "system" is two areas on purpose: the PC tools are the files/document
+    # readers and the program/phone controllers, and neither alone is "system".
+    (("Files and documents", "Controlling your PC and phone"),
+     ("system", "systems", "pc", "pcs", "computer", "computers", "windows",
+      "desktop")),
+)
+
+#: word -> the areas it means, and the one alternation the patterns share.
+_TOOL_CATEGORY_AREAS = {word: areas
+                        for areas, words in _TOOL_CATEGORY_WORDS
+                        for word in words}
+_TOOL_CATEGORY_ALT = "|".join(re.escape(w) for _areas, words
+                              in _TOOL_CATEGORY_WORDS for w in words)
+
+#: The whole-sentence shapes that name ONE category. `fullmatch` only, so "the
+#: email tools broke this morning" is not claimed. Each pattern names the group
+#: word as `area`, read back through `_TOOL_CATEGORY_AREAS`.
+_TOOL_CATEGORY_PATTERNS = tuple(re.compile(p) for p in (
+    # "which github tools do you have" / "what note tools are there"
+    r"(?:which|what)\s+(?:of\s+your\s+|of\s+the\s+|the\s+|your\s+)?"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
+    r"(?:tools?|functions?|abilities?)"
+    r"(?:\s+(?:do|does)\s+(?:you|jarvis)\s+(?:have|got))?"
+    r"(?:\s+(?:are|is)\s+there)?\s*\??$",
+    # "show me the email tools" / "list the github tools"
+    r"(?:show|list)\s+(?:me\s+)?(?:all\s+(?:of\s+)?)?(?:the|your)\s+"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+(?:tools?|functions?|abilities?)"
+    r"\s*\??$",
+    # "the calendar tools"
+    r"the\s+(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
+    r"(?:tools?|functions?|abilities?)\s*\??$",
+    # "what can the files tools do"
+    r"(?:what\s+can|what\s+do)\s+(?:the|your|my)\s+"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s+"
+    r"(?:tools?|functions?|abilities?)\s+(?:do|have)\s*\??$",
+    # "which tools work on notes"
+    r"which\s+(?:tools?|functions?)\s+(?:work|works|are\s+used)\s+"
+    r"(?:on|for|with)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?P<area>" + _TOOL_CATEGORY_ALT + r")\s*\??$",
+))
+
+#: "what groups of tools do you have" / "list your tools by category"
+_TOOLS_CATEGORIES = re.compile(
+    r"(?:what|which)\s+groups?\s+of\s+(?:your\s+|the\s+)?tools\s+"
+    r"(?:do\s+you\s+have|are\s+there|have\s+you\s+got)\s*\??$"
+    r"|(?:what|which)\s+(?:categories|groups|areas)\s+of\s+tools\s+"
+    r"(?:do\s+you\s+have|are\s+there)\s*\??$"
+    r"|list\s+(?:all\s+(?:of\s+)?)?(?:your\s+|the\s+)?tools\s+by\s+"
+    r"(?:category|categories|group|groups|area|areas)\s*\??$")
+
+#: "which tools are switched off" - the question you ask when one is missing
+_TOOLS_SWITCHED_OFF = re.compile(
+    r"(?:which|what)\s+(?:of\s+your\s+)?(?:tools?|functions?)\s+"
+    r"(?:are|is)\s+(?:switched\s+off|turned\s+off|off|disabled|not\s+on)\s*\??$"
+    r"|(?:which|what)\s+tools?\s+(?:have|has)\s+(?:you|jarvis)\s+"
+    r"(?:switched|turned)\s+off\s*\??$"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:tools?|functions?)\s+"
+    r"(?:that|which)\s+(?:are\s+)?(?:switched\s+off|off|disabled)\s*\??$")
+
+#: "what tools can change my settings" - the ATTRIBUTE form. It is answered
+#: from the settings area (see `_run_tools_settings`), whose own group
+#: description is "change one of Jarvis's own settings".
+_TOOLS_SETTINGS_CHANGERS = re.compile(
+    r"(?:what|which)\s+(?:of\s+your\s+)?tools?\s+(?:can|could)\s+"
+    r"(?:change|edit|modify|alter)\s+(?:my|your|the)\s+"
+    r"(?:settings?|config|configuration|preferences?)\s*\??$"
+    r"|(?:what|which)\s+(?:of\s+your\s+)?tools?\s+(?:change|edit|modify)\s+"
+    r"(?:my|your)\s+settings?\s*\??$"
+    r"|which\s+(?:tools?|functions?)\s+change\s+(?:a|one\s+of\s+my)\s+"
+    r"settings?\s*\??$")
+
+
+def _self_tools_categories(s: str) -> Optional[Intent]:
+    """The category / group-list / switched-off / settings-attribute questions.
+
+    Called from `_match` AFTER the GitHub self-answers, so "what github tools do
+    you have" keeps the answer it has always had (`github_self`, which lists the
+    GitHub tools with their cards); "which github tools do you have" is not
+    claimed there and reaches `tools_in_category` here. Every branch returns a
+    whole-sentence intent or None - a near miss still goes to the model.
+    """
+    if _TOOLS_SETTINGS_CHANGERS.fullmatch(s):
+        return Intent("tools_settings")
+    if _TOOLS_CATEGORIES.fullmatch(s):
+        return Intent("tools_categories")
+    if _TOOLS_SWITCHED_OFF.fullmatch(s):
+        return Intent("tools_switched_off")
+    for pattern in _TOOL_CATEGORY_PATTERNS:
+        m = pattern.fullmatch(s)
+        if m is not None:
+            word = " ".join(str(m.group("area") or "").split())
+            return Intent("tools_in_category",
+                          {"areas": list(_TOOL_CATEGORY_AREAS.get(word) or ()),
+                           "words": word})
+    return None
+
+
+def _category_names(rows, areas) -> list:
+    """Every tool in the named areas, in the areas' own order."""
+    wanted = set(areas)
+    names = []
+    for area, area_names in rows:
+        if area in wanted:
+            names += area_names
+    return names
+
+
+def _run_tools_in_category(intent: Intent) -> Result:
+    """"Which github tools do you have?" - one group, same bullet shape.
+
+    The count line is the group's own count ("20 tools in GitHub, 5 switched
+    on"), and the body is `_tool_rows_text`, the same renderer the all-90 list
+    uses, so the two cannot drift. A word that names NO area (pictures, photos,
+    audio) is answered honestly with the nearest file tool - there is no
+    picture tool in the registry, and saying so is the answer.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    rows = _tool_area_rows(names)
+    areas = [str(a) for a in (intent.f.get("areas") or ())]
+    if not areas:
+        # A real, honest empty answer. The nearest TOOL is read from the
+        # registry, not typed: send_file_to_phone is the one tool that can carry
+        # a picture (it sends one file), and it is only named if it is there.
+        near = [n for n in names if n == "send_file_to_phone"]
+        tail = (f" The nearest is {_tool_label(near[0])}, which sends one file "
+                f"from your PC to your phone." if near else "")
+        return Result(
+            f"I have no built-in tool for pictures, photos, screenshots or "
+            f"audio - nothing in my tool list does that.{tail} Say \"list the "
+            f"files tools\" for the file tools I do have.",
+            intent.name)
+    wanted = _category_names(rows, areas)
+    on = _inventory_on(inv)
+    where = areas[0] if len(areas) == 1 else "these groups"
+    said = []
+    if on is None:
+        said.append(f"{len(wanted)} tools in {where} built in. I cannot read "
+                    f"which are switched on - the settings file did not answer, "
+                    f"so no tool below is marked on or off.")
+    else:
+        switched = sum(1 for n in wanted if n in on)
+        said.append(f"{len(wanted)} tools in {where}, {switched} switched on.")
+    said.append(_tool_rows_text(wanted, on))
+    if on is not None:
+        said.append(f"That is all {len(wanted)} in {where} - nothing is left "
+                    f"off. Say \"list all of your tools\" for the whole list.")
+    return Result("\n\n".join(said), intent.name)
+
+
+def _run_tools_categories(intent: Intent) -> Result:
+    """"What groups of tools do you have?" - every area, its count, its on count.
+
+    Read from the same partition the all-90 list renders, so the groups and the
+    tools under them cannot disagree. Each line is a `- ` bullet like the tool
+    lines, and the closing sentence says how to reach either side.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    on = _inventory_on(inv)
+    rows = _tool_area_rows(names)
+    said = []
+    if on is None:
+        said.append(f"{len(rows)} groups of tools, {len(names)} built in. I "
+                    f"cannot read which are switched on - the settings file did "
+                    f"not answer, so no group shows an on count.")
+    else:
+        switched = sum(1 for n in names if n in on)
+        said.append(f"{len(rows)} groups of tools, {len(names)} built in, "
+                    f"{switched} switched on.")
+    lines = []
+    for area, area_names in rows:
+        n = len(area_names)
+        on_n = (sum(1 for t in area_names if t in on) if on is not None else None)
+        lines.append(f"- {area}: {n} tool{'' if n == 1 else 's'}"
+                     + ("" if on_n is None else f" ({on_n} on)"))
+    said.append("\n".join(lines))
+    said.append("Say \"list the GitHub tools\" for one group, or \"list all of "
+                "your tools\" for every tool with its own on or off mark.")
+    return Result("\n\n".join(said), intent.name)
+
+
+def _run_tools_switched_off(intent: Intent) -> Result:
+    """"Which tools are switched off?" - the complement, and the count.
+
+    The enabled set is the same read the count answer makes; the complement is
+    computed from the registry's own names, never from a typed list. If the
+    settings file cannot be read the answer says that instead of inventing an
+    off set.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    on = _inventory_on(inv)
+    if on is None:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read which of "
+            f"them are switched off - the settings file did not answer, so I "
+            f"will not guess at the list.", intent.name)
+    off = [n for n in names if n not in on]
+    switched = sum(1 for n in names if n in on)
+    said = [f"{len(off)} of my {registered} built-in tools are switched off; "
+            f"{switched} are switched on."]
+    if not off:
+        said = [f"None - every one of my {registered} built-in tools is switched "
+                f"on in your settings file."]
+    else:
+        said.append(_tool_rows_text(off, on))
+        said.append(f"That is all {len(off)} switched-off tools, nothing left "
+                    f"out. Say \"list all of your tools\" for the whole list with "
+                    f"both marks.")
+    return Result("\n\n".join(said), intent.name)
+
+
+def _run_tools_settings(intent: Intent) -> Result:
+    """"What tools can change my settings?" - the settings group, split honestly.
+
+    The ATTRIBUTE is read from the registry's own words, not from a second list:
+    a tool whose plain label says "(read-only)" cannot change anything, and every
+    tool in the settings group whose label does not say that has a card or a
+    write path. The group itself is `jarvis_agent.TOOL_GROUPS`' "settings" group
+    - the table whose own description is "change one of Jarvis's own settings".
+    The gate's `risk_for` cannot help here: it has no "read-only" tier (a read
+    is simply unclassified), so a gate-based split would need a hand-written
+    action list, which the rule against second lists forbids.
+    """
+    inv = _read_tool_inventory()
+    if inv is None:
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = _inventory_names(inv)
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    rows = _tool_area_rows(names)
+    settings = _category_names(rows, ("Settings",))
+    if not settings:
+        return Result("I have no tools for my own settings in this build.",
+                      intent.name)
+    changers = [n for n in settings if "read-only" not in _tool_label(n).lower()]
+    readers = [n for n in settings if n not in changers]
+    on = _inventory_on(inv)
+    said = [f"{len(changers)} of my {len(settings)} tools about my own settings "
+            f"can change one; the other {len(readers)} only read them."]
+    if changers:
+        said.append("Can change one:\n" + _tool_rows_text(changers, on,
+                                                         heading=False))
+    if readers:
+        said.append("Only read them:\n" + _tool_rows_text(readers, on,
+                                                          heading=False))
+    said.append("The switches are in Settings, \"What asks first\". Say \"list "
+                "the settings tools\" for all of them with their marks.")
     return Result("\n\n".join(said), intent.name)
 
 
@@ -33389,6 +33788,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_tools_inventory(intent)
     if n == "tools_list_all":
         return _run_tools_list_all(intent)
+    if n == "tools_in_category":
+        return _run_tools_in_category(intent)
+    if n == "tools_categories":
+        return _run_tools_categories(intent)
+    if n == "tools_switched_off":
+        return _run_tools_switched_off(intent)
+    if n == "tools_settings":
+        return _run_tools_settings(intent)
     if n == "tools_asking":
         return _run_tools_asking(intent)
     if n == "connected_list":
@@ -34367,6 +34774,11 @@ READ_ONLY_INTENTS = frozenset({
     # nothing, raises no card and calls no model, so it may not take back what
     # "cancel that" would undo.
     "tools_list_all",
+    # The category, group-list, switched-off and settings-attribute answers
+    # (2026-11-26): every one reads the same registry, the same partition and
+    # the same settings file, writes nothing and raises no card.
+    "tools_in_category", "tools_categories", "tools_switched_off",
+    "tools_settings",
     # The model-conversation reads (2026-11-08): all-preset models, per-preset
     # advice, the model history, and how to start a benchmark - every one reads
     # this PC's own rows and changes nothing, so none may clear "cancel that".
