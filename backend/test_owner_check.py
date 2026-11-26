@@ -1680,24 +1680,26 @@ def t_the_gate_believes_no_approved_row_without_a_stamp():
     # A branch is the line AND the body under it. The stand-in is a walk of
     # fragments, and a hunk that has to invent its pre-image leaves that
     # pre-image's own trailing CONTEXT line as the last line of the fragment:
-    # no-expiry-cards.patch's check() hunk was regenerated on 2026-10-28 with
+    # `no-expiry-cards.patch`'s check() hunk was regenerated on 2026-10-28 with
     # its full three-line trailing context, which ends on
-    # `if row["state"] == "approved":`, so the walk pastes a copy of that line
+    # `if row["state"] == "approved":`, so the walk pasted a copy of that line
     # immediately above `pending()`'s fragment. That copy opens no body - the
     # next line is a "# gap" marker - so it is not one of the gate's branches
     # and counting it was the 2026-10-28 CI failure.
     #
-    # THERE ARE THREE REAL ONES SINCE `no-deadline-cards.patch` (2026-10-28):
-    # the answer that lands during the wait, the one the prompt's watcher
-    # catches as the wait ends, and - new with that patch - the one that lands
-    # in the gap AFTER the wait, where the old code marked the row `expired`.
-    # The card has no deadline now, so an answer that late is still this
-    # request's to honour; all three must ask for the stamp, and the two late
-    # ones are the two that can record a "yes" once the loop has ended.
+    # TWO REAL ONES (2026-11-26). The three-branch shape came from the stack:
+    # `no-deadline-cards.patch` added a third approved branch, and it was
+    # retired into the published base that day, so the walk no longer writes
+    # either late branch. The base itself has exactly TWO approved guards (the
+    # answer that lands during the wait, and the late-answer block, which
+    # carries the watcher's and the post-wait gap's returns), and both must ask
+    # for the stamp. `t_the_gate_believes_no_approved_row_without_a_stamp` is
+    # about the stamping patch's content in the stand-in; the base's own
+    # branches are covered by backend/test_gate_no_deadline.py.
     branches = [i for i, l in enumerate(lines)
                 if re.search(r'row\["state"\] == "approved"', l)
                 and i + 1 < len(lines) and not lines[i + 1].startswith(_stack.GAP)]
-    check("all three of the gate's approved branches are there", len(branches) == 3, branches)
+    check("both of the gate's approved branches are there", len(branches) == 2, branches)
     late = []
     for i in branches:
         after = "\n".join(lines[i + 1:i + 6])
@@ -1706,7 +1708,7 @@ def t_the_gate_believes_no_approved_row_without_a_stamp():
               and after.find("_approval_stamped") < after.find('_audit("gate.approved"'), after)
         if '"late": True' in after:
             late.append(i + 1)
-    check("two of the three are the late-decision branches", len(late) == 2, late)
+    check("one of the two is the late-decision branch", len(late) == 1, late)
 
     ns = {"_audit": lambda *a, **k: ns.setdefault("audits", []).append(a)}
 

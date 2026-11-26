@@ -2,16 +2,19 @@
 
     python3 test_gate_no_expiry.py
 
-THIS SUITE IS ABOUT ITS PATCH IN ISOLATION, AND THE STACK SUPERSEDED PART OF IT
-(2026-10-28). The owner's later ruling - "if there doesn't need to be a time
-limit don't have one" - is carried by `no-deadline-cards.patch`, which is
-applied AFTER this one: no card has a deadline any more, and a routine card is
-no longer ended at fifteen minutes with its row 'expired'. What this file
-still proves, and should, is that `no-expiry-cards.patch` applies to the
-published base and does exactly what its own record says - which is the
-footing the next patch is written against. The SHIPPED behaviour (a card that
-outlives its request, and a late yes refused with the reason) is proven by
-`backend/test_gate_no_deadline.py`, which applies both patches.
+THIS SUITE IS ABOUT A CHANGE THAT IS NOW THE PUBLISHED BASE'S OWN (2026-11-26).
+`no-expiry-cards.patch` used to carry it; the base now carries it, so this
+suite copies `jarvis-backend/jarvis_gate.py` and drives it directly. The
+owner's later ruling - "if there doesn't need to be a time limit don't have
+one" - is ALSO base content now (`no-deadline-cards.patch` was retired with
+it): no card has a deadline any more, and a routine card's REQUEST keeps the
+fifteen-minute window while the card itself is swept, not refused, when the
+request stops waiting. What this file still proves, and should, is that the
+base names exactly the four ceremony actions in `APPROVAL_NEVER_EXPIRES`, that
+nothing else can reach the set, and that an exempt card still behaves as a
+card. The full shipped life (the sweep, the late yes, the timer) is proven by
+`backend/test_gate_no_deadline.py` and `backend/test_gate_card_timer.py`,
+which drive the same base.
 
 WHY THIS EXISTS, AND WHY IT IS NARROW
 
@@ -42,12 +45,12 @@ So this suite proves FOUR things, and the file is organised around them:
      ordinary 900-second card. There is no "flow" argument to forge and no
      caller-supplied value that reaches the set; a caller's own `timeout=`
      still wins over it, in the safe (shorter) direction.
-  4. t_the_patch_is_the_base_plus_this_change
-     The suite's own footing: `no-expiry-cards.patch` applies to the published
-     base with `git apply` (no fuzz), produces a different, complete,
-     compilable module, that module is anchored on #378's 900 seconds, and the
-     patch touches only `jarvis_gate.py` - never a second copy of a module the
-     repository ships whole.
+  4. t_the_base_already_carries_this_change
+     The suite's own footing: since 2026-11-26 the published base itself
+     carries the change, so the file this suite copies is checked for the
+     four-name `APPROVAL_NEVER_EXPIRES` set and the 2026-10-28 machinery, it
+     compiles, it is anchored on #378's 900 seconds, and the gate is a
+     base-only file - there is no `backend/jarvis_gate.py` twin.
 
 The other tests here are the supporting half: a card with no deadline can
 still be approved, denied and withdrawn; the start-up sweep does not age it
@@ -67,14 +70,13 @@ were live.
 HOW THE GATE IS LOADED. `jarvis_gate.py` is the owner's file; this repository
 holds the published base in `jarvis-backend/` (see jarvis-backend/README.md
 and backend/test_base_matches_repo.py). This suite copies that base into a
-scratch folder and applies `no-expiry-cards.patch` to it with `git apply`, so
-what it exercises is the patch's real output on the file the patch is
-published against - not a copy typed to suit the test. The two SHIPPED
-modules it uses (`jarvis_owner_check.py`, `jarvis_devices.py`) are the
-repository's own copies, and the twin check proves the base's copies are
-byte-identical to them.
+scratch folder and drives it directly: since 2026-11-26 the base carries the
+no-expiry change itself, so no patch file is applied and `git` is not needed.
+The two SHIPPED modules it uses (`jarvis_owner_check.py`,
+`jarvis_devices.py`) are the repository's own copies, and the twin check
+proves the base's copies are byte-identical to them.
 
-Needs nothing from the owner's PC and no network. Runs anywhere git does.
+Needs nothing from the owner's PC and no network.
 """
 from __future__ import annotations
 
@@ -98,7 +100,6 @@ sys.path.insert(0, str(HERE))
 import _gitapply  # noqa: E402  (beside this file; its docstring says why)
 from _where import REPO  # noqa: E402
 
-PATCH = HERE / "no-expiry-cards.patch"
 BASE = REPO / "jarvis-backend"
 BACKEND = REPO / "backend"
 TOML = BASE / "jarvis-framework.toml"
@@ -162,20 +163,14 @@ ROUTINE = (
 
 
 def built() -> tuple:
-    """(folder holding the patched gate and the two SHIPPED copies, why not).
+    """(folder holding the base gate and the two SHIPPED copies, why not).
 
-    The base is read from THIS CHECKOUT's `jarvis-backend/` - the file
-    `no-expiry-cards.patch` is published against. `git apply` is used rather
-    than a text substitution so a patch whose context no longer matches the
-    base fails here instead of passing on a hand-made copy.
+    The base is read from THIS CHECKOUT's `jarvis-backend/` and copied as it
+    is: since 2026-11-26 it carries the no-expiry change itself, so no patch
+    is applied and `git` is not needed.
     """
     if "dir" in _BUILT:
         return _BUILT["dir"], ""
-    git = shutil.which("git")
-    if not git:
-        return None, "git is not installed, so the patch cannot be applied"
-    if not PATCH.is_file():
-        return None, f"{PATCH.name} is missing"
     base_gate = BASE / "jarvis_gate.py"
     if not base_gate.is_file():
         return None, f"{base_gate} is missing"
@@ -183,20 +178,13 @@ def built() -> tuple:
     d.joinpath("jarvis_gate.py").write_bytes(
         base_gate.read_bytes().replace(b"\r\n", b"\n"))
     # The two SHIPPED modules: this repository's own copies, which the base
-    # twins must equal (test_the_patch_... checks that, and
+    # twins must equal (test_the_base_... checks that, and
     # tools/check_stale_twins.py checks it in a second at the desk).
     for name in ("jarvis_owner_check.py", "jarvis_devices.py"):
         src = BACKEND / name
         if not src.is_file():
             return None, f"{src} is missing"
         d.joinpath(name).write_bytes(src.read_bytes().replace(b"\r\n", b"\n"))
-    env = _gitapply.env_for(git, d)
-    r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
-                        "apply", str(PATCH)], cwd=str(d), capture_output=True,
-                       text=True, env=env)
-    if r.returncode != 0:
-        return None, (f"git apply refused {PATCH.name}: "
-                      f"{(r.stderr or r.stdout).strip().splitlines()[:2]}")
     _BUILT["dir"] = d
     return d, ""
 
@@ -376,7 +364,15 @@ def t_an_ordinary_session_still_expires_after_fifteen_minutes():
         check("...as 'timed_out' - nobody answered, nobody decided",
               v is not None and v.outcome == "timed_out",
               v.outcome if v is not None else box.get("error"))
-        check("...and its row is 'expired', exactly as before this change",
+        check("...and its row is left for the read-time sweep, not expired by a clock",
+              state_of(G, row["id"]) == "pending", state_of(G, row["id"]))
+        # 2026-10-28's model, now the base's: the card has no deadline of its
+        # own, so the request ending does not mark the row; the next read after
+        # the 60-second grace is what settles it (the same sweep #965 added).
+        clock.advance(61)
+        check("...and the next read after the grace takes the card off the queue",
+              row["id"] not in [r["id"] for r in G.pending()])
+        check("...and the row is 'expired' - a lapse, not a decision",
               state_of(G, row["id"]) == "expired", state_of(G, row["id"]))
 
 
@@ -525,8 +521,10 @@ def t_never_expires_cannot_be_reached_by_omission_zero_negative_malformed_or_unk
     src = Path(G.__file__).read_text(encoding="utf-8")
     check("check() takes its wait from timeout_for",
           "waited = timeout_for(action) if timeout is None else timeout" in src)
-    check("pending() takes expires_in from the same function",
-          'left = timeout_for(d.get("action"))' in src)
+    check("pending() takes the timer from the row's own request end",
+          "float(_waited) - time.time()" in src)
+    check("...and the sweep still keys on the same moment",
+          "waited_until < ?" in src and "now - 60" in src)
     check("the sweep exempts the same set, not a copy of it",
           "forever = sorted(APPROVAL_NEVER_EXPIRES)" in src)
     # Since 2026-10-28 the sweep is one helper, run at start-up AND on every
@@ -540,60 +538,48 @@ def t_never_expires_cannot_be_reached_by_omission_zero_negative_malformed_or_unk
 
 
 # ---------------------------------------------------------------------------
-# 4. THE PATCH IS THE PUBLISHED BASE PLUS THIS ONE CHANGE
+# 4. THE PUBLISHED BASE ALREADY CARRIES THIS CHANGE
 # ---------------------------------------------------------------------------
 
-def t_the_patch_is_the_base_plus_this_change():
-    """The suite's own footing, and the re-anchoring #378 made necessary.
+def t_the_base_already_carries_this_change():
+    """The suite's own footing, checked against the file it now drives.
 
-    The rescued patch was written against the 180-second gate; it did not
-    apply to main of 2026-10-13, and it does not apply to this one either. A
-    patch that only applied because the base had been edited by hand would
-    prove nothing, so this checks the base is untouched, that `git apply`
-    accepts the patch as written, and that the result carries #378's 900.
+    The change used to arrive as `no-expiry-cards.patch`; on 2026-11-26 it
+    became content of the published base (`jarvis-backend/jarvis_gate.py`), and
+    the patch was retired with the other two request-bounding patches. So the
+    footing is the base itself: it carries the four-name exemption set, it is
+    the file this suite copies, and there is no second copy of a SHIPPED module
+    beside it.
     """
     d, why = built()
     if d is None:
-        return check("no-expiry-cards.patch applies to the published base", False, why)
-    check("no-expiry-cards.patch applies to the published base with git", True)
-    check("...and the base has not been edited to make it fit",
-          'def timeout_for(' not in text_of(BASE / "jarvis_gate.py"),
-          "the base already contains the change - re-anchor the patch instead")
+        return check("the published base carries the no-expiry change", False, why)
 
     before = text_of(BASE / "jarvis_gate.py")
-    after = text_of(d / "jarvis_gate.py")
-    check("...and the file it produces is not the file it started from",
-          after != before)
-    check("...and it is the whole file, not an empty one", len(after) > 100_000,
-          len(after))
-    try:
-        compile(after, "jarvis_gate.py (patched)", "exec")
-        compiles = True
-    except SyntaxError as exc:
-        compiles = False
-        check("the patched module compiles", False, exc)
-    if compiles:
-        check("the patched module compiles", True)
+    check("the published base itself carries APPROVAL_NEVER_EXPIRES",
+          "APPROVAL_NEVER_EXPIRES = frozenset({" in before)
+    for action in NEVER_EXPIRES:
+        check(f"...and the base names {action} in it", f'"{action}"' in before)
+    check("...and carries the 2026-10-28 request-bounding model too",
+          all(name in before for name in
+              ("waited_until", "_wait_open", "_expire_overdue", "still_waiting")))
+    check("...and the folder this suite drives holds that file, byte for byte",
+          (d / "jarvis_gate.py").read_bytes()
+          == before.replace("\r\n", "\n").encode("utf-8"))
+    check("...and it is the whole file, not an empty one", len(before) > 200_000,
+          len(before))
+    check("the base compiles", bool(compile(before, "jarvis_gate.py (base)", "exec")))
+    check("...and keeps #378's 900-second window for a routine REQUEST",
+          '_cfg("autonomy", "approval_timeout_seconds", 900)' in before)
+    check("...and no line puts it back to the old 180 or 600",
+          not re.search(r'approval_timeout_seconds",\s*(180|600)\b', before),
+          [l for l in before.splitlines() if "approval_timeout_seconds" in l])
 
-    # Anchored on main's gate, not the 180-second text the rescue was written
-    # against: the default is #378's 900, and no stale timeout literal was
-    # carried in by the patch.
-    check("the patched module keeps #378's 900-second default",
-          '_cfg("autonomy", "approval_timeout_seconds", 900)' in after)
-    added = [l[1:] for l in text_of(PATCH).splitlines()
-             if l.startswith("+") and not l.startswith("+++")]
-    check("no added line puts the timeout back to the old 180 or 600",
-          not any(re.search(r"approval_timeout_seconds\",\s*(180|600)\b", l)
-                  for l in added), [l for l in added if "180" in l or "600" in l])
-
-    # One file, and only one: a patch that also carried a copy of a SHIPPED
-    # module would be a second, silently different version of it.
-    touched = set(re.findall(r"^\+\+\+ b/(.+)$", text_of(PATCH), re.M))
-    check("the patch changes exactly one file - jarvis_gate.py",
-          touched == {"jarvis_gate.py"}, sorted(touched))
-    check("...and it does not carry jarvis_owner_check.py or jarvis_devices.py",
-          not ({"jarvis_owner_check.py", "jarvis_devices.py"} & touched),
-          sorted(touched))
+    # One file, and only one: the gate is a base-only file, and a second copy
+    # under backend/ would be a silently different version of it (there is no
+    # `backend/jarvis_gate.py` twin and this suite must not grow one).
+    check("the gate is base-only: there is no backend/jarvis_gate.py twin",
+          not (BACKEND / "jarvis_gate.py").exists())
 
     # The two SHIPPED modules ARE changed, as whole files, and their twins are
     # byte-identical (the rule in CLAUDE.md; this is the in-suite half).
@@ -769,6 +755,15 @@ def t_owner_check_does_not_refuse_a_card_with_no_deadline():
     for a card the gate was still waiting on. With no verifier this suite asks
     the decision path directly: no deadline must reach the verifier, not a
     refusal.
+
+    IT DRIVES THE SHIPPED MODULE'S FALLBACK, ON PURPOSE. `jarvis_owner_check`
+    asks the gate's `still_waiting()` when the gate has one; the published base
+    has one since 2026-11-26, and it would (correctly) answer that this test's
+    made-up card `r1` is not waiting in its own database. The fallback is what
+    runs against a backend older than 2026-10-28 - the reason this half of the
+    seam exists - so the gate is hidden from that import for the length of the
+    test. The base's own `still_waiting()` is asserted in
+    `t_the_base_already_carries_this_change`.
     """
     d, why = built()
     if d is None:
@@ -793,6 +788,8 @@ def t_owner_check_does_not_refuse_a_card_with_no_deadline():
                     "swipe_ok": True, "classified": True}}
     asked = []
     OC.set_verifier(lambda message, timeout: asked.append(timeout) or OC.CONFIRMED)
+    saved_gate = sys.modules.get("jarvis_gate")
+    sys.modules["jarvis_gate"] = None          # the older-backend fallback
     try:
         out = OC.approve_check({"id": "r1"}, peer="127.0.0.1", local="127.0.0.1",
                                own=lambda: frozenset({"127.0.0.1"}),
@@ -839,6 +836,10 @@ def t_owner_check_does_not_refuse_a_card_with_no_deadline():
               and out3[1].get("owner_check") == "gone", out3)
     finally:
         OC.set_verifier(None)
+        if saved_gate is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = saved_gate
 
 
 # ---------------------------------------------------------------------------
@@ -863,8 +864,8 @@ def ask_tier(_action):
 def _devices_and_gate():
     """(gate module, devices module, the folder, why not). Fresh modules.
 
-    The gate is the one `built()` makes - the published base with
-    no-expiry-cards.patch applied - and `jarvis_devices.py` is this
+    The gate is the one `built()` makes - the published base, which carries the
+    no-expiry change itself since 2026-11-26 - and `jarvis_devices.py` is this
     repository's own copy. So what runs is the real `cancel()`/`_tick()`/
     `register_key()` calling the real `jarvis_gate.check()`, not stand-ins for
     either.
@@ -1095,7 +1096,7 @@ def text_of(path: Path) -> str:
 
 
 if __name__ == "__main__":
-    for fn in (t_the_patch_is_the_base_plus_this_change,
+    for fn in (t_the_base_already_carries_this_change,
                t_an_ordinary_session_still_expires_after_fifteen_minutes,
                t_only_pairing_approval_key_and_restore_may_never_expire,
                t_never_expires_cannot_be_reached_by_omission_zero_negative_malformed_or_unknown_flow,

@@ -367,19 +367,22 @@ def t_the_card_is_pc_only_and_in_every_table():
     check("devices.patch: the no-rule-from-denial set and the risk table both name it",
           patch.count('"register_approval_key"') == 2, patch.count('"register_approval_key"'))
     text, _log = __import__("_stack").stand_in("jarvis_gate.py")
-    # FIVE since 2026-10-23, and none is a duplicate row: the blind-approval
-    # guards add `_REPLACES_ACTIONS` (gate-touches.patch, marking the card as
-    # replacing data) and, with review ruling 8.1, `_REPLACES_KINDS` (the
-    # warning category per action), and `no-expiry-cards.patch` (rescue #4, the
-    # owner's ruling of 2026-10-23, Q1) names the action in
-    # `APPROVAL_NEVER_EXPIRES` so this one card waits for the owner instead of
-    # running out. The gate still has exactly one `_TOOL_ACTIONS` entry and one
-    # `_RISK` row, which is what this check is for - a duplicate there would
-    # still push the count above this number; devices.patch still holds the
-    # only two lines it ever did.
+    # FOUR in the STAND-IN since 2026-11-26, when `no-expiry-cards.patch` was
+    # retired into the published base: the `APPROVAL_NEVER_EXPIRES` line it
+    # contributed is base content now, so the patch-stack stand-in no longer
+    # holds it. The remaining four are the blind-approval guards
+    # (`_REPLACES_ACTIONS` from gate-touches.patch and `_REPLACES_KINDS` from
+    # review ruling 8.1), the one `_TOOL_ACTIONS` entry and the one `_RISK`
+    # row - a duplicate in either of the last two would still push the count
+    # above this number. The base's own half is checked separately below.
     check("the stacked gate has it in each list once, plus the guards' tables",
-          text is not None and text.count('"register_approval_key"') == 5,
+          text is not None and text.count('"register_approval_key"') == 4,
           text.count('"register_approval_key"') if text is not None else None)
+    base_gate = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    never = base_gate.split("APPROVAL_NEVER_EXPIRES = frozenset({", 1)
+    check("the published base names it in APPROVAL_NEVER_EXPIRES",
+          len(never) == 2 and '"register_approval_key"' in never[1].split("})")[0],
+          never[1].split("})")[0] if len(never) == 2 else never)
 
 
 # =========================================================== the challenge ==

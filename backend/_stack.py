@@ -677,7 +677,20 @@ RATCHET = {
     #: anchor, not the order - and backend/test_phone_app_allowlist.py pins
     #: handsfree immediately before web-search-grant.patch, so this is the one
     #: order that satisfies both. A ratchet: it may still only go down.
-    "jarvis_gate.py": 61,
+    #:
+    #: LOWERED 2026-11-26, 61 -> 43, when `no-expiry-cards.patch`,
+    #: `no-deadline-cards.patch` and `show-card-timer.patch` were RETIRED from
+    #: the stack: the 2026-10-28 request-bounding machinery and the 2026-10-30
+    #: card timer are now content of the published base
+    #: (`jarvis-backend/jarvis_gate.py`), not patches, so the walk no longer
+    #: holds those patches' hunks at all. Measured, not argued: `stand_in(
+    #: "jarvis_gate.py", stats=...)` reads 43 and `by_patch` no longer names
+    #: any of the three; the 18 hunks that left are exactly 9 + 8 + 1, the
+    #: counts those patches were pinned at. The later patches that used to
+    #: anchor on their output (`gate-touches.patch` and the rest) measure
+    #: unchanged, which tools/check_patch_original_text.py's own run confirms.
+    #: A ratchet: it may still only go down.
+    "jarvis_gate.py": 43,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s
