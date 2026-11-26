@@ -119,16 +119,41 @@ def planned_block(fragments: Path) -> list[str]:
 #: The claims register, whose `source` column may cite a changelog fragment.
 CLAIMS = Path(__file__).resolve().parents[1] / "docs" / "CLAIMS.tsv"
 
+#: The bold title a fragment's bullet OPENS with - `- **Title** ...`, or a
+#: nested `  - **Title**` - which is the part `tools/check_claims.py` can verify
+#: after the bullet has been rolled: it has no heading and no declaration to
+#: cite, so its own title is the only durable anchor. The body may cross a line
+#: break (titles wrap) but never crosses the start of another bullet. This is
+#: the same rule the checker reads; `backend/test_roll_changelog.py` proves the
+#: cell this writes against the checker's own `source_problem`, so the two
+#: cannot drift apart unnoticed.
+BULLET_TITLE = re.compile(
+    r"(?ms)^[ \t]*[-*][ \t]+\*\*((?:(?!\n[ \t]*[-*][ \t]).)+?)\*\*")
+
+
+def bullet_title(text: str) -> str:
+    """The bold title a fragment's bullet opens with, whitespace collapsed.
+
+    Empty when the bullet does not OPEN with one (`- A thing **changed**.`),
+    in which case the caller falls back to the old line citation - a title that
+    is not the bullet's own would not be a citation that means anything.
+    """
+    match = BULLET_TITLE.match((text or "").strip())
+    return " ".join(match.group(1).split()) if match else ""
+
 
 def reanchor_claims(fragments: Path, changelog: Path, claims: Path,
                     *, dry_run: bool = False) -> int:
-    """Point claims that cite a rolled fragment at CHANGELOG.md instead.
+    """Point claims that cite a rolled fragment at the rolled bullet.
 
     The roll removes the fragment files, so a claim whose `source` names one
     would then name a missing file (`backend/test_claims.py`, "every source is
     a file and a line inside it"). For each source `changelog.d/<name>:<line>`
     this finds that fragment's own bullet in the rolled CHANGELOG.md and
-    rewrites the source to `CHANGELOG.md:<line>`. Returns how many rows moved.
+    rewrites the source to `changelog:"<the bullet's bold title>"` - the
+    durable form, which survives every later roll (2026-11-25). A bullet that
+    does not open with a bold title gets the old `CHANGELOG.md:<line>` instead:
+    a line is weaker but it is at least verifiable. Returns how many rows moved.
     """
     if not claims.is_file() or not changelog.is_file():
         return 0
@@ -143,7 +168,7 @@ def reanchor_claims(fragments: Path, changelog: Path, claims: Path,
         at = text.find(body.splitlines()[0][:80])
         if at < 0:
             continue
-        moves.append((path.name, text.count("\n", 0, at) + 1))
+        moves.append((path.name, text.count("\n", 0, at) + 1, bullet_title(body)))
     if not moves:
         return 0
     out, changed = [], 0
@@ -155,9 +180,10 @@ def reanchor_claims(fragments: Path, changelog: Path, claims: Path,
         source = cells[-1].strip()
         if source.startswith("changelog.d/"):
             name = source.split(":", 1)[0].split("/", 1)[1]
-            for fragment_name, line in moves:
+            for fragment_name, line, title in moves:
                 if fragment_name == name:
-                    cells[-1] = f"CHANGELOG.md:{line}"
+                    cells[-1] = (f'changelog:"{title}"' if title
+                                 else f"CHANGELOG.md:{line}")
                     changed += 1
                     break
         out.append("\t".join(cells))
