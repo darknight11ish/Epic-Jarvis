@@ -83,6 +83,30 @@ REPO_ONLY_IMPORTS = {
     # were listed with the reason instead of the dependency being hidden. Both
     # entries were removed when #1117 put the module in the shipped set and the
     # base was re-taken - it is a shipped module now, so it needs no exemption.
+    ("jarvis_quick.py", "jarvis_privacy_removal"): (
+        "PR 1 of 3 of the personal data removal tool (2026-11-26). The owner's "
+        "ruling for this slice is that ONLY the pull request which wires a live "
+        "caller may register its module in `_where.SHIPPED`, so the module is "
+        "not shipped yet and the published base does not carry it. Every call "
+        "site is inside `try: import jarvis_privacy_removal ... except "
+        "Exception`, so a base without it imports and answers exactly as it did "
+        "before: the four trigger sentences fall through to the model, and the "
+        "mode-change sentence says the tool is not set up on this PC. PR 3, "
+        "which wires the Optery adapter and moves the module into SHIPPED, "
+        "deletes this entry - the same shape #1117 followed for "
+        "jarvis_storage_health."),
+    # The same module, the same reason, at its other two call sites. Both are
+    # guarded the same way, and both must keep working on a base that does not
+    # carry it: `jarvis_asks_first.py` appends the `Privacy` category row only
+    # when the module is there, and `jarvis_settings_registry.py`'s one mode row
+    # answers "the data removal tool is not on this PC yet" when it is not.
+    ("jarvis_asks_first.py", "jarvis_privacy_removal"):
+        "the Privacy tool-group row (2026-11-26, PR 1 of 3) - guarded, so an "
+        "install without the module keeps exactly the groups it had",
+    ("jarvis_settings_registry.py", "jarvis_privacy_removal"):
+        "the data_removal mode row (2026-11-26, PR 1 of 3) - guarded, and its "
+        "setter answers `_missing` for a PC without the module rather than "
+        "failing to import the whole registry",
 }
 
 # Third-party packages: import name -> pip name. Each must appear in
@@ -210,6 +234,23 @@ NOT_SHIPPED = {
                            "checklist document from .dsh-scratch/ and puts every phrase "
                            "through the real grammar. A reading tool, run from this "
                            "repository - it is imported by nothing the backend runs",
+    # The personal data removal tool (2026-11-26, PR 1 of 3). NOT a tool run from
+    # this repository like the rows above - it is a product module, and it is
+    # here for the one reason the owner's own ruling gives: "do not register
+    # `jarvis_privacy_removal.py` in `SHIPPED` until the PR that wires live
+    # callers to it". PR 1 wires the CHAT caller (jarvis_quick.py) but not the
+    # engine that sends anything (PR 2) or the Optery adapter (PR 3), so the
+    # module is here with its reason and `_where.SHIPPED` must not name it.
+    # PR 3 moves this line into SHIPPED and the base takes it up - at which
+    # point the REPO_ONLY_IMPORTS entry for jarvis_quick.py is deleted with it.
+    "jarvis_privacy_removal.py": "the personal data removal tool (2026-11-26, PR 1 of 3): "
+                                 "the mode dial, the tracker schema, the masked profile "
+                                 "reader, the official-portal checklist and the "
+                                 "self-explainer. The owner's ruling keeps it out of "
+                                 "SHIPPED until the PR that wires the live engine and the "
+                                 "Optery adapter (PR 2 and PR 3); jarvis_quick.py imports "
+                                 "it inside a try, so the published base - which does not "
+                                 "carry it - imports and behaves exactly as before",
 }
 
 

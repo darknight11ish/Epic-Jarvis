@@ -720,6 +720,27 @@ except Exception:                            # noqa: BLE001 - a damaged drop-in 
     _storage_health = None                   # not take the ask-first page down
 if _storage_health is not None:
     TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
+
+# The data removal tool's own category row (2026-11-26, PR 1 of 3), in the same
+# shape and the same guarded way: a PC whose install predates
+# `jarvis_privacy_removal.py` keeps exactly the groups it had, and nothing here
+# errors. The row is what the OTHER work on categories can find - the owner's
+# spec asks for one canonical `Privacy` category rather than a set of
+# uncategorised tools - and it names only the tools that really exist in this
+# slice: `privacy_explain`, which is read-only and raises no card, so
+# `_app_can_switch` filters it out of SWITCHABLE_GROUPS (there is nothing to
+# switch) and the Settings page draws no empty group. PR 2 and PR 3 add
+# `privacy_status`, the batch sender and the Optery action to this same row,
+# each as it becomes real; none of them is claimed here.
+_privacy_removal = None
+try:
+    import jarvis_privacy_removal as _privacy_removal
+except ImportError:                          # an install before 2026-11-26
+    _privacy_removal = None
+except Exception:                            # noqa: BLE001 - a damaged drop-in must
+    _privacy_removal = None                   # not take the ask-first page down
+if _privacy_removal is not None:
+    TOOL_GROUPS = TOOL_GROUPS + tuple(_privacy_removal.TOOL_ROWS)
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
