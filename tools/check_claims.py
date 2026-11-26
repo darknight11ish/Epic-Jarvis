@@ -79,7 +79,7 @@ and a row about stale prose carries an `absent` for the wrong sentence. When
 somebody fixes that prose the `absent` starts passing, and rule 2 above tells
 the next reader to flip the row.
 
-THE SEVEN KINDS, each with a definite answer:
+THE EIGHT KINDS, each with a definite answer:
 
   * `file:<path>` - this file exists (repo-relative, `/` separators);
   * `no-file:<path>` - this file is NOT there. `file:`'s mirror, and it was
@@ -109,16 +109,25 @@ THE SEVEN KINDS, each with a definite answer:
     that declares it, never a mention in prose. `#` names a markdown heading,
     matched case-insensitively on its text with whitespace collapsed. This is
     the kind that does not rot when a file grows above the place it names.
+  * `changelog:"<bold title>"` - `CHANGELOG.md` carries a bullet whose own
+    bold title is exactly this text (2026-11-25). A rolled changelog bullet has
+    no markdown heading and no declaration, so neither `doc.md#heading` nor
+    `path::symbol` can name it; its bold title is the part that survives an
+    edit above it. Matched case-sensitively on the title's text with whitespace
+    collapsed, so a title that wraps across a line break still matches and a
+    reworded title fails. The title is QUOTED because a real one carries
+    punctuation a bare form could not (`:`, `,`, backticks, even a `#`).
 
 A CLAIM'S `source` MAY USE THE SAME DURABLE FORMS (2026-11-25). Beside
 `path:line` - which is still accepted, and still rots as soon as an edit lands
-above it - a source may be `path::symbol` or `doc.md#heading`. `read_register`
-verifies every source: the file must be in the tree, a `:line` must be inside
-the file, and a symbol/heading must really be present. So a renamed function or
-reworded heading turns the register red the day it moves, instead of leaving a
-citation that points at a sentence the document no longer has. The migration of
-the worst-rotted rows is why this exists; the source comment in
-`docs/CLAIMS.tsv` says which form to use.
+above it - a source may be `path::symbol`, `doc.md#heading` or
+`changelog:"<bold title>"`. `read_register` verifies every source: the file
+must be in the tree, a `:line` must be inside the file, and a
+symbol/heading/changelog title must really be present. So a renamed function, a
+reworded heading or a reworded changelog title turns the register red the day
+it moves, instead of leaving a citation that points at a sentence the document
+no longer has. The migration of the worst-rotted rows is why this exists; the
+source comment in `docs/CLAIMS.tsv` says which form to use.
 
 A claim that needs judgement goes in as `unverifiable` with the reason in the
 `check` column - never as a guess. A reason that begins with one of the kinds
@@ -242,15 +251,25 @@ REGISTER = CHECKOUT / "docs" / "CLAIMS.tsv"
 DECISION_RECORD = "docs/DECISIONS.md"
 DECISION_FRAGMENTS = "decisions.d"
 
+#: The one file a `changelog:` citation names. A rolled bullet there carries a
+#: bold title but no heading and no declaration, which is why it needed a form
+#: of its own; there is deliberately no path in the form, because there is only
+#: one changelog to cite.
+CHANGELOG = "CHANGELOG.md"
+
 #: Columns, in order. A row with any other number is refused rather than
 #: guessed at, because a register whose shape is uncertain cannot be checked.
 COLUMNS = ("id", "claim", "check", "state", "source")
 
-#: The seven kinds a `check` may be, each with a definite answer. `symbol` was
+#: The eight kinds a `check` may be, each with a definite answer. `symbol` was
 #: added 2026-11-25 (architect ruling A) so a claim can name a declaration or a
 #: heading that survives normal edits, instead of a `grep:` for a sentence that
 #: may be reworded - and so a row's `source` can use the same durable forms.
-KINDS = ("file", "no-file", "grep", "absent", "test", "number", "symbol")
+#: `changelog` joined the same day for the changelog bullets no heading and no
+#: declaration can name, and it is the same two roles: a `changelog:` check row,
+#: and a `changelog:` `source` cell.
+KINDS = ("file", "no-file", "grep", "absent", "test", "number", "symbol",
+         "changelog")
 
 #: The ambient variables that name state OUTSIDE this checkout - the review
 #: gates' repository and the defect register file. They are set at USER level on
@@ -778,6 +797,52 @@ def heading_present(text: str, heading: str) -> bool:
     return False
 
 
+#: One changelog bullet and the bold title it OPENS with - `- **Title**`, or a
+#: nested `  - **Title**`. The body may cross a line break, because the rolled
+#: entries' titles wrap (`... not for` / `its own lane name (2026-10-06).**`);
+#: it may NOT cross the start of another bullet. A bold phrase in the middle of
+#: a bullet's prose is not a title, and proving the bullet still exists is the
+#: whole point, so it does not count.
+CHANGELOG_BULLET_TITLE = re.compile(
+    r"(?ms)^[ \t]*[-*][ \t]+\*\*((?:(?!\n[ \t]*[-*][ \t]).)+?)\*\*")
+
+
+def changelog_title_present(text: str, title: str) -> bool:
+    """Does `CHANGELOG.md`'s `text` carry a bullet whose bold title is `title`?
+
+    Case-SENSITIVE and whitespace collapsed: "the exact bold title" is the
+    ruling's own words, so a title reworded in any letter fails. Whitespace is
+    collapsed on both sides because a wrapped title must still match - the
+    line break is not part of the title.
+    """
+    want = " ".join((title or "").split())
+    if not want:
+        return False
+    for match in CHANGELOG_BULLET_TITLE.finditer(text or ""):
+        if " ".join(match.group(1).split()) == want:
+            return True
+    return False
+
+
+def quoted_title(rest: str):
+    """(title, why-not) for the `"<bold title>"` half of a `changelog:` form.
+
+    The title is quoted so it can carry the punctuation real titles carry - a
+    colon, a comma, backticks, even a `#` (`... the serve decision #814 landed
+    on the server`). A leading and trailing `"` are required; everything
+    between them is the title, so a title that itself contains a quote still
+    names itself exactly. An empty title is refused rather than matched.
+    """
+    text = (rest or "").strip()
+    if len(text) < 2 or not text.startswith('"') or not text.endswith('"'):
+        return None, ("changelog: needs a QUOTED bold title, e.g. "
+                      'changelog:"The exact bold title text"')
+    title = text[1:-1]
+    if not " ".join(title.split()):
+        return None, "changelog: names an empty bold title"
+    return title, ""
+
+
 def check_symbol(where: str, form: str, target: str):
     """(passed, detail) for a `symbol:` check: the file exists AND names it.
 
@@ -805,6 +870,31 @@ def check_symbol(where: str, form: str, target: str):
     return False, f"no heading {target!r} in {where}"
 
 
+def check_changelog(title: str):
+    """(passed, detail) for a `changelog:` check: the bold title is there.
+
+    `CHANGELOG.md` is judged by the TRACKED tree, like every other path in this
+    checker, so a scratch copy of the changelog is not evidence - and a binary
+    file cannot hide a title.
+    """
+    kind = tracked_entry(CHANGELOG)
+    if kind is None:
+        return False, f"no such path: {CHANGELOG}"
+    if kind != "file":
+        return False, f"{CHANGELOG} is a directory, not a file"
+    text, why = read_text(REPO / CHANGELOG)
+    if why:
+        return False, f"{CHANGELOG} {why}"
+    if text is None:
+        return False, (f"{CHANGELOG} is not a text file, so no bold title can "
+                       f"be read in it")
+    if changelog_title_present(text, title):
+        return True, f"the bold title {title!r} is in {CHANGELOG}"
+    return False, (f"no bullet in {CHANGELOG} carries the bold title "
+                   f"{title!r} - a bullet reworded above it, or removed, makes "
+                   f"this citation lie")
+
+
 def _read_source_text(path: Path) -> str | None:
     """The file's text, or None when it cannot be read (the caller says why)."""
     try:
@@ -828,8 +918,9 @@ def source_problem(source: str, repo: Path | None = None,
                    texts: dict | None = None) -> str | None:
     """Why this `source` cell does not trace to what it names, or None.
 
-    Three forms are accepted, and the durable two are VERIFIED here rather than
-    trusted (architect ruling A, 2026-11-25):
+    Four forms are accepted, and the durable three are VERIFIED here rather
+    than trusted (architect ruling A, 2026-11-25; the `changelog:` form joined
+    them the same day):
 
       * `path:line` - the file exists and the line is inside it. This is the old
         form: correct when written, and wrong the moment an edit lands above it.
@@ -837,6 +928,11 @@ def source_problem(source: str, repo: Path | None = None,
         prefer one of the forms below.
       * `path::symbol` - the file exists AND declares that symbol.
       * `doc.md#heading` - the file exists AND carries that exact heading.
+      * `changelog:"<bold title>"` - `CHANGELOG.md` carries a bullet whose own
+        bold title is exactly that text. A rolled changelog bullet has no
+        heading and no declaration, so this is the only durable form that can
+        name one; it is checked FIRST, before the `::` and `#` forms, because a
+        title may itself contain a `#` (`... #814 landed on the server`).
 
     `repo` is the tree the path is judged against (the checker's `REPO`, or a
     throwaway repository in the tests). `texts` is an optional cache so a run
@@ -846,6 +942,11 @@ def source_problem(source: str, repo: Path | None = None,
     source = (source or "").strip()
     if not source:
         return "the source names nothing"
+    if source.startswith("changelog:"):
+        title, why = quoted_title(source.split(":", 1)[1])
+        if why:
+            return why
+        return _citation_problem(base, CHANGELOG, "changelog", title, texts)
     if "::" in source:
         where, _, name = source.partition("::")
         where, name = where.strip(), name.strip()
@@ -887,6 +988,11 @@ def _citation_problem(base: Path, where: str, form: str, target: str,
         if symbol_present(text, target):
             return None
         return f"{target!r} is not declared in {where}"
+    if form == "changelog":
+        if changelog_title_present(text, target):
+            return None
+        return (f"no bullet in {where} carries the bold title {target!r} - the "
+                f"title was reworded or the bullet was removed")
     if heading_present(text, target):
         return None
     return f"no heading {target!r} in {where}"
@@ -1251,6 +1357,11 @@ def parse_check(check: str):
                 return None, None, "symbol: needs <path>::<symbol> or <path>#<heading>"
             return kind, (where.strip(), "heading", heading.strip()), ""
         return None, None, "symbol: needs <path>::<symbol> or <path>#<heading>"
+    if kind == "changelog":
+        title, why = quoted_title(rest)
+        if why:
+            return None, None, why
+        return kind, (title,), ""
     # number:<doc>:<path>:<value>
     doc, sep, rem = rest.partition(":")
     path, sep2, value = rem.partition(":")
@@ -1276,6 +1387,8 @@ def run_row(row: dict, env: dict[str, str] | None = None):
         return check_test(*args, env=env)
     if kind == "symbol":
         return check_symbol(*args)
+    if kind == "changelog":
+        return check_changelog(*args)
     return check_number(*args)
 
 
@@ -1348,10 +1461,10 @@ def read_register(register: Path = REGISTER):
         # sentence it came from; a file:line whose line has moved points at
         # somebody else's sentence, and nothing used to say so (56 of the
         # worst-rotted rows were measured more than 10 lines off). The durable
-        # forms are checked for the file AND the symbol/heading; the old line
-        # form is checked for the file and that the line is inside it. This runs
-        # for every row, in one pass, with `texts` so a big document read by 65
-        # rows is read once.
+        # forms are checked for the file AND the symbol/heading/changelog title;
+        # the old line form is checked for the file and that the line is inside
+        # it. This runs for every row, in one pass, with `texts` so a big
+        # document read by 65 rows is read once.
         citation = source_problem(row["source"], texts=source_texts)
         if citation:
             problems.append(

@@ -86,6 +86,50 @@ environment variable NAMES that still win over the store, and one sentence.
 a removal really is today. Neither reads a value, and neither is wired to a route
 or a card in this PR: this is the function a later slice's Remove button (tier
 `ask`) will call, so nothing the app draws can reach it yet.
+
+A MAILBOX, READ-ONLY, WITH AN APP PASSWORD (2026-11-25, DEF-096)
+
+    The owner's words (2026-11-24): "i would like to connect you to my gmail",
+    then "i saved my gmail password. can you access my account now". Jarvis
+    answered "there is no connect card for email here yet" - true on this
+    branch, and the reason "connect my gmail" could not raise the card this
+    module exists to raise: the table below held a calendar and GitHub, and no
+    mail service at all.
+
+    THE RULING, and why this is not Google OAuth: for a non-commercial,
+    local-only personal app, Google's restricted Gmail scopes either expire
+    every 7 days in "Testing" mode or need an external CASA Tier 2 audit for
+    "Production" mode. An App Password (with 2-Step Verification on) is
+    durable, needs no cloud redirect and no audit, fits into one setup card
+    plus one IMAP read test, and keeps the credential strictly inside Windows
+    Credential Manager. So Phase 1 is an App Password over IMAP, read-only,
+    and any outbound send stays behind its own per-email approval card
+    (`send_email`'s, which already exists). Nothing here sends anything.
+
+    WHERE THE SECRET GOES. `jarvis_email.IMAP_USER_TARGET` and
+    `IMAP_PASSWORD_TARGET` - the two entries the mail tools already read
+    (`jarvis_email.imap_user()` / `imap_password()`, `jarvis_accounts.py`'s
+    Email family). So the card configures the mailbox the rest of Jarvis
+    already reads, and there is no second store, no plaintext file and no
+    settings line holding it. The address is not a secret, but it is typed on
+    this PC only, exactly like the password.
+
+    THE ONE REAL TEST is a count, not a read: one IMAP connection, log in,
+    open the mailbox read-only (EXAMINE), ask how many messages it holds, and
+    disconnect. No message is fetched, so no sender, subject, date or body is
+    read, and nothing is marked as read. A wrong password is answered with a
+    plain sentence about app passwords - never a traceback, never the server's
+    own words, never the value.
+
+    ITS OWN ACTION, AND WHY. `MAIL_ACTION` ("connect_mail") is the one action
+    this card adds: connecting a mailbox stores a credential and then reads
+    the inbox once, so the card may only be raised where the settings leave
+    that action at "ask" - the card IS the ask. `tier_problem()` says so
+    before a card exists, in the same shape `jarvis_inbox_tidy.py` uses, and
+    the row's card words live in `jarvis-backend/jarvis_gate.py`'s `_RISK`
+    table (the published base, reached on the owner's PC through
+    `tools/repair_live_backend_gaps.py` - never a patch, the owner's ruling of
+    2026-11-14).
 """
 from __future__ import annotations
 
@@ -255,7 +299,61 @@ SERVICES: "collections.OrderedDict[str, Service]" = collections.OrderedDict([
         how="Say \"connect GitHub\" and one card appears for a personal access token.",
         verify="github",
     )),
+    ("gmail", Service(
+        id="gmail",
+        name="Gmail (your address and an app password)",
+        # ONLY mail words. "email" is deliberately NOT here: "connect my email"
+        # names no provider, and the honest answer to it stays the email
+        # answer's (`jarvis_quick.py`'s `accounts_email`), which names the
+        # Settings boxes AND this card. A word list is what decides which
+        # sentences this file claims; it may not swallow a lane it cannot test.
+        words=("gmail", "g mail", "google mail", "googlemail"),
+        fields=(
+            Field(
+                name="address",
+                label="Gmail address",
+                kind="username",
+                hint=("The whole address, like yourname@gmail.com - the same one you "
+                      "sign in with. It is typed here, on this PC, and never sent to "
+                      "the model."),
+            ),
+            Field(
+                name="app_password",
+                label="App password (16 letters - NOT your Google password)",
+                kind="password",
+                hint=("Google refuses your normal password over IMAP, and makes an app "
+                      "password only while 2-Step Verification is on: in your Google "
+                      "Account, Security, turn on 2-Step Verification, then open App "
+                      "passwords, create one for Mail, and copy the 16 letters here. "
+                      "That is how Google's app passwords work - this PC has not "
+                      "checked it against your account."),
+            ),
+        ),
+        summary=("Jarvis reads this mailbox itself on this PC, read-only, with the same "
+                 "app password a mail app uses. The one test reads a count only - how "
+                 "many messages INBOX holds - so no sender, no subject, no date and no "
+                 "message body is read, and nothing is marked as read. No Google sign-in "
+                 "and no permission grant is involved, and nothing is ever sent."),
+        note=("The address and the app password are handled like a password: typed here, "
+              "on this PC, and kept in Windows Credential Manager - never in the chat. "
+              "Google shows an app password once; if it ever leaks, revoke it on that "
+              "same App passwords page."),
+        how=("Say \"connect my Gmail\" and one card appears for your address and an app "
+             "password."),
+        verify="gmail",
+    )),
 ])
+
+#: The ONE action this card adds of its own (2026-11-25, DEF-096). The calendar
+#: and GitHub cards resolve under `connect_account` -> `change_own_config`,
+#: which has carried its "ask" line since 2026-10-28; a mailbox is the first
+#: service that reaches a mail server, so it gets a row and an ask of its own.
+MAIL_ACTION = "connect_mail"
+
+#: The services that reach a MAIL server. `jarvis_quick.py` reads this to know
+#: which sentence the connect card owns rather than the "how do I set email up"
+#: answer - one list, so a second mail service needs no second edit there.
+MAIL_SERVICES: Tuple[str, ...] = ("gmail",)
 
 #: The service each store target belongs to, for a status sentence that can say
 #: where a value is coming from. Filled in by `targets()`.
@@ -280,6 +378,14 @@ def targets(service_id: str) -> Dict[str, str]:
     if service_id == "github":
         import jarvis_research
         return {"token": jarvis_research.TOKEN_TARGET}
+    if service_id == "gmail":
+        # THE SAME TWO ENTRIES THE MAIL TOOLS ALREADY READ (2026-11-25). Not a
+        # second store and not a second name: `jarvis_email.imap_user()` and
+        # `jarvis_email.imap_password()` resolve exactly these, so connecting
+        # here configures the mailbox the rest of Jarvis already reads.
+        import jarvis_email
+        return {"address": jarvis_email.IMAP_USER_TARGET,
+                "app_password": jarvis_email.IMAP_PASSWORD_TARGET}
     raise ConnectAccountError("there is no such service to connect")
 
 
@@ -294,6 +400,10 @@ def env_names(service_id: str) -> Dict[str, str]:
     if service_id == "github":
         import jarvis_research
         return {"token": jarvis_research.TOKEN_ENV}
+    if service_id == "gmail":
+        import jarvis_email
+        return {"address": jarvis_email.USER_ENV,
+                "app_password": jarvis_email.PASSWORD_ENV}
     raise ConnectAccountError("there is no such service to connect")
 
 
@@ -309,10 +419,14 @@ def service_from_words(text: object) -> Optional[str]:
     """The service a person's (or the model's) words name, or None.
 
     Whole-word matching against the closed list above, longest phrase first, so
-    "google calendar" lands on the private link and a bare "calendar" does too -
-    and "connect my email" deliberately returns None, because email is not on
-    this card yet (Phase 2). Returning None is what makes the answer honest
-    instead of a card for something that cannot be verified.
+    "google calendar" lands on the private link and a bare "calendar" does too.
+
+    Two deliberate NON-matches. "connect my email" returns None, because a mail
+    provider has to be named before there is a server to test (Gmail is named
+    by its own words; the email answer names that card and the Settings boxes).
+    And "google" alone returns None: "external calendars like google or
+    outlook" is a calendar sentence. Returning None is what makes the answer
+    honest instead of a card for something that cannot be verified.
     """
     words = " ".join(str(text or "").lower().split())
     if not words:
@@ -408,16 +522,70 @@ def card_view(p: _Pending) -> dict:
     }
 
 
+def tier_of(action: str) -> str:
+    """Which tier the settings give one action ("auto", "notify", "ask", "never").
+
+    Read from `jarvis_framework`, the module the rest of the backend asks, and
+    NEVER raised: a PC with no framework module, or a settings file that cannot
+    be read, answers "ask" - which is the same fail-safe the tier table itself
+    uses for a name it does not hold, and it cannot block a card by accident.
+    The only thing that may ever REFUSE a card is an explicit line saying so.
+
+    `config_path()` is asked first so a settings file that is simply not there
+    does not make `jarvis_framework` print its "no jarvis-framework.toml found"
+    warning into a suite's output; the answer is "ask" either way.
+    """
+    try:
+        import jarvis_framework as fw
+        if fw.config_path() is None:
+            return "ask"
+        return str(fw.action_tier(str(action or "")))
+    except Exception:                       # noqa: BLE001 - no settings, no refusal
+        return "ask"
+
+
+def tier_problem(service_id: str, tier_of: Callable[[str], str] = tier_of) -> str:
+    """"" when this service's connect card may be raised, else why not.
+
+    Only the services with an action of their own are checked (`MAIL_ACTION`
+    today). Connecting stores a credential and then reads the mailbox once, so
+    the card may only exist where the settings leave that action at "ask" - the
+    card IS the ask, and "auto" or "notify" would save a mail password with
+    nobody asked. The same shape `jarvis_inbox_tidy.tier_problem` uses.
+    """
+    if service_id not in MAIL_SERVICES:
+        return ""
+    tier = str(tier_of(MAIL_ACTION))
+    if tier == "ask":
+        return ""
+    if tier == "never":
+        return (f"Connecting a mailbox is switched off on this PC ({MAIL_ACTION} is "
+                "\"never\" in jarvis-framework.toml's [autonomy.tiers]), so no card is "
+                "raised and nothing is saved.")
+    return (f"{MAIL_ACTION} is tier {tier!r} in jarvis-framework.toml, which would save a "
+            "mail password with nobody asked; every connection needs your yes on a card, "
+            "so nothing is offered until it is \"ask\".")
+
+
 def raise_card(service_id: str, label: object = "", *,
-               clock: Callable[[], float] = time.time) -> dict:
+               clock: Callable[[], float] = time.time,
+               tier_of: Optional[Callable[[str], str]] = None) -> dict:
     """Raise ONE connect card for one service, and return the card's view.
 
     Called by the model's `connect_account` tool and by `jarvis_quick.py`'s
     sentence grammar - one implementation, two doors, so the two can never
     describe the connection differently. Raising a card approves nothing: a
     value exists only after the owner types it on this PC and submits.
+
+    A service with its own action (the Gmail row, `tier_problem` above) is
+    refused when the settings do not leave that action at "ask": "never" means
+    the owner switched it off, and "auto"/"notify" would store a mail password
+    with nobody asked, which this card must never do.
     """
     svc = service(service_id)
+    problem = tier_problem(svc.id, tier_of) if tier_of is not None else tier_problem(svc.id)
+    if problem:
+        raise ConnectAccountError(problem)
     now = clock()
     with _LOCK:
         _prune_locked(now)
@@ -560,6 +728,8 @@ def verify(service_id: str, values: Dict[str, str]) -> Tuple[bool, str]:
             return _verify_caldav(values)
         if service_id == "github":
             return _verify_github(values)
+        if service_id == "gmail":
+            return _verify_gmail(values)
         return False, "there is no test for that service yet"
     except ConnectAccountError as exc:
         return False, str(exc)
@@ -659,6 +829,139 @@ def _verify_github(values: Dict[str, str]) -> Tuple[bool, str]:
         login = ""
     return True, ("GitHub accepted the token" +
                   (f" (signed in as {login})" if login else ""))
+
+
+# --------------------------------------------------------------------------
+#   The mailbox: ONE read-only IMAP connection, and a count
+# --------------------------------------------------------------------------
+#
+# WHY A COUNT AND NOT A MESSAGE (2026-11-25, DEF-096). The card's job is to
+# prove that the address and the app password really open the mailbox, and
+# nothing more. A count needs LOGIN, EXAMINE and SEARCH and fetches no message
+# at all: no sender, no subject, no date, no body, and no flag is touched. A
+# FETCH here would also make the card a way to read mail the owner never asked
+# to read, which is not what it is for.
+
+#: Gmail's own IMAP server, used only when this PC has NO mail server address
+#: saved and the address on the card is a Gmail one. Every other case uses the
+#: server `jarvis_email` resolves (`JARVIS_IMAP_HOST`, else Settings, Accounts) -
+#: the same one the mail tools will read - so the test proves the real path
+#: rather than a guess.
+GMAIL_IMAP_HOST = "imap.gmail.com"
+_GMAIL_DOMAINS = ("gmail.com", "googlemail.com")
+#: IMAP over implicit TLS, the same default `jarvis_email` uses.
+_DEFAULT_IMAP_PORT = 993
+_DEFAULT_MAILBOX = "INBOX"
+#: How long the card's one mail test may take. Shorter than the mail tool's 30
+#: seconds: the owner is sitting in front of the card waiting for the verdict.
+IMAP_TEST_TIMEOUT_S = 15.0
+
+
+def mail_domain(address: object) -> str:
+    """The part after the @, lowercased, or "" when there is no address."""
+    text = str(address or "").strip().lower()
+    return text.rsplit("@", 1)[-1] if "@" in text else ""
+
+
+def mail_settings() -> Tuple[str, int, str]:
+    """(host, port, mailbox), exactly as `jarvis_email` resolves them.
+
+    The host is "" when nothing is saved and the mail module is missing, so a
+    PC without it gets a plain sentence from `_verify_gmail` rather than a
+    traceback. This reads `jarvis_email`'s own functions rather than a second
+    copy of the rules: the environment variable first, then the address the
+    owner typed into Settings, Accounts.
+    """
+    try:
+        import jarvis_email
+        host = str(jarvis_email.imap_address("imap_host", jarvis_email.HOST_ENV) or "").strip()
+        raw_port = jarvis_email.imap_address("imap_port", jarvis_email.PORT_ENV)
+        mailbox = str(jarvis_email.imap_address("imap_mailbox",
+                                                jarvis_email.MAILBOX_ENV) or "").strip()
+    except Exception:                       # noqa: BLE001 - module absent
+        return "", _DEFAULT_IMAP_PORT, _DEFAULT_MAILBOX
+    try:
+        port = int(raw_port or _DEFAULT_IMAP_PORT)
+    except (TypeError, ValueError):
+        port = _DEFAULT_IMAP_PORT
+    return host, port, mailbox or _DEFAULT_MAILBOX
+
+
+def _imap_count(host: str, port: int, mailbox: str, user: str,
+                password: str) -> Tuple[bool, str]:
+    """ONE read-only connection: log in, open the mailbox read-only, count, go.
+
+    `imaplib` is imported HERE, so a suite can put a stand-in on
+    `imaplib.IMAP4_SSL` (exactly the way `test_email.py` drives the mail
+    module's own conversations) and nothing else in this file opens a socket.
+    The certificate and the host name are checked by `jarvis_email.tls_context`,
+    the same rule every other mail connection on this PC keeps.
+
+    A failure is a sentence, never a traceback and never the server's own
+    words: `imaplib.IMAP4.error` is the refusal (a wrong password, or a
+    provider that wants an app password) and any other exception is reported by
+    its TYPE NAME only, which cannot echo a value.
+    """
+    import imaplib
+    try:
+        import jarvis_email
+        context = jarvis_email.tls_context(host)
+    except Exception:                       # noqa: BLE001 - module absent
+        context = None
+    kwargs: dict = {"timeout": IMAP_TEST_TIMEOUT_S}
+    if context is not None:
+        kwargs["ssl_context"] = context
+    conn = None
+    try:
+        conn = imaplib.IMAP4_SSL(host, port, **kwargs)
+        conn.login(user, password)
+        status, _data = conn.select(mailbox, readonly=True)
+        if str(status).upper() != "OK":
+            return False, f"{host} would not open the {mailbox} folder"
+        status, data = conn.search(None, "ALL")
+        if str(status).upper() != "OK":
+            return False, (f"{host} answered, but would not count the messages in "
+                           f"{mailbox}")
+        raw = (data or [b""])[0] or b""
+        if isinstance(raw, bytes):
+            raw = raw.decode("ascii", "replace")
+        count = len(str(raw).split())
+    except imaplib.IMAP4.error:
+        return False, ("the mail server refused that address and app password over "
+                       "IMAP - an app password is the 16 letters from Google's own App "
+                       "passwords page, not your Google password")
+    except Exception as exc:                # noqa: BLE001 - the NAME only
+        return False, (f"the mail server {host} could not be reached from this PC "
+                       f"({type(exc).__name__})")
+    finally:
+        if conn is not None:
+            for step in ("close", "logout"):
+                try:
+                    getattr(conn, step)()
+                except Exception:           # noqa: BLE001 - nothing to undo
+                    pass
+    return True, (f"the mail server {host} accepted the address and app password on the "
+                  f"card, and {mailbox} holds {count} messages (a count only - no message "
+                  "was read and nothing was marked as read)")
+
+
+def _verify_gmail(values: Dict[str, str]) -> Tuple[bool, str]:
+    """The Gmail row's one real test: the mailbox opens, and how many messages."""
+    address = str(values.get("address") or "").strip()
+    password = str(values.get("app_password") or "")
+    if not address or not password:
+        return False, "both the Gmail address and the app password are needed"
+    if "@" not in address:
+        return False, "that Gmail address has no @ in it, so it cannot be a mail address"
+    host, port, mailbox = mail_settings()
+    if not host:
+        if mail_domain(address) in _GMAIL_DOMAINS:
+            host = GMAIL_IMAP_HOST
+        else:
+            return False, ("Jarvis does not know this mail server's address: put it in "
+                           "Settings, Accounts, under Mail server (an address is not a "
+                           "secret), then try this card again")
+    return _imap_count(host, port, mailbox, address, password)
 
 
 # --------------------------------------------------------------------------
@@ -1052,6 +1355,13 @@ _AFTER_REMOVAL = {
         "Deleting the saved token does not revoke it: the token on github.com stays "
         "valid until it is deleted there (Settings, Developer settings, Personal "
         "access tokens)."),
+    # 2026-11-25, DEF-096: an app password is a credential at Google, so removing
+    # it from this PC is not revoking it. Saying only "removed" would be a lie
+    # about the owner's exposure, the same honesty `github`'s line keeps.
+    "gmail": (
+        "Deleting the saved app password does not revoke it: it stays valid at Google "
+        "until it is removed on the App passwords page of your Google Account "
+        "(Security, then App passwords)."),
 }
 
 
@@ -1252,9 +1562,11 @@ def removability(service_id: str) -> dict:
 
 __all__ = [
     "CARD_TTL_S", "MAX_PENDING_CARDS", "MAX_VALUE_CHARS", "VERIFY_TIMEOUT_S",
+    "IMAP_TEST_TIMEOUT_S", "GMAIL_IMAP_HOST", "MAIL_ACTION", "MAIL_SERVICES",
     "ConnectAccountError", "ConnectAccountVoided", "Field", "Service", "SERVICES",
     "targets", "env_names", "service", "service_from_words", "clean_label",
     "raise_card", "pending_cards", "cancel_card", "card_view", "save_card",
     "verify", "status", "status_of", "status_words", "reset_for_tests",
-    "disconnect", "removability",
+    "disconnect", "removability", "tier_of", "tier_problem", "mail_domain",
+    "mail_settings",
 ]

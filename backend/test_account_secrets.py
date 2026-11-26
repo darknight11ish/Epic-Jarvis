@@ -297,13 +297,20 @@ def t_caldav_and_github_resolve_through_the_same_mechanism():
 
 
 def t_the_connect_cards_entries_are_the_reading_modules_own_names():
-    """The connect card must write where the feature reads. The three names
-    are the modules' own constants, so a rename in one place fails here."""
+    """The connect card must write where the feature reads. The names are the
+    modules' own constants, so a rename in one place fails here.
+
+    DEF-096 (2026-11-25) added the Gmail row: its two entries are
+    `jarvis_email`'s own, the pair `imap_user()` / `imap_password()` already
+    resolve, so the card configures the mailbox the rest of Jarvis reads.
+    """
     import jarvis_connect_account as CONNECT
     want = {"calendar_ics": {"url": CAL.ICS_URL_TARGET},
             "calendar_caldav": {"username": CAL.USER_TARGET,
                                 "password": CAL.PASSWORD_TARGET},
-            "github": {"token": RES.TOKEN_TARGET}}
+            "github": {"token": RES.TOKEN_TARGET},
+            "gmail": {"address": EMAIL.IMAP_USER_TARGET,
+                      "app_password": EMAIL.IMAP_PASSWORD_TARGET}}
     for sid, mapping in want.items():
         check(f"the connect card's {sid} entries are the reader's own names",
               CONNECT.targets(sid) == mapping, f"{CONNECT.targets(sid)} != {mapping}")
@@ -376,8 +383,9 @@ def t_live_windows_round_trip():
             pass
 
 
-def t_live_the_three_connect_entries_on_real_windows():
-    """The connect-account card's three entries, on the real store (2026-10-28).
+def t_live_the_four_connect_entries_on_real_windows():
+    """The connect-account card's four rows, on the real store (2026-10-28;
+    the Gmail row added 2026-11-25, DEF-096).
 
     On Windows only, exactly like the round trip above: each REAL name is
     checked for being writable under a THROWAWAY name derived from it, so the
@@ -391,7 +399,7 @@ def t_live_the_three_connect_entries_on_real_windows():
         print("skip  live connect-account entries (not Windows)")
         return
     import jarvis_connect_account as CONNECT
-    for sid in ("calendar_caldav", "github", "calendar_ics"):
+    for sid in ("calendar_caldav", "github", "calendar_ics", "gmail"):
         for target in CONNECT.targets(sid).values():
             throwaway = f"{target} test {secrets.token_hex(6)}"
             store = TS.WindowsStore(throwaway)
@@ -420,7 +428,7 @@ if __name__ == "__main__":
                t_no_secret_ever_appears_in_an_error_message,
                t_the_desktop_writes_under_the_same_four_names,
                t_live_windows_round_trip,
-               t_live_the_three_connect_entries_on_real_windows):
+               t_live_the_four_connect_entries_on_real_windows):
         try:
             fn()
         except Exception as exc:

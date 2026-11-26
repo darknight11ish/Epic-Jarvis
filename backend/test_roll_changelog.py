@@ -14,6 +14,10 @@ are never written):
      fragment files only after the new text is read back.
   3. `--dry-run` writes NOTHING; a second roll is a no-op (idempotent); `--check`
      exits 0 for good fragments and 1 for a bad one.
+  4. A `docs/CLAIMS.tsv` row whose `source` cited a rolled fragment is moved to
+     the durable `changelog:"<the bullet's bold title>"` form - the cell is
+     then verified with `tools/check_claims.py`'s own `source_problem`, so the
+     two tools cannot disagree about what the citation means.
 
 WHY THIS EXISTS. Every PR used to append to the same top of CHANGELOG.md, so
 two PRs always conflicted and a conflicted PR gets no CI. The fix is one small
@@ -29,6 +33,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))
+import check_claims  # noqa: E402
 import roll_changelog as R  # noqa: E402
 
 PASSED, FAILED = [], []
@@ -144,12 +149,17 @@ def t_the_check_exit_codes_are_real():
 
 
 
-def t_the_roll_reanchors_a_claim_that_cited_a_fragment():
-    """A claim source naming a rolled fragment is moved to CHANGELOG.md.
+def t_the_roll_reanchors_a_claim_to_the_durable_citation():
+    """A claim source naming a rolled fragment is moved to the durable form.
 
     The roll removes the fragment files, so `backend/test_claims.py`'s "every
     source is a file and a line inside it" would fail on a register still
-    pointing at one. The roll rewrites those cells itself, in the same run.
+    pointing at one. Since 2026-11-25 the roll writes
+    `changelog:"<the bullet's bold title>"` rather than `CHANGELOG.md:<line>`:
+    the line rots on the NEXT roll - that is how twelve rows came to cite
+    numbers that pointed at other entries - while the title is exactly what
+    `tools/check_claims.py` verifies. The cell this writes is proved against
+    that checker's own `source_problem`, so the two matchers cannot drift.
     """
     frags, changelog = fresh()
     fragment(frags, "2026-10-31-phone-doors.md",
@@ -164,14 +174,26 @@ def t_the_roll_reanchors_a_claim_that_cited_a_fragment():
     rows = claims.read_text(encoding="utf-8").splitlines()
     moved = [r for r in rows if r.startswith("C1\t")][0].split("\t")[-1]
     kept = [r for r in rows if r.startswith("C2\t")][0].split("\t")[-1]
-    check("a claim that cited a rolled fragment now cites CHANGELOG.md",
-          moved.startswith("CHANGELOG.md:"), moved)
-    text = changelog.read_text(encoding="utf-8").splitlines()
-    line = int(moved.split(":")[1]) if moved.startswith("CHANGELOG.md:") else 0
-    check("... and that line really is the rolled bullet",
-          0 < line <= len(text) and "Phone doors (2026-10-31)" in text[line - 1],
-          (line, text[line - 1] if 0 < line <= len(text) else None))
+    check("a claim that cited a rolled fragment now cites the bullet's bold "
+          "title - the form that survives the next roll",
+          moved == 'changelog:"Phone doors (2026-10-31)."', moved)
+    check("... and tools/check_claims.py accepts that cell exactly as written",
+          check_claims.source_problem(moved, repo=changelog.parent) is None,
+          check_claims.source_problem(moved, repo=changelog.parent))
     check("a claim that names another file is untouched", kept == "docs/DECISIONS.md:9", kept)
+    # A bullet that does not OPEN with a bold title keeps the weaker line
+    # citation: a title from the middle of the prose is not the bullet's own,
+    # and a citation that does not mean what it names is worse than a line.
+    frags3, changelog3 = fresh()
+    fragment(frags3, "2026-10-31-plain.md",
+             "- Phone doors **changed** (2026-10-31). one file.\n")
+    claims3 = frags3.parent / "CLAIMS.tsv"
+    claims3.write_text("C1\tone\tfile:x\tstated\t"
+                       "changelog.d/2026-10-31-plain.md:1\n", encoding="utf-8")
+    R.roll(frags3, changelog3, claims=claims3)
+    fallback = claims3.read_text(encoding="utf-8").splitlines()[0].split("\t")[-1]
+    check("a bullet with no leading bold title falls back to the line citation",
+          fallback.startswith("CHANGELOG.md:"), fallback)
     # A dry run must not rewrite the register.
     frags2, changelog2 = fresh()
     fragment(frags2, "2026-10-31-phone-doors.md",
@@ -183,6 +205,7 @@ def t_the_roll_reanchors_a_claim_that_cited_a_fragment():
     R.roll(frags2, changelog2, dry_run=True, claims=claims2)
     check("a dry run leaves the claims register exactly as it was",
           claims2.read_text(encoding="utf-8") == before)
+
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
