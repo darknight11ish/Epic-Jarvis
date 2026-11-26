@@ -341,6 +341,17 @@
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -3298,6 +3309,17 @@
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -6250,6 +6272,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
        "windows_hello": false
       }
      ],
@@ -9214,6 +9247,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
        "windows_hello": false
       }
      ],
@@ -12181,6 +12225,17 @@
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -15144,6 +15199,17 @@
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -18099,6 +18165,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
        "windows_hello": false
       }
      ],
@@ -21060,6 +21137,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
        "windows_hello": false
       }
      ],
@@ -24033,6 +24121,17 @@
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -26994,6 +27093,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
        "windows_hello": false
       }
      ],
@@ -29963,6 +30073,17 @@
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
        "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
+       "windows_hello": false
       }
      ],
      "title": "Writing your notes"
@@ -32925,6 +33046,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete notes from your Obsidian vault",
+       "windows_hello": false
+      },
+      {
+       "action": "empty_vault_trash",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "empty_vault_trash",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Empty your Obsidian vault's .trash folder for good",
        "windows_hello": false
       }
      ],

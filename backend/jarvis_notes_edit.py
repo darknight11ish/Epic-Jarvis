@@ -21,6 +21,14 @@ existing note. This module is those routes:
     POST /api/notes/move              into an existing (or created) folder
     POST /api/notes/delete            move up to twenty notes into the vault's
                                       own .trash folder, one card naming them all
+    POST /api/notes/merge             fold two to twenty notes into ONE survivor,
+                                      one card naming the survivor and every note
+                                      that leaves
+    POST /api/notes/copy              duplicate ONE note (a new note, so it is
+                                      additive: no card for a direct owner write)
+    POST /api/notes/trash             empty the vault's own .trash folder: ONE
+                                      card listing every file with its age, and
+                                      nothing happens without it
     GET  /api/notes/change?id=<job>   how one of those writes ended
 
 The three wave-1 writes (2026-10-31, the owner's flexibility decision) are the
@@ -108,9 +116,17 @@ WHAT IT WILL NOT DO
     sentence and raises NO card - it is a keep-out, not an approval question.
     When that module is not on the backend at all, this editor behaves as it did
     before the list existed. No note's bytes are read to answer it.
-  - Delete or rename a note. They are still not built (wave 2, with the link
-    repairs a rename needs), so a missing path is a 404 on read, save, append
-    and tag, and no route here removes or moves a file.
+  - Destroy a note. Since wave 2 (2026-10-31) a note CAN be renamed or moved
+    (with the links that named it updated) and, since 2026-11-23, deleted: up to
+    twenty notes are MOVED into the vault's own `.trash` folder, never written
+    over, and the owner can put one back from Explorer. What no route here does
+    is write over a file to destroy it. The one thing that really destroys bytes
+    is `/api/notes/trash`, which empties that trash folder, and it says so on its
+    own card.
+  - Treat `untitled*` notes specially. Nothing in this module keys on a note's
+    name at all: `untitled` handling is a separate feature (the vault organizer's),
+    and a note called "Untitled" is renamed, moved, merged, copied or deleted here
+    exactly like any other note.
   - Overwrite an existing note from `/api/notes/create`: a path that is already
     there is a 409 before any card. Creation makes ONE new file; undo removes
     exactly that file and refuses if it changed since.
@@ -196,6 +212,28 @@ MAX_DELETE = 20
 #: when the vault's "Deleted files" setting is the local trash folder.
 TRASH_DIR = ".trash"
 
+#: The gate action EMPTYING that folder is asked under - deliberately neither of
+#: the two above (2026-11-25). `edit_vault_note` says the old text is copied by
+#: the File Guardian first, and `delete_vault_notes` says every byte is kept in
+#: `.trash`; both of those sentences would be FALSE here. Emptying the trash
+#: destroys bytes for good, so it has its own row ("no"/"local") in
+#: `jarvis_gate._RISK` and its own card, whose words say so. The row reaches a
+#: live install the way every drop-in module's does - the published base plus
+#: `tools/repair_live_backend_gaps.py` - never a new patch.
+EMPTY_TRASH_ACTION = "empty_vault_trash"
+
+#: How many notes ONE merge request may fold in (the same bound as a delete, for
+#: the same reason: the card names every note, and a longer list is not read).
+MAX_MERGE = 20
+
+#: When the trash is worth ONE quiet line in a vault-health answer, and never
+#: otherwise (the owner's ruling Q6, 2026-11-25). All three are "it has stopped
+#: being a handful of mistakes": a size, a count, and an age. Below every one of
+#: them this feature says nothing at all, and it never acts.
+TRASH_NUDGE_BYTES = 50 * 1024 * 1024
+TRASH_NUDGE_FILES = 100
+TRASH_NUDGE_DAYS = 90
+
 #: One note may be at most 2 MiB. Bigger is refused BEFORE any card, for a
 #: read (413) and for a save (413): a card the owner cannot read is not an
 #: approval, and a whole-vault editor is not a file manager.
@@ -239,11 +277,16 @@ TEMPLATES_PATH = "/api/notes/templates"
 RENAME_PATH = "/api/notes/rename"
 MOVE_PATH = "/api/notes/move"
 DELETE_PATH = "/api/notes/delete"
+MERGE_PATH = "/api/notes/merge"
+COPY_PATH = "/api/notes/copy"
+TRASH_PATH = "/api/notes/trash"
 CHANGE_PATH = "/api/notes/change"
-GET_PATHS = (LIST_PATH, READ_PATH, SAVE_PATH, CHANGE_PATH, TEMPLATES_PATH)
+GET_PATHS = (LIST_PATH, READ_PATH, SAVE_PATH, CHANGE_PATH, TEMPLATES_PATH,
+             TRASH_PATH)
 POST_PATHS = (SAVE_PATH, CREATE_PATH, APPEND_PATH, TAG_PATH,
               INSERT_PATH, FORMAT_PATH, REPLACE_PATH, CUSTOMIZE_PATH,
-              RENAME_PATH, MOVE_PATH, DELETE_PATH)
+              RENAME_PATH, MOVE_PATH, DELETE_PATH, MERGE_PATH, COPY_PATH,
+              TRASH_PATH)
 
 #: A tag is one Obsidian tag name without the `#`: letters, digits, `_`, `-`
 #: and `/` (nested tags), at least one non-digit, never a space. 64 characters
@@ -302,6 +345,21 @@ _REFUSED_WRITE = {
         "denied": "You said no, so no note was deleted.",
         "timed_out": "Nobody answered the approval card in time, so no note was deleted.",
         "refused": "The approval gate refused it, so no note was deleted.",
+    },
+    "merge": {
+        "denied": "You said no, so no note was merged and nothing moved.",
+        "timed_out": "Nobody answered the approval card in time, so no note was merged and nothing moved.",
+        "refused": "The approval gate refused it, so no note was merged and nothing moved.",
+    },
+    "copy": {
+        "denied": "You said no, so no copy was made.",
+        "timed_out": "Nobody answered the approval card in time, so no copy was made.",
+        "refused": "The approval gate refused it, so no copy was made.",
+    },
+    "empty_trash": {
+        "denied": "You said no, so the vault's trash folder was left exactly as it was.",
+        "timed_out": "Nobody answered the approval card in time, so the vault's trash folder was left exactly as it was.",
+        "refused": "The approval gate refused it, so the vault's trash folder was left exactly as it was.",
     },
 }
 
@@ -699,13 +757,47 @@ def _finish(job_id: str, **fields) -> None:
             _jobs[job_id]["updated"] = time.time()
 
 
+def _save_change_words(old_text: str, new_text: str, rel: str) -> tuple:
+    """`(prompt, detail)` for a whole-body rewrite - what the card SAYS.
+
+    A card whose whole sentence is "overwrite Shopping.md (412 bytes)" can be
+    answered blind, and the owner's rule is that a body change must be visible
+    on the card. So the words state BOTH sizes and how many body lines are
+    going and coming, which is enough to see the change is real without
+    repeating the words: the note's own text never goes on a card or into its
+    detail (the hidden-lists rule, and the same reason a delete names files and
+    not contents). The counts are of the BODY (what follows any front matter),
+    because "14 lines of the body of X" is a fact about the owner's words, not
+    about a `---` block.
+    """
+    old = str(old_text or "")
+    new = str(new_text or "")
+    _opened, _front, old_body, _why = _split_frontmatter(old)
+    _opened2, _front2, new_body, _why2 = _split_frontmatter(new)
+    old_lines = _lines(old_body)
+    new_lines = _lines(new_body)
+    old_bytes = len(old.encode("utf-8", "surrogatepass"))
+    new_bytes = len(new.encode("utf-8", "surrogatepass"))
+    detail = {"path": rel, "action": "replace a note's whole body",
+              "bytes_before": old_bytes, "bytes_after": new_bytes,
+              "lines_before": len(old_lines), "lines_after": len(new_lines)}
+    prompt = (f"replace the whole body of {rel} in your Obsidian vault: "
+              f"{old_bytes} bytes / {len(old_lines)} body line(s) replaced by "
+              f"{new_bytes} bytes / {len(new_lines)} body line(s)")
+    return prompt, detail
+
+
 def _worker(job_id: str, full: Path, rel: str, data: bytes, expected: str,
-            vault: Path, gate_check) -> None:
+            vault: Path, gate_check, preview: dict = None) -> None:
     """Ask the gate, then (and only then) write. Runs on a daemon thread."""
     try:
-        prompt = (f"overwrite {rel} in your Obsidian vault "
-                  f"({len(data)} bytes, replacing the note that is there now)")
-        detail = {"path": rel, "size": len(data), "vault": str(vault)}
+        if isinstance(preview, dict) and preview.get("prompt"):
+            prompt = str(preview["prompt"])
+            detail = dict(preview.get("detail") or {})
+        else:
+            prompt = (f"overwrite {rel} in your Obsidian vault "
+                      f"({len(data)} bytes, replacing the note that is there now)")
+            detail = {"path": rel, "size": len(data), "vault": str(vault)}
         verdict = gate_check(ACTION, detail, prompt)
         if not getattr(verdict, "allowed", False):
             outcome = str(getattr(verdict, "outcome", "refused") or "refused")
@@ -838,10 +930,13 @@ def handle_save(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
         while len(_jobs) > MAX_JOBS:
             oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
             _jobs.pop(oldest, None)
+    _card_prompt, _card_detail = _save_change_words(
+        current.decode("utf-8", "replace"), text, rel2)
     thread = threading.Thread(
         target=_worker,
         args=(job_id, full, rel2, data, expected, vault,
-              gate_check or _gate_check),
+              gate_check or _gate_check,
+              {"prompt": _card_prompt, "detail": _card_detail}),
         name="jarvis-note-save", daemon=True)
     thread.start()
     thread.join(max(0.0, float(wait_s)))
@@ -1258,6 +1353,11 @@ def _change_prompt(kind: str, rel: str, payload, extra: dict) -> tuple:
         data = payload
         return (f"create {rel} in your Obsidian vault ({len(data)} bytes)",
                 {"path": rel, "bytes": len(data), "action": "create a new note"})
+    if kind == "copy":
+        source = str(extra.get("source") or "")
+        return (f"make a copy of {source} at {rel} in your Obsidian vault",
+                {"path": rel, "source": source, "bytes": len(payload or b""),
+                 "action": "copy a note"})
     if kind == "append":
         data = payload
         return (f"add {len(data)} bytes to the end of {rel} in your Obsidian vault",
@@ -1299,7 +1399,7 @@ def _change_worker(kind: str, job_id: str, full: Path, rel: str, payload,
                                            str(getattr(verdict, "reason", ""))))
             _audit(kind + "_refused", {"job": job_id, "path": rel, "outcome": outcome})
             return
-        if kind in ("create", "create_template"):
+        if kind in ("create", "create_template", "copy"):
             _finish_create(job_id, full, rel, payload, kind=kind,
                            source=str(extra.get("source") or ""))
             return
@@ -2016,6 +2116,25 @@ def _insert_at_anchor(text: str, anchor: str, mode: str, new_text: str):
     return new_lines, preview, ""
 
 
+def _insert_at_top(text: str, new_text: str):
+    """`(new_text, preview, why)` - the line at the TOP of the note's own words.
+
+    "add this to the top of my Shopping note" is a POSITION, not a heading. The
+    new line goes above the first body line and below any front matter, so a
+    note with properties keeps them where Obsidian expects them. A note with no
+    body at all gets the line as its first line.
+    """
+    opened, front, body, why = _split_frontmatter(text)
+    if why:
+        return text, {}, why
+    eol = _eol_of(text)
+    insert = "".join(_insert_lines(new_text, eol))
+    head = (opened + "".join(front) + "---" + eol) if opened else ""
+    first = body.splitlines()[0] if body else ""
+    preview = _preview(first, _line_body(insert), note="the top of the note")
+    return head + insert + body, preview, ""
+
+
 def _fence_ranges(text: str) -> list:
     """`[(start, end)]` character ranges of fenced code blocks (``` or ~~~)."""
     ranges = []
@@ -2204,10 +2323,26 @@ def handle_insert(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     mode = str(body.get("mode") or "").strip().lower() if isinstance(body, dict) else ""
     target = str((body or {}).get("target") or "").strip() if isinstance(body, dict) else ""
     text = (body or {}).get("text") if isinstance(body, dict) else None
-    if mode not in ("under_heading", "before", "after"):
-        return _error(400, "mode must be under_heading, before or after.", state="refused")
+    if mode not in ("under_heading", "before", "after", "top"):
+        return _error(400, "mode must be under_heading, before, after or top.",
+                      state="refused")
     if not isinstance(text, str) or not text.strip():
         return _error(400, "Need the words to add as text.", state="refused")
+    if mode == "top":
+        def transform(current):
+            new, preview, why = _insert_at_top(current, text)
+            if why:
+                return current, "", {}, why
+            said = f'Added "{_split_clip(text)}" at the top of {{rel}}.'
+            return new, said, preview, ""
+        words = f'add "{_split_clip(text)}" at the top of'
+        action = "add a line at the top of a note"
+        code, out = _start_surgical("insert", body, gate_check, wait_s, by,
+                                    transform, words, action)
+        if isinstance(out, dict) and isinstance(out.get("message"), str):
+            out["message"] = out["message"].replace(
+                "{rel}", str(out.get("path") or "the note"))
+        return code, out
     if mode == "under_heading":
         def transform(current):
             new, title, preview, why = _insert_under_heading(current, target, text)
@@ -2488,6 +2623,87 @@ def _new_section(text: str, heading: str, body: str, level: int = 2):
         block += str(body).strip() + eol
     preview = _preview("", "#" * level + " " + head, note="a new section at the end")
     return text + block, f'Added a new "{_split_clip(head)}" section.', preview, ""
+
+
+def _section_span(text: str, heading: str):
+    """`(start, end, level, title, why)` for ONE heading's whole section.
+
+    A section is its own heading line and every line after it up to the next
+    heading of the SAME or a HIGHER level (a `##` section owns its `###`
+    subsections, and stops at the next `##`), which is the span Obsidian itself
+    folds. Character offsets into `text`, so the caller can cut exactly that
+    span and leave every other byte alone.
+    """
+    want = str(heading or "").strip().lstrip("#").strip()
+    if not want:
+        return -1, -1, 0, "", "which section?"
+    lines = _lines(text)
+    found = []
+    for i, line in enumerate(lines):
+        h = _heading_at(line)
+        if h and h[1].casefold() == want.casefold():
+            found.append((i, h[0], h[1]))
+    if not found:
+        return -1, -1, 0, "", (f'There is no "{_split_clip(want)}" section in this '
+                               "note, so nothing was changed.")
+    if len(found) > 1:
+        return -1, -1, 0, "", (f'There are {len(found)} "{_split_clip(want)}" '
+                               "headings in this note, so nothing was changed - "
+                               "name one of them.")
+    idx, level, title = found[0]
+    stop = len(lines)
+    for j in range(idx + 1, len(lines)):
+        h = _heading_at(lines[j])
+        if h and h[0] <= level:
+            stop = j
+            break
+    # A blank line directly before the next heading belongs to that heading's
+    # spacing, not to this section: keep it, so removing a section never leaves
+    # two headings touching with no blank line between them.
+    while stop > idx + 1 and not _line_body(lines[stop - 1]).strip():
+        stop -= 1
+    start_at = sum(len(line) for line in lines[:idx])
+    end_at = sum(len(line) for line in lines[:stop])
+    return start_at, end_at, level, title, ""
+
+
+def _remove_section(text: str, heading: str, rel: str = ""):
+    """`(new_text, said, preview, why)` - ONE whole section taken out.
+
+    The one DELETE-shaped edit to the inside of a note. It is carded under
+    `edit_vault_note` (never `delete_vault_notes`, whose row says every byte is
+    kept in `.trash`): this is a change to ONE note, the File Guardian copies the
+    old text first, and one Undo puts the section back. The card names the
+    section and states how many lines it removes, because a section is not one
+    line and "delete the Warm-up section" must not be accepted blind.
+    """
+    start, end, _level, title, why = _section_span(text, heading)
+    if why:
+        return text, "", {}, why
+    removed = text[start:end]
+    gone = _lines(removed)
+    count = len(gone)
+    first = _line_body(gone[0]) if gone else ""
+    # WHICH LINES GO is on the card, not only how many (the owner's brief for
+    # 2026-11-25: "delete a section of a note - carded, shows which lines go").
+    # The span is named by its 1-based line numbers in the note as it stands now,
+    # because that is what the owner can see in Obsidian before answering. The
+    # section's own words are NOT quoted here: the hidden-lists rule keeps a
+    # note's text off a card, and the heading (which the owner just named) is the
+    # only line already in the request.
+    first_no = text[:start].count("\n") + 1
+    last_no = first_no + count - 1
+    where = f"line {first_no}" if count == 1 else f"lines {first_no}-{last_no}"
+    preview = _preview(first, "", note=(f'the whole "{title}" section is removed '
+                                       f"({where})"))
+    preview["lines_removed"] = count
+    preview["lines_from"] = first_no
+    preview["lines_to"] = last_no
+    fresh = text[:start] + text[end:]
+    where = (" from " + rel) if rel else ""
+    said = (f'Deleted the "{_split_clip(title)}" section ({count} line'
+            f'{"s" if count != 1 else ""}){where}.')
+    return fresh, said, preview, ""
 
 
 def _property_edit(text: str, action: str, key: str, value: str):
@@ -2839,6 +3055,16 @@ def handle_customize(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
         level = int(body.get("level") or 2)
         new_text, said, preview, why = _new_section(text, head, body_text, level)
         card = f'add a new "{_split_clip(head)}" section to'
+    elif action in ("remove_section", "delete_section"):
+        head = str(body.get("heading") or body.get("section") or "").strip()
+        new_text, said, preview, why = _remove_section(text, head, rel)
+        # The card's own line says HOW MANY lines go and WHERE, so "delete the
+        # Warm-up section" is never accepted blind - the count and the line span
+        # are on the card, and the detail carries both as fields.
+        gone = int(preview.get("lines_removed") or 0)
+        card = (f'delete the "{_split_clip(head)}" section ({gone} line'
+                f'{"s" if gone != 1 else ""}) from' if gone
+                else f'delete the "{_split_clip(head)}" section from')
     elif action in ("set_property", "remove_property"):
         key = str(body.get("key") or "").strip()
         value = str(body.get("value") or "")
@@ -3794,6 +4020,701 @@ except Exception:                                           # noqa: BLE001
     pass
 
 
+# ---------------------------------------------------------------------------
+#   Copying ONE note (2026-11-25) - additive, so a direct owner write is card-free
+# ---------------------------------------------------------------------------
+#
+# WHY CARDLESS. The owner's standing model (2026-10-31, and the reason create is
+# card-free) is that a brand-new file cannot overwrite or remove anything: a copy
+# is one more note, and one Undo removes exactly it. So a direct owner write in
+# the HUD (typed or voice) takes the same no-card path create takes, with the
+# same 64 KB cap and the same receipt recorded before the file exists. Every
+# other caller - a background job, another client, a write after outside text -
+# keeps ONE `edit_vault_note` card, exactly as create does.
+#
+# WHAT IT COPIES. The note's bytes, verbatim: a duplicate is a duplicate, so a
+# note's properties, tags, links and words all survive. That also means a copied
+# `aliases:` line points two notes at one name; the resolver's own ambiguity
+# refusal already answers that in words ("matches 2 notes"), which is the honest
+# behaviour rather than this writer editing the copy's frontmatter unasked.
+
+COPY_SUFFIX = " copy"
+
+
+def _copy_target(vault: Path, source_rel: str, wanted) -> tuple:
+    """`(target_rel, why)` - a free path for the copy, never over another file."""
+    parent = os.path.dirname(source_rel).replace("\\", "/").strip("/")
+    stem, suffix = os.path.splitext(os.path.basename(source_rel))
+    raw = str(wanted or "").strip().strip('"').strip("'")
+    if raw:
+        if "/" in raw or "\\" in raw:
+            parts, why = note_parts(raw)
+            if why:
+                return "", why
+            return "/".join(parts), ""
+        name = raw
+        if name.lower().endswith((".md", ".txt")):
+            name = name[:-len(".md")] if name.lower().endswith(".md") else name[:-4]
+        if _BAD_FILENAME.search(name) or name.startswith("."):
+            return "", ("a note name cannot contain < > : \" / \\ | ? * or start "
+                        "with a dot")
+        if len(name) > 120:
+            return "", "that note name is longer than the editor's 120-character limit"
+        stem = name
+        cand = (parent + "/" + stem + suffix) if parent else (stem + suffix)
+        if not vault.joinpath(*cand.split("/")).exists() \
+                and not _case_exists(vault.joinpath(*parent.split("/")) if parent else vault,
+                                     stem + suffix):
+            return cand, ""
+        return "", f'There is already a note called "{stem}", so nothing was copied.'
+    for n in range(1, 100):
+        name = stem + COPY_SUFFIX + ("" if n == 1 else " " + str(n))
+        cand = (parent + "/" + name + suffix) if parent else (name + suffix)
+        folder = vault.joinpath(*parent.split("/")) if parent else vault
+        if not vault.joinpath(*cand.split("/")).exists() \
+                and not _case_exists(folder, name + suffix):
+            return cand, ""
+    return "", "there are already too many copies of that note in its folder"
+
+
+def _plan_copy(body: dict) -> tuple:
+    """`(plan dict, error tuple)`; every refusal happens before any card."""
+    raw, why = _one_path(body)
+    if why:
+        return None, _error(400, why, state="refused")
+    source_full, source_rel, why = _resolve_note(raw)
+    if why:
+        return None, _error(400, why, state="refused")
+    if not source_full.is_file():
+        return None, _error(404, (f"There is no note at {source_rel} in your Obsidian "
+                                  "vault, so nothing was copied."), state="refused")
+    _P = _protection()
+    if _P is not None:
+        said = _P.path_refusal(str(source_full), write=True)
+        if said:
+            return None, _error(403, said, state="refused")
+    vault, why = _vault()
+    if vault is None:
+        return None, _error(503, "Nothing was copied: " + why + ".", state="refused")
+    try:
+        data = _read_bytes(source_full)
+    except OSError as exc:
+        return None, _error(503, (f"The note could not be read "
+                                  f"({type(exc).__name__}), so nothing was copied."),
+                            state="refused")
+    target_rel, why = _copy_target(vault, source_rel,
+                                   body.get("as") or body.get("new_name")
+                                   or body.get("target") or body.get("new_path"))
+    if why:
+        return None, _error(409 if "already a note" in why else 400, why,
+                            state="refused")
+    target_full = vault.joinpath(*target_rel.split("/"))
+    if not _inside(vault, target_full) or not _inside(vault, target_full.parent):
+        return None, _error(400, "the copy would land outside your Obsidian vault",
+                            state="refused")
+    if _P is not None:
+        said = _P.path_refusal(str(target_full), write=True)
+        if said:
+            return None, _error(403, said, state="refused")
+    return {"source": source_rel, "target": target_rel, "data": data,
+            "vault": str(vault), "hidden": _hidden_lists(),
+            "bytes": len(data)}, None
+
+
+def handle_copy(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                by: str = "", provenance: str = "typed",
+                client: str = "hud") -> tuple:
+    """POST /api/notes/copy: duplicate ONE note; additive, so usually no card."""
+    plan, err = _plan_copy(body)
+    if err is not None:
+        return err
+    vault = Path(plan["vault"])
+    body_prov = str((body or {}).get("provenance") or provenance or "typed").strip().lower()
+    body_client = str((body or {}).get("client") or client or "").strip().lower()
+    owner_direct = body_prov in ("typed", "voice") and body_client == "hud"
+    if owner_direct:
+        target_full = vault.joinpath(*plan["target"].split("/"))
+        return _create_now(target_full, plan["target"], plan["data"])
+    target_full = vault.joinpath(*plan["target"].split("/"))
+    return _start_change_job("copy", target_full, plan["target"], plan["data"], "",
+                             vault, gate_check, wait_s, by,
+                             {"source": plan["source"]})
+
+
+# ---------------------------------------------------------------------------
+#   Merging notes into ONE survivor (2026-11-25)
+# ---------------------------------------------------------------------------
+#
+# THE OWNER'S REQUEST: "i want atlas to have full control and full ability to
+# manipulate and change any of my notes, with deletions requiring a card of
+# approval". A merge is the one verb that writes AND deletes in one act, so it
+# is built to the strictest of the two:
+#
+#   * ONE card, under `delete_vault_notes` - not `edit_vault_note` - because a
+#     note really does leave the vault when the merge is done. Its row already
+#     says every byte is kept in the vault's .trash and that neither app can put
+#     the note back, which is exactly true here, and its words are what title the
+#     Windows Hello prompt.
+#   * The card names the SURVIVOR and every note that goes, and how many lines
+#     each contributes, so "which one survives" is on the card in the owner's own
+#     words rather than implied by field order.
+#   * Nothing is written until the card is answered; a Deny writes nothing and
+#     says so. After the yes, every note is re-verified against the sha256 the
+#     card named, so a note edited while the card waited refuses the whole merge.
+#   * The absorbed notes are MOVED into .trash, never written over: the bytes
+#     survive, and the reply names the folder, exactly as a delete's does.
+#
+# WHAT LANDS IN THE SURVIVOR. Each absorbed note's BODY (its text after any front
+# matter) is appended below the survivor's own words, behind one invisible
+# marker line naming where it came from. An HTML comment renders as nothing in
+# Obsidian, so the merge reads as one note - while the provenance is still
+# readable in the file itself, which a plain concatenation would lose.
+MERGE_MARK = "<!-- merged from \"{name}\" -->"
+
+
+def _body_of(text: str) -> str:
+    """One note's own words: everything after a closed front matter block."""
+    _opened, _front, body, _why = _split_frontmatter(str(text or ""))
+    return body
+
+
+def _merge_block(source_title: str, source_text: str, eol: str) -> str:
+    """The bytes one absorbed note contributes to the survivor."""
+    body = _body_of(source_text).replace("\r\n", eol).replace("\n", eol).strip("\r\n")
+    mark = MERGE_MARK.format(name=source_title.replace('"', "'"))
+    return mark + eol + (body + eol if body else "")
+
+
+def _plan_merge(body: dict) -> tuple:
+    """`(plan dict, error tuple)`; every refusal happens before any card."""
+    if not isinstance(body, dict):
+        return None, _error(400, "Need a JSON object naming the notes to merge.",
+                            state="refused")
+    into_raw = body.get("into") or body.get("survivor") or body.get("target")
+    if not isinstance(into_raw, str) or not into_raw.strip():
+        return None, _error(400, ("Say which note should survive: send `into` as "
+                                  "that note's path."), state="refused")
+    raw = body.get("paths") or body.get("notes") or body.get("sources")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list) or not raw:
+        return None, _error(400, ("Say which notes to fold in: send `paths` as a "
+                                  "list of note paths."), state="refused")
+    if len(raw) > MAX_MERGE:
+        return None, _error(400, (f"I merge up to {MAX_MERGE} notes at a time, and "
+                                  f"{len(raw)} were named, so nothing was merged."),
+                            state="refused")
+    vault, why = _vault()
+    if vault is None:
+        return None, _error(503, "Nothing was merged: " + why + ".", state="refused")
+    _P = _protection()
+    into_full, into_rel, why = _resolve_note(into_raw)
+    if why:
+        return None, _error(400, "Nothing was merged: " + why + ".", state="refused")
+    if not into_full.is_file():
+        return None, _error(404, (f"There is no note at {into_rel} in your Obsidian "
+                                  "vault, so nothing was merged."), state="refused")
+    if _P is not None:
+        said = _P.path_refusal(str(into_full), write=True)
+        if said:
+            return None, _error(403, said, state="refused")
+    try:
+        into_text = _read_bytes(into_full).decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, _error(400, (f"{into_rel} could not be read as text "
+                                  f"({type(exc).__name__}), so nothing was merged."),
+                            state="refused")
+    eol = _eol_of(into_text)
+    rows, seen, taken = [], {into_rel.casefold()}, set()
+    for one in raw:
+        full, rel, why = _resolve_note(one)
+        if why:
+            return None, _error(400, "Nothing was merged: " + why + ".", state="refused")
+        key = rel.casefold()
+        if key in seen:
+            return None, _error(400, (f"{rel} was named twice, so nothing was "
+                                      "merged."), state="refused")
+        seen.add(key)
+        if not full.is_file():
+            return None, _error(404, (f"There is no note at {rel} in your Obsidian "
+                                      "vault, so nothing was merged."), state="refused")
+        if _P is not None:
+            said = _P.path_refusal(str(full), write=True)
+            if said:
+                return None, _error(403, said, state="refused")
+        try:
+            data = _read_bytes(full)
+            text = data.decode("utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            return None, _error(400, (f"{rel} could not be read as text "
+                                      f"({type(exc).__name__}), so nothing was "
+                                      "merged."), state="refused")
+        try:
+            target_rel = _delete_target(vault, rel, taken)
+        except OSError:
+            return None, _error(409, (f"The trash folder already holds too many "
+                                      f"notes called {rel}, so nothing was merged."),
+                                state="refused")
+        taken.add(target_rel.casefold())
+        title = Path(rel).stem
+        rows.append({"rel": rel, "full": str(full), "sha256": _sha256(data),
+                     "bytes": len(data), "target": target_rel, "title": title,
+                     "lines": len(_lines(_body_of(text)))})
+    merged = into_text
+    for row in rows:
+        try:
+            absorbed = Path(row["full"]).read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError):       # re-read: it was read above
+            return None, _error(503, (f"{row['rel']} could not be re-read, so nothing "
+                                      "was merged."), state="refused")
+        block = _merge_block(row["title"], absorbed, eol)
+        if not merged.endswith(("\n", "\r")):
+            merged += eol
+        if not merged.endswith(eol + eol):
+            merged += eol
+        merged += block
+    data = merged.encode("utf-8", errors="surrogatepass")
+    if len(data) > MAX_FILE_BYTES:
+        return None, _error(413, (f"The merged note would be {len(data)} bytes, over "
+                                  f"the {MAX_FILE_BYTES} byte limit, so nothing was "
+                                  "merged."), state="refused")
+    plan = {"kind": "merge", "vault": str(vault), "into": into_rel,
+            "into_full": str(into_full), "into_sha": _sha256(into_text.encode("utf-8")),
+            "rows": rows, "n": len(rows),
+            "names": [r["rel"] for r in rows],
+            "lines_added": sum(r["lines"] for r in rows),
+            "hidden": _hidden_lists()}
+    plan["preview"] = _merge_preview(plan)
+    plan["data"] = data
+    return plan, None
+
+
+def _merge_preview(plan: dict) -> str:
+    """The sentence the conversation and the card both start from."""
+    n = plan["n"]
+    one = "note" if n == 1 else "notes"
+    if plan["hidden"]:
+        return (f"This merges {n} {one} into one note and moves the other one out "
+                "of your Obsidian vault and into its .trash folder.")
+    if n == 1:
+        return (f'This merges "{plan["names"][0]}" into "{plan["into"]}" and moves '
+                "it out of your Obsidian vault and into its .trash folder.")
+    return (f'These {n} notes are merged into "{plan["into"]}" and move out of your '
+            "Obsidian vault and into its .trash folder: "
+            + ", ".join(f'"{p}"' for p in plan["names"]) + ".")
+
+
+def _merge_prompt_detail(plan: dict) -> tuple:
+    """The card's own line and detail - the survivor, every note, the line counts."""
+    n = plan["n"]
+    if plan["hidden"]:
+        return (f"merge {n} note(s) into one note in your Obsidian vault and move "
+                f"{n} into its .trash folder",
+                {"action": "merge notes", "count": n, "trash": True,
+                 "undo": False, "deletes": True, "hidden_lists": True})
+    names = ", ".join(f'"{p}"' for p in plan["names"])
+    tail = ("and it moves into the vault's .trash folder" if n == 1
+            else f"and the other {n} move into the vault's .trash folder")
+    prompt = (f'merge {names} into "{plan["into"]}" in your Obsidian vault: '
+              f'"{plan["into"]}" survives and gains {plan["lines_added"]} line(s), '
+              f"{tail}")
+    detail = {"action": "merge notes", "into": plan["into"], "count": n,
+              "paths": list(plan["names"]), "survivor": plan["into"],
+              "lines_added": plan["lines_added"], "trash": True,
+              "undo": False, "deletes": True}
+    return prompt, detail
+
+
+def _merge_verify(plan: dict) -> str:
+    """Empty when every note is still the one the card named; else plain words."""
+    try:
+        if _sha256(_read_bytes(Path(plan["into_full"]))) != plan["into_sha"]:
+            return (f'{plan["into"]} changed while the card waited, so nothing was '
+                    "merged.")
+    except OSError:
+        return f'{plan["into"]} could not be re-read, so nothing was merged.'
+    why = _delete_verify(plan)
+    if why:
+        return why.replace("deleted", "merged")
+    return ""
+
+
+def _merge_worker(job_id: str, plan: dict, gate_check) -> None:
+    """Ask the gate, then (and only then) write the survivor and trash the rest."""
+    try:
+        prompt, detail = _merge_prompt_detail(plan)
+        verdict = gate_check(DELETE_ACTION, detail, prompt)
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            state = "denied" if outcome in ("denied", "timed_out") else "failed"
+            _finish(job_id, state=state, outcome=outcome,
+                    message=_REFUSED_WRITE["merge"].get(
+                        outcome, "The approval gate refused it, so nothing was merged."))
+            _audit("merge_refused", {"job": job_id, "outcome": outcome,
+                                     "count": plan["n"]})
+            return
+        why = _merge_verify(plan)
+        if why:
+            _finish(job_id, state="failed", message=why)
+            _audit("merge_failed", {"job": job_id, "why": "changed"})
+            return
+        vault = Path(plan["vault"])
+        trash = vault / TRASH_DIR
+        taken_now = [row["rel"] for row in plan["rows"]
+                     if trash.joinpath(*row["target"].split("/")).exists()]
+        if taken_now:
+            _finish(job_id, state="failed",
+                    message=("A file named like the trash copy appeared while the "
+                             "card waited, so nothing was merged: "
+                             + ", ".join(taken_now) + "."))
+            _audit("merge_failed", {"job": job_id, "why": "trash-name-taken"})
+            return
+        into_full = Path(plan["into_full"])
+        old_into = _read_bytes(into_full)
+        snap = _snapshot(into_full, plan["into"])
+        if not snap.get("ok"):
+            words = str(snap.get("words") or snap.get("error") or "no copy was made")
+            _finish(job_id, state="failed",
+                    message=("Nothing was merged, because a copy of "
+                             f'{plan["into"]} could not be saved first: ' + words))
+            _audit("merge_failed", {"job": job_id, "why": "guardian"})
+            return
+        moved = []
+        try:
+            _write_note(into_full, plan["data"])
+        except OSError as exc:
+            _finish(job_id, state="failed",
+                    message=(f"The merged note could not be written "
+                             f"({type(exc).__name__}), so nothing was merged."))
+            _audit("merge_failed", {"job": job_id, "why": "write"})
+            return
+        try:
+            for row in plan["rows"]:
+                target = trash.joinpath(*row["target"].split("/"))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(row["full"], str(target))
+                moved.append(row)
+        except Exception as exc:                            # noqa: BLE001
+            put_back, stuck = [], []
+            for row in moved:
+                try:
+                    os.replace(str(trash.joinpath(*row["target"].split("/"))),
+                               row["full"])
+                    put_back.append(row["rel"])
+                except Exception:                        # noqa: BLE001
+                    stuck.append(row["rel"])
+            try:
+                _write_note(into_full, old_into)
+            except OSError:
+                stuck.append(plan["into"])
+            if stuck:
+                said = (f"The merge failed ({type(exc).__name__}). "
+                        f'{plan["into"]} was put back; {", ".join(stuck)} could not '
+                        "be, and are in the vault's .trash folder.")
+            else:
+                said = (f"The merge failed ({type(exc).__name__}), so every note was "
+                        "put back exactly as it was.")
+            _finish(job_id, state="failed", message=said)
+            _audit("merge_failed", {"job": job_id, "why": "write",
+                                    "stuck": len(stuck)})
+            return
+        _finish(job_id, state="saved", target=plan["into"], count=plan["n"],
+                paths=[] if plan["hidden"] else list(plan["names"]),
+                message=_merged_words(plan))
+        _audit("merged", {"job": job_id, "count": plan["n"],
+                          "into": plan["into"]})
+    except Exception as exc:                                # noqa: BLE001
+        _finish(job_id, state="failed",
+                message=(f"The merge failed ({type(exc).__name__}), so nothing was "
+                         "merged."))
+        _audit("merge_failed", {"job": job_id, "why": "exception"})
+
+
+def _merged_words(plan: dict) -> str:
+    """What the conversation says once the merge has landed."""
+    n = plan["n"]
+    if plan["hidden"]:
+        return ("Merged the notes into one and moved the others into the vault's "
+                ".trash folder.")
+    if n == 1:
+        return (f'Merged "{plan["names"][0]}" into "{plan["into"]}". The merged note '
+                "is in your vault, and the other one is in the vault's .trash folder.")
+    return (f'Merged {n} notes into "{plan["into"]}". They are now in the vault\'s '
+            ".trash folder: " + ", ".join(f'"{p}"' for p in plan["names"]) + ".")
+
+
+def handle_merge(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                 by: str = "") -> tuple:
+    """POST /api/notes/merge: fold one or more notes into ONE survivor, one card."""
+    plan, err = _plan_merge(body)
+    if err is not None:
+        return err
+    with _lock:
+        waiting = sum(1 for j in _jobs.values() if j.get("state") == "waiting")
+        if waiting >= MAX_WAITING:
+            return _error(429, (f"{MAX_WAITING} note changes are already waiting for "
+                                "approval - answer those cards first, then ask this "
+                                "one."), state="refused")
+        job_id = "notemerge_" + secrets.token_hex(8)
+        _jobs[job_id] = {"id": job_id, "kind": "merge", "state": "waiting",
+                         "path": plan["into"], "target": plan["into"],
+                         "count": plan["n"], "paths": list(plan["names"]),
+                         "message": plan["preview"], "created": time.time(),
+                         "updated": time.time(), "by": by}
+        while len(_jobs) > MAX_JOBS:
+            oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
+            _jobs.pop(oldest, None)
+    thread = threading.Thread(target=_merge_worker,
+                              args=(job_id, plan, gate_check or _gate_check),
+                              name="jarvis-note-merge", daemon=True)
+    thread.start()
+    thread.join(max(0.0, float(wait_s)))
+    code, out = change_status(job_id)
+    if out.get("state") == "waiting":
+        out["id"] = job_id
+    return (202 if out.get("state") == "waiting" else 200), out
+
+
+# ---------------------------------------------------------------------------
+#   Emptying the vault's own .trash folder (2026-11-25)
+# ---------------------------------------------------------------------------
+#
+# WHY. Obsidian's `.trash` folder has no timer: a note deleted last month is
+# still there, so the folder grows for ever. Until now nothing could empty it -
+# every route here refuses a dot-prefixed path - so the owner's own deletions
+# accumulated with no way to finish the job from either app.
+#
+# WHY ITS OWN CARD AND ITS OWN ACTION. This is the ONE note operation that
+# really destroys bytes: no Undo receipt, no File Guardian copy of what is in the
+# trash (it IS the copy), and nothing left for Explorer to restore. Neither
+# `edit_vault_note` ("the old text is copied first") nor `delete_vault_notes`
+# ("every byte is kept in .trash") can say that honestly, so it is asked under
+# `empty_vault_trash`, whose `_RISK` row says it cannot be undone. The row lives
+# in the published base (`jarvis-backend/jarvis_gate.py`) with the other
+# end-of-file update blocks, and reaches a live install through
+# `tools/repair_live_backend_gaps.py` - never a new patch.
+#
+# WHAT THE CARD SHOWS. Every file, with its name and how many days old it is,
+# the count and the total size. An age is the thing that tells the owner whether
+# they are about to throw away yesterday's mistake before they notice it, or
+# three weeks of clutter - so it is on the card, not in a log.
+TRASH_EMPTY_SAID = ("The vault's trash folder is already empty, so there was "
+                    "nothing to empty and no card was raised.")
+TRASH_NUDGE_SAID = ('Your vault\'s .trash folder has {why}. Say "empty the vault '
+                    'trash" and I will list every file on one card before anything '
+                    'is deleted.')
+
+
+def _size_words(total: int) -> str:
+    """A byte count in words a beginner reads at a glance (never "0.0 KB")."""
+    if total >= 1024 * 1024:
+        return f"{round(total / (1024 * 1024), 1)} MB"
+    if total >= 1024:
+        return f"{round(total / 1024, 1)} KB"
+    return f"{total} byte{'' if total == 1 else 's'}"
+
+
+def _trash_rows(vault: Path, *, now: float = None) -> list:
+    """Every FILE in `<vault>/.trash`, with its size and age; never a symlink."""
+    stamp = time.time() if now is None else float(now)
+    root = vault / TRASH_DIR
+    rows = []
+    if not root.is_dir():
+        return rows
+    for dirpath, dirnames, filenames in os.walk(str(root), followlinks=False):
+        here = Path(dirpath)
+        dirnames[:] = sorted(d for d in dirnames
+                             if not _is_link_or_reparse(here / d))
+        for name in sorted(filenames):
+            full = here / name
+            if _is_link_or_reparse(full):
+                continue
+            try:
+                st = os.stat(str(full))
+            except OSError:
+                continue
+            rel = os.path.relpath(str(full), str(root)).replace(os.sep, "/")
+            rows.append({"rel": rel, "full": str(full), "bytes": int(st.st_size),
+                         "mtime": float(st.st_mtime),
+                         "age_days": max(0, int((stamp - float(st.st_mtime)) // 86400))})
+    return rows
+
+
+def trash_state(*, now: float = None) -> dict:
+    """The trash folder's own numbers: count, bytes, oldest age, and any nudge.
+
+    Read-only, and the ONE place the three thresholds live: every caller that
+    wants to mention the trash asks this, so the answer cannot differ between the
+    card, chat and the GET route. `nudge` is "" unless one of the owner's three
+    thresholds is passed (the ruling of 2026-11-25) - a handful of recent files
+    says nothing at all, ever.
+    """
+    vault, why = _vault()
+    if vault is None:
+        return {"ok": False, "readable": False, "why": why, "count": 0,
+                "bytes": 0, "oldest_days": 0, "nudge": ""}
+    rows = _trash_rows(vault, now=now)
+    total = sum(r["bytes"] for r in rows)
+    oldest = max((r["age_days"] for r in rows), default=0)
+    tripped = []
+    if total > TRASH_NUDGE_BYTES:
+        tripped.append(f"{len(rows)} file(s) taking {round(total / (1024 * 1024), 1)} MB")
+    if len(rows) > TRASH_NUDGE_FILES:
+        tripped.append(f"{len(rows)} files in it")
+    if oldest > TRASH_NUDGE_DAYS:
+        tripped.append(f"a file {oldest} days old in it")
+    nudge = ""
+    if tripped:
+        nudge = TRASH_NUDGE_SAID.format(why=tripped[0])
+    return {"ok": True, "readable": True, "why": "", "count": len(rows),
+            "bytes": total, "oldest_days": oldest, "nudge": nudge,
+            "rows": rows}
+
+
+def trash_nudge(*, now: float = None) -> str:
+    """The ONE quiet line, or "" - never a card, never a write."""
+    try:
+        return str(trash_state(now=now).get("nudge") or "")
+    except Exception:                                       # noqa: BLE001
+        return ""
+
+
+def _trash_prompt_detail(rows: list) -> tuple:
+    """The card's own line and detail: EVERY file, its age, the count and size."""
+    total = sum(r["bytes"] for r in rows)
+    size = _size_words(total)
+    listing = "; ".join(f'"{r["rel"]}" ({r["age_days"]} day'
+                        f'{"s" if r["age_days"] != 1 else ""} old)' for r in rows)
+    prompt = (f"empty the vault's trash folder: {len(rows)} file(s) taking {size}, "
+              f"and this cannot be undone - {listing}")
+    detail = {"action": "empty the vault trash", "count": len(rows),
+              "bytes": total, "files": [r["rel"] for r in rows],
+              "ages": [r["age_days"] for r in rows],
+              "undo": False, "deletes": True}
+    return prompt, detail
+
+
+def _empty_trash_words(rows: list) -> str:
+    total = sum(r["bytes"] for r in rows)
+    return (f"Emptied the vault's trash folder: {len(rows)} file(s), {total} byte(s) "
+            "gone for good. This cannot be undone.")
+
+
+def _empty_trash_worker(job_id: str, plan: dict, gate_check) -> None:
+    """Ask the card, then (and only then) delete every file in `.trash`."""
+    try:
+        prompt, detail = _trash_prompt_detail(plan["rows"])
+        verdict = gate_check(EMPTY_TRASH_ACTION, detail, prompt)
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            state = "denied" if outcome in ("denied", "timed_out") else "failed"
+            _finish(job_id, state=state, outcome=outcome,
+                    message=_REFUSED_WRITE["empty_trash"].get(
+                        outcome, "The approval gate refused it, so nothing was "
+                                 "deleted."))
+            _audit("empty_trash_refused", {"job": job_id, "outcome": outcome,
+                                           "count": plan["count"]})
+            return
+        vault, why = _vault()
+        if vault is None:
+            _finish(job_id, state="failed",
+                    message="The Obsidian vault could not be found, so nothing was "
+                            "deleted.")
+            return
+        rows = _trash_rows(vault)
+        if len(rows) != plan["count"] or any(
+                r["rel"] not in plan["names"] for r in rows):
+            _finish(job_id, state="failed",
+                    message=("The trash folder changed while the card waited, so "
+                             "nothing was deleted; ask again to see the new list."))
+            _audit("empty_trash_failed", {"job": job_id, "why": "changed"})
+            return
+        gone, stuck = [], []
+        for row in rows:
+            try:
+                os.unlink(row["full"])
+                gone.append(row["rel"])
+            except OSError:
+                stuck.append(row["rel"])
+        if stuck:
+            _finish(job_id, state="failed",
+                    message=(f"{len(gone)} file(s) were deleted and {len(stuck)} "
+                             "could not be: " + ", ".join(stuck) + "."))
+            _audit("empty_trash_failed", {"job": job_id, "why": "unlink",
+                                          "stuck": len(stuck)})
+            return
+        _finish(job_id, state="saved", count=len(gone), paths=list(plan["names"]),
+                message=_empty_trash_words(plan["rows"]))
+        _audit("empty_trash", {"job": job_id, "count": len(gone)})
+    except Exception as exc:                                # noqa: BLE001
+        _finish(job_id, state="failed",
+                message=(f"Emptying the trash failed ({type(exc).__name__}), so "
+                         "nothing was deleted."))
+        _audit("empty_trash_failed", {"job": job_id, "why": "exception"})
+
+
+def handle_empty_trash(body=None, *, gate_check=None,
+                       wait_s: float = DEFAULT_WAIT_S, by: str = "") -> tuple:
+    """POST /api/notes/trash: empty the vault's own .trash folder, one card.
+
+    An EMPTY trash is a 200 with its own sentence and NO card: there is nothing
+    to approve. More files than `MAX_DELETE` is refused with the count stated, so
+    the folder is emptied whole or not at all - never half-empty.
+    """
+    vault, why = _vault()
+    if vault is None:
+        return _error(503, "Nothing was deleted: " + why + ".", state="refused")
+    rows = _trash_rows(vault)
+    if not rows:
+        return 200, {"ok": True, "state": "empty", "count": 0,
+                     "message": TRASH_EMPTY_SAID}
+    if len(rows) > MAX_DELETE:
+        return _error(400, (f"The vault's trash folder holds {len(rows)} files and I "
+                            f"empty at most {MAX_DELETE} at a time, so nothing was "
+                            "deleted. Empty it in Explorer, or delete fewer notes "
+                            "before asking again."), state="refused")
+    plan = {"rows": rows, "count": len(rows), "names": [r["rel"] for r in rows]}
+    with _lock:
+        waiting = sum(1 for j in _jobs.values() if j.get("state") == "waiting")
+        if waiting >= MAX_WAITING:
+            return _error(429, (f"{MAX_WAITING} note changes are already waiting for "
+                                "approval - answer those cards first, then ask this "
+                                "one."), state="refused")
+        job_id = "notetrash_" + secrets.token_hex(8)
+        _jobs[job_id] = {"id": job_id, "kind": "empty_trash", "state": "waiting",
+                         "path": TRASH_DIR, "count": plan["count"],
+                         "paths": list(plan["names"]),
+                         "message": (f"This deletes all {plan['count']} file(s) in "
+                                     "your vault's .trash folder for good."),
+                         "created": time.time(), "updated": time.time(), "by": by}
+        while len(_jobs) > MAX_JOBS:
+            oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
+            _jobs.pop(oldest, None)
+    thread = threading.Thread(target=_empty_trash_worker,
+                              args=(job_id, plan, gate_check or _gate_check),
+                              name="jarvis-note-empty-trash", daemon=True)
+    thread.start()
+    thread.join(max(0.0, float(wait_s)))
+    code, out = change_status(job_id)
+    if out.get("state") == "waiting":
+        out["id"] = job_id
+    return (202 if out.get("state") == "waiting" else 200), out
+
+
+def handle_trash_status(query: str = "") -> tuple:
+    """GET /api/notes/trash: what is in the trash, and the ONE nudge line or ""."""
+    state = trash_state()
+    if not state.get("readable"):
+        return _error(503, "No trash list: " + str(state.get("why") or
+                                                   "the vault could not be read") + ".")
+    return 200, {"ok": True, "count": state["count"], "bytes": state["bytes"],
+                 "oldest_days": state["oldest_days"],
+                 "files": [{"path": r["rel"], "bytes": r["bytes"],
+                            "age_days": r["age_days"]} for r in state["rows"]],
+                 "nudge": state["nudge"]}
+
+
+
 
 def change_status(job_id: str) -> tuple:
     """GET /api/notes/change?id=: waiting / saved / denied / failed, never text."""
@@ -4433,6 +5354,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 code, out = handle_templates_list()
             elif route == CHANGE_PATH:
                 code, out = handle_change_status(parts.query)
+            elif route == TRASH_PATH:
+                code, out = handle_trash_status(parts.query)
             else:
                 code, out = handle_save_status(parts.query)
         except Exception as exc:                            # noqa: BLE001
@@ -4478,6 +5401,16 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 code, out = handle_move(body)
             elif route == DELETE_PATH:
                 code, out = handle_delete(body)
+            elif route == MERGE_PATH:
+                code, out = handle_merge(body)
+            elif route == COPY_PATH:
+                code, out = handle_copy(
+                    body,
+                    client=str(self.headers.get("X-Jarvis-Client") or "").strip().lower()
+                    or "hud",
+                    provenance=str((body or {}).get("provenance") or "typed"))
+            elif route == TRASH_PATH:
+                code, out = handle_empty_trash(body)
             else:
                 code, out = handle_save(body)
         except Exception as exc:                            # noqa: BLE001
