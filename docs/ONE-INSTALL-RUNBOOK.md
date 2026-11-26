@@ -151,9 +151,9 @@ the backend folder (the program and its files), and `%USERPROFILE%\.openjarvis` 
 memory database, the approval queue and the logs). Together they are the "before" picture this
 whole runbook can be undone to.
 
-**UNVERIFIED.** Both lines are ordinary PowerShell and are the shape `docs/INSTALL.md` uses for
-copies, but this exact backup was not run while writing this page. If a zip fails, a file is open -
-close Atlas and try again. Do not go on with a backup you do not have.
+**UNVERIFIED.** Both lines are ordinary PowerShell, but this exact backup was not run while writing
+this page. If a zip fails, a file is open - close Atlas and try again. Do not go on with a backup
+you do not have.
 
 1. Back up the backend folder. One line (the file lands on your Desktop and ends in today's date):
 
@@ -228,6 +228,14 @@ refuses unless the base is the exact bytes it classified, never overwrites an ex
 re-imports the file it wrote to prove two rows the live file never had. It writes **only**
 `jarvis_gate.py` and its backup; it touches nothing else.
 
+**Run it once, and do not run it again to "check".** With the two shipped hashes, a second run
+refuses at the live-file guard because the gate is no longer the drifted file it measured (its
+`USAGE` line calls a second run "already the base"; the hash guard fires first in the code). That
+refusal is not a fault - the check afterwards is the hash line in 8.2. **On a new PC there is
+nothing to replace**: the copy made in step 3 already *is* the base, and this tool refuses there
+because its live file is not the one it measured. Skip step 4 on a new PC; running it is how you
+get a harmless refusal.
+
 **VERIFIED** from `tools/replace_live_gate_from_base.py` (its whole docstring, its guards and its
 `--backend-path` / `--apply` / `--allow-new-base` flags) and from
 `backend/test_replace_live_gate_from_base.py` (every case built on temp copies).
@@ -271,15 +279,16 @@ replacement (2026-11-26), the base does **not** carry:
   `still_waiting`, the read-time sweep and the no-deadline ceremonies;
 - the **2026-10-30 card timer** from `show-card-timer.patch` - an `expires_in` counted from
   `waited_until` while the request is still waiting, with the 60-second grace not shown;
-- and it does not merge, apply patches, or invent any of that. `58 of the 62` `jarvis_gate.py`
+- and it does not merge, apply patches, or invent any of that. 58 of the 62 `jarvis_gate.py`
   patches do not apply to the base either, so **the patch stack in step 5 is not a way to get the
   two behaviours back**.
 
 What the base carries instead is its own older approval model: `pending()` counts a card down from
-`created` plus `APPROVAL_TIMEOUT`, and stale rows are swept only at start-up. The tool prints that
-note before it writes, so it is not a surprise afterwards. If the patch-carried behaviour has to
-survive, it must be taken into `jarvis-backend/jarvis_gate.py` first, as a separate reviewed
-change.
+`created` plus `APPROVAL_TIMEOUT`, and stale rows are swept only at start-up. It still sends an
+`expires_in` field, but counted from `created` (the older `approval-expiry.patch` behaviour), not
+from the request's `waited_until`. The tool prints that note before it writes, so it is not a
+surprise afterwards. If the patch-carried behaviour has to survive, it must be taken into
+`jarvis-backend/jarvis_gate.py` first, as a separate reviewed change.
 
 What you should notice once it is replaced: cancels stop needing a card, and GitHub mode gets its
 own risk and tool rows instead of the unclassified fallback that demanded Windows Hello (the PR
@@ -293,6 +302,14 @@ risk row. Its check mode writes nothing; run it that way first, and send a `REFU
 rather than forcing `--apply`:
 
 `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\repair_live_backend_gaps.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
+
+**Do not use that tool to try to put the card timer back.** Its timer repair rewrites `pending()`'s
+SQL to read a `waited_until` column. The published base's `CREATE TABLE approvals` lists no such
+column and nothing in the base writes it: on a fresh database that repair would make `pending()`
+fail at run time, and on this PC's existing database the column exists but stays empty, so the
+timer would simply never appear. The tool's own comment says a file with only one of the timer's
+two hunks is "a silent no-op this tool's probes would call applied" - do not force it. The timer
+has to come into the base as a reviewed change.
 
 **UNVERIFIED:** the exact output of that repair check on this PC right now. The tool's anchors are
 the *live* file shapes; on a copy of the published base it refuses at `jarvis_hud.py` with "the
@@ -517,13 +534,14 @@ the lines under it say why (INSTALL section 1.9).
 
 ### 8.2 The gate is the base it was replaced with
 
-One line (check only; writes nothing):
+One line - it prints the hash and the size of the live gate (read-only):
 
-`cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\replace_live_gate_from_base.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
+`Get-FileHash -LiteralPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\jarvis_gate.py" -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower() }; (Get-Item -LiteralPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\jarvis_gate.py").Length`
 
-Good: `ok: the live gate is already the published base byte for byte; nothing to do.` If the patch
-stack changed the gate after step 4, this refuses instead - that is the guard telling you the file
-is no longer the classified one, and worth sending back rather than forcing.
+Good: `03964d30ebdd944be4b257d06e1948853441d93dfb82a3a2c95d9ff0e3db284c` and `232674` - the
+published base's identity. If the patch stack changed the gate after step 4, the hash differs; that
+means the file is no longer the classified base, so write down both hashes and send them back
+rather than forcing anything.
 
 ### 8.3 The backend folder is complete
 
@@ -546,10 +564,11 @@ pass either; read it.
 
 ### 8.5 The desktop app
 
-The desktop app should be running from step 6. Press `Alt+Space` (or tray -> **Show or hide the
-Atlas bar**), type `hello`, press Enter. An answer means the desktop reached the backend and the
-model answered. If the HUD says "demo - not connected", it could not reach the backend - check
-8.1 and the address in Settings -> Connection (INSTALL section 2.3).
+The desktop app should be running from step 6; start it from the Start menu if it is not. Press
+`Alt+Space` (or tray -> **Show or hide the Atlas bar**), type `hello`, press Enter. An answer means
+the desktop reached the backend and the model answered. If the HUD says "demo - not connected", it
+could not reach the backend - check 8.1 and the address in Settings -> Connection (INSTALL section
+2.3).
 
 ### 8.6 Approve a card
 
@@ -593,9 +612,9 @@ been run against a real PC's settings file.
 
 Then restart the backend (close the step 8.1 window, run 8.1 again). If your file writes the value
 with single quotes, not double, edit it by hand in Notepad - this line only matches the double-quoted
-form the shipped file uses. The phrase this creates is **not** the same as the 0.1-false-accepts-per-
-hour bar; that bar is unmeasured, and no phone microphone has been driven here (`CLAUDE.md` says so
-too - do not claim it).
+form the shipped file uses. **Nothing on this page proves the 0.1-false-accepts-per-hour bar for the
+wake word** - that bar is unmeasured, and no phone microphone has been driven here (`CLAUDE.md` says
+so too - do not claim it).
 
 ### 8.9 Drive it, and write down what you could not
 
