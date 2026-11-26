@@ -561,8 +561,13 @@ def t_the_rows_ride_the_base_and_the_repair_tool_not_a_patch():
     check("... AFTER the scheduling batch's own end-of-file block (both kept)",
           base.index('"cancel_scheduled": "auto",')
           < base.index('"github_mode": ("yes", "outbound",'))
-    check("the base still ends without a trailing newline, as it did",
-          not base.endswith("\n"), repr(base[-3:]))
+    # 2026-11-25: the base's newest end-of-file update (DEF-096's mailbox row)
+    # ends the file with a newline, as every other module in this base does and
+    # as the owner's live gate does; the no-newline tail the two appends before
+    # it happened to carry was an accident of how they were written. Still able
+    # to fail: a rewritten or truncated tail is not this block's `})` + newline.
+    check("the base ends with its end-of-file update closed, and a final newline",
+          base.endswith("})\n"), repr(base[-3:]))
     check("the mode's own row text is the one the repair tool carries",
           '"github_mode": ("yes", "outbound", "turns GitHub mode on for this PC'
           in base)

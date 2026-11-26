@@ -19113,12 +19113,13 @@ def _run_connect(f: dict) -> Result:
     sid = str(f.get("service") or "")
     if ask == "later" or not sid:
         return Result(
-            "I can connect two things by talking today: a calendar (the private iCal "
-            "link, or a CalDAV server's username and password) and GitHub. The rest - "
-            "email, Notion, Obsidian, the search and chatbot keys, Home Assistant - "
-            "still need Settings, Accounts on the PC, because none of them has a test "
-            "I can run to prove it works. A password or a token is never typed into "
-            "the chat, there or anywhere else.",
+            "I can connect three things by talking today: a calendar (the private iCal "
+            "link, or a CalDAV server's username and password), GitHub, and a Gmail "
+            "mailbox (your address and an app password, read-only). The rest - Notion, "
+            "Obsidian, the search and chatbot keys, Home Assistant - still need Settings, "
+            "Accounts on the PC, because none of them has a test I can run to prove it "
+            "works. A password or a token is never typed into the chat, there or anywhere "
+            "else.",
             "connect_account")
     if ask == "status":
         said = C.status_words(sid)
@@ -19182,8 +19183,10 @@ CONNECT_MISSING = ("I cannot raise the connect card on this PC: jarvis_connect_a
 #   (b) calendar, read-only - the private iCal link, typed on the secure
 #       connect card this PC raises ("connect my calendar");
 #   (c) GitHub - the same kind of secure card ("connect GitHub");
-#   (d) email - NOT built: no connect card, and its IMAP details are typed in
-#       Settings, Accounts on this PC.
+#   (d) email - Gmail, read-only: the same kind of secure card ("connect my
+#       Gmail"), which saves the address and an app password in Credential
+#       Manager and reads only the INBOX count to prove it (2026-11-25,
+#       DEF-096; other providers keep Settings, Accounts).
 #
 # NOTHING HERE TYPES A VALUE, raises a card or changes anything: the answer is
 # read-only (READ_ONLY_INTENTS) and only navigates Settings, Accounts.
@@ -19213,8 +19216,10 @@ ACCOUNTS_PATHS_WORDS = (
     "2. Google Calendar, quick read-only - the private iCal link. Say \"connect my calendar\" "
     "and one secure card appears on this PC for it.\n"
     "3. GitHub - the same kind of secure card: say \"connect GitHub\".\n"
-    "4. Email - not built yet: there is no connect card for it, and its IMAP details (mail "
-    "server, username, password) are typed in Settings, Accounts on this PC."
+    "4. Email - Gmail, read-only: say \"connect my Gmail\" and one secure card appears on "
+    "this PC for your address and an app password (it reads only how many messages INBOX "
+    "holds). Any other provider's IMAP details (mail server, username, password) are "
+    "typed in Settings, Accounts on this PC."
 )
 
 #: The first sentence, from the calendar's own chosen way - so an owner who
@@ -19288,14 +19293,16 @@ ACCOUNTS_EMAIL_LEAD_ON = "A mail server is saved on this PC already.\n"
 #: is said last. The app-password rule is Google's, not a measurement of his
 #: account, and the sentence says so.
 ACCOUNTS_EMAIL_WORDS = (
-    "Email is set up in Settings, Accounts on the PC, not on the phone: there is no "
-    "connect card for email here yet.\n"
-    "For Gmail: under Server addresses, Mail server imap.gmail.com, port 993, Mailbox "
-    "folder INBOX, and the Sending server can stay empty. Under the account secrets, "
-    "IMAP username is your Gmail address, and IMAP password must be an APP PASSWORD: "
-    "Google refuses your normal password over IMAP, and makes an app password only "
-    "with 2-step verification switched on. That is how Google's app passwords work - "
-    "I have not checked it against your account.\n"
+    "Email is set up in Settings, Accounts on the PC, and Gmail has its own secure "
+    "connect card: say \"connect my Gmail\" for your address and an app password "
+    "(read-only - it reads only how many messages INBOX holds).\n"
+    "The same account typed by hand in those boxes is the other way in, and the way "
+    "for any other provider: under Server addresses, Mail server imap.gmail.com, port "
+    "993, Mailbox folder INBOX, and the Sending server can stay empty. Under the "
+    "account secrets, IMAP username is your Gmail address, and IMAP password must be an "
+    "APP PASSWORD: Google refuses your normal password over IMAP, and makes an app "
+    "password only with 2-step verification switched on. That is how Google's app "
+    "passwords work - I have not checked it against your account.\n"
     "With that saved I read the sender of new mail (no subject, no text, and nothing "
     "goes to the model) and can send one when you ask. Type the password in that box "
     "on the PC, never into this chat."
@@ -19340,6 +19347,26 @@ def _accounts_connect(s: str) -> Optional[Intent]:
     if _CONNECT_STATUS.match(said):
         return None
     if _ACCOUNTS_ASK.match(said) or _ACCOUNTS_BARE.match(said):
+        # THE CONNECT CARD OWNS A SENTENCE THAT NAMES A MAIL SERVICE
+        # (2026-11-25, DEF-096). The owner said "i would like to connect you to
+        # my gmail" and got this answer's old line - "there is no connect card
+        # for email here yet" - which was true and useless. `gmail` is a
+        # service on that card now, so a sentence that names it belongs to
+        # `_connect` below, which raises the card and whose card says exactly
+        # what is read.
+        #
+        # IT YIELDS TO THE INTENT, NOT TO A WORD LIST. `_connect(said)` is asked
+        # what it would do, and only a real card ask is handed over - so a
+        # question this file's own grammar does not claim ("what about gmail?")
+        # keeps this answer, unchanged. The calendar half stays here too: this
+        # answer holds the Google two-way setup and the private iCal link, and a
+        # sentence naming both ("connect my gmail and google calendar") still
+        # needs it.
+        if not _ACCOUNTS_NAMES_CALENDAR.search(said) and _connectable_mail_service(said):
+            card = _connect(said)
+            if card is not None and card.name == "connect_account" \
+                    and str(card.f.get("ask") or "") == "card":
+                return None
         # Email alone, when the sentence names email and not the calendar: the
         # four-path answer below is the right shape for "gmail or google
         # calendar", and the wrong shape for "how do I connect a Gmail
@@ -19348,6 +19375,22 @@ def _accounts_connect(s: str) -> Optional[Intent]:
             return Intent("accounts_email")
         return Intent("accounts_connect")
     return None
+
+
+def _connectable_mail_service(text: str) -> str:
+    """The mail service this sentence names ("" when it names none).
+
+    Asks the card table itself (`jarvis_connect_account.SERVICES` and its
+    `MAIL_SERVICES`), so a second mail service added there needs no second
+    word list here. A missing module answers "", which keeps this answer's own
+    path unchanged.
+    """
+    try:
+        import jarvis_connect_account as C
+        sid = C.service_from_words(text)
+    except Exception:                       # noqa: BLE001 - module absent
+        return ""
+    return sid if sid in getattr(C, "MAIL_SERVICES", ()) else ""
 
 
 def _run_accounts_connect() -> Result:

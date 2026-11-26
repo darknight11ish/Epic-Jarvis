@@ -884,5 +884,68 @@ def main():
     return 1 if FAILED else 0
 
 
+def t_the_connect_mail_row_repairs_a_live_gate_without_it():
+    """DEF-096 (2026-11-25): the mailbox connect card's own action.
+
+    The card itself works without the row - a name with no `[autonomy.tiers]`
+    line takes `unknown_action_tier`, "ask" on this PC - so this repair is about
+    the GATE'S OWN RECORD: without it `risk_for("connect_mail")` answers the
+    unclassified fallback, "permanent and able to leave this PC", which is false
+    of a Credential Manager write and one IMAP count. The repair must insert the
+    published base's row byte for byte, in one write, and be a no-op afterwards.
+    """
+    mod = load_tool()
+    repair = mod.REPAIRS["connect-mail"]
+    owner = load_owner_check()
+    base = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    base_row = risk_table(base).get("connect_mail")
+    check("the published base carries the action's risk row",
+          isinstance(base_row, tuple) and base_row[:2] == ("yes", "local"),
+          repr(base_row))
+    base_line = next((line for line in base.splitlines()
+                      if line.startswith('    "connect_mail": ("yes", "local",')),
+                     "")
+    check("... and the repair inserts that line byte for byte, not a retyped copy",
+          bool(base_line) and (base_line + "\n") in repair.replace_with)
+    check("... with the row itself as the positive probe",
+          repair.probes == ('"connect_mail": ("yes", "local"',), repair.probes)
+
+    unrepaired = a_live_folder()
+    live_rows = risk_table((unrepaired / "jarvis_gate.py").read_text(encoding="utf-8"))
+    check("a live-shaped gate without the row has no entry to classify",
+          live_rows.get("connect_mail") is None)
+    check("... so an unclassified card would be RISKY, which this action is not",
+          owner.is_risky({"risk": dict(UNCLASSIFIED_RISK)}) is True)
+
+    check("the tool reports the connect-mail row missing",
+          mod.check_one(unrepaired, repair) == "missing")
+    check("... and one apply writes it",
+          mod.apply_one(unrepaired, repair, stamp="test") == "applied")
+    gate_after = (unrepaired / "jarvis_gate.py").read_text(encoding="utf-8")
+    check("the repaired gate's _RISK table is the base's own row",
+          risk_table(gate_after).get("connect_mail") == base_row,
+          repr(risk_table(gate_after).get("connect_mail")))
+    # Unpacked by name, not `[0]`/`[1]`: `landed` is a source-read name elsewhere
+    # in this file, so `tools/check_position_pins.py` counts a subscript on it as
+    # a position pin even when the tuple is a risk row.
+    reversible, reach, _why = risk_table(gate_after)["connect_mail"]
+    classified = {"classified": True, "reversible": reversible, "reach": reach}
+    check("... which is classified local and reversible",
+          classified["reversible"] == "yes" and classified["reach"] == "local",
+          repr(classified))
+    check("... so a card for it is not treated as permanent and outbound",
+          owner.is_risky({"risk": classified}) is False)
+    check("... and exactly one row was inserted",
+          risk_key_uses(gate_after, "connect_mail") == 1,
+          risk_key_uses(gate_after, "connect_mail"))
+    check("... a second apply is the idempotent no-op",
+          mod.apply_one(unrepaired, repair, stamp="test-2") == "already")
+    check("... it did not insert a second copy",
+          risk_key_uses((unrepaired / "jarvis_gate.py").read_text(encoding="utf-8"),
+                        "connect_mail") == 1)
+    check("... with exactly one backup for the one write",
+          len(list(unrepaired.glob("jarvis_gate.py.before-repair-*"))) == 1)
+
+
 if __name__ == "__main__":
     sys.exit(main())
