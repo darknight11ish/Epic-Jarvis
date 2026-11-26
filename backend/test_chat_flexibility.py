@@ -94,7 +94,13 @@ LIFTS = (
     ("which tools are on right now", "tools_inventory"),
     ("what are your active tools", "tools_inventory"),
     ("tell me what tools you have", "tools_inventory"),
-    ("list every tool you have", "tools_inventory"),
+    # 2026-11-25: the ANSWER to this one deliberately changed shape, not the
+    # route. "list every tool you have" now reaches `tools_list_all` - the
+    # complete inventory, one line per tool - because the owner's complaint was
+    # that this question got the count answer's "and 17 more". "list all of
+    # them" below keeps the summary: with no tool noun it does not say WHAT to
+    # list, so it stays the safe count answer.
+    ("list every tool you have", "tools_list_all"),
     ("list all of them", "tools_inventory"),
     ("how many tools are switched on", "tools_inventory"),
     ("what tools need my approval", "tools_asking"),
@@ -112,6 +118,9 @@ STAYS_WITH_MODEL = (
     "what is failing on my pr",
     "do i have any email",
     "find a note about the boiler",
+    # "all" alone must not turn an unrelated request into an inventory: this
+    # names something to list, so it is not the tools question (2026-11-25).
+    "list all the tools for painting",
 )
 
 

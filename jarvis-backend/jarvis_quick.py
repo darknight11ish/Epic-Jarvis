@@ -15247,6 +15247,43 @@ _SELF_TOOLS = re.compile(
     r"(?:have|got|use|using|offered|switched\s+on|enabled|active)\b.*"
     r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?tools\s*\??$")
 
+#: THE QUESTION THAT ASKS FOR THE WHOLE INVENTORY (2026-11-25). "Can you list
+#: all of your tools?" was answered by `_SELF_TOOLS` above, which is the COUNT
+#: answer: with the owner's live settings file naming 47 tools that night, it
+#: named 30 and said "and 17 more". He asked for the complete list - every
+#: built-in tool, each marked on or off. This shape is checked BEFORE
+#: `_SELF_TOOLS`, and its answer has no cap (`_run_tools_list_all`), while
+#: "what tools do you have" / "how many tools" keep the count-and-flavour
+#: sentence exactly as it was.
+#:
+#: WHOLE sentences only: "list all the tools for painting" is a request about
+#: something else and must keep its path to the model, so the shape ends after
+#: the tool noun and an optional "you have".
+_SELF_TOOLS_ALL = re.compile(
+    # "list all of your tools" / "show me all your tools" / "name every tool"
+    # / "list all 90 tools" / "list every tool you have" / "every one of them"
+    r"(?:(?:list|show|name|give|tell)(?:\s+me)?|"
+    r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:list|show|name|give|tell)(?:\s+me)?))\s+"
+    r"(?:all|every|each)\s+(?:(?:one|single)\s+)?(?:of\s+)?"
+    r"(?:(?:your|the|jarvis'?s?)\s+)?(?:\d+\s+)?"
+    r"(?:tools?|functions?|abilities?)"
+    r"(?:\s+(?:that\s+)?(?:you|jarvis)\s+(?:have|got|use|using|offer))?\s*\??$"
+    # "list the full list of tools" / "give me the complete list of your tools"
+    r"|(?:list|show|give|name)(?:\s+me)?\s+(?:the\s+|a\s+)?"
+    r"(?:full|complete|whole|entire)\s+(?:list\s+(?:of\s+)?)?"
+    r"(?:(?:your|the|jarvis'?s?)\s+)?(?:tools?|functions?|abilities?)"
+    r"(?:\s+(?:that\s+)?(?:you|jarvis)\s+(?:have|got))?\s*\??$"
+    # "what are all of your tools" / "which are all the tools"
+    r"|(?:what|which)\s+(?:are\s+)?all\s+(?:of\s+)?"
+    r"(?:(?:your|the|jarvis'?s?)\s+)?(?:tools?|functions?|abilities?)\s*\??$"
+    # The polite lead-in is stripped before the SECOND matching attempt, so
+    # "show me all your tools" can arrive here as "all your tools" (the
+    # verbatim attempt normally claims it first). A bare "all tools" is the
+    # same request.
+    r"|all\s+(?:(?:your|the|jarvis'?s?)\s+)?(?:tools?|functions?|abilities?)\s*\??$"
+)
+
 _SELF_TOOLS_ASK = re.compile(
     r"(?:which|what)\s+(?:of\s+)?(?:your|the|jarvis'?s?)\s+tools\s+"
     r"(?:ask|asks|need|needs)\b.*"
@@ -15424,6 +15461,11 @@ def _self_answers(s: str) -> Optional[Intent]:
     """
     if _SELF_TOOLS_ASK.fullmatch(s):
         return Intent("tools_asking")
+    # BEFORE the count answer (2026-11-25): "list all of your tools" and "name
+    # every tool" get the complete inventory; "what tools do you have" and
+    # "how many tools" keep the count-and-flavour summary below.
+    if _SELF_TOOLS_ALL.fullmatch(s):
+        return Intent("tools_list_all")
     if _SELF_TOOLS.fullmatch(s):
         return Intent("tools_inventory")
     if _SELF_CONNECTED.fullmatch(s):
@@ -26792,6 +26834,190 @@ def _run_tools_inventory(intent: Intent) -> Result:
     return Result(head + body, intent.name)
 
 
+#: The areas the COMPLETE inventory is grouped under, in the order they are
+#: shown (2026-11-25, the owner's "list all of your tools"). DISPLAY ONLY: which
+#: tools exist and which area each belongs to is read from
+#: `jarvis_agent.CORE_TOOLS` and `jarvis_agent.TOOL_GROUPS` - the same tables
+#: `more_tools` and `test_short_tool_list.py` already own - so a tool added to a
+#: group appears in this answer with no second list to edit. Only the plain-word
+#: AREA NAMES are written down here. "Other" is the catch-all and is never
+#: empty-handed by design: a tool in neither table is listed there rather than
+#: dropped, and the suite asserts every tool is named exactly once.
+_TOOL_AREA_ORDER = (
+    "Everyday", "Memory", "Notes", "Email", "Calendar",
+    "Timers and reminders", "The web", "Smart home", "GitHub",
+    "Files and documents", "Goals and projects", "Settings", "Accounts",
+    "Controlling your PC and phone", "Money", "Phone and messages", "Other",
+)
+
+#: `jarvis_agent.TOOL_GROUPS` group name -> the area it is listed under. A group
+#: this table has not met yet still appears (under "Other"), so a new group is
+#: never silently missing - but a listed group that stops existing is named by
+#: the suite, so this table cannot quietly go stale.
+_TOOL_GROUP_AREA = {
+    "timers": "Timers and reminders",
+    "goals": "Goals and projects",
+    "projects": "Goals and projects",
+    "send_email": "Email",
+    "draft_email": "Email",
+    "notes": "Notes",
+    "home_control": "Smart home",
+    "documents": "Files and documents",
+    "files": "Files and documents",
+    "retirement": "Money",
+    "connect": "Accounts",
+    "github": "GitHub",
+    "read_web_page": "The web",
+    "web_search_grant": "The web",
+    "control": "Controlling your PC and phone",
+    "settings": "Settings",
+    # The drop-in plugins share the settings group's subject, and the group is
+    # empty on this build; mapping it now keeps the table honest if one lands.
+    "plugins": "Settings",
+    "send_text": "Phone and messages",
+}
+
+#: `jarvis_agent.CORE_TOOLS` name -> the area it is listed under. The core is
+#: the eight tools offered on every turn; they belong to the areas a person
+#: would look for them in, not to one "core" heading.
+_TOOL_CORE_AREA = {
+    "calculator": "Everyday",
+    "memory_search": "Memory",
+    "calendar_read": "Calendar",
+    "email_check": "Email",
+    "notes_search": "Notes",
+    "web_search": "The web",
+    "home_read": "Smart home",
+    "set_reminder": "Timers and reminders",
+}
+
+#: Tools whose GROUP area is not the area a person would look under. Today that
+#: is one: the spending reader shares the "documents" group with the file reader
+#: (both need a listed folder) but is about money.
+_TOOL_AREA_OVERRIDE = {"my_spending": "Money"}
+
+
+def _tool_area_rows(names) -> list:
+    """`[(area, [name, ...]), ...]` for every name, in the fixed area order.
+
+    NOTHING IS DROPPED. The area of each name comes from `jarvis_agent`'s own
+    tables - `TOOL_GROUPS` first, then `CORE_TOOLS` - and a name in neither is
+    listed under "Other". That is the one thing this builder must never get
+    wrong: a "list all my tools" answer with a hole in it is the defect this
+    change exists to remove. If `jarvis_agent` itself cannot be imported the
+    grouping is lost but the names are not - every one lands under "Other".
+    """
+    where = {}
+    try:
+        import jarvis_agent as A
+        for group, _what, members in A.TOOL_GROUPS:
+            area = _TOOL_GROUP_AREA.get(str(group)) or "Other"
+            for name in members:
+                where[str(name)] = area
+        for name in A.CORE_TOOLS:
+            where.setdefault(str(name), _TOOL_CORE_AREA.get(str(name)) or "Other")
+    except Exception:                       # noqa: BLE001 - grouping is display only
+        pass
+    buckets = {area: [] for area in _TOOL_AREA_ORDER}
+    for name in names:
+        key = str(name)
+        area = _TOOL_AREA_OVERRIDE.get(key) or where.get(key) or "Other"
+        buckets.setdefault(area, []).append(key)
+    order = list(_TOOL_AREA_ORDER) + sorted(a for a in buckets
+                                           if a not in _TOOL_AREA_ORDER)
+    rows = []
+    for area in order:
+        got = buckets.get(area) or []
+        if got:
+            got.sort(key=lambda n: _tool_label(n).casefold())
+            rows.append((area, got))
+    return rows
+
+
+def _run_tools_list_all(intent: Intent) -> Result:
+    """"List all of your tools" - the COMPLETE inventory, one tool per line.
+
+    THE OWNER'S COMPLAINT, 2026-11-25. "Can you list all of your tools?" was
+    answered by `_run_tools_inventory`, whose body is
+    `_self_list([...], cap=30)`: with 47 tools switched on it named 30 and said
+    "and 17 more", joining every name into one comma-run. That cap is right for
+    "what tools do you have?" - a count and a flavour - and wrong for a question
+    that says ALL, so the two questions now have two shapes.
+
+    NO CAP HERE, and no "and N more". The list is `tool_inventory()`'s
+    `all_names` - the registry's whole list; a settings file that names every
+    tool changes the MARKS, never the list. Where a part really cannot be read
+    the answer says which part and why, in the same breath - a shorter list with
+    no explanation is the class of bug this removes.
+
+    `_MEASURED_FIXTURE["tools"]` is the same suite seam `_run_tools_inventory`
+    reads, so a test can pin the names and the on/off split without depending on
+    tonight's settings file. Production never sets it.
+    """
+    inv = None
+    if _MEASURED_FIXTURE is not None and _MEASURED_FIXTURE.get("tools") is not None:
+        inv = dict(_MEASURED_FIXTURE["tools"])
+    if inv is None:
+        try:
+            import jarvis_self_portrait as SP
+            inv = SP.tool_inventory()
+        except Exception:                   # noqa: BLE001 - older PC
+            return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    names = [str(n) for n in (inv.get("all_names") or inv.get("registered_names") or ())
+             if str(n or "").strip()]
+    if not names:
+        return Result(
+            f"I have {registered} tools built in, but I cannot read their names "
+            f"on this PC just now - so I will not pretend to list them.",
+            intent.name)
+    enabled = inv.get("enabled")
+    offered = [str(n) for n in (inv.get("enabled_names") or ())
+               if str(n or "").strip()]
+    on = None
+    if enabled is not None and (offered or not enabled):
+        # `enabled` is a COUNT and `offered` is the NAMES. A count with no names
+        # is not a usable read either, so it is said rather than marking every
+        # tool off - which would be a guess.
+        on = set(offered)
+    total = len(names)
+    missing = max(0, registered - total)
+    said = []
+    if on is None:
+        why = ("the settings file did not answer" if enabled is None else
+               "the settings file gave a count but not the names")
+        said.append(f"{registered} tools built in. I cannot read which of them "
+                    f"are switched on - {why}, so no tool below is marked on or "
+                    f"off and I will not guess.")
+    else:
+        switched = sum(1 for n in names if n in on)
+        said.append(f"{registered} tools built in, {switched} switched on.")
+        said.append("Here is every one, with on or off against each.")
+    if missing:
+        # A bound that must exist says itself, honestly: this is the "never a
+        # silent omission" rule, applied to the one case where a name really is
+        # not there to print.
+        said.append(f"The registry names {total} of them; the other {missing} "
+                    f"could not be read, so they are missing from the list below "
+                    f"- not switched off.")
+    blocks = []
+    for area, area_names in _tool_area_rows(names):
+        lines = [area + ":"]
+        if on is None:
+            lines += [f"- {_tool_label(n)}" for n in area_names]
+        else:
+            lines += [f"- {_tool_label(n)} — {'on' if n in on else 'off'}"
+                      for n in area_names]
+        blocks.append("\n".join(lines))
+    said.append("\n\n".join(blocks))
+    if on is not None:
+        said.append(f"That is all {registered} - nothing is left off the list. "
+                    f"The switches are in Settings, \"What asks first\".")
+    return Result("\n\n".join(said), intent.name)
+
+
 def _run_tools_asking(intent: Intent) -> Result:
     """"Which of your tools ask before they act?" - the asks-first page's rows.
 
@@ -33161,6 +33387,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_internet_access(intent)
     if n == "tools_inventory":
         return _run_tools_inventory(intent)
+    if n == "tools_list_all":
+        return _run_tools_list_all(intent)
     if n == "tools_asking":
         return _run_tools_asking(intent)
     if n == "connected_list":
@@ -34134,6 +34362,11 @@ READ_ONLY_INTENTS = frozenset({
     # changing or restarting anything - so none may take back what "cancel
     # that" would undo.
     "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # "List all of your tools" (2026-11-25): the complete inventory, read from
+    # the same registry and settings file as the count answer. It writes
+    # nothing, raises no card and calls no model, so it may not take back what
+    # "cancel that" would undo.
+    "tools_list_all",
     # The model-conversation reads (2026-11-08): all-preset models, per-preset
     # advice, the model history, and how to start a benchmark - every one reads
     # this PC's own rows and changes nothing, so none may clear "cancel that".

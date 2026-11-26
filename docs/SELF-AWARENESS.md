@@ -118,6 +118,12 @@ can invent an ability:
   graphics cards; ask "are you using both cards" for the cards.
 - "What tools do you have?" - the registered tool count and the tools switched
   on in your own settings file (`[tools].enabled`), with their plain names.
+- "Can you list all of your tools?" / "name every tool" - the complete
+  inventory instead of the count: every tool the program has built in, one per
+  line, grouped by area and marked on or off against your own settings file.
+  The count question keeps its short answer, so the long list cannot bury the
+  count; if a name really cannot be read, the answer says which part is
+  missing rather than printing a shorter list.
 - "Which of your tools ask before they act?" - the "What asks first" page's own
   rows whose words say they ask you first, with the count.
 - "refresh your abilities" - re-reads the inventory above and says in one

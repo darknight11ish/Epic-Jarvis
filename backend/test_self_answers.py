@@ -22,7 +22,15 @@ WHAT THIS PROVES (2026-11-04, the self-awareness audit's gap 4):
   - THE ANSWER FOLLOWS A REAL SETTINGS FILE. A one-tool [tools].enabled is
     written through JARVIS_FRAMEWORK_TOML, and "what tools do you have" must
     say ONE switched on - not a constant, and not the shipped 21.
-  - ALL FOUR ARE READ-ONLY. "cancel that" must not be able to undo a question,
+  - THE FULL-LIST QUESTION GETS THE COMPLETE LIST (2026-11-25). "Can you list
+    all of your tools?" used to reach the count answer, whose `cap=30` named 30
+    switched-on tools and said "and 17 more" - the owner's complaint, with the
+    live settings file naming 47. "list all/every ..." now reaches
+    `tools_list_all`, and these checks prove the answer names EVERY registered
+    tool exactly once, marks each on or off against a fixture with a known
+    split, groups the lines under plain area headings, and never prints
+    "and N more". The summary question keeps its summary, in the same suite.
+  - ALL FIVE ARE READ-ONLY. "cancel that" must not be able to undo a question,
     and a question must not clear a pending card; each name is in
     jarvis_quick.READ_ONLY_INTENTS.
   - NEAR MISSES STILL GO TO THE MODEL. "what tools do I need for this job",
@@ -74,8 +82,11 @@ import jarvis_settings_registry as REG  # noqa: E402
 PASSED, FAILED = [], []
 DOC = (REPO / "docs" / "SELF-AWARENESS.md").read_text(encoding="utf-8")
 
-#: The four intents this change added, each read-only.
-SELF_INTENTS = ("tools_inventory", "tools_asking", "connected_list", "self_refresh")
+#: The five intents this area owns, each read-only. `tools_list_all` is the
+#: 2026-11-25 addition: "list all of your tools" is a different ANSWER from
+#: "what tools do you have", not a different question about the machine.
+SELF_INTENTS = ("tools_inventory", "tools_list_all", "tools_asking",
+                "connected_list", "self_refresh")
 
 
 class _Sched:
@@ -136,6 +147,15 @@ def the_docs_quoted_questions_all_answer():
         got = Q.match(words)
         check(f"{words!r} is answered by {want}", got is not None and got.name == want,
               got.name if got else "went to the model")
+    # The full-list promise (2026-11-25) is quoted as a question so the same
+    # doc-driven check above covers it too; this one names the intent, because
+    # the whole point is that it is NOT the count answer.
+    check("the page promises the complete inventory as its own question",
+          '"Can you list all of your tools?"' in DOC)
+    got = Q.match("Can you list all of your tools?")
+    check("... and that promise reaches the complete list, not the count",
+          got is not None and got.name == "tools_list_all",
+          got.name if got else "went to the model")
 
 
 def near_misses_still_go_to_the_model():
@@ -144,13 +164,16 @@ def near_misses_still_go_to_the_model():
                   "which tools ask for a password",
                   "refresh my browser",
                   "refresh the page",
-                  "what tools does a carpenter need"):
+                  "what tools does a carpenter need",
+                  # "all" must not capture a request about something else.
+                  "list all the tools for painting",
+                  "name every setting"):
         got = Q.match(words)
         check(f"{words!r} is not hijacked", got is None or got.name not in SELF_INTENTS,
               got.name if got else None)
 
 
-def all_four_are_read_only():
+def all_self_answers_are_read_only():
     for name in SELF_INTENTS:
         check(f"{name} cannot be undone by 'cancel that'",
               name in Q.READ_ONLY_INTENTS)
@@ -235,6 +258,277 @@ def tools_answer_follows_a_real_settings_file():
             os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
         else:
             os.environ["JARVIS_FRAMEWORK_TOML"] = real
+
+
+# ---------------------------------------------------------------------------
+#   2b. "List all of your tools" - the COMPLETE inventory (2026-11-25)
+# ---------------------------------------------------------------------------
+#
+# THE OWNER'S COMPLAINT. "Can you list all of your tools?" was answered "I have
+# 90 tools built in. 47 of them are switched on in your settings file: ...
+# and 17 more." That is `_run_tools_inventory`'s `cap=30`, and the cap is RIGHT
+# for "what tools do you have?" - a count and a flavour - and wrong for a
+# question that says ALL. These checks drive the real matcher and the real
+# answer: the full list names every registered tool exactly once, marks each on
+# or off from the settings file, and never says "and N more".
+
+FULL_LIST_PHRASINGS = (
+    "list all of your tools",
+    "list every tool",
+    "name every tool",
+    "show me all your tools",
+    "list all 90 tools",
+    "list every tool you have",
+    "can you list all of your tools",
+)
+
+#: Six REAL tools from four areas, with a known 2-on split. Real names so the
+#: grouping is exercised; a made-up name would land under "Other" and prove
+#: nothing about the area table.
+FULL_LIST_FIXTURE = {
+    "tools": {
+        "registered": 6,
+        "all_names": ["calculator", "notes_search", "append_obsidian_daily",
+                      "github_ci_status", "send_email", "my_spending"],
+        "registered_names": ["calculator", "notes_search",
+                             "append_obsidian_daily", "github_ci_status",
+                             "send_email", "my_spending"],
+        "enabled": 2,
+        "enabled_names": ["calculator", "append_obsidian_daily"],
+    }
+}
+
+
+class _Fixture:
+    """Set `jarvis_quick._MEASURED_FIXTURE` for the block, then put it back."""
+
+    def __init__(self, fixture):
+        self.fixture = fixture
+        self.real = None
+
+    def __enter__(self):
+        self.real = Q._MEASURED_FIXTURE
+        Q._MEASURED_FIXTURE = dict(self.fixture)
+
+    def __exit__(self, *exc):
+        Q._MEASURED_FIXTURE = self.real
+        return False
+
+
+def _bullets(reply):
+    return [ln for ln in str(reply or "").splitlines() if ln.startswith("- ")]
+
+
+def _marks(reply):
+    """{plain label: "on"/"off"} from the answer's own bullet lines."""
+    out = {}
+    for line in _bullets(reply):
+        label, _sep, mark = line[2:].rpartition(" — ")
+        out[label] = mark
+    return out
+
+
+def the_full_list_phrasings_reach_the_complete_inventory():
+    for words in FULL_LIST_PHRASINGS:
+        got = Q.match(words)
+        check(f"{words!r} asks for the complete inventory",
+              got is not None and got.name == "tools_list_all",
+              got.name if got else "went to the model")
+    # And the count question keeps its own answer: the distinction only works
+    # if both sides stay put.
+    for words in ("what tools do you have", "how many tools do you have",
+                  "how many tools do you have switched on right now",
+                  "list tools", "what tools do you have around notes"):
+        got = Q.match(words)
+        check(f"{words!r} keeps the count answer",
+              got is not None and got.name == "tools_inventory",
+              got.name if got else "went to the model")
+
+
+def the_summary_question_still_summarises():
+    """The cap is deliberate for THIS question, and it stays."""
+    with _Fixture(FULL_LIST_FIXTURE):
+        res = answer("what tools do you have")
+    reply = res.reply
+    check("the count answer still counts",
+          res.intent == "tools_inventory" and "6 tools" in reply
+          and "2 of them are switched on" in reply, reply[:200])
+    check("... and names the switched-on tools in one sentence",
+          "Calculator" in reply and " — on" not in reply
+          and " — off" not in reply, reply[:300])
+    check("... and is not the line-per-tool list",
+          not _bullets(reply), reply[:300])
+
+
+def the_full_list_names_every_tool_exactly_once():
+    names = FULL_LIST_FIXTURE["tools"]["all_names"]
+    labels = {Q._tool_label(n) for n in names}
+    with _Fixture(FULL_LIST_FIXTURE):
+        res = answer("list all of your tools")
+    reply = res.reply
+    bullets = _bullets(reply)
+    check("the complete inventory is its own intent",
+          res.intent == "tools_list_all", res.intent)
+    check("the count line comes first, from the registry's own numbers",
+          reply.splitlines()[0] == "6 tools built in, 2 switched on.",
+          reply.splitlines()[:1])
+    check("one bullet per registered tool, no more and no fewer",
+          len(bullets) == len(names), (len(bullets), len(names)))
+    check("every registered tool is named exactly once",
+          all(sum(1 for b in bullets if b[2:].startswith(lbl + " —")) == 1
+              for lbl in labels),
+          [lbl for lbl in labels
+           if sum(1 for b in bullets if b[2:].startswith(lbl + " —")) != 1])
+    check("... and no bullet names a tool that is not registered",
+          all(b[2:].rpartition(" — ")[0] in labels for b in bullets), bullets)
+    check("the answer never says 'and N more'",
+          re.search(r"\band \d+ more\b", reply) is None, reply[-300:])
+    check("it is line-per-tool text, not one comma-run",
+          reply.count("\n") >= len(names), reply.count("\n"))
+
+
+def the_full_list_marks_on_and_off_correctly():
+    """A fixture with a KNOWN 2-of-6 split: every mark is checked both ways."""
+    want = {"calculator": "on", "append_obsidian_daily": "on",
+            "notes_search": "off", "github_ci_status": "off",
+            "send_email": "off", "my_spending": "off"}
+    with _Fixture(FULL_LIST_FIXTURE):
+        reply = answer("name every tool").reply
+    got = _marks(reply)
+    check("each tool's mark is the settings file's own split",
+          got == {Q._tool_label(n): m for n, m in want.items()}, got)
+    check("... the two switched-on tools are marked on, not off",
+          sum(1 for m in got.values() if m == "on") == 2, got)
+    check("every tool line is a plain '- <label> — on/off' bullet",
+          all(re.fullmatch(r"- .+ — (?:on|off)", b) for b in _bullets(reply)),
+          _bullets(reply)[:3])
+
+
+def the_full_list_is_grouped_by_area_in_plain_text():
+    with _Fixture(FULL_LIST_FIXTURE):
+        reply = answer("show me all your tools").reply
+    headings = [ln for ln in reply.splitlines()
+                if ln.endswith(":") and not ln.startswith("- ")]
+    check("the tools are grouped under area headings",
+          len(headings) >= 4, headings)
+    check("... the headings are plain words, with no '#' and no table",
+          all(re.fullmatch(r"[A-Z][A-Za-z' ]+:", h) for h in headings)
+          and "#" not in reply and "|" not in reply, headings)
+    check("... and the areas a person would look under are there",
+          {"Notes", "Email", "GitHub", "Money"} <= {h[:-1] for h in headings},
+          headings)
+    check("... with every heading followed by at least one tool",
+          all(reply.split(h, 1)[1].lstrip().startswith("- ") for h in headings),
+          headings)
+
+
+def a_tool_in_no_group_is_still_listed():
+    """THE "NEVER A SILENT OMISSION" RULE: an unknown name lands under Other."""
+    fixture = {"tools": {
+        "registered": 2,
+        "all_names": ["calculator", "not_a_real_tool"],
+        "registered_names": ["calculator", "not_a_real_tool"],
+        "enabled": 1, "enabled_names": ["calculator"]}}
+    with _Fixture(fixture):
+        reply = answer("list all of your tools").reply
+    check("a tool the grouping tables do not know is listed under Other",
+          "Other:" in reply and "- not_a_real_tool — off" in reply, reply)
+    check("... so the answer still carries every registered name",
+          len(_bullets(reply)) == 2, _bullets(reply))
+
+
+def a_short_name_list_says_what_is_missing():
+    fixture = {"tools": {
+        "registered": 10,
+        "all_names": ["calculator", "send_email"],
+        "registered_names": ["calculator", "send_email"],
+        "enabled": 0, "enabled_names": []}}
+    with _Fixture(fixture):
+        reply = answer("list all of your tools").reply
+    check("a name list shorter than the count says how many are missing",
+          "The registry names 2 of them; the other 8 could not be read" in reply,
+          reply[:400])
+    check("... and says they are missing, NOT switched off",
+          "not switched off" in reply, reply[:400])
+
+
+def an_unreadable_settings_file_marks_nothing_and_hides_nothing():
+    fixture = {"tools": {
+        "registered": 2,
+        "all_names": ["calculator", "send_email"],
+        "registered_names": ["calculator", "send_email"],
+        "enabled": None, "enabled_names": []}}
+    with _Fixture(fixture):
+        reply = answer("list all of your tools").reply
+    check("without a settings read the answer says it will not guess",
+          "did not answer" in reply and "no tool below is marked" in reply,
+          reply[:300])
+    check("... it still lists every tool",
+          len(_bullets(reply)) == 2, _bullets(reply))
+    check("... and marks none of them on or off",
+          " — on" not in reply and " — off" not in reply, reply)
+
+
+def a_settings_file_naming_every_tool_does_not_break_it():
+    """The real seam: every tool in the owner's own file, against the real path."""
+    all_names = sorted(A.TOOLS)
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-self-answers-all-"))
+    every = tmp / "every-tool.toml"
+    every.write_text('[tools]\nenabled = ["' + '", "'.join(all_names) + '"]\n',
+                     encoding="utf-8")
+    real = os.environ.get("JARVIS_FRAMEWORK_TOML")
+    try:
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(every)
+        reply = answer("list all of your tools").reply
+    finally:
+        if real is None:
+            os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+        else:
+            os.environ["JARVIS_FRAMEWORK_TOML"] = real
+    bullets = _bullets(reply)
+    check("a settings file naming every tool lists every tool",
+          len(bullets) == len(A.TOOLS), (len(bullets), len(A.TOOLS)))
+    check("... with every one marked on",
+          all(ln.endswith(" — on") for ln in bullets),
+          [ln for ln in bullets if not ln.endswith(" — on")][:3])
+    check("... and the count line says all of them are switched on",
+          f"{len(A.TOOLS)} tools built in, {len(A.TOOLS)} switched on."
+          in reply, reply.splitlines()[:1])
+
+
+def the_area_tables_cover_the_registry():
+    """A new tool group or core tool gets a DELIBERATE area, not "Other".
+
+    The names and the membership are `jarvis_agent`'s; only the plain-word area
+    names live in this answer (see `_TOOL_AREA_ORDER`). That split is what makes
+    a new tool appear without a second list - and these checks are what make the
+    area names a decision rather than a default: a group or core tool with no
+    area fails here, and an area name that is not one of the ordered headings
+    fails too. A name-table entry that stops matching the registry is named as
+    well, so the table cannot quietly go stale.
+    """
+    groups = {str(g) for g, _what, _members in A.TOOL_GROUPS}
+    check("every tool group has a plain-words area",
+          groups <= set(Q._TOOL_GROUP_AREA),
+          sorted(groups - set(Q._TOOL_GROUP_AREA)))
+    check("... and every mapped group still exists",
+          set(Q._TOOL_GROUP_AREA) <= groups,
+          sorted(set(Q._TOOL_GROUP_AREA) - groups))
+    check("every core tool has an area",
+          set(A.CORE_TOOLS) <= set(Q._TOOL_CORE_AREA),
+          sorted(set(A.CORE_TOOLS) - set(Q._TOOL_CORE_AREA)))
+    check("... and every mapped core tool still exists",
+          set(Q._TOOL_CORE_AREA) <= set(A.TOOLS),
+          sorted(set(Q._TOOL_CORE_AREA) - set(A.TOOLS)))
+    named = (set(Q._TOOL_GROUP_AREA.values()) | set(Q._TOOL_CORE_AREA.values())
+             | set(Q._TOOL_AREA_OVERRIDE.values()))
+    check("every area an entry names is one of the ordered headings",
+          named <= set(Q._TOOL_AREA_ORDER), sorted(named - set(Q._TOOL_AREA_ORDER)))
+    check("a per-tool area override names a real tool",
+          set(Q._TOOL_AREA_OVERRIDE) <= set(A.TOOLS),
+          sorted(set(Q._TOOL_AREA_OVERRIDE) - set(A.TOOLS)))
+    check("the area order ends with the catch-all",
+          Q._TOOL_AREA_ORDER[-1] == "Other", Q._TOOL_AREA_ORDER[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -492,9 +786,19 @@ def main() -> int:
     try:
         the_docs_quoted_questions_all_answer()
         near_misses_still_go_to_the_model()
-        all_four_are_read_only()
+        all_self_answers_are_read_only()
         tools_answer_is_the_registry_and_the_live_file()
         tools_answer_follows_a_real_settings_file()
+        the_full_list_phrasings_reach_the_complete_inventory()
+        the_summary_question_still_summarises()
+        the_full_list_names_every_tool_exactly_once()
+        the_full_list_marks_on_and_off_correctly()
+        the_full_list_is_grouped_by_area_in_plain_text()
+        the_area_tables_cover_the_registry()
+        a_tool_in_no_group_is_still_listed()
+        a_short_name_list_says_what_is_missing()
+        an_unreadable_settings_file_marks_nothing_and_hides_nothing()
+        a_settings_file_naming_every_tool_does_not_break_it()
         asking_answer_is_the_pages_own_rows()
         connected_answer_is_the_reach_pages_on_rows()
         refresh_answer_is_the_portraits_own_refresh()
