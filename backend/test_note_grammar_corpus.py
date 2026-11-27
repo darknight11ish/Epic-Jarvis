@@ -555,6 +555,9 @@ ROWS = [
     ("merge my two Newsletter notes", ("note_merge_ask",), nothing_written()),
     ("can you merge the pull request", ("<not-note>",), nothing_written()),
     ("merge pull request 12", ("<not-note>",), nothing_written()),
+    # The short form's guard (2026-11-26): two things that are not notes reach no
+    # lane at all; before it they were answered in the note lane's words.
+    ("merge the two invoices and send them", ("<not-note>",), nothing_written()),
     ("merge my Shopping note and my Ideas note", MERGED, merge_landed("Shopping.md",
                                                                      "Ideas.md")),
     ("merge my Ideas note into my Shopping note", MERGED, trashed("Ideas.md")),

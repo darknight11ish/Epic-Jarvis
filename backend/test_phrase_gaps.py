@@ -40,6 +40,26 @@ phrase first, so `_run_note_merge` resolves the literal title first and asks
 (nothing is merged) when it exists; only when it does not does the split run.
 `backend/test_note_grammar_corpus.py` drives that against a real temporary
 vault, both with and without the note that carries the two-name title.
+
+THE OVER-CAPTURE THIS FILE NOW PINS (found by the lead 2026-11-26, measured on
+both trees with their own probe). The first short-form build claimed six
+sentences that reach NO lane on main, every one of them about something that is
+not a note:
+
+    merge the pull requests 12 and 13    (none) -> note_merge   (now none)
+    merge my two branches and push       (none) -> note_merge   (now none)
+    merge the two commits and push       (none) -> note_merge   (now none)
+    merge the config and restart         (none) -> note_merge   (now none)
+    merge the two invoices and send them (none) -> note_merge   (now none)
+    merge the audio and video files      (none) -> note_merge   (now none)
+
+A bare grammar cannot tell those from "merge Ideas and Shopping": both are
+`merge <phrase> and <phrase>`. So the module now reads the words -
+`_NOTE_MERGE_NOT_A_NOTE` (the things Atlas merges that are not notes) and
+`_NOTE_MERGE_NEXT_VERB` (a second half that is a second instruction) - and
+SHORT_MERGE_REFUSALS below names one sentence per rejected word. Each of those
+sentences passes on `main` (it reaches no lane there) and FAILS on the first
+short-form build, which is the measurement this table exists to keep.
 """
 from __future__ import annotations
 
@@ -138,6 +158,17 @@ def short_merge_form_reaches_the_merge_lane() -> None:
               f"({sentence!r})",
               tries == [["Ideas and Shopping"], ["Ideas", "Shopping"]],
               f"tries were {tries!r}")
+    # Ordinary note names still route: the lexical guard must not be so wide
+    # that a normal pair is refused ("Work", "Read" and "Play" are the words that
+    # ruled out reusing `_CAP_VERBS` for this check - see the module comment).
+    got = intent("merge Recipes and Workout")
+    name = getattr(got, "name", "") if got is not None else ""
+    tries = list(getattr(got, "f", {}).get("tries") or []) if got else []
+    check("'merge Recipes and Workout' still reaches the merge lane",
+          name == "note_merge", f"got {name!r}")
+    check("... with the whole phrase and the split, as the targets carry",
+          tries == [["Recipes and Workout"], ["Recipes", "Workout"]],
+          f"tries were {tries!r}")
 
 
 def what_tools_form_reaches_the_category_lane() -> None:
@@ -156,7 +187,46 @@ def what_tools_form_reaches_the_category_lane() -> None:
 
 
 # --------------------------------------------------------------------------
-#  2. THE NEIGHBOURS: nothing else may move.
+#  2. THE OVER-CAPTURE: a merge that is not about notes must reach no lane.
+#
+#  Measured by the lead 2026-11-26 on main (4136d2d7f) and on the FIRST
+#  short-form build: every sentence below reached NO lane on main and was
+#  answered `note_merge` on that build. The parenthesised words are the ones the
+#  module reads; every word in `_NOTE_MERGE_NOT_A_NOTE` and
+#  `_NOTE_MERGE_NEXT_VERB` is named by at least one sentence here.
+# --------------------------------------------------------------------------
+SHORT_MERGE_REFUSALS = (
+    ("merge the pull requests 12 and 13", "pull requests"),
+    ("merge PR 123 and 456", "PR (via the block's own _GITHUB_MERGE_NOUN)"),
+    ("merge main and my branch", "branch"),
+    ("merge my two branches and push", "branches, push"),
+    ("merge the two commits and push", "commits, push"),
+    ("merge the repositories and the branches", "repositories, branches"),
+    ("merge my repo and the release", "repo, release"),
+    ("merge the releases and the tags", "releases, tags"),
+    ("merge the config and restart", "config, restart"),
+    ("merge the configurations and restart", "configurations, restart"),
+    ("merge the audio and video files", "files"),
+    ("merge the two invoices and send them", "invoices, send"),
+    ("merge the receipts and the invoices", "receipts, invoices"),
+    ("merge Ideas and push", "push"),
+    ("merge Ideas and restart", "restart"),
+    ("merge Ideas and deploy", "deploy"),
+    ("merge Ideas and send them", "send"),
+    ("merge Ideas and then deploy", "then"),
+)
+
+
+def short_merge_refuses_what_is_not_a_note() -> None:
+    """Not one non-note merge is claimed; the whole sentence reaches no lane."""
+    for sentence, word in SHORT_MERGE_REFUSALS:
+        got = intent_name(sentence)
+        check(f"{sentence!r} reaches no lane (pins {word})", got == "",
+              f"got {got!r}, wanted no lane")
+
+
+# --------------------------------------------------------------------------
+#  3. THE NEIGHBOURS: nothing else may move.
 # --------------------------------------------------------------------------
 #: (sentence, the whole intent name that must come back, or None for "no lane").
 NEIGHBOURS = (
@@ -203,6 +273,7 @@ def main() -> int:
           "main 4136d2d7f")
     short_merge_form_reaches_the_merge_lane()
     what_tools_form_reaches_the_category_lane()
+    short_merge_refuses_what_is_not_a_note()
     neighbours_do_not_move()
     print()
     print(f"{PASSED} passed, {len(FAILED)} failed")

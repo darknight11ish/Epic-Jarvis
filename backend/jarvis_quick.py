@@ -21589,6 +21589,8 @@ _NOTE_MERGE_ASK = re.compile(
 #: is pinned as still reaching no lane), and "merge my notes" / "merge two
 #: notes" keep their ask. The leading "my two notes" of the longer form is the
 #: sentence pointing at its notes, not part of a title, so it is taken off here.
+#: `_short_merge_is_a_note` below then refuses a sentence whose names are things
+#: Atlas merges that are not notes - the over-capture measured on 2026-11-26.
 _NOTE_MERGE_SHORT = re.compile(
     r"merge\s+(?:(?:my|the|these|those|both|two|2|some|any)\s+)*"
     r"(?:notes?\s+)?(?P<names>.+?)\s*[.!?]?$", re.I)
@@ -21616,6 +21618,46 @@ _NOTE_MERGE_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
 #: A merge splits on "and" but a TITLE may hold one ("Salt and Pepper"), so the
 #: whole phrase is tried first and the split list is the fallback - the same
 #: order `_delete_phrases` keeps.
+#
+#: THE SHORT FORM'S OWN GUARD (measured 2026-11-26, main 4136d2d7f -> the first
+#: short-form build). A bare grammar cannot tell "merge Ideas and Shopping" from
+#: "merge the pull requests 12 and 13": both are `merge <phrase> and <phrase>`.
+#: The first build claimed six sentences that reach no lane on main, all of them
+#: about something that is not a note:
+#:     merge the pull requests 12 and 13    (none) -> note_merge
+#:     merge my two branches and push       (none) -> note_merge
+#:     merge the two commits and push       (none) -> note_merge
+#:     merge the config and restart         (none) -> note_merge
+#:     merge the two invoices and send them (none) -> note_merge
+#:     merge the audio and video files      (none) -> note_merge
+#: That is the 2026-11-25 pull-request swallow one lane over, so the short form
+#: reads the words: a side naming something Atlas merges that is not a note, or
+#: a second half that opens with an instruction verb, is not this lane's.
+#:
+#: The GitHub half is the vocabulary this file ALREADY owns - `_GITHUB_MERGE_NOUN`
+#: above - and no copy of it is made here: that regex guards the WHOLE merge block
+#: before any pattern runs, so a sentence naming a pull request, a branch, a repo,
+#: a PR or `#123` never reaches the short form at all. What it cannot catch is its
+#: own plurals ("pull requests", "branches", "repos" - its `\b` anchors refuse the
+#: trailing "s"), so this regex carries those plus the non-GitHub things in the
+#: measured list (commits, releases, tags, config, files, receipts, invoices). It
+#: is read by the SHORT form only; the "... into ..." and "... notes" forms are
+#: already strict on their own note noun and are not touched by it.
+_NOTE_MERGE_NOT_A_NOTE = re.compile(
+    r"\b(?:pull\s+requests|branches|commits?|repos?|repositor(?:y|ies)|"
+    r"releases?|tags?|configs?|configurations?|files?|receipts?|invoices?)\b",
+    re.I)
+#: The words that make "and <word>" the SECOND of TWO INSTRUCTIONS in a short
+#: merge ("merge my two branches and push", "merge the config and restart",
+#: "merge the two invoices and send them", "and then ...", "and deploy"), not a
+#: second note name. Named here because NO tuple in this file fits: the
+#: module's one imperative-verb regex, `_CAPABILITY_IMPERATIVE_LEAD`, is
+#: anchored to the start of the message and carries none of push/restart/
+#: deploy, and `_CAP_VERBS` is the capability catalogue's 70-verb vocabulary,
+#: where a note called "Work" or "Read" or "Play" would be read as a verb and
+#: its merge silently refused. Every word below is pinned by a sentence in
+#: `backend/test_phrase_gaps.py`.
+_NOTE_MERGE_NEXT_VERB = frozenset({"push", "restart", "deploy", "send", "then"})
 
 _NOTE_REWRITE = re.compile(
     r"(?:rewrite|reword)\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note\s+"
@@ -22286,6 +22328,29 @@ def _note_merge_tries(raw: str, at_least: int = 2) -> list:
     return out
 
 
+def _short_merge_is_a_note(names: str) -> bool:
+    """True only when a short "merge <A> and <B>" is really about notes.
+
+    The short form has no note noun to be strict with, so it reads the words:
+    a side naming something Atlas merges that is not a note (see
+    `_NOTE_MERGE_NOT_A_NOTE`; the GitHub singulars are already excluded for the
+    whole block by `_GITHUB_MERGE_NOUN`), or a second half that opens with an
+    instruction verb (`_NOTE_MERGE_NEXT_VERB`), mean the sentence belongs to the
+    model, exactly as it does on main. Measured 2026-11-26: without this, six
+    non-note merges were answered `note_merge`; with it they reach no lane, and
+    the two note sentences still carry both readings. Every word is pinned by a
+    sentence in `backend/test_phrase_gaps.py`.
+    """
+    if _NOTE_MERGE_NOT_A_NOTE.search(names):
+        return False
+    parts = [p.strip() for p in _NOTE_MERGE_SPLIT.split(names) if p.strip()]
+    if parts:
+        first = re.match(r"[a-z']+", parts[-1].casefold())
+        if first is not None and first.group(0) in _NOTE_MERGE_NEXT_VERB:
+            return False
+    return True
+
+
 def _note_control_asking(s: str) -> Optional[Intent]:
     """The five verbs of 2026-11-25 that had no sentence, or None.
 
@@ -22316,9 +22381,13 @@ def _note_control_asking(s: str) -> Optional[Intent]:
                 return Intent("note_merge", {"tries": tries, "into": ""})
         # "merge Ideas and Shopping" / "merge my two notes Ideas and Shopping":
         # the short form, read only when the names are really JOINED by a
-        # splitting word (so "merge Ideas into Shopping" is not claimed here).
+        # splitting word (so "merge Ideas into Shopping" is not claimed here)
+        # AND neither side names something that is not a note (so "merge the
+        # pull requests 12 and 13" and "merge the config and restart" are not
+        # claimed either - see `_short_merge_is_a_note`).
         m = _NOTE_MERGE_SHORT.fullmatch(s)
-        if m and _NOTE_MERGE_SPLIT.search(m.group("names")):
+        if (m and _NOTE_MERGE_SPLIT.search(m.group("names"))
+                and _short_merge_is_a_note(m.group("names"))):
             # BOTH readings go to the runner, the whole phrase as ONE name FIRST
             # and the split second. That is what keeps the ambiguity honest: a
             # note really called "Ideas and Shopping" resolves as one note, and
