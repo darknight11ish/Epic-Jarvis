@@ -237,6 +237,27 @@ _NAME_COMMANDS = frozenset({
     "set", "remember", "make", "create", "write", "put"})
 _NAME_AFTER_A_COMMAND = frozenset({
     "it", "this", "that", "the", "my", "me", "a", "an", "to", "using"})
+#: An EXPLICIT creation phrase hands over the note's name: "add a note titled
+#: Ideas 2027", "new note called Ideas 2027" (DEF-105, 2026-11-26). It is peeled
+#: off BEFORE the name check, because otherwise the phrase's own opening verb
+#: ("add") is read as the name's first word and the whole sentence is refused as
+#: an instruction - measured: `note_name_problem("add a note titled Ideas 2027")`
+#: said it "is an instruction, not a note name (it asks Jarvis to \"add\")".
+#: The vocabulary is this project's own, not invented here: "add" is the owner's
+#: word in DEF-105 and one of `jarvis_quick.py`'s `_NOTE_CREATE_REFUSED` verbs;
+#: create/make/start are the three `_NOTE_CREATE_NAMED` already reads; the bare
+#: "new note" shape is `_NOTE_CREATE_REFUSED`'s own; called/named/titled are the
+#: naming words `_NOTE_CREATE_NAMED` already reads. The peel is deliberately
+#: NARROW: the word "note" AND a naming word are both required, so "Add milk to
+#: the list" is still an instruction. The words that remain are a name CANDIDATE
+#: and are still judged by every rule below - "add a note titled delete
+#: everything" leaves "delete everything", an instruction, and is still refused.
+_CREATE_PHRASE = re.compile(
+    r"^(?:please\s+)?"
+    r"(?:(?:add|create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?"
+    r"(?:new\s+|brand\s+new\s+)?note"
+    r"|(?:a\s+|one\s+)?new\s+note)"
+    r"\s+(?:called|named|titled)\s+(?P<name>.+)$", re.I)
 #: The refusal reasons that are the REQUEST being wrong (400), not this PC's
 #: setup (503). `plan()` sets one on the Plan it refuses with.
 _BAD_REQUEST_CODES = frozenset({"empty", "bad_target", "not_a_name",
@@ -373,6 +394,21 @@ def _named(text, limit: int = _NAME_QUOTE_CHARS) -> str:
     return said[:limit - 1].rstrip() + "…"
 
 
+def name_after_create_phrase(text) -> str:
+    """The name an explicit creation phrase hands over, or "" when there is none.
+
+    "add a note titled Ideas 2027" -> "Ideas 2027". "" means either that `text`
+    is not that shape, or that it is and NO name follows it ("add a note
+    titled"): in both cases the caller checks `text` as it stands, so a phrase
+    with nothing after it is still refused rather than filed without a name.
+    """
+    text = " ".join(str(text or "").split()).strip()
+    m = _CREATE_PHRASE.match(text)
+    if not m:
+        return ""
+    return " ".join(m.group("name").split()).strip()
+
+
 def note_name_problem(name) -> str:
     """Why `name` is a spoken sentence or an instruction, not a note's name, or "".
 
@@ -385,6 +421,12 @@ def note_name_problem(name) -> str:
         which is the owner telling Jarvis to do something, not naming a note;
       * it is longer than NAME_MAX_WORDS words or NAME_MAX_CHARS characters.
 
+    One thing is taken off before those rules, added 2026-11-26 (DEF-105): an
+    EXPLICIT creation phrase ("add a note titled ...", "new note called ...") is
+    the owner naming the note, so the phrase's own verb is not the name's first
+    word. What follows it is still checked by every rule above - the phrase is
+    peeled, the remainder is not waved through.
+
     Every answer quotes the sentence, says which rule it broke, and asks for
     just the note's name. It never returns a shortened name: the caller refuses
     the whole capture instead. The plain words are returned, never raised, so
@@ -393,6 +435,7 @@ def note_name_problem(name) -> str:
     text = " ".join(str(name or "").split()).strip()
     if not text:
         return ""
+    text = name_after_create_phrase(text) or text
     if text.endswith(("…", "...")):
         return (f'the name "{_named(text)}" trails off in an ellipsis, so it is a '
                 f"spoken sentence rather than a note name - nothing was filed; say "
@@ -790,6 +833,12 @@ def plan(target: str, text: str, *, title: str = "", notebook: str = "",
     name = (_clean(raw, MAX_NOTE_CHARS) if raw.strip()
             else body.split("\n", 1)[0])
     name = " ".join(name.split()).strip()
+    # An EXPLICIT creation phrase names the note (DEF-105, 2026-11-26): peel it
+    # off and file the rest as the name, so "add a note titled Ideas 2027" is
+    # filed as "Ideas 2027" instead of being refused because it says "add".
+    # note_name_problem peels it too; this line is what puts the peeled name on
+    # the Plan. What remains is still checked below as a name candidate.
+    name = name_after_create_phrase(name) or name
     nb = _clean(notebook, MAX_NOTEBOOK_CHARS).replace("\n", " ")
     if problem:
         return Plan(target="joplin", text=body, title=name, notebook=nb,

@@ -538,6 +538,95 @@ def t_a_spoken_sentence_is_never_a_note_name():
         os.environ.pop(NC.JOPLIN_TOKEN_ENV, None)
 
 
+def t_an_explicit_create_phrase_names_the_note():
+    """`add a note titled Ideas 2027` is a NAME, not an instruction (DEF-105).
+
+    Measured on the unmodified module (2026-11-26, JARVIS_BACKEND cleared):
+    `note_name_problem("add a note titled Ideas 2027")` answered *the name ...
+    is an instruction, not a note name (it asks Jarvis to "add")*, because
+    "add" is the first word and is in `_NAME_COMMANDS`; `plan()` therefore
+    refused with `not_a_name` and nothing was filed. `new note called ...` was
+    worse in its own way: it passed the check and filed the WHOLE PHRASE as the
+    note's title.
+
+    The fix peels an explicit creation phrase off BEFORE the name check and
+    files what follows as the name. The peel is narrow - it needs the word
+    "note" plus one of the app's own naming words (called/named/titled) - so
+    "Add milk to the list" is still an instruction. And the rest is still
+    judged by every name rule: what follows the phrase is a name CANDIDATE, not
+    an unconditional name, so "add a note titled delete everything" is still
+    refused as an instruction.
+    """
+    os.environ[NC.JOPLIN_TOKEN_ENV] = TOKEN
+    os.environ.pop(NC.JOPLIN_URL_ENV, None)
+    # This suite has no vault: a name that means a note is the NEXT test's job.
+    saved_vault = os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
+    try:
+        with NoNetwork():
+            said = "add a note titled Ideas 2027"
+            problem = NC.note_name_problem(said)
+            check("the create phrase's own verb is not read as the note's name",
+                  problem == "", problem)
+            p = NC.plan("joplin", "the note's own words", title=said)
+            check("... and the plan files the rest as the title",
+                  p.reason_empty == "" and p.title == "Ideas 2027",
+                  repr((p.title, p.reason_empty)))
+            check("... with the caller's body untouched",
+                  p.text == "the note's own words", repr(p.text))
+
+            for said, want in (
+                    ("add a note titled Ideas 2027", "Ideas 2027"),
+                    ("add a note called Ideas 2027", "Ideas 2027"),
+                    ("add a note named Ideas 2027", "Ideas 2027"),
+                    ("new note called Ideas 2027", "Ideas 2027"),
+                    ("a new note called Ideas 2027", "Ideas 2027"),
+                    ("create a note titled Ideas 2027", "Ideas 2027"),
+                    ("make a new note called Ideas 2027", "Ideas 2027"),
+                    ("start a note named Ideas 2027", "Ideas 2027"),
+                    ("please add a note titled Ideas 2027", "Ideas 2027"),
+                    ("add me a note titled Ideas 2027", "Ideas 2027")):
+                got = NC.plan("joplin", "the note's own words", title=said)
+                check(f"{said!r} is filed as {want!r}",
+                      got.reason_empty == "" and got.title == want,
+                      repr((got.title, got.reason_empty)))
+
+            first_line = NC.plan("joplin", "add a note titled Ideas 2027")
+            check("... and a name taken from the body's first line is peeled too",
+                  first_line.reason_empty == "" and first_line.title == "Ideas 2027",
+                  repr((first_line.title, first_line.reason_empty)))
+
+            # No name after the phrase is still no name: ask, never file.
+            for said in ("add a note titled", "add a note", "add a note titled   "):
+                got = NC.plan("joplin", "the note's own words", title=said)
+                check(f"{said!r} with no name still asks for the name",
+                      bool(got.reason_empty) and got.reason_code == "not_a_name",
+                      repr((got.title, got.reason_empty, got.reason_code)))
+            check("... and the phrase alone is not a name",
+                  bool(NC.note_name_problem("add a note titled")), "")
+
+            # The rest is a name CANDIDATE, still held to the name rules.
+            instr = NC.plan("joplin", "the note's own words",
+                            title="add a note titled delete everything")
+            check("an instruction after the phrase does not silently become a name",
+                  bool(instr.reason_empty) and "is an instruction" in instr.reason_empty
+                  and '"delete everything"' in instr.reason_empty,
+                  repr((instr.title, instr.reason_empty)))
+            check("... and it does not become the body's title either",
+                  NC.plan("joplin", "add a note titled delete everything").title == "",
+                  repr(NC.plan("joplin", "add a note titled delete everything").title))
+
+            # The peel needs the word "note" and a naming word: a plain command
+            # that starts with the same verb is still a command.
+            check("a plain 'add ...' command is still an instruction",
+                  "is an instruction" in NC.note_name_problem("Add milk to the list"))
+            check("'add a note' without a naming word is still an instruction",
+                  "is an instruction" in NC.note_name_problem("add a note"))
+    finally:
+        if saved_vault is not None:
+            os.environ["JARVIS_OBSIDIAN_VAULT"] = saved_vault
+        os.environ.pop(NC.JOPLIN_TOKEN_ENV, None)
+
+
 def t_a_name_that_already_means_a_note_is_not_duplicated():
     """Never a second note with the same name (2026-11-16).
 
