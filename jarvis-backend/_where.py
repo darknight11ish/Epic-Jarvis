@@ -1920,7 +1920,18 @@ SHIPPED = (
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
     # It is the LAST entry, and it stays last: a new module goes above it, so
     # the two lists cannot disagree about any other module's position.
-    "jarvis_bench.py"
+    # The homework loop (jarvis_homework.py, 2026-11-26; the owner's "do
+    # homework with Atlas to fix these things"): point at an exchange in the
+    # encrypted history, replay its routing through the REAL matcher, explain
+    # the code location through jarvis_self_improve, and stop wherever a card
+    # has to answer. It edits nothing, pushes nothing and merges nothing - the
+    # acting is github_fix_and_push, github_open_pr and github_merge_pr, which
+    # this module never calls. Read-only, so its lane is in
+    # jarvis_quick.READ_ONLY_INTENTS and a private chat hands it to the model
+    # instead. Its suite is backend/test_homework_loop.py. The same entry, in
+    # the same position, is in scripts/apply-patches.ps1 $SHIPPED, above
+    # jarvis_bench.py, which stays LAST.
+    "jarvis_homework.py",    "jarvis_bench.py"
 )
 
 
