@@ -2755,12 +2755,97 @@ GITHUB_TOOLS_GROUP_LAST_WORDS = {
 }
 
 
-def tools_enabled_set() -> set:
+def tools_enabled_read() -> dict:
+    """The tools the owner's settings file offers, or WHY it cannot be read.
+
+    THE 2026-11-26 AWARENESS AUDIT'S H2. `tools_enabled_set()` used to answer
+    `set()` for a read that FAILED - no `jarvis_framework` module on this PC,
+    no `jarvis-framework.toml` found, no TOML parser, or a file that could not
+    be parsed - so every tool answer built from it said "0 switched on ...
+    your settings file names no tool" about a file nothing had read. The
+    portrait's own promise is the opposite: `jarvis_self_portrait.
+    tool_inventory()`'s `enabled` is None, never 0, when the file cannot be
+    read (`jarvis_self_portrait.py:642-644`). This function is what makes that
+    promise keepable, and the chat answers that already say "I cannot read
+    which of them" when `enabled` is None (`jarvis_quick.py:28576`,
+    `28806`, `29028`, `29064`, `29105`) then say the true thing.
+
+    Returns `{"names": set|None, "why": str, "path": str}`:
+
+      * `names` is the enabled set when the file WAS read. An empty set is a
+        real answer there ("the file names no tool") and `why` is "";
+      * `names` is None when it could not be read, and `why` is one plain
+        sentence naming which read failed - words a screen may show, never a
+        traceback and never an exception.
+
+    It is the same read `tools_enabled_set()` makes (one framework, one
+    cache), not a second parser: `config_path()` is asked FIRST so a PC with
+    no settings file says "not found" instead of whatever an empty config
+    means, and a file that exists but parses to nothing is proved against the
+    file itself, because `load_framework()` returns `{}` both for an empty
+    file and for one it could not parse.
+
+    Read-only: it loads the parsed config and reads one section.
+    """
+    if fw is None:
+        return {"names": None, "why": "the settings reader is not on this PC",
+                "path": ""}
     try:
-        cfg = fw.load_framework() if fw is not None else {}
-        return normalise_enabled((cfg.get("tools") or {}).get("enabled") or [])
-    except Exception:
-        return set()
+        found = fw.config_path()
+    except Exception as exc:                # noqa: BLE001 - said as unknown
+        return {"names": None, "why": (f"the settings file could not be found "
+                                       f"({type(exc).__name__})"), "path": ""}
+    if found is None:
+        return {"names": None,
+                "why": "no jarvis-framework.toml was found on this PC",
+                "path": ""}
+    path = str(found)
+    try:
+        cfg = fw.load_framework()
+    except Exception as exc:                # noqa: BLE001 - said as unknown
+        return {"names": None, "why": (f"jarvis-framework.toml could not be "
+                                       f"read ({type(exc).__name__})"),
+                "path": path}
+    if not isinstance(cfg, dict):
+        return {"names": None, "why": "the settings file did not answer",
+                "path": path}
+    tools = cfg.get("tools")
+    if isinstance(tools, dict):
+        return {"names": normalise_enabled(tools.get("enabled") or []),
+                "why": "", "path": path}
+    if cfg:
+        # The file parsed and other sections came back; it simply has no
+        # [tools] section, so "it names no tool" is true of it.
+        return {"names": set(), "why": "", "path": path}
+    # AN EMPTY RESULT IS AMBIGUOUS: a file that really is empty and one that
+    # could not be parsed both give {}. Ask the file itself, so a damaged
+    # settings file is "cannot read" and never "no tool is switched on".
+    if _toml is None:
+        return {"names": None, "why": "there is no TOML reader on this PC",
+                "path": path}
+    try:
+        _toml.loads(Path(found).read_bytes().decode("utf-8-sig"))
+    except Exception as exc:                # noqa: BLE001 - said as unknown
+        return {"names": None, "why": (f"jarvis-framework.toml could not be "
+                                       f"parsed ({type(exc).__name__})"),
+                "path": path}
+    return {"names": set(), "why": "", "path": path}
+
+
+def tools_enabled_set() -> set:
+    """The enabled tool names, or an empty set when the file cannot be read.
+
+    Kept for the callers that only decide what to DRAW or what a card should
+    say - `newly_off_tools`, the group card, the page's rows and the route's
+    own before/after. Those have no place to put an "unknown" and every one of
+    them only ever narrows what it offers.
+
+    A caller that TELLS the owner a count must call `tools_enabled_read()`
+    instead: on this shape a failed read and "none enabled" are the same empty
+    set, and reporting that as a fact about the file is the 2026-11-26 H2
+    defect. `jarvis_self_portrait.tool_inventory()` is that caller.
+    """
+    return set(tools_enabled_read()["names"] or ())
 
 
 # ---------------------------------------------------------------------------
