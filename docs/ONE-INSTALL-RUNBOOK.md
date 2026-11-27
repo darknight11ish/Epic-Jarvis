@@ -1,62 +1,100 @@
 # One install runbook - from nothing installed to driving the merged work
 
-**The short answer: eight steps, in this order.** Check the PC and the repository -> back up the
-backend folder and its data -> tell Windows where the backend folder is (copying the published one
-only on a new PC) -> replace the one drifted approval-gate file from the repository's published
-copy -> run the patch stack **after** that replacement -> build the desktop app from the merged tree
--> install the phone APK that CI built -> check the whole chain by driving it. Every step ends with
-the one line that undoes it.
+**The short answer, for this PC: the desktop installer first, then the backend deploy, then the gate
+replacement.** Check the PC and the repository -> back up the backend folder and its data -> tell
+Windows where the backend folder is (copying the published one only on a new PC) -> install the
+desktop app built from the merged tree -> put the backend down with its **deploy** tool (this PC is
+deploy-managed, so the patch stack is not its route) -> replace the one drifted approval gate from
+the repository's published base -> install the phone APK that CI built -> check the whole chain by
+driving it. Every step ends with the one line that undoes it. **A fresh PC, or a patcher install,
+swaps the middle for the patch stack** - and then the gate replacement comes **before** it. The
+section after this one gives both orders, and step 5 says how to tell which PC you are on.
 
-**This document has NOT been executed.** It was written on 2026-11-26 by reading the files named
-beside each claim, and no step has been run end to end. Two labels are used throughout:
+**This page has been rehearsed on a copy; nothing has been installed.** It was written on 2026-11-26
+by reading the files named beside each claim. On the same day the two backend steps - the deploy and
+the gate replacement - were run end to end on a **byte-identical copy** of this PC's backend folder.
+**The install itself has not run:** the live gate is still `c2a31981…` (236,453 bytes); the live
+folder was read, never written. Three labels are used throughout:
 
 - **VERIFIED** - the command or claim was read out of the named file in this repository on
   2026-11-26. It does **not** mean the command has been tried.
-- **UNVERIFIED** - I could not read it out of the repository at all. The text says exactly what is
+- **REHEARSED** - the command was run end to end on a byte-identical copy of this PC's backend
+  folder on 2026-11-26, and this is what it printed. It was **not** run against the live folder.
+- **UNVERIFIED** - it was neither read out of the repository nor run. The text says exactly what is
   missing.
 
 Treat the first run as a test of this page, and send back the output if a line does not behave as
 described here. Do not "fix" a refusal by editing a guard; the guards are the point.
 
-**Written against** merged `main` at `f9ed4cc36` (2026-11-26 10:58 -0800, the merge of PR #1519).
-Run `git pull` first; if `main` has moved since, the files named here may have moved with it, so
-check the file before trusting a line.
+**Written against** merged `main` at `4136d2d7f` (2026-11-26, the merge of PR #1521) **plus PR
+#1524** (`fix/gate-base-carries-expiry`, tip `43bb5ed57`), which this page depends on and which is
+merged before it: step 4 and 8.2 describe the published base **after** that change. Run `git pull`
+first; if `main` has moved since, the files named here may have moved with it, so check the file
+before trusting a line.
 
 **What "driving the merged work" means here.** The backend you end up with is the repository's
-published copy of the approval gate plus whatever the patch stack can still put on this PC; the
-desktop app is built from this checkout; the phone app is the APK CI built from this project. You
-have driven it when you have typed a question in the desktop app, approved a card with Windows
-Hello, opened the phone app, and (only if your PC is set to it - see 8.8) said the wake phrase.
-Anything you could not reach is written down as BLOCKED, PARTIAL or NOT-TESTABLE. **A screen you
-could not read is not a pass**, and a feature that could not be reached is never a pass
+published copy of the approval gate, on top of the backend files your route put down - the deploy's
+files on a deploy-managed PC, the patch stack's on a fresh or patcher one; the desktop app is built
+from this checkout; the phone app is the APK CI built from this project. You have driven it when you
+have typed a question in the desktop app, approved a card with Windows Hello, opened the phone app,
+and (only if your PC is set to it - see 8.8) said the wake phrase. Anything you could not reach is
+written down as BLOCKED, PARTIAL or NOT-TESTABLE. **A screen you could not read is not a pass**, and
+a feature that could not be reached is never a pass
 (`docs/FIELD-TEST-HOW-TO-READ-THE-APPS.md`, `docs/FIELD-TEST-MATRIX-2026-10-11.md`).
 
 ---
 
-## The one order that is not negotiable: the gate replacement runs before the patch stack
+## The order, and the two backend routes
 
-This runbook deliberately puts **the gate replacement (step 4) before the patch stack (step 5)**.
-That is not a preference; it is what the two tools require:
+**This PC's install runs in this order: the desktop installer, then the backend deploy, then the
+gate replacement.** Every part of that order is measured, not a preference.
 
-- The replacement tool (`tools/replace_live_gate_from_base.py`) **refuses unless the live
-  `jarvis_gate.py` is byte-for-byte the file it was measured against** - SHA-256
-  `c2a31981d7863c1a08e2200cc208c8f0950bead1503d40614cbcaa0ce06a2f95`, 236,453 bytes. Any patch
-  that touched that file first would change the hash, and the tool would refuse forever (until a
-  reviewed change re-measures it). **Nothing may touch the live gate before step 4.**
-- `backend/test_replace_live_gate_from_base.py`'s own docstring says what the replacement is for:
-  the tool replaces the unrecognised file "with the published base - once, with the old file kept -
-  and then the patch stack can be applied to a recognised file again."
-- It is the patch stack that refuses on this PC today: the repair tool's docstring records that
-  `scripts/apply-patches.ps1` **refuses 37 patches on this drifted install** (measured 2026-10-30).
-  Running it before the replacement proves nothing and risks the gate's identity.
+**The desktop first, because a deploy writes `VERSION` from the desktop that is installed.** The
+deploy tool plans the release marker from the installed desktop: `plan_release_files` in
+`tools/reconcile_live_backend.py` says *"The VERSION value comes ONLY from the installed desktop's
+FileVersion"*, and `tools/update_backend.py` will not call the update finished unless the live
+`VERSION` equals that same number (`:2190-2193`, *"the two halves are not proved to match"*).
+Install the desktop *after* the backend and the marker is the old desktop's number: the next launch
+reads "MISMATCH" and Atlas spends a whole second backend run finishing itself. That was measured on
+this PC on 2026-11-25 and is DEF-100: the log reads `installing Jarvis Desktop 0.2.502 over
+0.2.495`, then `version handshake: MISMATCH: the backend 0.2.495, but this HUD expects 0.2.502`,
+then a backend run from 02:29:37 to 02:33:14 for an update whose files had already carried.
+**Desktop installer first, and the marker and the HUD agree.**
 
-And one thing that must be said plainly rather than discovered later: **the gate replacement does
-not carry the patch-stack behaviour, and the patch stack cannot put it back on the base.** The
-2026-10-28 request-bounding and the 2026-10-30 card timer are patch-carried, the base does not have
-them, and 58 of the 62 `jarvis_gate.py` patches do not apply to the base either (the replacement
-tool's own docstring, measured 2026-11-26). Step 4 spells out exactly what is lost. If it must
-survive, it has to be taken into `jarvis-backend/jarvis_gate.py` first - a separate reviewed change
-that this page cannot do.
+**Then the backend half, by the route this PC is on.** There are two routes, and they are not
+interchangeable:
+
+- **A deploy-managed PC runs the deploy tool** - `tools/reconcile_live_backend.py --apply`. **This
+  PC is one.** `DEPLOY-MANIFEST` sits beside `VERSION` in
+  `C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program` (measured 2026-11-26), and
+  that manifest is the deploy tool's own content-hash record of the release it wrote. On evidence
+  like that `tools/update_backend.py` chooses the deploy route **up front and skips the patch stack
+  entirely** - its own docstring: *"if the live folder is deploy-managed, run
+  `tools/reconcile_live_backend.py --apply` DIRECTLY as the primary route and skip the guaranteed
+  refusal"* - because a deploy-managed install has live files the patch stack rejects by
+  construction. Step 5 is where you run it.
+- **A fresh PC, or a patcher install, runs the patch stack** - `scripts/apply-patches.ps1`. It has
+  no `DEPLOY-MANIFEST` or `SOURCE-COMMIT` beside `VERSION`, so nothing has been deployed and the
+  patch stack is the install. Step 5 keeps that route, whole.
+
+**The gate replacement is last on this PC, and it is separate from both routes.** A deploy **never
+copies `jarvis_gate.py`** (the deploy tool's own words: *"the published base, which the deploy NEVER
+copies"*), and on a byte-identical copy of this PC's folder the deploy left the gate byte-identical
+before and after (**REHEARSED**, 2026-11-26). So the replacement can run safely after the deploy,
+which is the order here. It must still run **before any patch stack**, if your PC takes one: it
+refuses unless the live `jarvis_gate.py` is byte-for-byte
+`c2a31981d7863c1a08e2200cc208c8f0950bead1503d40614cbcaa0ce06a2f95` (236,453 bytes), and a patch that
+touched that file first would change the hash and the tool would refuse. **Nothing may touch the
+live gate before the replacement.**
+
+**What the replacement does and does not do.** It puts the repository's published base down in
+place of a lineage no other tool recognises, once, keeping the old file beside it. **That base now
+carries the approval model this PC has been running** - the 2026-10-28 request-bounding machinery
+and the 2026-10-30 card timer included, measured in step 4. It does **not** apply patches, and the
+patch stack is not a way to add to the base: the replacement tool's own docstring, measured
+2026-11-26 over the 59 `jarvis_gate.py` patches left in the stack, says 58 of them do not apply to
+the published base. New gate rows go into `jarvis-backend/jarvis_gate.py` and reach a live file
+through `tools/repair_live_backend_gaps.py` (step 4).
 
 ---
 
@@ -74,8 +112,10 @@ that this page cannot do.
 snapshot for a *new* PC; your folder holds the data, the tokens and the history, and the patches are
 written against it. Step 3 copies only on a new PC.
 
-**This is a document.** Nothing on this page was executed by the session that wrote it, and this
-PC's live backend folder was not read or touched while it was written.
+**This is a document, and the live folder is read-only to it.** Nothing on this page has been
+executed against the live backend folder: its gate, `VERSION` and `DEPLOY-MANIFEST` were read (the
+last two to tell this PC's route), and nothing in it was written. The two backend steps were run on
+a byte-identical **copy** - see the labels at the top.
 
 ---
 
@@ -130,8 +170,9 @@ running while it patches.
 
 5. **Close Atlas.** If you started the backend in a PowerShell window, press **Ctrl+C** in it; if
    the desktop app started it, tray icon -> **Quit Atlas**. The patch stack refuses to run while the
-   backend's own `jarvis_hud.py` is running, because a running backend has the files open and would
-   go on running the old code. There is no command for this - use the window and the tray.
+   backend's own `jarvis_hud.py` is running, and for either route a running Atlas keeps the code it
+   started with until it is restarted - so close it, and restart it at step 8.1. There is no command
+   for this - use the window and the tray.
 
 6. Check the backend folder is where this page says. One line:
 
@@ -201,7 +242,7 @@ this step only tells Windows where it is and checks it.
    `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
 
    Good: no `MISSING` lines. `not yet` means "this repository ships it and step 5 copies it in" -
-   that is expected before the patch stack.
+   that is expected before step 5, whichever route your PC is on.
 
 **If it refuses:** a folder without `jarvis_hud.py` is refused before the setting is written, so a
 wrong path cannot be half-installed. Nothing changes; run it again with the right folder.
@@ -215,7 +256,10 @@ only that copy (second line). Never run the delete against your only backend fol
 
 ---
 
-## Step 4 - The gate replacement (must run before the patch stack)
+## Step 4 - The gate replacement
+
+**When: on this PC, after step 5's deploy; on a patcher PC, before step 5's patch stack; on a new
+PC, never** (the copy already is the base, see below). The section at the top has the reason.
 
 What this is: `jarvis_gate.py` is the **approval gate** - the one file that decides what needs an
 approval card, what tier it asks at, and what a person is allowed to approve. The live copy here is
@@ -253,9 +297,10 @@ get a harmless refusal.
 
    `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\replace_live_gate_from_base.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
 
-   Good: it prints the live and base identity, the line count it would change, and the
-   **approval-model note** (read it - see "What it does NOT carry" below), then says check only and
-   exits 0.
+   Good: it prints the live and base identity (bytes, lines, SHA-256), the line count it would
+   change, then says check only and exits 0. **With today's base there is no `NOTE:` line** - the
+   tool measures whether the base carries the expiry machinery and warns only when it does not, and
+   it now does (see "What it carries now" below).
 
 3. Write it. One line:
 
@@ -265,34 +310,59 @@ get a harmless refusal.
    `re-import:` line that says a fresh interpreter found `cancel_scheduled` (cardless) and
    `github_mode` (its own risk and tool rows). Exit code 0.
 
+   **REHEARSED**, 2026-11-26, on a byte-identical copy of this PC's backend folder: live 236,453 B
+   / `c2a31981…` -> base 254,627 B / `be9f7469…`, `+762 / -410` lines, backup
+   `jarvis_gate.py.bak.<date>` (236,453 B, `c2a31981…`), and the re-import found both rows. The
+   copy's gate then read back **byte-identical to `<repo>\jarvis-backend\jarvis_gate.py`**, and a
+   fresh interpreter imported `jarvis_agent, jarvis_quick, jarvis_gate`. `VERSION` in the copy was
+   unchanged (0.2.507) because the installed desktop was unchanged; after step 6's installer it is
+   the deploy that writes the new desktop's number, not this step.
+
+   **A `main` that has moved needs its own word.** The tool also refuses unless the base is the
+   exact file it classified; if a newer base has been published since this tool was written, the
+   refusal names both hashes and `--allow-new-base` is the tool's one way to say out loud that the
+   newer published base is the one to write. It is not a way past the live-file guard.
+
    **If it exits 2**, it refused and put the old file back (or wrote nothing). The message names
    why: wrong live hash, a moved base (that needs a reviewed `--allow-new-base`, not a guess), an
    existing backup, or a re-import check that failed. Nothing was silently changed; send the whole
    output back.
 
-### What it does NOT carry - say this out loud before you run it
+### What it carries now - measured, not taken on trust
 
-The base is a published snapshot, **not** a superset of the live file. Measured for this
-replacement (2026-11-26), the base does **not** carry:
+**The base this replacement writes is the approval model this PC has been running.** Until
+2026-11-26 it was not: the base's `pending()` counted a card down from `created`, swept stale rows
+only at start-up, and had no `_wait_open` gate and no `expires_in` read from `waited_until`, so
+replacing the live gate would have thrown the 2026-10-28 request-bounding machinery and the
+2026-10-30 card timer away. **PR #1524 changed that**: it put both into
+`jarvis-backend/jarvis_gate.py` and retired the three patches that used to carry them
+(`no-expiry-cards.patch`, `no-deadline-cards.patch`, `show-card-timer.patch`).
 
-- the **2026-10-28 request-bounding machinery** - `waited_until`, `_wait_open`, `_expire_overdue`,
-  `still_waiting`, the read-time sweep and the no-deadline ceremonies;
-- the **2026-10-30 card timer** from `show-card-timer.patch` - an `expires_in` counted from
-  `waited_until` while the request is still waiting, with the 60-second grace not shown;
-- and it does not merge, apply patches, or invent any of that. 58 of the 62 `jarvis_gate.py`
-  patches do not apply to the base either, so **the patch stack in step 5 is not a way to get the
-  two behaviours back**.
+Measured from the three files themselves on 2026-11-26 (occurrence counts in the text):
 
-What the base carries instead is its own older approval model: `pending()` counts a card down from
-`created` plus `APPROVAL_TIMEOUT`, and stale rows are swept only at start-up. It still sends an
-`expires_in` field, but counted from `created` (the older `approval-expiry.patch` behaviour), not
-from the request's `waited_until`. The tool prints that note before it writes, so it is not a
-surprise afterwards. If the patch-carried behaviour has to survive, it must be taken into
-`jarvis-backend/jarvis_gate.py` first, as a separate reviewed change.
+| file | bytes | sha256 | `waited_until` | `_wait_open` | `_expire_overdue` | `still_waiting` | `expires_in` | `cancel_scheduled` | `github_mode` |
+|---|---|---|---|---|---|---|---|---|---|
+| this PC's live gate | 236,453 | `c2a31981…` | 40 | 11 | 11 | 1 | 6 | 0 | 0 |
+| `origin/main`'s base, before #1524 | 232,674 | `03964d30…` | 0 | 0 | 0 | 0 | 3 | 2 | 5 |
+| the base after #1524 - what this step writes | 254,627 | `be9f7469…` | 43 | 11 | 11 | 1 | 6 | 2 | 5 |
+
+So **all five behaviours are in the base, and `cancel_scheduled` and `github_mode` with them** - the
+pair the re-import proves is no longer the only thing the write adds. That is the point: after this
+step the live gate is the base, and the base carries what the live gate has been running.
+
+The base is a published snapshot and it will move again, which is why 8.2 compares the live file
+with the **repository's own** base instead of pinning these numbers.
+
+What the replacement does **not** do: it does not apply patches and cannot make an older base
+current. Its own docstring, measured over the 59 `jarvis_gate.py` patches left in the stack, says
+58 of them do not apply to the published base, so **the patch stack is not a way to add to the
+base** - new gate rows go into `jarvis-backend/jarvis_gate.py` and reach a live file through
+`tools/repair_live_backend_gaps.py` (below).
 
 What you should notice once it is replaced: cancels stop needing a card, and GitHub mode gets its
 own risk and tool rows instead of the unclassified fallback that demanded Windows Hello (the PR
-that shipped the replacement says the same; `changelog.d/2026-11-26-replace-live-gate-from-base.md`).
+that shipped the replacement says the same;
+`changelog.d/2026-11-26-replace-live-gate-from-base.md`).
 
 **New gate rows after this** do not come from a new patch: they go into
 `jarvis-backend/jarvis_gate.py` and reach the live file through
@@ -303,13 +373,11 @@ rather than forcing `--apply`:
 
 `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\repair_live_backend_gaps.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
 
-**Do not use that tool to try to put the card timer back.** Its timer repair rewrites `pending()`'s
-SQL to read a `waited_until` column. The published base's `CREATE TABLE approvals` lists no such
-column and nothing in the base writes it: on a fresh database that repair would make `pending()`
-fail at run time, and on this PC's existing database the column exists but stays empty, so the
-timer would simply never appear. The tool's own comment says a file with only one of the timer's
-two hunks is "a silent no-op this tool's probes would call applied" - do not force it. The timer
-has to come into the base as a reviewed change.
+**The card timer is no longer something that tool needs to add.** Its timer repair rewrites
+`pending()`'s SQL to read `waited_until`, which was for a base that did not carry the timer. The
+published base now creates that column (`ALTER TABLE approvals ADD COLUMN waited_until`, after the
+`CREATE TABLE`, so an older database still opens) and `pending()` runs that sweep on every read -
+measured in the table above. New **rows** are still that tool's job; the timer is not.
 
 **UNVERIFIED:** the exact output of that repair check on this PC right now. The tool's anchors are
 the *live* file shapes; on a copy of the published base it refuses at `jarvis_hud.py` with "the
@@ -327,7 +395,70 @@ whole folder from step 2's zip (step 9).
 
 ---
 
-## Step 5 - The patch stack
+## Step 5 - The backend half: the deploy (this PC) or the patch stack (a fresh PC)
+
+What this is: the backend files that sit beside `jarvis_gate.py` - the HUD, the memory store, the
+models' glue. **There are two routes and the wrong one refuses**; one read-only line tells you which
+this PC takes:
+
+`Test-Path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\DEPLOY-MANIFEST"; Test-Path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\SOURCE-COMMIT"`
+
+Good: `True` for the first is a **deploy-managed** PC - this one - and you run **5A**. `False` for
+both is a fresh or patcher install, and you run **5B**. (`SOURCE-COMMIT` beside `VERSION` is the
+older deploy evidence, and `_jarvis-deploy-backup-tool-*` folders corroborate either; the authority
+for those three is `tools/update_backend.py`'s `deploy_managed_evidence`, whose own comment names
+each one. A manifest that is there but unreadable is a refusal, not a fallback.)
+
+### 5A - The deploy route (this PC)
+
+What it is: `tools/reconcile_live_backend.py` copies the repository's published modules and the HUD
+deltas into the live folder, then records what it wrote in `DEPLOY-MANIFEST` beside `VERSION`.
+**It does not copy `jarvis_gate.py`** - step 4 is what replaces that file, and the deploy leaves it
+alone.
+
+**REHEARSED** on a byte-identical copy of this PC's backend folder on 2026-11-26: it finished
+`RESULT: PASS - backend reconciled`, wrote 31 files, made a `_jarvis-deploy-backup-tool-<stamp>`
+folder, and the gate was **byte-identical before and after**. The copy then imported
+`jarvis_agent, jarvis_quick, jarvis_gate`.
+
+1. Dry run first - it prints what it would add and update and writes nothing. One line, from the
+   repository folder after step 1's `git pull`:
+
+   `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\reconcile_live_backend.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
+
+   Good: the `to add` / `to update` / `unchanged` lines, then the refusals it found (if any), and no
+   write. `--apply` is a no-op pass only once this is clean.
+
+2. Write it. One line:
+
+   `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\reconcile_live_backend.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program" --apply`
+
+   Good: `RESULT: PASS - backend reconciled; restart Jarvis and read the start-up banner.` and a
+   `_jarvis-deploy-backup-tool-<stamp>` folder inside the backend folder. **Do not read the file
+   count as a target** - the rehearsal's 31 is a dated measurement; the `PASS` line is the result.
+
+   **If it refuses**, nothing was written and the message names why. One common one: `HEAD` is not
+   the commit `--ref` names (run it from a checkout at `origin/main`, or name the commit with
+   `--ref`). Send the whole output back rather than forcing a flag.
+
+3. Read its `VERSION:` line. `VERSION: unchanged 0.2.507` or `VERSION: wrote <number> (was ...,
+   from the installed desktop)` are both good. **`VERSION: skipped (no installed desktop)` is not**:
+   the tool could not read an installed Jarvis Desktop, so it also writes no `DEPLOY-MANIFEST` (both
+   need that pairing) - that is step 6 not done yet. Do step 6, then run this again.
+
+**To undo this step**: close Atlas, then the deploy's own rollback. One line (the `<stamp>` is the
+backup folder's own name, from the run above):
+
+`cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; py -3 tools\reconcile_live_backend.py --backend-path "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program" --rollback "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\_jarvis-deploy-backup-tool-<stamp>"`
+
+It restores the files it overwrote, removes the ones it added, and keeps the backup folder.
+
+### 5B - The patch stack (a fresh or patcher PC)
+
+**Not this PC's route.** A deploy-managed install has live files the patch stack rejects by
+construction - the repair tool's docstring records **37 refusals on this drifted install** (measured
+2026-10-30) - and `tools/update_backend.py` skips it for exactly that reason. On a fresh PC, or one
+with no deploy evidence, it is the install.
 
 What this is: a **patch** is a small text edit to the backend files, and the **patch stack** is the
 ordered list of them that the repository keeps in `scripts/apply-patches.ps1`. The script rehearses
@@ -339,9 +470,9 @@ order, copies in the modules this repository ships whole, puts `jarvis-framework
 hash-locked `backend/requirements.lock`, and runs the test suites. It writes a log of everything to
 `_jarvis-logs\apply-patches-<date>.txt` inside the backend folder.
 
-**This step runs after step 4, never before it** - see the section at the top for the reason. Also,
-**do not run `scripts\setup-jarvis.ps1` or `scripts\update-jarvis.ps1` before step 4**: both run the
-patch stack for you.
+**On a patcher PC whose live gate is the drifted one, step 4 runs before this step, never after** -
+see the section at the top for the reason. Do not run `scripts\setup-jarvis.ps1` or
+`scripts\update-jarvis.ps1` first either: both run the patch stack for you.
 
 **VERIFIED** from `scripts/apply-patches.ps1`'s own help and its final summary: the order of the
 list, the rehearsal, the backup folder, the `-Revert` switch, the refusal wording, exit 0 on a clean
@@ -364,12 +495,12 @@ run and exit 1 when it reports problems. The 37-patch figure is the repair tool'
      clear. If it refused at the rehearsal it also says "NOTHING HAS BEEN CHANGED" - that is true:
      none of your files was touched.
 
-   **UNVERIFIED: what this run prints on this PC after step 4.** The replacement gives the
-   patch stack a recognised `jarvis_gate.py` to work against (the test's docstring says it "can be
-   applied to a recognised file again"), and the patcher treats the published base as the state
-   *after* the patches, so expect some patches to be reported as already on. What is not measured
-   is whether every one of the 37 refusals is gone; the log from your run is the answer, and it is
-   the file to send back.
+   **UNVERIFIED: the patch stack's result anywhere.** It was not run while this page was written or
+   rehearsed, so the log from your run is the evidence - and the 37 refusals are a dated record of
+   this PC's install on 2026-10-30, not a promise about yours. **Do not expect step 4 to make the
+   stack apply**: the replacement tool's own docstring, measured 2026-11-26, says 58 of the 59
+   remaining `jarvis_gate.py` patches do not apply to the published base either, so the replacement
+   is a lineage reset, not a way to re-apply the stack to it.
 
    **Do not use `-SkipMissing` to force a run through.** Its own help says it makes a PARTIAL
    install: the patches it leaves out are features you will not have. Only use it after you have
@@ -390,6 +521,11 @@ To undo the whole run in one go, restore step 2's zip instead (step 9).
 ---
 
 ## Step 6 - The desktop build
+
+**When: on this PC, before step 5's deploy.** The deploy writes `VERSION` from the installed
+desktop, so the desktop goes in first and the marker and the HUD agree (the section at the top has
+the measurement and DEF-100). On a PC that runs the patch stack (5B) this step can come at any point
+before step 8: the patch stack does not write `VERSION` at all.
 
 What this is: the **desktop app** (Windows lists it as **Jarvis Desktop**) is the Windows app - the
 bar, the tray icon, the HUD window. It is a **Tauri** app: a Rust program that shows a web page in a
@@ -532,16 +668,23 @@ Read the top of what it prints. A `token` line saying **in Windows Credential Ma
 line saying `NOT SAVED`, `STILL IN THE OLD PLAIN-TEXT FILE`, or `token NONE` is a real failure, and
 the lines under it say why (INSTALL section 1.9).
 
-### 8.2 The gate is the base it was replaced with
+### 8.2 The gate is the repository's base, byte for byte
 
-One line - it prints the hash and the size of the live gate (read-only):
+Compare the live gate with the base in the repository you installed from. One line, read-only - it
+prints each file's path, its size and its SHA-256:
 
-`Get-FileHash -LiteralPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\jarvis_gate.py" -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower() }; (Get-Item -LiteralPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\jarvis_gate.py").Length`
+`$g = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\jarvis_gate.py"; $b = "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\jarvis-backend\jarvis_gate.py"; foreach ($p in @($g,$b)) { $h = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower(); $n = (Get-Item -LiteralPath $p).Length; "{0}  {1}  {2}" -f $p, $n, $h }`
 
-Good: `03964d30ebdd944be4b257d06e1948853441d93dfb82a3a2c95d9ff0e3db284c` and `232674` - the
-published base's identity. If the patch stack changed the gate after step 4, the hash differs; that
-means the file is no longer the classified base, so write down both hashes and send them back
-rather than forcing anything.
+Good: two lines that differ only in the path - the same byte count and the same SHA-256. **The
+number is deliberately not written down here.** The base moves every time the repository publishes a
+new one, and a frozen hash in a page goes stale the day it does; this compares two files on your own
+PC, so it stays true. (On 2026-11-26, at PR #1524, both read `be9f7469…` and `254627`.)
+
+If they differ, name both before believing anything is broken. A `git pull` that brings a newer base
+after step 4 leaves the live gate one base behind - the replacement only accepts the drifted live
+file, so a second run refuses; that difference is expected, not a fault. A patch stack run after
+step 4 (5B, not this PC's route) can change the gate too. Write both hashes down and send them back
+rather than forcing a tool.
 
 ### 8.3 The backend folder is complete
 
@@ -550,7 +693,8 @@ One line (read-only):
 `cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main"; powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"`
 
 Good: no `MISSING`. A `not yet` after a fully successful step 5 would mean the run did not put
-everything in - read the patch log.
+everything in - read the run's own record: `_jarvis-logs\apply-patches-<date>.txt` for the patch
+stack (5B), the deploy tool's own output for 5A.
 
 ### 8.4 The live check
 
@@ -639,7 +783,8 @@ several steps. Stop Atlas first for anything that touches the backend folder.
 | 2 backup | delete the two zips | nothing else changed |
 | 3 backend install | unset `JARVIS_BACKEND`; delete the copied folder if you made one | your only backend folder is untouched |
 | 4 gate replacement | copy `jarvis_gate.py.bak.<date>` back over `jarvis_gate.py`, restart | the backup file stays |
-| 5 patch stack | `apply-patches.ps1 -Revert`, or restore step 2's zip | the modules it copied in and your settings file stay |
+| 5A deploy (this PC) | close Atlas, then `reconcile_live_backend.py --backend-path "<live>" --rollback "<live>\_jarvis-deploy-backup-tool-<stamp>"` | the `_jarvis-deploy-backup-tool-<stamp>` folder stays |
+| 5B patch stack | `apply-patches.ps1 -Revert`, or restore step 2's zip | the modules it copied in and your settings file stay |
 | 6 desktop build | Settings -> Apps -> Jarvis Desktop -> Uninstall | settings under `%LOCALAPPDATA%` may stay |
 | 7 phone APK | `adb uninstall com.jarvis.client` | app data and the pairing token are gone |
 | 8 after-checks | stop the backend | - |
@@ -659,19 +804,30 @@ example a `_jarvis-backup-<date>` folder or a `.bak` file) simply remain.
 
 ## What is still UNVERIFIED, and what to send back
 
-**The whole page.** It has not been run end to end. Everything marked VERIFIED was read out of the
-repository; nothing marked VERIFIED was executed.
+**The install itself.** This page has not been run end to end on the live folder. The two backend
+steps were **rehearsed** on a byte-identical copy on 2026-11-26 (deploy: `RESULT: PASS - backend
+reconciled`, 31 files; gate: 236,453 B `c2a31981…` -> 254,627 B `be9f7469…`, `+762 / -410`), and
+everything marked VERIFIED was read out of the repository. **Nothing was installed:** the live gate
+is still `c2a31981…`, and the live folder was read, never written. A rehearsal is not an install, so
+the live folder's own run is the evidence that is still missing.
 
 The specific pieces I could not verify from the repository, with what is missing:
 
-- **The patch stack's result on this PC after the gate replacement.** The repository records
-  37 refusals on the 2026-10-30 drifted install (the repair tool's docstring), and the replacement's
-  test says the patch stack can be applied to a recognised file again, but no run's log for the
-  post-replacement state exists in the repository. The run's own
-  `_jarvis-logs\apply-patches-<date>.txt` is the missing evidence.
+- **The desktop half.** Step 6's build and install were not run - the rehearsal copied the backend
+  folder, not the desktop - so `VERSION` being written from the **new** desktop's FileVersion, the
+  reason step 6 goes first, is proved by the code and by DEF-100's log, not by this install.
+- **The patch stack's result anywhere.** The repository records 37 refusals on the 2026-10-30
+  drifted install (the repair tool's docstring), and no run's log for a patcher PC exists in the
+  repository. The run's own `_jarvis-logs\apply-patches-<date>.txt` is the missing evidence.
+  **Do not expect step 4 to make the stack apply:** 58 of the 59 remaining `jarvis_gate.py` patches
+  do not apply to the published base (the replacement tool's docstring, measured 2026-11-26).
 - **The repair tool's output on this PC after the replacement.** Its anchors are the live shapes; a
   copy of the published base refuses at `jarvis_hud.py` ("the anchor for 'history' is not there any
   more") and writes nothing. What it says on the live folder is unmeasured.
+- **Whether a later deploy refreshes the gate in `DEPLOY-MANIFEST`.** This PC's manifest lists
+  `jarvis_gate.py` at 236,453 B / `c2a31981…` (read 2026-11-26), so step 4 leaves that record naming
+  the file it replaced; the deploy plans a new manifest from the live bytes, which should refresh it
+  on the next run, but that run was not made.
 - **Step 2's zip lines** and **step 9's `Expand-Archive` line** - standard PowerShell, not run here.
 - **8.8's two lines** (the read-only one, and the one that moves the wake phrase) were syntax-tested
   on a copy of the shipped `jarvis-framework.toml`, not on a real settings file. The single-quote
@@ -685,6 +841,6 @@ The specific pieces I could not verify from the repository, with what is missing
   figures, not measured for this page.
 
 Send back, for any step that does not behave as written: the whole window (not a screenshot of one
-line), the step number, and the log file it names. For step 5 that is
-`_jarvis-logs\apply-patches-<date>.txt`; for step 4 it is the tool's own output, which names the
-refusal. **Never send the pairing token or a password** - no line on this page prints one.
+line), the step number, and the log file it names - `_jarvis-logs\apply-patches-<date>.txt` for 5B,
+the deploy tool's own output for 5A, and the replacement tool's own output (which names the refusal)
+for step 4. **Never send the pairing token or a password** - no line on this page prints one.
