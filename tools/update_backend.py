@@ -25,6 +25,22 @@ is clamped to 20-22 and `responsive` to 12-16, so a caller cannot ask for more
 than the mode promises; `safe` is clamped to 1 and can never run in parallel.
 An unknown mode is refused before anything runs.
 
+WHICH CODE IT DEPLOYS (the owner's ruling Q5, 2026-11-27)
+
+The app-triggered update deploys a COMMIT, not the program folder's HEAD. It
+resolves the published desktop release's own `commit` from `latest.json` (the
+file the app's updater already downloads), else `origin/main` after a READ-ONLY
+`git fetch origin`, and reads the whole run from a clean detached worktree at
+that commit - so the backend half and the desktop half come from one release.
+`git fetch` writes no working-tree file, so the owner's checkout is left exactly
+as they left it, and the throwaway worktree is removed on every exit path.
+`--ref HEAD` / `--ref <branch>` / `--ref <commit>` is the developer's own
+override and the only way to deploy something else: the app never passes it.
+A run that cannot be pinned does NOT fall back to the working tree - a
+deploy-managed install refuses with a sentence, and a patch-only install says
+out loud that it is using the folder it always used. (DEF-099: the stale local
+checkout was deployed while the desktop half was the published release.)
+
 WHAT IT DOES, IN ORDER
 
 1. `scripts/apply-patches.ps1 -BackendPath <backend> -SkipTests` - the same
@@ -205,16 +221,23 @@ WHAT IT WRITES, AND WHAT IT DOES NOT
 - Does NOT write: `scripts/apply-patches.ps1` or any other repository file,
   the desktop app's settings, or anything else in the owner's
   `~/.openjarvis`.
-- Talks to exactly ONE network address, and only on this PC: the owner's own
-  Ollama lane at `OLLAMA_URL` (loopback only; a non-loopback value is refused
-  and nothing is restored), to read `/api/ps` and warm back the recorded model -
-  plus the bounded proof's own three GETs, on a loopback port of its own making,
-  to the live HUD it just started. Nothing leaves the machine, no proxy is used
-  for either, and no other request is made. The only processes it starts are
+- Talks to the owner's own Ollama lane at `OLLAMA_URL` (loopback only; a
+  non-loopback value is refused and nothing is restored), to read `/api/ps` and
+  warm back the recorded model - plus the bounded proof's own three GETs, on a
+  loopback port of its own making, to the live HUD it just started. No proxy is
+  used for any of those. IT MAKES EXACTLY ONE REQUEST THAT LEAVES THIS PC (the
+  owner's ruling Q5, 2026-11-27): one HTTPS GET of the desktop release feed the
+  app's own updater already reads, to learn the commit the published desktop was
+  built from. That URL is READ from `jarvis-desktop/src-tauri/tauri.conf.json`'s
+  `plugins.updater.endpoints`, so no second host is ever asked and there is no
+  second copy of it to drift, and the request carries no token and no identifier.
+  The only processes it starts are
   PowerShell (the patcher, and the deploy tool's own read of the installed
   desktop's FileVersion), Python (`run_suites.py`, the bounded proof's
   import-all child and the live HUD it starts, and its own `--restore-lane` mode
-  for the desktop), and `tools/check_egress_gate.py` as a Python child.
+  for the desktop), `tools/check_egress_gate.py` as a Python child, and `git`
+  (a read-only fetch, a clean checkout of one commit, and that checkout's
+  removal).
 
 THE EVENTS
 
@@ -251,6 +274,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 KIND = "update_backend"
@@ -2114,10 +2138,14 @@ def deploy_route(repo, backend, *, say=print, module=None, version_reader=None,
     afterwards - a marker that could not be read or does not match is a failure,
     never a claim.
 
-    The bytes carried are `HEAD`: the patcher applies the working tree, a clean
-    checkout's working tree IS `HEAD`, and `HEAD` is the only ref the deploy
-    tool's own worktree guard accepts without an override. The commit is read
-    from git, never guessed, so `SOURCE-COMMIT` names a real commit.
+    The bytes carried are this folder's `HEAD`: the patcher applies the working
+    tree, a clean checkout's working tree IS `HEAD`, and `HEAD` is the only ref
+    the deploy tool's own worktree guard accepts without an override. THE FOLDER
+    IS WHATEVER `update()` PINNED (the owner's ruling Q5, 2026-11-27): on the app
+    path that is a clean detached worktree at the published release's commit, so
+    `HEAD` here is a release rather than whatever checkout the app happened to
+    run from. The commit is read from git, never guessed, so `SOURCE-COMMIT`
+    names a real commit.
 
     THE ROUTE PROBES ARE SKIPPED, FOR A STATED REASON. The desktop stops the
     supervised backend before the backend half runs, so there is no server for
@@ -3294,6 +3322,389 @@ bounded_proof._checks = {}
 
 
 # ---------------------------------------------------------------------------
+#   Which code this run deploys: a pinned commit, never this folder's HEAD
+# ---------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (the owner's ruling Q5, 2026-11-27; measured the night before
+# as DEF-099). The app's automatic finish for desktop 0.2.519 ran THIS tool on
+# this PC from the program folder, and the tool deployed that folder's own HEAD
+# - the stale local checkout `cac8a8824` - while the desktop half was the
+# published release `e719ccbf4`. The program folder is a checkout a person
+# updates by hand; it is not evidence about which release is being installed,
+# and it must never be read as if it were.
+#
+# SO THE COMMIT IS RESOLVED IN THIS ORDER, AND THEN CHECKED OUT CLEANLY:
+#
+#   1. THE PUBLISHED DESKTOP RELEASE'S OWN COMMIT. `latest.json` - the file the
+#      app's own updater downloads - carries `"commit"`, the commit the desktop
+#      installer was built from (`jarvis-desktop/scripts/updater-manifest.mjs`
+#      writes it, and the release workflow always passes the commit it built).
+#      Deploying that commit puts both halves on ONE release, which is the whole
+#      point. The field is OPTIONAL by its writer's own rule - "a run without
+#      --commit writes a manifest with no commit key at all, so a reader can
+#      tell 'not recorded'" - so a manifest without one is NOT RECORDED and
+#      falls through to 2. This tool never invents a commit.
+#   2. `origin/main`, AFTER A READ-ONLY `git fetch origin`. Read-only is the
+#      whole of it: a fetch writes no working-tree file, creates no branch and
+#      moves no checkout, so the owner's folder is exactly as they left it. This
+#      is also what keeps an offline PC updatable: a release commit this
+#      checkout does not have yet, and a fetch that failed, both leave the last
+#      known `origin/main` usable - and the run says which of those it did.
+#   3. NEITHER -> NOTHING IS DEPLOYED. A plain sentence says what could not be
+#      read. THE LOCAL WORKING TREE IS NEVER THE FALLBACK: that silent fallback
+#      is DEF-099, and it is the one mistake this section exists to prevent.
+#
+# THE BYTES COME FROM A CLEAN DETACHED WORKTREE at that commit, never from the
+# working tree, which may hold uncommitted edits and is not a release. It shares
+# this repository's object store, so it costs one checkout and no clone, and
+# `--detach` means no branch is created and none is checked out twice. It is
+# removed on every exit path - a leftover worktree in the owner's repository
+# would be a new bug of its own - and THE WHOLE RUN READS IT: the patcher, the
+# deploy, the live-file check, the proof, the look spec and the tool defaults,
+# so no two steps of one update can read two different trees.
+#
+# ONE NETWORK READ, AND IT IS THE APP'S OWN. The manifest is one HTTPS GET of
+# the release feed `jarvis-desktop/src-tauri/tauri.conf.json` already names
+# (`plugins.updater.endpoints`): that URL is READ OUT OF THAT FILE and never
+# typed again here, so this tool cannot ask a second host and cannot drift from
+# what the app's updater reads. The GET carries no token and no identifier, is
+# bounded, and a read that fails is not an error - it falls through to
+# `origin/main` and says so.
+#
+# `--ref HEAD` / `--ref <branch>` IS THE DEVELOPER'S OWN OVERRIDE AND NOTHING
+# ELSE. The app never passes it - the desktop's command line is `tool_args` in
+# `backend_update.rs`, which has no `--ref` and no field that could add one - so
+# an app-triggered run always gets 1 or 2 above. A run given `--ref` deploys the
+# commit that name resolves to, from the same kind of clean copy, and says so.
+
+#: The app's own updater config, relative to the program folder. The manifest
+#: URL is READ from it, never typed a second time here, so this tool can only
+#: ever ask the one host the app's own updater already asks.
+UPDATER_CONFIG_REL = Path("jarvis-desktop") / "src-tauri" / "tauri.conf.json"
+#: How long one manifest read may take. Short on purpose: this runs before an
+#: update, and a release page that is slow is not worth hanging for when the
+#: fallback (`origin/main`) is a usable answer.
+PUBLISHED_TIMEOUT_SECONDS = 6.0
+#: git's own bounds. A fetch of this repository is a few seconds on the owner's
+#: PC; a dead network must not hang an update, and `git` is what would hang.
+FETCH_TIMEOUT_SECONDS = 180
+GIT_TIMEOUT_SECONDS = 60
+#: A clean checkout of the whole repository takes longer than a rev-parse.
+WORKTREE_TIMEOUT_SECONDS = 300
+#: The fallback: this repository's upstream branch, and the remote it is on.
+PIN_BRANCH = "origin/main"
+PIN_REMOTE = "origin"
+#: What a pin's `from` says when the release's commit was used as it stands.
+PIN_PUBLISHED_WORDS = "the published desktop release's own commit"
+
+
+def _git(repo, *args, timeout: float = GIT_TIMEOUT_SECONDS):
+    """(exit code, stdout, stderr) from one git command in `repo`. Never raises.
+
+    git writes its reasons on stderr, and an update must REPORT them rather than
+    crash on them, so the three things come back and nothing else. A machine
+    with no git at all is (127, "", "...")-shaped and the caller says so in
+    words, and a git that hangs is (124, ...) rather than a stuck update.
+    """
+    try:
+        proc = subprocess.run(["git", "-C", str(repo)] + [str(part) for part in args],
+                              capture_output=True, timeout=timeout)
+    except FileNotFoundError:
+        return 127, "", "git is not installed on this PC"
+    except subprocess.TimeoutExpired:
+        return 124, "", (f"git {args[0] if args else ''} did not finish within "
+                         f"{int(timeout)} seconds")
+    except Exception as exc:                            # noqa: BLE001 - never a crash
+        return 1, "", f"git could not be run ({type(exc).__name__}: {exc})"
+    out = (proc.stdout or b"").decode("utf-8", "replace").strip()
+    err = (proc.stderr or b"").decode("utf-8", "replace").strip()
+    return proc.returncode, out, err
+
+
+def git_checkout_root(repo) -> str:
+    """The root of the git checkout `repo` IS, or "" when it is not one.
+
+    `--show-toplevel` and not `--git-dir`: a plain folder that happens to sit
+    inside somebody else's repository is NOT a checkout of this program, and
+    pinning from its parent would deploy a tree this folder never was. The
+    comparison is resolved on both sides because git prints forward slashes on
+    Windows, and it is case-insensitive there because Path is.
+    """
+    code, out, _err = _git(repo, "rev-parse", "--show-toplevel")
+    if code != 0 or not out:
+        return ""
+    try:
+        if Path(repo).resolve() != Path(out).resolve():
+            return ""
+    except OSError:
+        return ""
+    return out
+
+
+def _resolve_commit(repo, want: str) -> str:
+    """The full commit sha `want` names in this checkout, or "" when it names none."""
+    if not want:
+        return ""
+    code, out, _err = _git(repo, "rev-parse", "--verify", "--quiet",
+                           f"{want}^{{commit}}")
+    if code != 0 or not out:
+        return ""
+    return out.splitlines()[-1].strip()
+
+
+def updater_endpoint(repo) -> str:
+    """The desktop release feed's URL, read from the app's own updater config.
+
+    Read, never typed again: the app's updater reads `plugins.updater.endpoints`
+    in `tauri.conf.json`, and a second copy of that URL in Python is how the two
+    drift apart. "" when this checkout has no readable config - the caller then
+    falls back to `origin/main` and says why.
+    """
+    try:
+        doc = json.loads((Path(repo) / UPDATER_CONFIG_REL).read_text(encoding="utf-8"))
+        urls = doc["plugins"]["updater"]["endpoints"]
+    except Exception:                                   # noqa: BLE001 - never a crash
+        return ""
+    if isinstance(urls, str):
+        urls = [urls]
+    if not isinstance(urls, list):
+        return ""
+    for url in urls:
+        if isinstance(url, str) and url.strip().lower().startswith("https://"):
+            return url.strip()
+    return ""
+
+
+def _open_json(url: str):
+    """One small JSON document from `url`: no token, no identifier, bounded.
+
+    The only request this tool makes that leaves this PC, and it goes to the
+    release feed the app's own updater already reads (see `updater_endpoint`).
+    """
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "Jarvis-backend-update/1",
+                      "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=PUBLISHED_TIMEOUT_SECONDS) as answer:
+        raw = answer.read(256 * 1024)
+    return json.loads(raw.decode("utf-8", "replace"))
+
+
+def read_published_release(repo, *, opener=None) -> dict:
+    """{"version", "commit", "why"} - the desktop release the app's updater reads.
+
+    ONE plain HTTPS GET of that feed. `commit` is "" when the manifest does not
+    record one, and `why` says which of the two happened: "not recorded" is a
+    fact about the manifest, not a failure of the read, and a reader that
+    invented a commit from it would be DEF-099 in a new coat.
+
+    `opener` is the test seam: the suite passes a function that answers with a
+    fixture document, so no test ever touches the network.
+    """
+    url = updater_endpoint(repo)
+    if not url:
+        return {"version": "", "commit": "",
+                "why": ("this program folder has no readable desktop updater "
+                        "config, so the published release was not read")}
+    try:
+        doc = (opener or _open_json)(url)
+    except Exception as exc:                            # noqa: BLE001 - never a crash
+        return {"version": "", "commit": "",
+                "why": (f"the published release could not be read "
+                        f"({type(exc).__name__}: {exc})")}
+    if not isinstance(doc, dict):
+        return {"version": "", "commit": "",
+                "why": "the published release was not a JSON object"}
+    version = str(doc.get("version") or "").strip()
+    raw = doc.get("commit")
+    commit = str(raw or "").strip().lower()
+    if commit and not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return {"version": version, "commit": "",
+                "why": (f"the published release names a commit that is not a "
+                        f"hex sha ({raw!r})")}
+    if not commit:
+        return {"version": version, "commit": "",
+                "why": "the published release records no commit (not recorded)"}
+    return {"version": version, "commit": commit, "why": ""}
+
+
+def resolve_deploy_commit(repo, *, ref=None) -> dict:
+    """{"commit", "from", "why", "note"} - what this run deploys, and in whose words.
+
+    `ref` is the developer's `--ref ...`, and it is the ONLY way to deploy
+    something other than the published release's commit or `origin/main`. An
+    empty `commit` means "could not be pinned" and `why` is the sentence that
+    says why; `note` is something worth saying about a pin that DID happen.
+
+    Nothing here touches the working tree except `git fetch`, and nothing here
+    decides whether the run may continue: the two install shapes treat a `why`
+    differently, so the caller decides (see `_update_locked`) and this function
+    never quietly substitutes the folder it was given.
+    """
+    if ref:
+        # A DEVELOPER'S RUN, and only a developer's run gets here. No fetch: the
+        # ref they named is the ref they mean, and the copy is clean.
+        sha = _resolve_commit(repo, ref)
+        if not sha:
+            return {"commit": "", "from": "", "note": "",
+                    "why": (f"--ref {ref} does not name a commit in this checkout. "
+                            f"Nothing was deployed from this folder's working tree "
+                            f"instead.")}
+        return {"commit": sha, "from": f"--ref {ref}", "note": "", "why": ""}
+    if not git_checkout_root(repo):
+        return {"commit": "", "from": "", "note": "",
+                "why": ("this program folder is not a git checkout, so there is no "
+                        "origin/main and no release commit to pin the update to")}
+    note = ""
+    code, _out, err = _git(repo, "fetch", "--quiet", PIN_REMOTE,
+                           timeout=FETCH_TIMEOUT_SECONDS)
+    fetch_failed = code != 0
+    if fetch_failed:
+        note = (f"the read-only git fetch did not finish ({err or code}), so this "
+                f"run could only use a commit this checkout already had")
+    release = read_published_release(repo)
+    published = ""
+    release_why = release["why"]
+    if release["commit"]:
+        published = _resolve_commit(repo, release["commit"])
+        if not published and not fetch_failed:
+            # The release was cut from a commit this checkout has never fetched.
+            # One read-only fetch of that commit, then look again: a tag or a
+            # branch would have come with `git fetch origin`, so this is only for
+            # a commit that nothing else points at.
+            _git(repo, "fetch", "--quiet", "--no-tags", PIN_REMOTE, release["commit"],
+                 timeout=FETCH_TIMEOUT_SECONDS)
+            published = _resolve_commit(repo, release["commit"])
+        if not published:
+            release_why = (f"the published release names commit "
+                           f"{release['commit'][:12]}, but this checkout does not "
+                           f"have it")
+    if published:
+        from_words = PIN_PUBLISHED_WORDS
+        if release["version"]:
+            from_words = f"the published desktop release {release['version']}"
+        return {"commit": published, "from": from_words, "why": "", "note": note}
+    why_release = release_why or "the published release was not read"
+    origin = _resolve_commit(repo, PIN_BRANCH)
+    if origin:
+        return {"commit": origin, "why": "", "note": note or why_release,
+                "from": (f"{PIN_BRANCH} after a read-only git fetch"
+                         if not fetch_failed else
+                         f"the last known {PIN_BRANCH} (the fetch failed)")}
+    return {"commit": "", "from": "", "note": note,
+            "why": (f"nothing could be pinned: {why_release}, and {PIN_BRANCH} "
+                    f"could not be read either"
+                    + (f" ({note})" if note else "")
+                    + ". The code in this folder was NOT deployed in its place.")}
+
+
+def _detached_worktree(repo, commit: str) -> dict:
+    """{"tree", "root", "why"} - a clean detached copy of `commit`, or why not.
+
+    A `git worktree` and not an export: the deploy tool reads its own file lists
+    and every module's bytes out of a git object store (`git show <ref>:<path>`)
+    and refuses a folder that is not a repository, so an exported tree would be
+    refused. A worktree shares this one's object store, so it costs one checkout
+    and no clone, and `--detach` creates no branch to clean up.
+
+    `tree`/`root` are None on failure, NEVER AN EMPTY PATH. `Path("")` is `"."`,
+    and a cleanup helper that trusts it deletes the folder the tool was run from
+    - which is exactly what happened while this function was being written
+    (2026-11-27).
+    """
+    root = Path(tempfile.mkdtemp(prefix="jarvis-deploy-source-"))
+    tree = root / "tree"
+    code, _out, err = _git(repo, "worktree", "add", "--detach", str(tree), commit,
+                           timeout=WORKTREE_TIMEOUT_SECONDS)
+    if code != 0:
+        shutil.rmtree(str(root), ignore_errors=True)
+        return {"tree": None, "root": None,
+                "why": (f"a clean copy of {commit[:12]} could not be made "
+                        f"(git worktree add: {err or code})")}
+    return {"tree": tree, "root": root, "why": ""}
+
+
+def _under_temp_folder(path) -> bool:
+    """True only for a path inside this PC's temporary folder.
+
+    A DESTRUCTIVE HELPER THAT RESOLVES A CALLER'S PATH MUST NEVER ACCEPT "",
+    "." OR THE REPOSITORY ROOT. Measured 2026-11-27, expensively: this driver
+    was handed `Path("")` to mean "there is no worktree", `Path("")` is `"."`,
+    and `shutil.rmtree(".")` set about deleting the repository it was run from.
+    So the answer here is not "does this look empty" but "is this inside the
+    one temporary folder this tool made its own copy in" - and anything else,
+    including the folder this tool is running from, is left strictly alone.
+    """
+    try:
+        target = Path(path).resolve()
+        temp = Path(tempfile.gettempdir()).resolve()
+    except (OSError, ValueError):
+        return False
+    if str(path).strip() in ("", ".", ".."):
+        return False
+    return target == temp or temp in target.parents
+
+
+def _release_worktree(repo, tree=None, root=None) -> None:
+    """Remove the throwaway worktree and its folder. Never raises.
+
+    Called from `deploy_source`'s `finally`, so a refusal, an exception and a
+    finished update all clean up the same way: a leftover worktree in the
+    owner's repository is a new bug of its own. If `worktree remove` refuses,
+    the folder is deleted outright and the metadata pruned, so `git worktree
+    list` never names a tree that is not on disk.
+
+    Both paths must be inside the temporary folder (`_under_temp_folder`), which
+    is where `_detached_worktree` makes them and nowhere else; `None` means
+    there was nothing to make. Nothing outside that folder is touched, whatever
+    a caller passes in.
+    """
+    if tree and _under_temp_folder(tree):
+        code, _out, _err = _git(repo, "worktree", "remove", "--force", str(tree))
+        if code != 0:
+            shutil.rmtree(str(tree), ignore_errors=True)
+    if root and _under_temp_folder(root):
+        shutil.rmtree(str(root), ignore_errors=True)
+    _git(repo, "worktree", "prune")
+
+
+@contextmanager
+def deploy_source(repo, *, ref=None, say=print):
+    """Yield {"tree", "commit", "from", "why", "note"} - where THIS run reads code.
+
+    `tree` is the caller's own folder ONLY when there is nothing to pin. Whenever
+    a commit was resolved, `tree` is a clean detached copy at it, and that copy
+    is removed however this block ends.
+
+    A `why` is NOT raised here: a deploy-managed install must refuse on it and a
+    patch-only install must carry on and say it, and this function has no
+    business deciding that for them. It also never substitutes the caller's
+    working tree to avoid a `why` - that silent fallback is DEF-099.
+    """
+    repo = Path(repo)
+    found = resolve_deploy_commit(repo, ref=ref)
+    tree = root = None
+    try:
+        if found["commit"]:
+            made = _detached_worktree(repo, found["commit"])
+            if made["why"]:
+                source = dict(found, tree=repo, why=made["why"])
+            else:
+                tree, root = made["tree"], made["root"]
+                source = dict(found, tree=tree)
+        else:
+            source = dict(found, tree=repo)
+        if source["commit"]:
+            say(f"PIN  {source['from']} - this update reads and deploys "
+                f"{source['commit'][:12]} from a clean detached copy, not from this "
+                f"folder's own HEAD.")
+            if source.get("note"):
+                say(f"NOTE  {source['note']}.")
+        yield source
+    finally:
+        _release_worktree(repo, tree, root)
+
+
+# ---------------------------------------------------------------------------
 #   The update itself
 # ---------------------------------------------------------------------------
 
@@ -3373,13 +3784,27 @@ def _deploy_safe_words() -> str:
 def update(repo, backend, mode: str, *, requested_workers=None, timings_path=None,
            say=print, run=_run, clock=time.time, lock_file=None,
            previous_release=None, full_proof=False,
-           tool_defaults=None, beside_files=None, deploy=None) -> int:
+           tool_defaults=None, beside_files=None, deploy=None, ref=None,
+           pin=None) -> int:
     """Run one backend update at `mode`'s pace; return 0 only when it proved it.
 
     The whole state machine is in `_update_locked`, so the fallback can be
     driven end to end with a fake runner: patch, verify, test; if a quick mode
     cannot prove itself, restore the newest backup and do the same three steps
     with one worker, and judge the update by that second pass.
+
+    WHICH CODE IT READS IS PINNED, NOT THIS FOLDER'S HEAD (the owner's ruling
+    Q5, 2026-11-27). `deploy_source` wraps the whole run: it resolves the
+    published release's commit (else `origin/main` after a read-only fetch),
+    checks that commit out into a clean detached worktree, and the state machine
+    below reads THAT - patcher, deploy, live-file check, proof, look spec and
+    tool defaults - so no step can read the stale checkout DEF-099 deployed.
+    `ref` is the developer's `--ref HEAD` / `--ref <branch>` and is the only way
+    to deploy something else; the app never passes it. A run that cannot be
+    pinned is decided in `_update_locked`, by the install's own shape.
+    `pin` is the test seam for a fixture that is not a git checkout at all: it
+    replaces `deploy_source` and yields the same dict, and no caller in
+    production passes it.
 
     THE PROOF STAGE IS BOUNDED ON THE APP PATH (Gemini ruling 5.1, 2026-11-21).
     The in-app auto-finish and the "Update everything" press both run this
@@ -3424,6 +3849,7 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     """
     repo = Path(repo)
     backend = Path(backend)
+    pin = pin or deploy_source
     mode_spec(mode)                        # unknown mode: refused here, first
     requested_workers = workers_for(mode, requested_workers)
     preflight(repo, backend)
@@ -3450,15 +3876,24 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     else:
         say(f"NOTE  {taken.get('why') or 'the update lock is not held'}.")
     try:
-        return _update_locked(repo, backend, mode,
-                              requested_workers=requested_workers,
-                              timings_path=timings_path, say=say, run=run,
-                              clock=clock,
-                              previous_release=previous_release,
-                              tool_defaults=tool_defaults,
-                              beside_files=beside_files,
-                              deploy=deploy, full_proof=bool(full_proof),
-                              lock_file=target if taken.get("ok") else None)
+        with pin(repo, ref=ref, say=say) as source:
+            pinned = Path(source["tree"])
+            if pinned != repo:
+                # THE PINNED COPY IS A WHOLE CHECKOUT and it is what the run
+                # reads, so it gets the same check the caller's folder just had:
+                # a release that moved one of these two programs out of the way
+                # must be a plain refusal, not a crash three steps later.
+                preflight(pinned, backend)
+            return _update_locked(pinned, backend, mode,
+                                  requested_workers=requested_workers,
+                                  timings_path=timings_path, say=say, run=run,
+                                  clock=clock,
+                                  previous_release=previous_release,
+                                  tool_defaults=tool_defaults,
+                                  beside_files=beside_files,
+                                  deploy=deploy, full_proof=bool(full_proof),
+                                  lock_file=target if taken.get("ok") else None,
+                                  source=source)
     finally:
         if taken.get("ok"):
             released = release_lock(path=target)
@@ -3470,13 +3905,18 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
 def _update_locked(repo, backend, mode: str, *, requested_workers,
                    timings_path=None, say=print, run=_run, clock=time.time,
                    lock_file=None, previous_release=None, full_proof=False,
-                   tool_defaults=None, beside_files=None, deploy=None) -> int:
+                   tool_defaults=None, beside_files=None, deploy=None,
+                   source=None) -> int:
     """The update itself. The lock is already held by `update()`; `lock_file`
     is refreshed as suites finish (the heartbeat) and released by the caller.
 
     `full_proof` is the developer's `--full-proof`: False (the app path) runs
     the bounded subset, True keeps today's full suite sweep and its ending
     words. The route and the file half are identical either way.
+
+    `source` is `deploy_source`'s answer for this run (which commit it pinned
+    and where it read the code from). It is `None` only for a caller that drives
+    this state machine directly, and then no pinning decision is made here.
     """
     tool_defaults = tool_defaults or enable_new_tool_defaults
     beside_files = beside_files or deliver_visual_spec
@@ -3494,6 +3934,7 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
     # is the legacy patch-only install and starts with the patch stack exactly
     # as before. `evidence` is what the ROUTE line says, never a re-guess.
     evidence = deploy_managed_evidence(backend)
+    source = source or {}
     if evidence.get("corrupt"):
         # RULING 4 (Gemini, 2026-11-21). Evidence that is THERE and unusable is a
         # refusal, never a fallback: a malformed/edited `DEPLOY-MANIFEST` (or one
@@ -3513,6 +3954,35 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
             "update again.")
         say("DONE WITH PROBLEMS - nothing was run and nothing is claimed as updated.")
         return 1
+    if source.get("why") and evidence.get("managed"):
+        # THE PIN COULD NOT BE MADE ON A DEPLOY-MANAGED INSTALL (ruling Q5,
+        # 2026-11-27). This is the install shape DEF-099 measured: its backend
+        # half comes from the deploy tool, which deploys whatever commit it is
+        # given, and the checkout's own HEAD was the stale one. A refusal is the
+        # whole fix - the one thing that must never happen is falling back to the
+        # working tree, because that IS the bug, and it deploys silently.
+        say("")
+        say(f"REFUSED  {source['why']}.")
+        say("This install is deploy-managed, so its backend half has to come from a "
+            "published commit: the desktop release's own commit, or origin/main after a "
+            "read-only git fetch. The code in this program folder was NOT deployed in "
+            "its place - deploying a checkout that is behind is exactly how the two "
+            "halves came to carry different commits (DEF-099).")
+        say("Nothing was changed. Connect this PC to the network and run the update "
+            "again (a read-only git fetch is all it needs), or run it by hand with "
+            "tools\\update_backend.py --ref <commit> to deploy one you name.")
+        say("DONE WITH PROBLEMS - nothing was run and nothing is claimed as updated.")
+        return 1
+    if source.get("why"):
+        # A PATCH-ONLY INSTALL THAT COULD NOT BE PINNED keeps working exactly as
+        # it always has: the patcher runs from the folder it sits in, and this
+        # time that folder is the one the person has. Said out loud every time -
+        # never silently, which is the DEF-099 rule. (When a pin IS possible this
+        # branch is not reached: the whole run reads the clean copy, patcher
+        # included, because the patcher takes its scripts, its patch list and the
+        # desktop's Cargo.lock from the folder it sits in.)
+        say(f"NOTE  {source['why']}; the code already in this folder is used, as it "
+            f"always has been for a patch-only install.")
     path = Path(timings_path) if timings_path is not None else timings_path_for(backend)
     timings = pace_timings(load_timings(path), mode)
     plan = estimate(mode, names, timings, requested=requested_workers)
@@ -4453,6 +4923,7 @@ def _minutes(seconds: int) -> str:
 def _usage() -> str:
     return ("usage: update_backend.py --repo <program folder> --backend <backend folder> "
             "[--mode max_speed|responsive|safe] [--workers N] [--full-proof] "
+            "[--ref HEAD|<branch>|<commit>] "
             "[--modes-json] [--timings PATH] [--previous-release COMMIT]; or "
             "update_backend.py --restore-lane --backend <backend folder>")
 
@@ -4465,7 +4936,7 @@ def parse_args(argv) -> dict:
     out = {"mode": DEFAULT_MODE, "workers": None, "modes_json": False,
            "restore_lane": False, "full_proof": False,
            "repo": None, "backend": None, "timings": None,
-           "previous_release": None}
+           "previous_release": None, "ref": None}
     rest = list(argv)
     while rest:
         word = rest.pop(0)
@@ -4482,7 +4953,7 @@ def parse_args(argv) -> dict:
             out["full_proof"] = True
             continue
         if word in ("--repo", "--backend", "--mode", "--workers", "--timings",
-                    "--previous-release"):
+                    "--previous-release", "--ref"):
             if not rest:
                 raise UpdateRefused("bad_argument", f"{word} needs a value after it.")
             value = rest.pop(0)
@@ -4492,6 +4963,18 @@ def parse_args(argv) -> dict:
         if word.startswith("--"):
             raise UpdateRefused("bad_argument", f"I do not know the option {word!r}.")
         raise UpdateRefused("bad_argument", f"I do not know what to do with {word!r}.")
+    if out["ref"] is not None:
+        # AN EMPTY --ref IS NOT A REF, and it is reachable by accident: `--ref
+        # $sha` with `$sha` unset in PowerShell is "". The deploy tool refuses it
+        # too, but this tool would otherwise treat "" as "no --ref at all" and pin
+        # the published release instead - a silent substitution for the tree the
+        # developer named, which is the one thing --ref exists to prevent.
+        if not str(out["ref"]).strip():
+            raise UpdateRefused("bad_ref",
+                                "--ref must not be empty. Pass a commit, a branch or "
+                                "HEAD; leave --ref out entirely to deploy the published "
+                                "release's commit instead.")
+        out["ref"] = str(out["ref"]).strip()
     if not out["restore_lane"] and not out["repo"]:
         raise UpdateRefused("bad_argument", "--repo is needed: the folder that holds "
                                            "scripts\\apply-patches.ps1.")
@@ -4577,7 +5060,7 @@ def main(argv=None, *, say=print, run=_run) -> int:
                       requested_workers=args["workers"],
                       timings_path=args["timings"], say=say, run=run,
                       previous_release=args["previous_release"],
-                      full_proof=args["full_proof"])
+                      full_proof=args["full_proof"], ref=args["ref"])
     except UpdateRefused as exc:
         print(f"REFUSED  {exc.message}", file=sys.stderr)
         return 2

@@ -169,6 +169,20 @@ def _make_root() -> Path:
     return Path(tempfile.mkdtemp(prefix="jarvis-update-backend-"))
 
 
+@contextmanager
+def _no_pin(repo, *, ref=None, say=print):
+    """`deploy_source`'s answer for a fixture that is NOT a git checkout.
+
+    The Q5 pin (2026-11-27) resolves a commit before anything runs, and every
+    fixture in this suite is a plain temporary folder - there is no git object
+    store to pin to and there must be no network read. This stands in for that
+    step and says "nothing to pin, so use the folder as it is"; the pin itself is
+    proved against REAL repositories in the checks further down. Only a fixture
+    that is deploy-managed needs it: a patch-only fixture simply says so.
+    """
+    yield {"tree": Path(repo), "commit": "", "from": "", "why": "", "note": ""}
+
+
 class _Clock:
     """An injectable wall clock for the update's time-based decisions."""
 
@@ -4182,7 +4196,7 @@ def t_a_deploy_managed_install_takes_reconcile_first_with_no_patch_run():
     with _fake_proof_checks(calls=calls):
         code = U.update(repo, backend, "responsive", run=fake, say=said.append,
                         clock=lambda: 0.0, timings_path=root / "timings.json",
-                        deploy=_deploy_ok(backend, calls=deploys))
+                        deploy=_deploy_ok(backend, calls=deploys), pin=_no_pin)
     tail = "\n".join(said)
     patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
     route_lines = [line for line in said if line.startswith(U.ROUTE_PREFIX)]
@@ -4246,7 +4260,7 @@ def t_a_deploy_refusal_on_the_detected_route_is_verbatim_and_never_falls_back():
     with _fake_proof_checks():
         code = U.update(repo, backend, "responsive", run=fake, say=said.append,
                         clock=lambda: 0.0, timings_path=root / "timings.json",
-                        deploy=_deploy_refused(refused_line))
+                        deploy=_deploy_refused(refused_line), pin=_no_pin)
     tail = "\n".join(said)
     patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
     route_lines = [line for line in said if line.startswith(U.ROUTE_PREFIX)]
@@ -4267,6 +4281,479 @@ def t_a_deploy_refusal_on_the_detected_route_is_verbatim_and_never_falls_back():
           all((backend / name).read_bytes() == OLD[name] for name in OLD)
           and (backend / "VERSION").read_text(encoding="utf-8") == "0.2.491",
           {name: (backend / name).read_bytes() for name in OLD})
+
+
+
+# ==========================================================================
+#   WHICH COMMIT THE APP DEPLOYS: the release's own, never the checkout's HEAD
+# ==========================================================================
+#
+# The owner's ruling Q5 (2026-11-27), and the measured failure it answers
+# (DEF-099): launching desktop 0.2.519 auto-ran this tool and it deployed the
+# program folder's own HEAD - the stale local checkout `cac8a8824` - while the
+# desktop half was the published release `e719ccbf4`.
+#
+# So these use a REAL git repository whose HEAD is one commit behind its own
+# origin/main, and the thing each one measures is WHICH COMMIT THE DEPLOY WAS
+# HANDED. They can all fail in the direction that matters: the first goes red if
+# the pin falls back to the checkout (`seen["sha"] == head` instead of `origin`),
+# and the run's own live-file check would go red too, because the fake deploy
+# carries the bytes of the tree it was given and the run compares them with the
+# PINNED tree's `jarvis-backend/`.
+
+#: git must not read this PC's user config and must not rewrite line endings.
+_PIN_GIT_CONFIG = ["-c", "user.name=Jarvis suite",
+                   "-c", "user.email=suite@example.invalid",
+                   "-c", "commit.gpgsign=false",
+                   "-c", "core.autocrlf=false"]
+
+
+def _pin_git(repo, *args) -> str:
+    """git in `repo`, stripped stdout; a failure raises. Real objects, no fakes."""
+    proc = subprocess.run(["git"] + _PIN_GIT_CONFIG + [str(part) for part in args],
+                          cwd=str(repo), capture_output=True, text=True, timeout=180)
+    if proc.returncode != 0:
+        raise RuntimeError(f"git {' '.join(str(a) for a in args)} failed in {repo}: "
+                           f"{proc.stderr}")
+    return proc.stdout.strip()
+
+
+def _pin_repo(root: Path) -> dict:
+    """A checkout one commit BEHIND its own origin/main, as on the owner's PC.
+
+    Returns `{"repo", "backend", "head", "origin", "upstream"}`. `head` is the
+    commit the checkout is on and its published base holds the OLD bytes;
+    `origin` is the commit origin/main is on and holds the NEW bytes - so WHICH
+    commit a deploy read is visible in the bytes it carried, not only in a number.
+
+    The live folder is made deploy-managed the way the owner's is (VERSION with
+    SOURCE-COMMIT beside it), so the deploy route is the primary route and no
+    patch stack is ever started here.
+    """
+    repo, backend = _make_repo(root)
+    for name, content in OLD.items():                 # commit A: this checkout
+        (repo / "jarvis-backend" / name).write_bytes(content)
+    _pin_git(repo, "init", "-q", "-b", "main")
+    # THIS PC'S GLOBAL CONFIG MAY BE autocrlf=true, which would check the
+    # throwaway copy out with CRLF while the fixture's bytes are LF. Pin it off,
+    # so "which bytes did the deploy read" is a byte comparison and not a
+    # question about somebody's git config. (Production is safe either way:
+    # `verify_live_files` compares with line endings normalised, and the deploy
+    # tool reads its module bytes out of the object store, not off the disk.)
+    _pin_git(repo, "config", "core.autocrlf", "false")
+    _pin_git(repo, "add", "-A")
+    _pin_git(repo, "commit", "-q", "-m", "the release this PC is on")
+    head = _pin_git(repo, "rev-parse", "HEAD")
+    for name, content in NEW.items():                 # commit B: origin/main
+        (repo / "jarvis-backend" / name).write_bytes(content)
+    _pin_git(repo, "add", "-A")
+    _pin_git(repo, "commit", "-q", "-m", "the release origin/main is on")
+    origin = _pin_git(repo, "rev-parse", "HEAD")
+    _pin_git(repo, "reset", "-q", "--hard", head)     # the checkout stays behind
+    upstream = root / "upstream.git"
+    _pin_git(root, "init", "-q", "--bare", str(upstream))
+    _pin_git(repo, "remote", "add", "origin", str(upstream))
+    _pin_git(repo, "push", "-q", "origin", f"{origin}:refs/heads/main")
+    _pin_git(repo, "fetch", "-q", "origin")
+    (backend / "VERSION").write_text("0.2.518", encoding="utf-8")
+    (backend / "SOURCE-COMMIT").write_text(json.dumps({"commit": head}),
+                                           encoding="utf-8")
+    return {"repo": repo, "backend": backend, "head": head, "origin": origin,
+            "upstream": upstream}
+
+
+def _pin_deploy(backend: Path, seen: dict, *, refuse=False):
+    """A stand-in for the deploy route that records WHICH TREE it was handed.
+
+    It carries that tree's own published base into the live folder, exactly as
+    `tools/reconcile_live_backend.py --apply` carries the bytes of the commit it
+    was given - so a deploy handed the wrong tree writes the wrong bytes and the
+    run's own live-file check says so, without this fake having to be believed.
+    """
+    def deploy(repo_arg, backend_arg, *, say):
+        tree = Path(repo_arg)
+        seen["repo"] = str(tree)
+        seen["sha"] = _pin_git(tree, "rev-parse", "HEAD")
+        seen["head_ref"] = _pin_git(tree, "rev-parse", "--abbrev-ref", "HEAD")
+        seen["status"] = _pin_git(tree, "status", "--porcelain")
+        seen["base"] = (tree / "jarvis-backend" / "one.py").read_bytes()
+        if refuse:
+            line = "REFUSED: the deploy tool refused this on purpose"
+            say(line)
+            return {"ok": False, "code": 2, "ref": "", "version": "",
+                    "desktop_version": "", "why": line, "lines": [line]}
+        for name in NEW:
+            (Path(backend_arg) / name).write_bytes(
+                (tree / "jarvis-backend" / name).read_bytes())
+        (Path(backend_arg) / "VERSION").write_text("0.2.519", encoding="utf-8")
+        say("RESULT: PASS - backend reconciled; restart Jarvis and read the "
+            "start-up banner.")
+        return {"ok": True, "code": 0, "ref": seen["sha"], "version": "0.2.519",
+                "desktop_version": "0.2.519", "why": "",
+                "lines": ["RESULT: PASS"]}
+
+    return deploy
+
+
+@contextmanager
+def _with_published(answer):
+    """Swap the published-release reader for one answer, and put it back."""
+    before = U.read_published_release
+    U.read_published_release = lambda repo, **kw: dict(answer)
+    try:
+        yield
+    finally:
+        U.read_published_release = before
+
+
+def _worktrees(repo: Path) -> list:
+    """The repository's worktree paths, as Paths.
+
+    `git worktree list` prints forward slashes even on Windows, so the paths are
+    compared as Paths and never as strings.
+    """
+    return [Path(line.split(" ", 1)[1]) for line in
+            _pin_git(repo, "worktree", "list", "--porcelain").splitlines()
+            if line.startswith("worktree ")]
+
+
+def _only_worktree(repo: Path) -> bool:
+    """True when the repository lists exactly ONE worktree and it is `repo`.
+
+    A leftover throwaway copy is a new bug of its own, so every pinning check
+    ends with this. Resolved Paths, because git prints `C:/...` and Windows
+    hands out `C:\\...`.
+    """
+    return ([path.resolve() for path in _worktrees(repo)]
+            == [Path(repo).resolve()])
+
+
+def t_the_app_deploys_origin_main_not_the_checkout_s_head():
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    seen, said = {}, []
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    with _with_published({"version": "", "commit": "",
+                          "why": "not recorded (this test)"}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_pin_deploy(backend, seen), full_proof=True)
+    tail = "\n".join(said)
+    check("the checkout really is one commit behind origin/main (the fixture)",
+          fixture["head"] != fixture["origin"]
+          and _pin_git(repo, "rev-parse", "HEAD") == fixture["head"]
+          and _pin_git(repo, "rev-parse", "origin/main") == fixture["origin"],
+          fixture["head"])
+    check("the app-triggered update deploys origin/main's commit, NOT the "
+          "checkout's HEAD",
+          code == 0 and seen.get("sha") == fixture["origin"],
+          (code, seen.get("sha"), fixture["origin"], fixture["head"]))
+    check("... from a clean DETACHED copy (no branch of the owner's is moved)",
+          seen.get("head_ref") == "HEAD" and seen.get("status") == "",
+          (seen.get("head_ref"), seen.get("status")))
+    check("... carrying that commit's bytes, not the checkout's",
+          seen.get("base") == NEW["one.py"], seen.get("base"))
+    check("... and the run says so: the PIN line names the commit and that it is "
+          "not this folder's HEAD",
+          any(line.startswith("PIN  ") and fixture["origin"][:12] in line
+              and "not from this folder's own HEAD" in line for line in said),
+          [line for line in said if line.startswith("PIN")])
+    check("... the run finished and proved the live files against the PINNED "
+          "tree (the checkout's base holds the other bytes)",
+          code == 0 and "ALL DONE" in tail, (code, said[-6:]))
+    suites = [cmd for cmd in fake.calls if not _is_patcher(cmd)]
+    check("... and the proof ran the PINNED tree's suites, not the checkout's",
+          bool(suites) and str(repo) not in suites[0][2],
+          suites[0][:3] if suites else [])
+    check("the owner's checkout is untouched: same HEAD, same bytes, no new "
+          "branch, nothing uncommitted",
+          _pin_git(repo, "rev-parse", "HEAD") == fixture["head"]
+          and _pin_git(repo, "status", "--porcelain") == ""
+          and len(_pin_git(repo, "branch", "--list").splitlines()) == 1
+          and (repo / "jarvis-backend" / "one.py").read_bytes() == OLD["one.py"],
+          (_pin_git(repo, "rev-parse", "HEAD"),
+           _pin_git(repo, "status", "--porcelain")))
+    check("... and the throwaway copy is GONE when the run ends",
+          _only_worktree(repo), _worktrees(repo))
+
+
+def t_a_manual_ref_head_still_deploys_the_commit_head_names():
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    seen, said = {}, []
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    with _with_published({"version": "0.2.519", "commit": fixture["origin"],
+                          "why": ""}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_pin_deploy(backend, seen), full_proof=True,
+                        ref="HEAD")
+    check("a developer's --ref HEAD still deploys the commit HEAD names",
+          code == 0 and seen.get("sha") == fixture["head"],
+          (code, seen.get("sha"), fixture["head"]))
+    check("... and it BEATS both the published release's commit and origin/main",
+          seen.get("sha") != fixture["origin"],
+          (seen.get("sha"), fixture["origin"]))
+    check("... with the PIN line naming the override, so the log says which ran",
+          any(line.startswith("PIN  --ref HEAD") for line in said),
+          [line for line in said if line.startswith("PIN")])
+
+
+def t_the_published_release_s_commit_is_preferred_over_origin_main():
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    seen, said = {}, []
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    # The release names the commit the checkout is on; origin/main is the newer
+    # one. A pin that ignored the release would deploy origin/main instead.
+    with _with_published({"version": "0.2.519", "commit": fixture["head"],
+                          "why": ""}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_pin_deploy(backend, seen), full_proof=True)
+    check("the published release's own commit wins over origin/main",
+          code == 0 and seen.get("sha") == fixture["head"],
+          (code, seen.get("sha"), fixture["head"], fixture["origin"]))
+    check("... and the PIN line names the release it came from",
+          any(line.startswith("PIN  the published desktop release 0.2.519")
+              for line in said), [line for line in said if line.startswith("PIN")])
+
+
+def t_a_pin_that_cannot_be_made_refuses_instead_of_deploying_the_checkout():
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    # Offline, and this checkout has never seen an origin/main: the two things
+    # that must produce a refusal rather than the DEF-099 fallback.
+    _pin_git(repo, "remote", "set-url", "origin", str(root / "nowhere"))
+    _pin_git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    seen, said, deploys = {}, [], []
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+
+    def deploy(repo_arg, backend_arg, *, say):
+        deploys.append(str(repo_arg))
+        return _pin_deploy(backend, seen, refuse=True)(repo_arg, backend_arg, say=say)
+
+    with _with_published({"version": "", "commit": "",
+                          "why": "the published release could not be read "
+                                 "(URLError: offline)"}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=deploy, full_proof=True)
+    tail = "\n".join(said)
+    check("a deploy-managed install with nothing to pin REFUSES instead of "
+          "deploying the checkout", code == 1 and deploys == [],
+          (code, deploys, said[-4:]))
+    check("... the sentence names what could not be read (the release AND the fetch)",
+          "REFUSED" in tail and "published release could not be read" in tail
+          and "origin/main could not be read" in tail, said[-6:])
+    check("... and it says in so many words that the folder was NOT deployed in "
+          "its place", "was NOT deployed in its place" in tail, said[-6:])
+    check("... nothing was written and no new version is claimed",
+          (backend / "VERSION").read_text(encoding="utf-8") == "0.2.518"
+          and (backend / "one.py").read_bytes() == OLD["one.py"],
+          (backend / "VERSION").read_text(encoding="utf-8"),
+          )
+    check("... no patch stack ran either (a deploy-managed install has none that "
+          "applies)", fake.calls == [], fake.calls)
+    check("... the checkout is untouched and no throwaway copy is left",
+          _pin_git(repo, "rev-parse", "HEAD") == fixture["head"]
+          and _only_worktree(repo), _worktrees(repo))
+
+
+def t_a_failed_deploy_still_removes_the_throwaway_copy():
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    seen, said = {}, []
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    with _with_published({"version": "", "commit": "",
+                          "why": "not recorded (this test)"}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_pin_deploy(backend, seen, refuse=True),
+                        full_proof=True)
+    check("a deploy that fails is an honest failure, never a claimed update",
+          code == 1 and "DONE WITH PROBLEMS" in "\n".join(said), (code, said[-4:]))
+    check("... and its throwaway copy is removed on the failure path too",
+          seen.get("sha") == fixture["origin"]
+          and _only_worktree(repo), _worktrees(repo))
+
+
+def t_a_pinned_patch_install_runs_the_patched_tree_s_own_patcher():
+    """The OTHER route reads the pinned tree too (measured, not assumed).
+
+    A patch-only install has no deploy tool to point elsewhere, but the patcher
+    it runs takes its own scripts, its patch list and the desktop's Cargo.lock
+    from the folder it sits in - so running the PINNED tree's copy is what makes
+    "the whole run reads one tree" true for this route as well. That is also the
+    shape `scripts/update-jarvis.ps1` already describes around its (unused)
+    throwaway source copy.
+    """
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    # A PATCH-ONLY install: the deploy evidence is removed, so the patch stack is
+    # the route and nothing about the deploy tool is involved.
+    (backend / "SOURCE-COMMIT").unlink()
+    (backend / "VERSION").unlink()
+    deploys, said = [], []
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    with _with_published({"version": "", "commit": "",
+                          "why": "not recorded (this test)"}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_deploy_ok(backend, calls=deploys), full_proof=True)
+    patchers = [cmd for cmd in fake.calls if _is_patcher(cmd)]
+    own = str(repo / "scripts" / "apply-patches.ps1")
+    check("a patch install that can be pinned still finishes by the patch stack",
+          code == 0 and len(patchers) == 1 and deploys == [],
+          (code, len(patchers), deploys))
+    check("... and the patcher it runs is the PINNED tree's copy, not the "
+          "checkout's",
+          bool(patchers) and own not in patchers[0]
+          and any(str(part).endswith("apply-patches.ps1")
+                  and str(tempfile.gettempdir()) in str(part)
+                  for part in patchers[0]),
+          patchers[0] if patchers else [])
+    check("... and its throwaway copy is gone when the run ends",
+          _only_worktree(repo), _worktrees(repo))
+
+
+def t_a_patch_only_install_says_it_could_not_pin_and_still_works():
+    root = _make_root()
+    repo, backend = _make_repo(root)          # not a git checkout at all
+    said = []
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    with _with_published({"version": "", "commit": "",
+                          "why": "not recorded (this test)"}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        full_proof=True)
+    tail = "\n".join(said)
+    check("a folder that is not a git checkout still updates by the patch stack",
+          code == 0 and "ALL DONE" in tail, (code, said[-5:]))
+    check("... and it SAYS OUT LOUD that it could not be pinned - never silently",
+          any(line.startswith("NOTE  this program folder is not a git checkout")
+              for line in said),
+          [line for line in said if line.startswith("NOTE")])
+
+
+def t_the_cleanup_refuses_any_path_outside_the_temporary_folder():
+    """MEASURED 2026-11-27, expensively: this cleanup deleted a repository.
+
+    The driver was handed `Path("")` to mean "there is no worktree". `Path("")`
+    is `"."`, so `shutil.rmtree(".")` set about removing the folder the tool was
+    running from - and it took the working tree with it before it was stopped.
+    The guard is `_under_temp_folder`, and this proves it REFUSES before any
+    deletion: the folder is still there afterwards, which is the only claim worth
+    making (a raised exception would not prove that nothing was removed).
+    """
+    outside = Path(tempfile.gettempdir()).parent
+    keeper = outside / "q5-a folder that must survive"
+    if keeper.exists():
+        shutil.rmtree(keeper, ignore_errors=True)
+    keeper.mkdir(parents=True)
+    for name in ("one.txt", "two.txt"):
+        (keeper / name).write_text("still here\n", encoding="utf-8")
+    nested = keeper / "nested"
+    nested.mkdir()
+    (nested / "three.txt").write_text("still here too\n", encoding="utf-8")
+    for bad in ("", ".", "..", str(keeper)):
+        U._release_worktree(outside, bad, bad)
+        check(f"the cleanup refused {bad!r} and left the folder alone",
+              keeper.is_dir() and (keeper / "one.txt").is_file()
+              and (nested / "three.txt").is_file(), bad)
+    check("... and it names no folder inside the temporary store it did not make",
+          U._under_temp_folder("") is False
+          and U._under_temp_folder(".") is False
+          and U._under_temp_folder(keeper) is False,
+          [U._under_temp_folder(value) for value in ("", ".", keeper)])
+    check("... while a folder it DID make under the temporary store is accepted",
+          U._under_temp_folder(Path(tempfile.gettempdir()) / "jarvis-deploy-source-x")
+          is True)
+    # A path it made itself is removed, so the guard is not simply "never delete".
+    mine = Path(tempfile.mkdtemp(prefix="jarvis-deploy-source-test-"))
+    (mine / "tree").mkdir()
+    (mine / "tree" / "junk.txt").write_text("junk\n", encoding="utf-8")
+    U._release_worktree(outside, mine / "tree", mine)
+    check("... and a throwaway folder it made IS removed", not mine.exists(), mine)
+    shutil.rmtree(keeper, ignore_errors=True)
+
+
+def t_ref_is_the_manual_override_and_nothing_else_produces_it():
+    base = ["--repo", "r", "--backend", "b"]
+    check("the app path carries no ref at all, so the pin decides",
+          U.parse_args(base)["ref"] is None, U.parse_args(base)["ref"])
+    check("a developer can name HEAD, a branch or a commit",
+          U.parse_args(base + ["--ref", "HEAD"])["ref"] == "HEAD"
+          and U.parse_args(base + ["--ref", "main"])["ref"] == "main"
+          and U.parse_args(base + ["--ref", "c" * 40])["ref"] == "c" * 40,
+          U.parse_args(base + ["--ref", "main"])["ref"])
+    refused = ""
+    try:
+        U.parse_args(base + ["--ref", ""])
+    except U.UpdateRefused as exc:
+        refused = exc.message
+    check("an empty --ref is refused, not read as 'no --ref' (the silent "
+          "substitution a developer would never see)",
+          "must not be empty" in refused, refused)
+    check("the usage line names the override", "--ref" in U._usage(), U._usage())
+    # The desktop's own command line IS the app-triggered path: it must have no
+    # way to pass a ref, or an app update could pin itself to a stale checkout.
+    rust = (HERE.parent / "jarvis-desktop" / "src-tauri" / "src"
+            / "backend_update.rs")
+    text = rust.read_text(encoding="utf-8", errors="replace") if rust.is_file() else ""
+    start = text.find("pub fn tool_args(")
+    end = text.find("\n}\n", start) if start >= 0 else -1
+    body = text[start:end] if start >= 0 and end > start else ""
+    check("the desktop's own command line (tool_args) has no --ref in it",
+          bool(body) and '"--ref"' not in body and "-ref" not in body,
+          body or "not read - this checkout has no desktop half")
+
+
+def t_the_release_feed_is_the_app_s_own_and_its_commit_is_never_invented():
+    root = _make_root()
+    repo, _backend = _make_repo(root)
+    (repo / "jarvis-desktop" / "src-tauri").mkdir(parents=True, exist_ok=True)
+    (repo / "jarvis-desktop" / "src-tauri" / "tauri.conf.json").write_text(
+        json.dumps({"plugins": {"updater": {"endpoints": [
+            "https://example.invalid/desktop-latest/latest.json"]}}}),
+        encoding="utf-8")
+    check("the feed URL is READ from the app's own updater config, not typed here",
+          U.updater_endpoint(repo)
+          == "https://example.invalid/desktop-latest/latest.json",
+          U.updater_endpoint(repo))
+    asked = {}
+
+    def opener(url):
+        asked["url"] = url
+        return {"version": "0.2.519", "commit": "17A92E5F" + "a" * 32}
+
+    got = U.read_published_release(repo, opener=opener)
+    check("the manifest's commit is read and lower-cased",
+          got["commit"] == ("17a92e5f" + "a" * 32) and got["why"] == "", got)
+    check("... and the request went to the one URL the app itself reads",
+          asked.get("url", "").endswith("/desktop-latest/latest.json"), asked)
+    got = U.read_published_release(repo, opener=lambda url: {"version": "0.2.519"})
+    check("a manifest with no commit says 'not recorded' and invents nothing",
+          got["commit"] == "" and "not recorded" in got["why"], got)
+    got = U.read_published_release(
+        repo, opener=lambda url: {"version": "0.2.519", "commit": "not-a-commit"})
+    check("a commit that is not a hex sha is refused, not resolved",
+          got["commit"] == "" and "not a hex sha" in got["why"], got)
+    got = U.read_published_release(
+        repo, opener=lambda url: (_ for _ in ()).throw(OSError("offline")))
+    check("a feed that cannot be read is a plain sentence, never an exception",
+          got["commit"] == "" and "could not be read" in got["why"], got)
+    got = U.read_published_release(_make_repo(_make_root())[0],
+                                   opener=lambda url: {"commit": "a" * 40})
+    check("a checkout with no updater config asks nothing at all",
+          got["commit"] == "" and "no readable desktop updater config" in got["why"],
+          got)
 
 
 # ==========================================================================
