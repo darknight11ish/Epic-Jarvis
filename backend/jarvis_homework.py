@@ -295,6 +295,28 @@ def _last_exchange(turns: Sequence) -> Tuple[str, str, int]:
     return "", answer, answer_at
 
 
+def _content_text(content) -> str:
+    """A message's words, whichever shape the request carried them in.
+
+    A chat message's `content` is a string on an ordinary turn and a list of
+    parts when a picture rides with it (the phone sends its own screenshots).
+    Stringifying a list would quote "({'type': 'image', ...})" back at the owner
+    as if he had said it, so the parts are read for their text and the pictures
+    are dropped here - `jarvis_homework` never needs the bytes.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, (list, tuple)):
+        out = []
+        for part in content:
+            if isinstance(part, str):
+                out.append(part)
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                out.append(part["text"])
+        return " ".join(out)
+    return ""
+
+
 def _messages_exchange(messages: Sequence) -> Tuple[str, str, int]:
     """The same pair out of THIS turn's own messages.
 
@@ -303,19 +325,19 @@ def _messages_exchange(messages: Sequence) -> Tuple[str, str, int]:
     newest assistant message is the answer; the owner's message before it is
     what got it.
     """
-    if not isinstance(messages, Sequence):
+    if not isinstance(messages, Sequence) or isinstance(messages, str):
         return "", "", 0
     for i in range(len(messages) - 1, -1, -1):
         item = messages[i]
         if not isinstance(item, dict):
             continue
-        if item.get("role") == "assistant" and str(item.get("content") or "").strip():
-            answer = str(item.get("content") or "")
+        if item.get("role") == "assistant" and _content_text(item.get("content")).strip():
+            answer = _content_text(item.get("content"))
             for j in range(i - 1, -1, -1):
                 before = messages[j]
                 if isinstance(before, dict) and before.get("role") == "user" \
-                        and str(before.get("content") or "").strip():
-                    return str(before.get("content") or ""), answer, 0
+                        and _content_text(before.get("content")).strip():
+                    return _content_text(before.get("content")), answer, 0
             return "", answer, 0
     return "", "", 0
 

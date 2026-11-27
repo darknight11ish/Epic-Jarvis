@@ -229,6 +229,17 @@ def t_the_same_conversation_comes_from_the_request():
     got = H.find_exchange("", messages=[{"role": "user", "content": "hello"}])
     check("a chat with no answer yet says so instead of quoting a question",
           not got.found and "no earlier exchange" in got.why, got)
+    # The phone sends its screenshots in the same request: `content` is a list
+    # of parts there, and quoting the list back as if he had said it would be a
+    # false quote of the owner's own words.
+    got = H.find_exchange("", messages=[
+        {"role": "user", "content": [
+            {"type": "text", "text": "what is this"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]},
+        {"role": "assistant", "content": "A screenshot of a form."}])
+    check("a message whose content is a list of parts quotes its text, not the list",
+          got.found and got.words == "what is this"
+          and "image_url" not in got.words and "{" not in got.words, got)
 
 
 def t_an_older_conversation_is_found_by_title():
@@ -588,6 +599,15 @@ def t_the_owner_can_ask_for_this_in_chat():
               None if got is None else (got.name, dict(got.f)))
     check("the homework lane is read-only, so it cannot clear what 'cancel that' "
           "would undo", "homework_loop" in Q.READ_ONLY_INTENTS)
+    # How the owner actually types and how the PC's own normaliser hands it
+    # over: capitals, a question mark, a full stop, a trailing "please".
+    for text in ("Do homework on that.", "do homework on that?", "DO HOMEWORK ON THAT!",
+                 "do homework on that, please", "do homework on that please"):
+        got = Q.match(text, now=NOW)
+        check(f"chat: {text!r} reaches it with punctuation and please",
+              got is not None and got.name == "homework_loop"
+              and dict(got.f) == {"ref": "that", "draft": False},
+              None if got is None else (got.name, dict(got.f)))
     check("... and a private chat hands it to the model instead of quoting the "
           "owner's own chat back",
           Q.answer("do homework on that", private=True) is None)
