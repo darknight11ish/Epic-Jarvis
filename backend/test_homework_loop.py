@@ -375,6 +375,55 @@ def t_the_diagnosis_is_passed_through_unchanged():
           not got.found and "Could not establish this" in got.text, got)
 
 
+def t_a_missing_coder_lane_is_answered_at_once_not_after_a_minute():
+    """The owner's ruling of 2026-11-27 (Q6), measured live the night before.
+
+    On a PC whose only loaded lane was the one-card everyday model, the real
+    loop spent 64.6 s handing a code question to a 9B and then said "Could not
+    establish this". Steps 1 and 2 - recalling the exchange and replaying the
+    real matcher - cost under a second and need no model at all, so with no
+    pooled lane the loop must answer with those two and name the lane to switch
+    to, and it must NOT start the slow call. Both directions are proved here:
+    the guard is on, and with the lane up the diagnosis still runs.
+    """
+    calls = []
+
+    class StubSI:
+        """Stands in for jarvis_self_improve: its `diagnose` is the slow call."""
+
+        def diagnose(self, question, **kwargs):
+            calls.append(question)
+            return SI.Diagnosis(question=question, found=False,
+                                why="the model named no line it had read")
+
+        def text(self, got):
+            return "Could not establish this: a stub."
+
+    saved_lane, saved_si = H._coder_lane_now, H._self_improve
+    H._self_improve = lambda: StubSI()
+    try:
+        H._coder_lane_now = lambda: (
+            False, "the pooled lane on port 11450 is not holding a model")
+        got = H.explain("combine my notes")
+        check("no coder lane: the source is not diagnosed off the wrong model",
+              calls == [], calls)
+        check("... the answer names the Coder preset and its port",
+              "Coder" in got.text and "11450" in got.text, got.text)
+        check("... it says the routing was replayed, so the fast half is kept",
+              "replayed the routing" in got.text, got.text)
+        check("... it tells the owner the exact next words",
+              "continue homework" in got.text, got.text)
+        check("... and it is not reported as a found cause",
+              not got.found, got)
+
+        H._coder_lane_now = lambda: (True, "")
+        H.explain("combine my notes")
+        check("with the coder lane up the diagnosis still runs", len(calls) == 1,
+              calls)
+    finally:
+        H._coder_lane_now, H._self_improve = saved_lane, saved_si
+
+
 def t_the_question_carries_the_routing_fact_and_stays_short():
     said = "x " * 400
     question = H._diagnose_question(said, H.Replay(words=said, intent=None))
@@ -690,6 +739,7 @@ def main():
                t_the_search_is_the_second_door,
                t_a_paging_reader_that_repeats_itself_does_not_double_the_list,
                t_the_diagnosis_is_passed_through_unchanged,
+               t_a_missing_coder_lane_is_answered_at_once_not_after_a_minute,
                t_the_question_carries_the_routing_fact_and_stays_short,
                t_the_draft_is_a_draft_and_a_refusal_stays_a_refusal,
                t_this_module_cannot_act,

@@ -683,6 +683,51 @@ def t_a_gate_pinned_as_already_repaired_is_a_no_op():
         mod.LIVE_GATE_ALREADY_REPAIRED = frozenset({live_hash})
 
 
+def t_a_gate_that_is_the_tools_own_output_is_a_no_op():
+    """DEF-110: after the nine-row repair the live gate IS this tool's output.
+
+    Measured on the owner's PC, 2026-11-27: 243,288 B, and a check run printed
+    fifteen `ok <repair>: already present` lines and then exited **2** with
+    "REFUSED: ... this is a live-lineage gate this repair does not recognise".
+    A caller reading exit codes saw a failure for a gate that needed nothing.
+    The fix is this table's own kind of fact - the exact post-repair bytes,
+    measured - so this test pins the hash and then proves, on a synthetic
+    live-sized file, that the repair which raised the refusal returns "already"
+    when its hash is pinned and refuses when it is not.
+    """
+    mod = load_tool()
+    repaired = "2d9ad18d327d29cbd7cf1ef561a122b783fa95b21b06c08f1bfea1adca84f383"
+    check("this tool's own repaired output is pinned as already repaired",
+          repaired in mod.LIVE_GATE_ALREADY_REPAIRED)
+    check("... and it is NOT a PRE-image (those are patched, not accepted)",
+          repaired not in mod.LIVE_LEGACY_GATES)
+    check("... and it is not the #1023 target every lineage is brought to",
+          repaired != mod.LIVE_GATE_TARGET_SHA256)
+    carriers = [r for r in mod.REPAIRS.values() if r.lineages]
+    check("at least one repair is addressed by live-lineage hash", bool(carriers))
+    if not carriers:
+        return
+    carrier = carriers[-1]
+    synthetic = "x" * (mod.LIVE_LINEAGE_MIN_BYTES + 1)
+    digest = mod._sha256_text(synthetic)
+    live = a_live_folder_with_exact_bytes(synthetic)
+    saved = mod.LIVE_GATE_ALREADY_REPAIRED
+    try:
+        mod.LIVE_GATE_ALREADY_REPAIRED = frozenset()
+        try:
+            mod.check_one(live, carrier)
+            check("an unpinned live-sized gate is refused, not accepted", False,
+                  "it was accepted")
+        except mod.Refused as exc:
+            check("an unpinned live-sized gate is refused, naming its hash",
+                  digest in str(exc), str(exc)[:120])
+        mod.LIVE_GATE_ALREADY_REPAIRED = frozenset({digest})
+        check("... and a pinned post-repair gate is the idempotent no-op",
+              mod.check_one(live, carrier) == "already")
+    finally:
+        mod.LIVE_GATE_ALREADY_REPAIRED = saved
+
+
 def _tuple_rows(node) -> dict:
     """The str -> tuple rows of one `{...}` literal node, read with `ast`."""
     out = {}

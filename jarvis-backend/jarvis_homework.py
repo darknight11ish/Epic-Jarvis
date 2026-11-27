@@ -683,6 +683,32 @@ def _diagnose_question(words: str, outcome: Replay) -> str:
     return lead
 
 
+def _coder_lane_now() -> Tuple[bool, str]:
+    """(can a code diagnosis run here, why not). Read-only, never raises.
+
+    The owner's ruling of 2026-11-27 (Q6), measured the expensive way: on a PC
+    whose only loaded lane was the one-card everyday model, `diagnose` spent
+    64.6 s degrading a code question onto a 9B and then said "Could not
+    establish this". Steps 1 and 2 of this loop cost under a second and need no
+    model at all, so the honest thing is to answer with them and SAY which lane
+    is missing, rather than burn a minute to produce the same refusal.
+
+    The evidence is `jarvis_model_lanes.pooled_state()`, the same `/api/ps`
+    read that decides every other question about a lane being up - never the
+    preset's name and never a guess. A PC where that read cannot be made is
+    answered as "not ready", which is the safe direction: the caller then says
+    so instead of starting a slow call that cannot succeed.
+    """
+    try:
+        import jarvis_model_lanes as ML
+        state = ML.pooled_state()
+    except Exception as exc:                       # noqa: BLE001 - said, not raised
+        return False, f"the model lanes could not be read ({type(exc).__name__})"
+    if (state or {}).get("row") is None:
+        return False, "the pooled lane on port 11450 is not holding a model"
+    return True, ""
+
+
 def explain(words: str, *, outcome: Optional[Replay] = None,
             diagnose: Optional[Callable] = None,
             ask: Optional[Callable] = None) -> Explanation:
@@ -704,6 +730,17 @@ def explain(words: str, *, outcome: Optional[Replay] = None,
             text="Could not establish this: the self-improvement module is not "
                  "on this PC, so the source was not read.")
     runner = diagnose if diagnose is not None else SI.diagnose
+    if diagnose is None:
+        ready, why_not = _coder_lane_now()
+        if not ready:
+            return Explanation(
+                found=False,
+                why=why_not,
+                text="I replayed the routing above, but reading the source "
+                     "needs the Coder preset (the pooled graphics-card lane on "
+                     f"port 11450), which is not active right now ({why_not}). "
+                     "Switch to Coder and say 'continue homework' and I will "
+                     "diagnose it and draft the fix.")
     question = _diagnose_question(words, outcome)
     try:
         if diagnose is not None:
