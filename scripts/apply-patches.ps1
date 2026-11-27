@@ -3367,6 +3367,13 @@ $SHIPPED = @(
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     # It is the LAST entry, and it stays last.
+    # The homework loop (jarvis_homework.py, 2026-11-26): replay a sentence the
+    # owner complained about through the REAL matcher, say which route claimed
+    # it or that none did, explain the code location through
+    # jarvis_self_improve, and stop wherever a card has to answer. It edits
+    # nothing, pushes nothing and merges nothing. Read-only, so a private chat
+    # hands it to the model instead. Its suite is backend/test_homework_loop.py.
+    'jarvis_homework.py'         # the homework loop: the routing replay, the honest explanation, the merge gate that names the seven checks
     'jarvis_bench.py'
 )
 
