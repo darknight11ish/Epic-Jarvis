@@ -140,6 +140,78 @@ def feature_count() -> int:
 
 
 # --------------------------------------------------------------------------
+#   The one live word in a feature answer (2026-11-26)
+# --------------------------------------------------------------------------
+#
+# THE MEASURED LIE (the awareness audit of 2026-11-26, H3). "What is my wake
+# word" is answered from the catalogue row called `wake-word`, whose title is
+# `Say "Hey Jarvis"` - the phrase the product shipped before 2026-11-25. The
+# shipped setting is now `[voice] wake_phrase = "hey_atlas"`, and an existing
+# PC is never re-pointed (`scripts/apply-patches.ps1` does not overwrite
+# `jarvis-framework.toml`), so a PC left on `hey_jarvis` keeps waking on it and
+# must be TOLD that, not the new default. A title typed into the generated
+# catalogue (from `features/features.json`) cannot know which phrase this PC
+# answers to, so this module reads it at answer time from the settings file the
+# voice stack itself reads - `jarvis_framework.section("voice")`.
+#
+# ONLY THE DISPLAY IS OVERRIDDEN. `row["title"]` stays the catalogue's own
+# word: matching (`find`, `_name_tokens`, `find_exact`) reads it, and so does
+# `_feature_facts()`, which answers "what does the feature list say". What a
+# person READS in an answer comes through `display_title()`.
+
+#: The catalogue row whose title is a PHRASE rather than a feature name.
+WAKE_ROW = "wake-word"
+
+
+def wake_phrase_now() -> tuple:
+    """("Hey Atlas", "") or ("", why) - the phrase this PC really answers to.
+
+    Read from `[voice] wake_phrase`, the same setting the voice stack wakes on
+    and the same one `jarvis_quick._self_wake_words` quotes back. Never
+    guessed: a PC without the framework module, without the line, or with a
+    file that cannot be read answers WHY, and the answer then says it cannot
+    read the phrase instead of naming one.
+    """
+    try:
+        import jarvis_framework as fw
+        if fw.config_path() is None:
+            return "", "no jarvis-framework.toml was found on this PC"
+        voice = fw.section("voice")
+    except Exception as exc:                # noqa: BLE001 - said, never raised
+        return "", f"jarvis-framework.toml could not be read ({type(exc).__name__})"
+    raw = str((voice or {}).get("wake_phrase") or "").strip()
+    if not raw:
+        return "", "no [voice] wake_phrase is set"
+    return raw, ""
+
+
+def wake_phrase_title(phrase: str) -> str:
+    """`hey_atlas` -> "Hey Atlas"; any other phrase as a person would write it."""
+    return " ".join(str(phrase or "").replace("_", " ").split()).title()
+
+
+def display_title(row: dict) -> str:
+    """A row's title as an ANSWER should say it - live where it can be.
+
+    Every row keeps the catalogue's own title. The one exception is the
+    wake-word row: its title IS a phrase ("Say \"Hey Jarvis\""), and the phrase
+    this PC answers to is a setting (see `wake_phrase_now`), so the answer
+    reads it. On a PC whose own `[voice] wake_phrase` is still `hey_jarvis`
+    this says "Hey Jarvis" - true of that PC, and the reason this is a read
+    rather than a replaced string in the list.
+    """
+    title = str(row.get("title") or "").strip()
+    if str(row.get("id") or "") != WAKE_ROW:
+        return title
+    phrase, why = wake_phrase_now()
+    if phrase:
+        return f'Say "{wake_phrase_title(phrase)}"'
+    return ("Say the phrase this PC listens for (I cannot read which one it is "
+            "right now" + (f": {why}" if why else "") + ")")
+
+
+
+# --------------------------------------------------------------------------
 #   Matching owner words to a row
 # --------------------------------------------------------------------------
 
@@ -1282,7 +1354,7 @@ def surface_context(row: dict) -> str:
 
 def explain_words(row: dict) -> str:
     """The exact facts, in plain words, made only from the row and the switches."""
-    parts = [f"{row['title']}.", str(row.get("what") or "").strip(),
+    parts = [f"{display_title(row)}.", str(row.get("what") or "").strip(),
              f"Status: {status_label(row)}.",
              f"Settings: {settings_path_words(row)}.", "",
              f"Where: {str(row.get('where') or '').strip()}",
@@ -1414,7 +1486,7 @@ def change(words) -> dict:
     if got["kind"] == "feature":
         row = got["row"]
         rows = _switch_state_rows(row)
-        words_out = (f"{row['title']}. Status: {status_label(row)}. "
+        words_out = (f"{display_title(row)}. Status: {status_label(row)}. "
                      f"{change_words(row)}")
         clause = _state_clause(rows)
         if clause:
@@ -1747,7 +1819,7 @@ def _capability_verb_supported(verb: str, rows: list) -> bool:
 
 def _capability_row_words(row: dict) -> str:
     """One row's own facts, in the order the list itself writes them."""
-    bits = [str(row["title"]).strip() + "."]
+    bits = [display_title(row).strip() + "."]
     for key, label in (("what", ""), ("where", "Where: "),
                        ("asks", "Does it ask first? "), ("limit", "The honest limit: ")):
         value = str(row.get(key) or "").strip()
@@ -1896,7 +1968,7 @@ def limits(words) -> dict:
     if bad is not None:
         return bad
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. The honest limit: {_row_limit_words(row)} "
+            "words": (f"{display_title(row)}. The honest limit: {_row_limit_words(row)} "
                       f"Where: {str(row.get('where') or '').strip()}")}
 
 
@@ -1909,7 +1981,7 @@ def asks_first(words) -> dict:
     if bad is not None:
         return bad
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. Does it ask first? "
+            "words": (f"{display_title(row)}. Does it ask first? "
                       f"{str(row.get('asks') or '').strip()}")}
 
 
@@ -1922,7 +1994,7 @@ def which_app(words) -> dict:
     if bad is not None:
         return bad
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": f"{row['title']}. {surface_words(row)}"}
+            "words": f"{display_title(row)}. {surface_words(row)}"}
 
 
 def why_use(words) -> dict:
@@ -1934,7 +2006,7 @@ def why_use(words) -> dict:
     if bad is not None:
         return bad
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. {str(row.get('what') or '').strip()} "
+            "words": (f"{display_title(row)}. {str(row.get('what') or '').strip()} "
                       f"Where: {str(row.get('where') or '').strip()} "
                       f"The honest limit: {_row_limit_words(row)}")}
 
@@ -2190,7 +2262,7 @@ def detail(words) -> dict:
     if row is None:
         return _detail_bad(words)[1]
     parts = [
-        f"{row['title']}.",
+        f"{display_title(row)}.",
         str(row.get("what") or "").strip(),
         f"Where it lives: {str(row.get('where') or '').strip()}",
         f"How to use it: {change_words(row)} {example_phrase_words(row)}",
@@ -2215,7 +2287,7 @@ def example(words) -> dict:
     if row is None:
         return _detail_bad(words)[1]
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. {example_phrase_words(row)} "
+            "words": (f"{display_title(row)}. {example_phrase_words(row)} "
                       f"Where: {str(row.get('where') or '').strip()} "
                       f"Does it ask first? {str(row.get('asks') or '').strip()} "
                       f"The honest limit: {_limit_words(row)} "
@@ -2235,12 +2307,12 @@ def is_private(words) -> dict:
     own = " ".join(str(row.get(k) or "") for k in ("what", "where", "asks", "limit"))
     hits = [m for m in markers if m in own.lower()]
     if hits:
-        words = (f"{row['title']}. The feature list's own privacy words are: "
+        words = (f"{display_title(row)}. The feature list's own privacy words are: "
                  f"Where: {str(row.get('where') or '').strip()} "
                  f"Does it ask first? {str(row.get('asks') or '').strip()} "
                  f"The honest limit: {_limit_words(row)}")
     else:
-        words = (f"{row['title']}. The feature list records no separate privacy "
+        words = (f"{display_title(row)}. The feature list records no separate privacy "
                  f"note for it. Its own words: "
                  f"Where: {str(row.get('where') or '').strip()} "
                  f"Does it ask first? {str(row.get('asks') or '').strip()} "
@@ -2257,7 +2329,7 @@ def needs(words) -> dict:
     if row is None:
         return _detail_bad(words)[1]
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. {_detail_needs(row)} "
+            "words": (f"{display_title(row)}. {_detail_needs(row)} "
                       f"Which app(s): {surface_words(row)} "
                       f"The honest limit: {_limit_words(row)} "
                       + CAPABILITY_TAIL)}
@@ -2271,7 +2343,7 @@ def why_state(words) -> dict:
     if row is None:
         return _detail_bad(words)[1]
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. {_detail_state(row)} "
+            "words": (f"{display_title(row)}. {_detail_state(row)} "
                       f"Does it ask first? {str(row.get('asks') or '').strip()} "
                       f"The honest limit: {_limit_words(row)} "
                       + CAPABILITY_TAIL)}
@@ -2286,12 +2358,12 @@ def goes_wrong(words) -> dict:
         return _detail_bad(words)[1]
     limit = str(row.get("limit") or "").strip()
     if not limit:
-        words = (f"{row['title']}. The feature list records no limit for it, so I "
+        words = (f"{display_title(row)}. The feature list records no limit for it, so I "
                  f"cannot name what can go wrong. Its own words: "
                  f"Where: {str(row.get('where') or '').strip()} "
                  f"Does it ask first? {str(row.get('asks') or '').strip()}")
     else:
-        words = (f"{row['title']}. The honest limit: {limit} "
+        words = (f"{display_title(row)}. The honest limit: {limit} "
                  f"Does it ask first? {str(row.get('asks') or '').strip()}")
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
             "words": words + " " + CAPABILITY_TAIL}
@@ -2307,7 +2379,7 @@ def can_do(words, capability) -> dict:
     want = tuple(w for w in _tokens(capability) if w not in _STOP)
     if not want:
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                "words": (f"{row['title']}. Say what ability you mean and I will "
+                "words": (f"{display_title(row)}. Say what ability you mean and I will "
                           f"look only in that feature's own words. "
                           f"The honest limit: {_limit_words(row)} "
                           + CAPABILITY_TAIL)}
@@ -2316,13 +2388,13 @@ def can_do(words, capability) -> dict:
     if _contains_all(_tokens(" ".join(own)), want):
         hits = [s for s in own if s.strip() and _contains_all(_tokens(s), want)]
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                "words": (f"{row['title']}. The feature list's own words: "
+                "words": (f"{display_title(row)}. The feature list's own words: "
                           + " ".join(hits)
                           + f" The honest limit: {_limit_words(row)} "
                           + CAPABILITY_TAIL)}
     return {"ok": True, "kind": "not_listed", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. That is not listed as part of "
-                      f"{row['title']}. The honest limit: {_limit_words(row)} "
+            "words": (f"{display_title(row)}. That is not listed as part of "
+                      f"{display_title(row)}. The honest limit: {_limit_words(row)} "
                       f"Does it ask first? {str(row.get('asks') or '').strip()} "
                       + CAPABILITY_TAIL)}
 
@@ -2335,7 +2407,7 @@ def is_like(words) -> dict:
     if row is None:
         return _detail_bad(words)[1]
     return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-            "words": (f"{row['title']}. {str(row.get('what') or '').strip()} "
+            "words": (f"{display_title(row)}. {str(row.get('what') or '').strip()} "
                       f"Where: {str(row.get('where') or '').strip()} "
                       f"Does it ask first? {str(row.get('asks') or '').strip()} "
                       f"The honest limit: {_limit_words(row)} "
@@ -2557,6 +2629,8 @@ def state(words) -> dict:
     got = find(words, loose=True)
     if got["kind"] == "feature":
         row = got["row"]
+        # The name an answer says, live for the wake row (2026-11-26 H3).
+        title = display_title(row)
         rows = _switch_state_rows(row)
         if not rows:
             # A row switched on by an AI-tool switch (2026-11-07): its state is
@@ -2569,22 +2643,22 @@ def state(words) -> dict:
                 if known and len({s["state"] for s in known}) == 1:
                     value = known[0]["state"]
                 if len(tool) == 1 and len(known) == 1:
-                    words = (f"\"{row['title']}\" is "
+                    words = (f"\"{title}\" is "
                              f"{ON_WORD if value else OFF_WORD} right now "
                              f"({tool[0]['label']}).")
                 else:
-                    words = f"{row['title']}: {_tool_switch_words(row)}"
+                    words = f"{title}: {_tool_switch_words(row)}"
                 return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                         "state": value, "switches": tool, "words": words}
             has_control = (str((_matrix_row(row) or {}).get("status") or "")
                            in _HAS_A_CONTROL)
             if str((_matrix_row(row) or {}).get("status") or "") == "planned":
-                words = (f"{row['title']}: it is not wired yet, so I could not "
+                words = (f"{title}: it is not wired yet, so I could not "
                          f"read a state for it. {_planned_reason(row)}")
                 return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                         "state": None, "switches": [], "words": words}
-            words = (f"{row['title']}: {_no_switch_words(row)}" if has_control else
-                     f"{row['title']} has no on/off switch in the feature list, "
+            words = (f"{title}: {_no_switch_words(row)}" if has_control else
+                     f"{title} has no on/off switch in the feature list, "
                      f"so there is no state for me to read.")
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                     "state": None, "switches": [], "words": words}
@@ -2592,21 +2666,21 @@ def state(words) -> dict:
         if not known:
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                     "state": None, "switches": rows,
-                    "words": (f"I could not read {row['title']}'s switch on this PC, so "
+                    "words": (f"I could not read {title}'s switch on this PC, so "
                               f"I will not guess whether it is on.")}
         if len(known) == 1:
             value = known[0]["state"]
             switch_name = str(known[0]["label"] or "")
             aside = (f" ({switch_name})" if switch_name
-                     and switch_name.lower() not in row["title"].lower() else "")
+                     and switch_name.lower() not in title.lower() else "")
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                     "state": value, "switches": rows,
-                    "words": (f"\"{row['title']}\" is {ON_WORD if value else OFF_WORD} "
+                    "words": (f"\"{title}\" is {ON_WORD if value else OFF_WORD} "
                               f"right now{aside}.")}
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                 "state": known[0]["state"] if len({r["state"] for r in known}) == 1 else None,
                 "switches": rows,
-                "words": f"{row['title']}: " + _state_clause(rows)}
+                "words": f"{title}: " + _state_clause(rows)}
     if got["kind"] == "ambiguous":
         return {"ok": False, "kind": "ambiguous",
                 "candidates": [{"id": r["id"], "title": r["title"]} for r in got["rows"]],
@@ -2647,7 +2721,7 @@ def how_to(words, on: bool) -> dict:
     if got["kind"] == "feature":
         row = got["row"]
         rows = _switch_state_rows(row)
-        base = (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
+        base = (f"{display_title(row)}. Where: {str(row.get('where') or '').strip()} "
                 f"Does it ask first? {str(row.get('asks') or '').strip()}")
         if not rows:
             # A row switched on by an AI-tool switch (2026-11-07): there is no
@@ -2742,7 +2816,7 @@ def switch_target(words):
         # fake switch and never a model guess.
         return None, ability_explanation(row)
     if len(rows) > 1:
-        return None, (f"{row['title']} has more than one switch: "
+        return None, (f"{display_title(row)} has more than one switch: "
                       + "; ".join(_setting_words(s) for s in rows)
                       + ". Say \"turn on <one of those>\" for the one you mean.")
     return rows[0], ""
@@ -3955,7 +4029,8 @@ def ability_explanation(row: dict) -> str:
     kinds it is, why, a real example where one exists, and the exact Settings
     place. Used by jarvis_quick's turn-on/off path through switch_target()."""
     label = label_for(row)
-    title = str(row.get("title") or row.get("id") or "That")
+    # The live name: the wake row's phrase is a setting, not a catalogue word.
+    title = display_title(row) or str(row.get("id") or "That")
     path = settings_path_words(row)
     # Same rule as change_words(): a phone-only row is changed on the phone, and
     # the PC-Only label must never put its control "on this PC" (F3, 2026-10-26);

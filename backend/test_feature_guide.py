@@ -1192,7 +1192,7 @@ def t_every_feature_answers_every_owner_question():
             # less than a beginner needs to act.
             if want == "feature_explain":
                 required = (
-                    ("name", row["title"] in text),
+                    ("name", FG.display_title(row) in text),
                     ("what", row["what"] in text),
                     ("where", row["where"] in text),
                     ("asks", row["asks"] in text),
@@ -1203,7 +1203,7 @@ def t_every_feature_answers_every_owner_question():
                 # 2026-10-31 depth: "how do I use X" answers with the detail
                 # view - every own field plus the state and the app line.
                 required = (
-                    ("name", row["title"] in text),
+                    ("name", FG.display_title(row) in text),
                     ("what", row["what"] in text),
                     ("where", row["where"] in text),
                     ("asks", row["asks"] in text),
@@ -1214,20 +1214,20 @@ def t_every_feature_answers_every_owner_question():
                 )
             elif want == "feature_howto":
                 required = (
-                    ("name", row["title"] in text),
+                    ("name", FG.display_title(row) in text),
                     ("where", row["where"] in text),
                     ("asks", row["asks"] in text),
                     ("how", any(m in text for m in HOW_WORDS)),
                 )
             elif want == "feature_change":
                 required = (
-                    ("name", row["title"] in text),
+                    ("name", FG.display_title(row) in text),
                     ("status", "Status:" in text),
                     ("how", any(m in text for m in HOW_WORDS)),
                 )
             else:                            # feature_state
                 required = (
-                    ("name", row["title"] in text),
+                    ("name", FG.display_title(row) in text),
                     ("state", any(m in text for m in (
                         "right now", "Right now", "no on/off switch",
                         "could not read"))),
@@ -2765,14 +2765,14 @@ def t_the_layer_one_shapes_reach_every_catalogue_title():
             text = out.reply if out is not None else ""
             low = text.lower()
             if want == "feature_detail":
-                facts = row["title"] in text and "the honest limit:" in low
+                facts = FG.display_title(row) in text and "the honest limit:" in low
             elif want == "feature_state":
-                facts = row["title"] in text and any(
+                facts = FG.display_title(row) in text and any(
                     marker in low for marker in
                     ("right now", "no on/off switch", "could not read",
                      "not wired yet"))
             else:
-                facts = row["title"] in text and row["where"] in text
+                facts = FG.display_title(row) in text and row["where"] in text
             if not facts:
                 thin.append((row["id"], template, text[:160]))
     check("activate / turned-on / why-not-working reach all 182 titles",

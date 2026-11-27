@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""test_awareness_honesty.py - "cannot read it" is not "none switched on".
+"""test_awareness_honesty.py - "cannot read it" is not "none switched on",
+and the wake phrase is read from this PC, not from the catalogue's old title.
 
     python3 backend/test_awareness_honesty.py
 
@@ -31,18 +32,28 @@ WHAT THIS PROVES, and why it exists (2026-11-26, the awareness audit's H2):
     for an empty file and for one it could not parse, so the reader proves an
     empty config against the file itself; this suite drives a corrupt TOML and
     requires "could not be parsed" rather than "no tool".
+  - THE WAKE PHRASE IS READ FROM THIS PC (the audit's H3). The catalogue row's
+    title is a typed phrase ("Say \"Hey Jarvis\""), and an existing PC is never
+    re-pointed, so `jarvis_feature_guide.display_title()` reads `[voice]
+    wake_phrase` at answer time. This suite drives three real files: the
+    shipped template must say "Hey Atlas", a copy left on `hey_jarvis` must
+    say "Hey Jarvis", and a file with no `wake_phrase` line (or no settings
+    module at all) must say it cannot read the phrase and name neither. It also
+    pins that MATCHING still uses the catalogue's own title, so a live read
+    cannot move which row a question reaches.
   - THE SUITE READS THE CHECKOUT. `_where.require_shipped` is called first, so
     a run with `JARVIS_BACKEND` still set to the owner's live folder refuses
     (NOT-TESTABLE) instead of passing against the installed copy. The config
     folder and the databases are throwaway temp paths, and no intent driven
-    here writes anything: all six are in `jarvis_quick.READ_ONLY_INTENTS`.
+    here writes anything: every one is in `jarvis_quick.READ_ONLY_INTENTS`.
 
 The two answers this work does NOT fix are pinned by name so a future lane
 cannot think this suite covers them (they need `jarvis_quick.py`, which a
-concurrent pull request is editing): `"what is my wake word"` still reaches
-`feature_explain` and says "Hey Jarvis", and `"can you empty the trash"` still
-reaches `note_empty_trash` with `ask=False`. They are reported, not asserted
-here - a check that the wrong answer stays wrong would block the fix.
+concurrent pull request is editing): `"how do I activate the wake word"` is
+built in `jarvis_quick._run_wake_word_howto` from the catalogue row directly
+and still says "Hey Jarvis"; and `"can you empty the trash"` still reaches
+`note_empty_trash` with `ask=False`. They are reported, not asserted here - a
+check that the wrong answer stays wrong would block the fix.
 """
 from __future__ import annotations
 
@@ -67,7 +78,7 @@ sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
 require_shipped("jarvis_asks_first.py", "jarvis_self_portrait.py",
-                "jarvis_quick.py")
+                "jarvis_quick.py", "jarvis_feature_guide.py")
 # The framework module the real backend ships beside these modules lives in
 # `backend/rebuilt/` in a checkout; on the path, `jarvis_asks_first.fw` is the
 # real module, exactly as on an install. Without it every read here would be
@@ -75,6 +86,7 @@ require_shipped("jarvis_asks_first.py", "jarvis_self_portrait.py",
 sys.path.append(str(HERE / "rebuilt"))
 
 import jarvis_asks_first as ASK  # noqa: E402
+import jarvis_feature_guide as FG  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
 import jarvis_self_portrait as SP  # noqa: E402
 
@@ -332,6 +344,89 @@ def a_damaged_file_is_said_as_damaged():
 
 
 # ---------------------------------------------------------------------------
+#   5. The wake phrase is read from THIS PC, not from a typed catalogue title
+# ---------------------------------------------------------------------------
+
+
+def _shipped_phrase() -> str:
+    """The `[voice] wake_phrase` the shipped template really sets."""
+    import tomllib
+    raw = (HERE / "rebuilt" / "jarvis-framework.toml").read_bytes()
+    return str((tomllib.loads(raw.decode("utf-8-sig")).get("voice") or {})
+               .get("wake_phrase") or "")
+
+
+def the_wake_answer_reads_the_live_phrase():
+    Q._MEASURED_FIXTURE = None
+    had = os.environ.get("JARVIS_FRAMEWORK_TOML")
+    try:
+        shipped = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(
+            encoding="utf-8")
+        phrase = _shipped_phrase()
+        check("the shipped template really sets a wake phrase", bool(phrase), phrase)
+
+        # MATCHING is the catalogue's own word, not the live read: the row is
+        # found the same way whether the PC listens for Atlas or Jarvis.
+        got = Q.match("what is my wake word")
+        check("the question still reaches the catalogue's wake-word row",
+              got is not None and got.name == "feature_explain"
+              and got.f.get("id") == "wake-word",
+              (got.name if got else None, got.f if got else None))
+
+        # A fresh install: the shipped setting.
+        _write_toml(shipped)
+        expected = f'Say "{FG.wake_phrase_title(phrase)}"'
+        title = FG.display_title(FG.row_by_id(FG.WAKE_ROW))
+        check("a fresh PC's wake row says the SHIPPED phrase, not a typed one",
+              title == expected, (title, expected))
+        first = answer("what is my wake word").reply.splitlines()[0]
+        check("... and the answer a person hears opens with it",
+              first == expected + ".", first)
+        first = answer("is the wake word on").reply.splitlines()[0]
+        check("... and so does 'is the wake word on'",
+              first.startswith(expected), first)
+        first = answer("how do I change the wake word").reply.splitlines()[0]
+        check("... and 'how do I change the wake word'",
+              first.startswith(expected), first)
+
+        # An existing PC that was never re-pointed must be told its OWN phrase.
+        _write_toml(shipped.replace(f'wake_phrase = "{phrase}"',
+                                    'wake_phrase = "hey_jarvis"'))
+        title = FG.display_title(FG.row_by_id(FG.WAKE_ROW))
+        first = answer("what is my wake word").reply.splitlines()[0]
+        check("a PC left on hey_jarvis is told hey_jarvis, not the new default",
+              title == 'Say "Hey Jarvis"' and first == 'Say "Hey Jarvis".',
+              (title, first))
+
+        # A file with no line at all: honest, and names no phrase.
+        _write_toml("\n".join(line for line in shipped.splitlines()
+                              if "wake_phrase" not in line))
+        first = answer("what is my wake word").reply.splitlines()[0]
+        check("no wake_phrase line: the answer says it cannot read it",
+              "cannot read" in first, first)
+        check("... and it names neither phrase it could have guessed",
+              "Hey Atlas" not in first and "Hey Jarvis" not in first, first)
+
+        # No settings module at all (the checkout's own state): same answer.
+        had_module = sys.modules.get("jarvis_framework")
+        sys.modules["jarvis_framework"] = None   # makes `import` raise ImportError
+        try:
+            _phrase, why = FG.wake_phrase_now()
+            first = answer("what is my wake word").reply.splitlines()[0]
+        finally:
+            if had_module is None:
+                sys.modules.pop("jarvis_framework", None)
+            else:
+                sys.modules["jarvis_framework"] = had_module
+        check("no settings reader: the wake read says why it could not read",
+              "could not be read" in why, why)
+        check("... and the answer says so instead of naming a phrase",
+              "cannot read" in first, first)
+    finally:
+        _restore_toml_env(had)
+
+
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -340,6 +435,7 @@ def main() -> int:
         the_tool_answers_say_the_read_failed()
         a_readable_file_is_counted_from_the_file()
         a_damaged_file_is_said_as_damaged()
+        the_wake_answer_reads_the_live_phrase()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")

@@ -98,7 +98,7 @@ def t_every_row_is_deep_answerable_by_both_shapes():
         own = [str(row.get(k) or "").strip() for k in
                ("what", "where", "asks", "limit", "surface", "group")]
         quoted = [f for f in own if f and f in words]
-        if row["title"] not in words or len(quoted) < 5:
+        if FG.display_title(row) not in words or len(quoted) < 5:
             bad_fields.append((fid, len(quoted)))
         for marker in ("Where it lives:", "Does it ask first?",
                        "The honest limit:", "Its state:",
