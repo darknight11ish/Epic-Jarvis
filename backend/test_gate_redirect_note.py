@@ -73,12 +73,19 @@ import jarvis_task_control as TC  # noqa: E402
 
 
 def _insert(rid, action, detail, prompt, state="pending"):
+    """One waiting row, written with the moment its request is waiting until.
+
+    `waited_until` is not decoration: `pending()` settles a row that has none
+    as expired before any check can read it, so a fixture that omits it models a
+    card nobody is waiting on.
+    """
     G._init()
     with sqlite3.connect(str(G.DB_PATH)) as c:
         c.execute(
-            "INSERT OR REPLACE INTO approvals (id,action,tier,detail,prompt,state,created)"
-            " VALUES (?,?,?,?,?,?,?)",
-            (rid, action, "ask", json.dumps(detail), prompt, state, time.time()))
+            "INSERT OR REPLACE INTO approvals (id,action,tier,detail,prompt,state,created,"
+            "waited_until) VALUES (?,?,?,?,?,?,?,?)",
+            (rid, action, "ask", json.dumps(detail), prompt, state, time.time(),
+             time.time() + float(G.APPROVAL_TIMEOUT)))
 
 
 def _count():

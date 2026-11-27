@@ -137,13 +137,19 @@ def raise_card(gate, request_id: str, action: str = "send_email") -> None:
     """One waiting row, written the way the gate's own `check()` writes it -
     the columns it reads back are the ones `pending()` SELECTs. The waiting
     thread `check()` would normally hold open is deliberately not here: the row
-    is the card, and a decision on it is what these checks are about."""
+    is the card, and a decision on it is what these checks are about.
+
+    The moment that thread would have recorded IS here, because `pending()`
+    settles any row without one as expired: a card with no `waited_until` is a
+    card nobody is waiting on, and no decision can be made against it.
+    """
     gate._init()
     with closing(gate._connect()) as c:
         c.execute(
-            "INSERT INTO approvals (id, action, tier, detail, prompt, state, created)"
-            " VALUES (?,?,?,?,?,'pending',?)",
-            (request_id, action, "ask", '{"to": "a@example.com"}', "send it", time.time()),
+            "INSERT INTO approvals (id, action, tier, detail, prompt, state, created,"
+            " waited_until) VALUES (?,?,?,?,?,'pending',?,?)",
+            (request_id, action, "ask", '{"to": "a@example.com"}', "send it",
+             time.time(), time.time() + float(gate.APPROVAL_TIMEOUT)),
         )
 
 

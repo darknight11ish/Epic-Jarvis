@@ -1177,29 +1177,21 @@ def t_the_carrier_patch_and_the_published_gate_agree():
         (work / "p.patch").write_bytes(
             (HERE / "gate-touches.patch").read_bytes().replace(b"\r\n", b"\n"))
         patch_text = (work / "p.patch").read_text(encoding="utf-8")
-        base_text = (BASE / "jarvis_gate.py").read_text(encoding="utf-8")
         check("the carrier patch is a real change, not an empty one",
               (work / "p.patch").stat().st_size > 1000,
               (work / "p.patch").stat().st_size)
         check("... and it touches jarvis_gate.py and nothing else",
               [line[6:].strip() for line in patch_text.splitlines()
                if line.startswith("+++ b/")] == ["jarvis_gate.py"])
-        # The change itself is IN the base: the two helpers and the table the
-        # dedupe/replaces guards are built from, and the one line that puts
-        # the mark on a waiting row.
-        missing = [marker for marker in
-                   ("def _pending_target(", "def _pending_card_id(",
-                    "_REPLACES_ACTIONS = frozenset({", "def replaces_for(",
-                    'd["replaces"] = replaces_for(')
-                   if marker not in base_text]
-        check("... and the base carries the change the patch adds", not missing,
-              missing)
-        # ... and the base carries the retired patches' rewrite of the same
-        # block, which is why this patch can no longer reverse out of it.
-        check("... and the base carries the 2026-10-28 rewrite that moved "
-              "past it",
-              "if not _wait_open(row):" in base_text
-              and "waited_until" in base_text)
+        # THAT THE BASE STILL CARRIES THIS PATCH'S CHANGE IS PROVEN ELSEWHERE,
+        # at hunk level, by test_gate_touches.py's
+        # t_the_published_base_already_carries_this_patch. It is deliberately
+        # not re-read here as source text: `tools/check_no_source_pins.py`
+        # ratchets exactly that ("Call the real function and assert on what it
+        # received, or walk `ast` nodes") and its ceiling may only go DOWN, so
+        # this suite must not add a third way to say the same thing. What is
+        # left below is behavioural: two real `git apply` runs against the real
+        # bytes, which is what says the base is a later lineage.
         shutil.copyfile(BASE / "jarvis_gate.py", work / "jarvis_gate.py")
         back = subprocess.run([git, "apply", "-R", "p.patch"], cwd=work,
                               capture_output=True, text=True)
