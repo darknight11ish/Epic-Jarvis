@@ -319,9 +319,16 @@ PIN = {
     # the code above `def check(`, and check()'s own INSERT into the queue,
     # which the owner's file already had - and no patch in this walk writes any
     # of them, so they are honest rather than drift. Checked the same way: the
-    # whole patch is `git apply`ed forwards and reversed out of the published
+    # whole patch was `git apply`ed forwards and reversed out of the published
     # gate byte-for-byte by backend/test_gate_touches.py, and
-    # backend/test_approval_guards.py proves the behaviour against that copy.
+    # backend/test_approval_guards.py proved the behaviour against that copy.
+    # SINCE 2026-11-26 THAT REHEARSAL IS GONE, and the pin below is unchanged
+    # because the PATCH is unchanged: the base took in the 2026-10-28
+    # request-bounding machinery and the 2026-10-30 card timer, which rewrote
+    # the same `_pending_card_id()` SELECT, `check()` INSERT and `pending()`
+    # decoration this patch adds, so the base is a later lineage. Both suites
+    # now assert the base carries the change and that the patch is past it
+    # (see decisions.d/2026-11-26-the-base-gate-carries-the-request-bounding.md).
     # 2026-10-21 (F-680-2, long-detail dedupe): the target_digest column adds
     # one hunk in `_init`'s migration block and six lines of the owner's own
     # `check()` around the INSERT; raised here with the reason, the one case

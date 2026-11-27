@@ -127,6 +127,14 @@ def _pending(action=None):
     return [r for r in rows if action is None or r.get("action") == action]
 
 
+def _row_state(card_id):
+    """The stored state of one row, or None: what the sweep actually wrote."""
+    with closing(G._connect()) as c:
+        row = c.execute("SELECT state FROM approvals WHERE id=?",
+                        (card_id,)).fetchone()
+    return row["state"] if row else None
+
+
 def _wait_for_row(action, deadline=5.0):
     end = time.time() + deadline
     while time.time() < end:
@@ -532,7 +540,17 @@ def t_concurrent_identical_long_requests_share_one_card():
 
 
 def t_an_old_row_without_a_digest_is_merged_only_by_its_parseable_detail():
-    """Old rows (NULL digest) fall back to the old comparison, never guessed."""
+    """Old rows (NULL digest) fall back to the old comparison, never guessed.
+
+    THE WAIT IS WRITTEN HERE TOO (2026-11-26). The rows below are the shape a
+    pre-digest row has - NULL `target_digest` - but the property under test is
+    the FALLBACK COMPARISON, not the request-bound rule: `_pending_card_id()`
+    is called directly here and would still read these rows, while `pending()`
+    would settle a NULL `waited_until` row on the next read (see
+    `t_the_read_time_sweep_settles_only_a_dead_request`). So the fixture
+    records the moment its request would have been given, exactly as `_seed()`
+    does, and keeps the one column this test is about NULL.
+    """
     _reset()
     action = "send_email"
     short = {"to": "old@example.com"}
@@ -540,15 +558,17 @@ def t_an_old_row_without_a_digest_is_merged_only_by_its_parseable_detail():
         c.execute("BEGIN IMMEDIATE")
         c.execute(
             "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,"
-            "raised,target_digest) VALUES (?,?,?,?,?,'pending',?,?,NULL)",
+            "raised,target_digest,waited_until)"
+            " VALUES (?,?,?,?,?,'pending',?,?,NULL,?)",
             ("oldshort", action, "ask", json.dumps(short), "Send it?",
-             time.time() - 1, None))
+             time.time() - 1, None, time.time() + 3600))
         long_raw = json.dumps({"to": "old@example.com", "body": "z" * 6000})
         c.execute(
             "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,"
-            "raised,target_digest) VALUES (?,?,?,?,?,'pending',?,?,NULL)",
+            "raised,target_digest,waited_until)"
+            " VALUES (?,?,?,?,?,'pending',?,?,NULL,?)",
             ("oldlong", action, "ask", long_raw[:4000], "Send it?",
-             time.time() - 1, None))
+             time.time() - 1, None, time.time() + 3600))
         c.execute("COMMIT")
     with closing(G._connect()) as c:
         c.execute("BEGIN IMMEDIATE")
@@ -602,13 +622,37 @@ def t_the_digest_column_migrates_idempotently_and_keeps_old_rows():
               "target_digest" in cols, cols)
         check("... and keeps the rows that were already there", rows == 1, rows)
         G._init()                                    # idempotent second init
+        # A migrated row predates `waited_until` too, so it is a request that
+        # has already stopped, and `_init()`'s own start-up sweep has just
+        # settled it (that is the 2026-10-28 rule in its other half). Put it
+        # back to 'pending' with NO moment first, to prove the DEDUPE half on
+        # its own: a pending card whose request has stopped is never reused,
+        # whether or not a sweep has reached the row yet.
+        with closing(G._connect()) as c:
+            c.execute("UPDATE approvals SET state='pending', decided=NULL"
+                      " WHERE id='oldrow'")
+        with closing(G._connect()) as c:
+            c.execute("BEGIN IMMEDIATE")
+            dead = G._pending_card_id(c, "send_email", {"to": "x@example.com"},
+                                      "Send it?")
+            c.execute("COMMIT")
+        check("... a pending old row with a NULL `waited_until` is NOT reused: "
+              "its request has stopped, so a new identical request gets its own "
+              "card", dead is None, repr(dead))
+        # ... and THEN the fixture records the moment its request would have
+        # held, so the digest fallback is read for the property it was written
+        # for - the old comparison - not as a claim that a real pre-machinery
+        # row can still be answered.
+        with closing(G._connect()) as c:
+            c.execute("UPDATE approvals SET waited_until=? WHERE id='oldrow'",
+                      (time.time() + 3600,))
         with closing(G._connect()) as c:
             c.execute("BEGIN IMMEDIATE")
             got = G._pending_card_id(c, "send_email", {"to": "x@example.com"},
                                      "Send it?")
             c.execute("COMMIT")
-        check("... and the migrated old row still dedupes through its detail",
-              got == "oldrow", repr(got))
+        check("... and the migrated old row still dedupes through its detail "
+              "while its request is alive", got == "oldrow", repr(got))
     finally:
         G.DB_PATH, G._inited = real_path, real_inited
         G._init()
@@ -858,14 +902,120 @@ def t_the_voice_training_clear_marks_its_own_card():
           repr(card_detail.get("text")))
 
 
-def _seed(action, detail, card_id, prompt="card"):
-    """Write a pending row straight into the scratch queue."""
+def _seed_row(card_id, action, detail, waited_until, prompt="card"):
+    """Write one pending row with an explicit `waited_until`.
+
+    None is allowed and means "no request-side moment at all" - the shape a
+    ceremony card really has. Everything else is the moment the request that
+    raised the card stops waiting.
+    """
     G._init()
     with closing(G._connect()) as c:
         c.execute(
-            "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
-            " VALUES (?,?,?,?,?,'pending',?,NULL)",
-            (card_id, action, "ask", json.dumps(detail)[:4000], prompt, time.time()))
+            "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,"
+            "raised,waited_until) VALUES (?,?,?,?,?,'pending',?,NULL,?)",
+            (card_id, action, "ask", json.dumps(detail)[:4000], prompt,
+             time.time(), waited_until))
+
+
+def _seed(action, detail, card_id, prompt="card"):
+    """Write a pending row straight into the scratch queue, its request WAITING.
+
+    THE WAIT IS WRITTEN, AND THAT IS THE POINT (2026-11-26). The published base
+    now carries the 2026-10-28 request-bounding machinery: `check()` records
+    `waited_until` on the row it raises, and `pending()` sweeps the queue
+    before it reads - a routine row whose `waited_until` is NULL or past is
+    settled as 'expired', because no request can act on an answer to it any
+    more. A seed that omitted the column would model a request that has already
+    stopped, and the row would be gone before the guard under test could read
+    it. That is exactly what happened when the base learned the sweep: thirteen
+    checks in this suite read an empty queue (two more fixtures wrote their own
+    INSERTs and shared the same gap). The moment here is a comfortable
+    hour ahead because these rows are not testing the clock -
+    `t_the_read_time_sweep_settles_only_a_dead_request` is the test that writes
+    the moments it does check - and a ceremony card keeps the NULL the live
+    gate gives it.
+    """
+    waited = None if G.timeout_for(action) is None else time.time() + 3600
+    _seed_row(card_id, action, detail, waited, prompt=prompt)
+
+
+# ---------------------------------------------- the read-time sweep (2026-10-28)
+#
+# The base carries the owner's request-bounding machinery: `check()` writes the
+# moment its request stops waiting on the row (`waited_until`), and `pending()`
+# sweeps the queue before it reads, settling every row whose request can no
+# longer act on an answer. `backend/test_pending_expiry_on_read.py` owns that
+# sweep's own suite. The four rows below pin the boundary THIS suite's fixtures
+# must not cross - and they are here because the fixtures were the first thing
+# the sweep caught: `_seed()` wrote no `waited_until`, so every row it made was
+# a dead request and `pending()` settled it before the guard under test could
+# read it. These checks say plainly which shapes the sweep must and must not
+# take, so the fixture fix above is a recorded property and not a workaround.
+
+
+def t_the_read_time_sweep_settles_only_a_dead_request():
+    """A routine row with no wait, or a wait that has passed, is expired on read.
+
+    The four cases are the whole rule: no moment for an ordinary action (a row
+    from before the machinery, or one whose request died) is dead; a NULL
+    moment for one of the four ceremonies is alive; a past moment is dead; a
+    future one is alive. The grace is not what is tested here - a past moment
+    is 120 seconds behind, so the 60-second grace it must also cross is
+    cleared.
+    """
+    _reset()
+    now = time.time()
+    _seed_row("sweep-null", "send_email", {"to": "gone@example.com"}, None)
+    _seed_row("sweep-ceremony", "register_approval_key",
+              {"text": "Register this phone?"}, None)
+    _seed_row("sweep-past", "send_email", {"to": "past@example.com"}, now - 120)
+    _seed_row("sweep-future", "send_email", {"to": "future@example.com"},
+              now + 120)
+    rows = {r["id"]: r for r in G.pending()}
+    check("a NULL-`waited_until` row for an ordinary action IS expired by "
+          "`pending()`", "sweep-null" not in rows, sorted(rows))
+    check("... the same NULL row for an APPROVAL_NEVER_EXPIRES action is NOT "
+          "expired", "sweep-ceremony" in rows, sorted(rows))
+    check("... a row whose `waited_until` is in the past IS expired",
+          "sweep-past" not in rows, sorted(rows))
+    check("... and a row whose `waited_until` is in the future survives",
+          "sweep-future" in rows, sorted(rows))
+    check("... the lapse is recorded as 'expired', never 'denied' (a denial "
+          "would put an answer in the owner's mouth)",
+          [_row_state("sweep-null"), _row_state("sweep-past"),
+           _row_state("sweep-ceremony"), _row_state("sweep-future")]
+          == ["expired", "expired", "pending", "pending"],
+          [_row_state(i) for i in ("sweep-null", "sweep-past",
+                                   "sweep-ceremony", "sweep-future")])
+    # BITE: with the sweep not called, the dead ordinary row is served again -
+    # which is what the queue did before the read-time half existed, and what
+    # `pending()` must never do again.
+    _seed_row("sweep-bite", "send_email", {"to": "bite@example.com"}, None)
+    real = G._expire_overdue
+    try:
+        G._expire_overdue = lambda c: 0                  # the sweep, gone
+        visible = {r["id"] for r in G.pending()}
+    finally:
+        G._expire_overdue = real
+    check("... and with `_expire_overdue()` not called that dead row is "
+          "served again (so this pin can fail)", "sweep-bite" in visible,
+          sorted(visible))
+    # BITE 2: the ceremony half is the EXEMPTION SET, and emptying it must
+    # expire the very card the rule promises to leave waiting.
+    _seed_row("sweep-bite2", "register_approval_key", {"text": "Pair?"}, None)
+    real_never = G.APPROVAL_NEVER_EXPIRES
+    try:
+        G.APPROVAL_NEVER_EXPIRES = frozenset()           # the exemption, gone
+        exposed = {r["id"] for r in G.pending()}
+    finally:
+        G.APPROVAL_NEVER_EXPIRES = real_never
+    check("... and with APPROVAL_NEVER_EXPIRES emptied the ceremony row is "
+          "expired (so that pin can fail too)",
+          "sweep-bite2" not in exposed
+          and _row_state("sweep-bite2") == "expired",
+          (sorted(exposed), _row_state("sweep-bite2")))
+    _reset()
 
 
 def t_the_three_labels_are_accurate_per_action():
@@ -986,17 +1136,35 @@ def t_the_replaces_guard_is_what_marks_the_cards():
 def t_the_carrier_patch_and_the_published_gate_agree():
     """`jarvis_gate.py` is not in `backend/` whole: it is patch-carried.
 
-    The published copy is the state the whole stack leaves and
-    `backend/gate-touches.patch` is what carries the change to the owner's own
-    file. This rehearses the carrier the way the patcher does - take the change
-    back OUT of the published gate (which is the text the owner's own file
-    holds), then apply it forwards - and proves the result is the published
-    file again, byte for byte. A patch without its published copy (or the
-    other way round) cannot pass this.
+    `jarvis-backend/jarvis_gate.py` is the state the whole stack leaves, and
+    `backend/gate-touches.patch` is what carries this suite's change to the
+    owner's own file. Until 2026-11-26 the rehearsal was exact - reverse the
+    patch out of the base (which is the text the owner's own file holds), apply
+    it forwards, and demand the published file back byte for byte. That day the
+    base took in the 2026-10-28 request-bounding machinery and the 2026-10-30
+    card timer (`no-expiry-cards`, `no-deadline-cards` and `show-card-timer`,
+    all three now retired into the base), which rewrote the same
+    `_pending_card_id()`, `check()` and `pending()` lines THIS patch writes.
 
-    `test_gate_touches.py` owns the hunk-level proof (that the four changed
-    lines are the ones this change is about); what is checked HERE is that the
-    change under test and the file the apps' PC will run are the same thing.
+    SO A CONTEXT-ONLY REFRESH CANNOT BRING THE REHEARSAL BACK, and that is
+    measured rather than assumed (2026-11-26): reversing the patch out of the
+    base now rejects three hunks - the `_pending_card_id()` block (the base
+    gained `_wait_open(row)` and `waited_until` in its SELECT), `check()`'s
+    INSERT (the base added the `waited_until` column and bind) and `pending()`'s
+    decoration (the base replaced `approval-expiry`'s `created`-based
+    `expires_in` with the request's own timer). Those are the retired patches'
+    ADDED lines, rewritten in place; no context edit can remove a block that is
+    no longer there as written, and re-attributing the rewrites to this patch
+    would make it a different change.
+
+    The base is therefore a LATER lineage. What is held here is the pair of
+    facts that must stay true together - the base STILL CARRIES this patch's
+    change, and the patch is BEHIND the base - so a base that lost the change,
+    or a patch that started to apply to the base again, is still a failure.
+    `test_gate_touches.py` owns the same relationship at hunk level
+    (`t_the_published_base_already_carries_this_patch`); this suite's angle is
+    that the patch the repository still ships for the owner's PC is the same
+    change these tests run against.
     """
     git = shutil.which("git")
     if not git:
@@ -1004,33 +1172,46 @@ def t_the_carrier_patch_and_the_published_gate_agree():
         return
     work = Path(tempfile.mkdtemp(prefix="jarvis-approval-guards-patch-"))
     try:
-        shutil.copyfile(BASE / "jarvis_gate.py", work / "jarvis_gate.py")
-        shutil.copyfile(HERE / "gate-touches.patch", work / "p.patch")
+        # LF, deliberately: `.gitattributes` makes `*.patch` -text, so a
+        # patch's context is LF whatever the checkout's own endings are.
+        (work / "p.patch").write_bytes(
+            (HERE / "gate-touches.patch").read_bytes().replace(b"\r\n", b"\n"))
+        patch_text = (work / "p.patch").read_text(encoding="utf-8")
+        base_text = (BASE / "jarvis_gate.py").read_text(encoding="utf-8")
         check("the carrier patch is a real change, not an empty one",
               (work / "p.patch").stat().st_size > 1000,
               (work / "p.patch").stat().st_size)
+        check("... and it touches jarvis_gate.py and nothing else",
+              [line[6:].strip() for line in patch_text.splitlines()
+               if line.startswith("+++ b/")] == ["jarvis_gate.py"])
+        # The change itself is IN the base: the two helpers and the table the
+        # dedupe/replaces guards are built from, and the one line that puts
+        # the mark on a waiting row.
+        missing = [marker for marker in
+                   ("def _pending_target(", "def _pending_card_id(",
+                    "_REPLACES_ACTIONS = frozenset({", "def replaces_for(",
+                    'd["replaces"] = replaces_for(')
+                   if marker not in base_text]
+        check("... and the base carries the change the patch adds", not missing,
+              missing)
+        # ... and the base carries the retired patches' rewrite of the same
+        # block, which is why this patch can no longer reverse out of it.
+        check("... and the base carries the 2026-10-28 rewrite that moved "
+              "past it",
+              "if not _wait_open(row):" in base_text
+              and "waited_until" in base_text)
+        shutil.copyfile(BASE / "jarvis_gate.py", work / "jarvis_gate.py")
         back = subprocess.run([git, "apply", "-R", "p.patch"], cwd=work,
                               capture_output=True, text=True)
-        check("the patch reverses out of the published gate (the text the "
-              "patcher recognises on the owner's PC)", back.returncode == 0,
-              back.stderr.strip()[-300:])
-        if back.returncode != 0:
-            return
-        fwd = subprocess.run([git, "apply", "p.patch"], cwd=work,
+        check("... so it no longer reverses out of the published gate: a later "
+              "lineage, not a context refresh", back.returncode != 0,
+              "it reversed out again - re-check which patch owns the rewritten "
+              "lines")
+        fwd = subprocess.run([git, "apply", "--check", "p.patch"], cwd=work,
                              capture_output=True, text=True)
-        check("... and applies forwards again", fwd.returncode == 0,
-              fwd.stderr.strip()[-300:])
-        if fwd.returncode != 0:
-            return
-        def _norm(path):
-            return path.read_text(encoding="utf-8").replace("\r\n", "\n")
-        check("... giving back the published gate byte for byte, line endings "
-              "aside: the patch and the copy the tests run ARE the same change",
-              _norm(work / "jarvis_gate.py") == _norm(BASE / "jarvis_gate.py"))
-        check("... and the patch touches jarvis_gate.py and nothing else",
-              [line[6:].strip() for line in
-               (work / "p.patch").read_text(encoding="utf-8").splitlines()
-               if line.startswith("+++ b/")] == ["jarvis_gate.py"])
+        check("... and it does not apply to the base forwards either",
+              fwd.returncode != 0,
+              "it applied to the base - the base is its pre-image again")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
