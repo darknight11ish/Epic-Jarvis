@@ -11,8 +11,9 @@ counted it down. The 2026-10-28 ruling ("if there doesn't need to be a time
 limit don't have one") is not reversed - it stays true of the CARD. What was
 missing is that the REQUEST's own wait was hidden.
 
-WHAT THE STACK DOES NOW (`backend/show-card-timer.patch`, applied after
-`no-deadline-cards.patch`):
+WHAT THE PUBLISHED BASE DOES NOW (the 2026-10-30 timer; `show-card-timer.patch`
+was retired into the base on 2026-11-26, after `no-deadline-cards.patch` in the
+old stack):
 
   * a ROUTINE card whose request is still waiting carries `expires_in`, the
     whole seconds left until the row's own `waited_until` - the same moment the
@@ -33,14 +34,23 @@ WHAT THE STACK DOES NOW (`backend/show-card-timer.patch`, applied after
 
 WHAT THIS PROVES
 
-  1. t_the_three_patch_stack_is_the_published_base_plus_patches
-     All three patches apply with `git apply` to `jarvis-backend/jarvis_gate.py`,
-     the result imports, `pending()` still sweeps before its SELECT, and the
-     base was not edited to make them fit.
+  1. t_the_base_carries_the_timer
+     The published base itself carries the timer block, together with the
+     2026-10-28 request-bounding model it sits on: `pending()` still sweeps
+     before its SELECT, and the file this suite drives is the base byte for
+     byte.
   2. t_a_waiting_routine_card_counts_the_request_down
      A raised routine card carries `expires_in` inside its request's window; the
      number is the request's own seconds left, and it goes DOWN as the clock
      moves.
+  2b. t_the_timer_counts_from_the_request_moment_not_from_created
+     The formula, distinguished: a caller-bounded request (`timeout=120`) has
+     `waited_until` 780 seconds earlier than `created` + the action's 900, and
+     the timer follows `waited_until`, not `created`.
+  2c. t_a_stopped_request_shows_no_grace_on_the_card
+     The 60-second grace is not counted down: a card whose request has ended is
+     still pending inside it and carries no timer, and the read after the grace
+     takes it off.
   3. t_a_ceremony_card_and_an_ended_request_carry_no_timer
      The four ceremonies carry none; a row whose request has ended carries none
      (while it is still inside the grace); an unreadable `waited_until` carries
@@ -55,17 +65,16 @@ WHAT THIS PROVES
      A Deny always works; an Approve after `waited_until` is refused by the
      gate and by the owner's own route, with the same plain sentence, and the
      card is taken off the list - unchanged from 2026-10-28.
-  7. t_the_timer_is_the_new_patch_and_not_the_base
-     THE BITE PROOF. The same stack WITHOUT `show-card-timer.patch` (published
-     base + `no-expiry-cards.patch` + `no-deadline-cards.patch`) sends no
-     `expires_in` at all for the same waiting card, so every assertion above
-     comes from this patch and nowhere else.
+  7. t_the_timer_is_in_the_base_and_not_an_earlier_layer
+     THE BITE PROOF. The published base with EXACTLY the timer block cut out of
+     `pending()` sends no `expires_in` at all for the same waiting card, so
+     every assertion above comes from that block and nowhere else.
 
-HOW THE GATE IS LOADED. As `backend/test_gate_no_deadline.py` does it: the
-published base in `jarvis-backend/` is copied to a scratch folder, the patches
-are applied with `git apply` (no fuzz), and the result is imported with its own
-approvals database. Needs nothing from the owner's PC and no network; runs
-anywhere git does.
+HOW THE GATE IS LOADED. The published base in `jarvis-backend/` is copied to a
+scratch folder as it is - since 2026-11-26 it carries all three retired
+patches' content, so no patch is applied and `git` is not needed - and the
+result is imported with its own approvals database. Needs nothing from the
+owner's PC and no network.
 """
 from __future__ import annotations
 
@@ -90,12 +99,15 @@ sys.path.insert(0, str(HERE))
 import _gitapply  # noqa: E402  (beside this file; its docstring says why)
 from _where import REPO  # noqa: E402
 
-EXPIRY_PATCH = HERE / "no-expiry-cards.patch"
-DEADLINE_PATCH = HERE / "no-deadline-cards.patch"
-TIMER_PATCH = HERE / "show-card-timer.patch"
 BASE = REPO / "jarvis-backend"
 BACKEND = REPO / "backend"
 TOML = BASE / "jarvis-framework.toml"
+
+#: Where the 2026-10-30 timer block starts and ends in the published base. The
+#: bite proof removes exactly this slice, so "without the timer" is made from
+#: the base itself now that `show-card-timer.patch` is retired.
+TIMER_BLOCK_START = "        # THE TIMER ON A CARD WITH A LIMITED TIME (2026-10-30)."
+TIMER_BLOCK_END = "        # Why this is being asked about at all"
 
 #: The shipped `approval_timeout_seconds` #378 left on 2026-10-13: 15 minutes.
 MINUTES_15 = 15 * 60
@@ -135,23 +147,31 @@ def skip(why):
 _BUILT: dict = {}
 
 
-def built(patches: tuple = (EXPIRY_PATCH, DEADLINE_PATCH, TIMER_PATCH)) -> tuple:
-    """(folder holding the patched gate, why not). One folder per patch set."""
-    key = tuple(p.name for p in patches)
+def built(timer: bool = True) -> tuple:
+    """(folder holding the base gate, why not). One folder per variant.
+
+    `timer=False` is the bite proof's copy: the published base with EXACTLY the
+    timer block cut out of `pending()`. That is the same "without this change"
+    question the two-patch stack used to answer, asked of the file that now
+    carries the change.
+    """
+    key = bool(timer)
     if key in _BUILT:
         return _BUILT[key], ""
-    git = shutil.which("git")
-    if not git:
-        return None, "git is not installed, so the patch cannot be applied"
-    for patch in patches:
-        if not patch.is_file():
-            return None, f"{patch.name} is missing"
     base_gate = BASE / "jarvis_gate.py"
     if not base_gate.is_file():
         return None, f"{base_gate} is missing"
+    text = base_gate.read_bytes().replace(b"\r\n", b"\n").decode("utf-8")
+    if not timer:
+        try:
+            start = text.index(TIMER_BLOCK_START)
+            end = text.index(TIMER_BLOCK_END, start)
+        except ValueError:
+            return None, ("the timer block this suite cuts out is not in the "
+                          "published base any more - re-anchor the slice")
+        text = text[:start] + text[end:]
     d = Path(tempfile.mkdtemp(prefix="jarvis-card-timer-"))
-    d.joinpath("jarvis_gate.py").write_bytes(
-        base_gate.read_bytes().replace(b"\r\n", b"\n"))
+    d.joinpath("jarvis_gate.py").write_bytes(text.encode("utf-8"))
     # The two SHIPPED modules the owner's route needs, from this repository's
     # own copies (the base twins must equal them; check_stale_twins.py says so).
     for name in ("jarvis_owner_check.py", "jarvis_devices.py"):
@@ -159,14 +179,6 @@ def built(patches: tuple = (EXPIRY_PATCH, DEADLINE_PATCH, TIMER_PATCH)) -> tuple
         if not src.is_file():
             return None, f"{src} is missing"
         d.joinpath(name).write_bytes(src.read_bytes().replace(b"\r\n", b"\n"))
-    env = _gitapply.env_for(git, d)
-    for patch in patches:
-        r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
-                            "apply", str(patch)], cwd=str(d), capture_output=True,
-                           text=True, env=env)
-        if r.returncode != 0:
-            return None, (f"git apply refused {patch.name}: "
-                          f"{(r.stderr or r.stdout).strip().splitlines()[:3]}")
     _BUILT[key] = d
     return d, ""
 
@@ -307,7 +319,7 @@ def ceil_seconds(seconds: float) -> int:
 # 1. The stack's own footing
 # ---------------------------------------------------------------------------
 
-def t_the_three_patch_stack_is_the_published_base_plus_patches():
+def t_the_base_carries_the_timer():
     text = TOML.read_text(encoding="utf-8")
     m = re.search(r"^\s*approval_timeout_seconds\s*=\s*(\d+)\s*$", text, re.M)
     check("the shipped settings declare approval_timeout_seconds", m is not None)
@@ -317,13 +329,12 @@ def t_the_three_patch_stack_is_the_published_base_plus_patches():
 
     d, why = built()
     if d is None:
-        return check("all three patches apply to the published base", False, why)
-    check("no-expiry-cards, no-deadline-cards and show-card-timer all apply "
-          "with git", True)
-    check("...and the base was not edited to make them fit",
-          "waited_until" not in (BASE / "jarvis_gate.py").read_text(encoding="utf-8")
-          and "expires_in" in (BASE / "jarvis_gate.py").read_text(encoding="utf-8"),
-          "re-anchor the patch instead of editing the base")
+        return check("the published base carries the timer", False, why)
+    # The base carries the block: the bite proof's own slice (below) finds its
+    # start and end markers and only then builds its "without" copy.
+    check("the published base itself carries the 2026-10-30 timer block",
+          built(timer=False)[0] is not None,
+          "the bite proof's slice could not find the block in the base")
 
     G = load_module("jarvis_gate", d)
     after = Path(G.__file__).read_text(encoding="utf-8")
@@ -334,12 +345,11 @@ def t_the_three_patch_stack_is_the_published_base_plus_patches():
     # `after.split("def pending")` landed inside it and every check below read
     # the wrong body. The old split was always ambiguous; it is now precise.
     pending_body = after.split("def pending() -> list[dict]:")[1].split("def decide(")[0]
-    check("the patched module imports (it compiles)", True)
-    check("the patch touches jarvis_gate.py and nothing else",
-          set(re.findall(r"^\+\+\+ b/(.+)$",
-                         TIMER_PATCH.read_text(encoding="utf-8"), re.M))
-          == {"jarvis_gate.py"})
-    check("pending() now emits expires_in", 'd["expires_in"]' in pending_body)
+    check("the base module imports (it compiles)", True)
+    check("the file this suite drives is the published base, byte for byte",
+          Path(G.__file__).read_bytes()
+          == (BASE / "jarvis_gate.py").read_bytes())
+    check("pending() emits expires_in", 'd["expires_in"]' in pending_body)
     check("...from the row's own request end, not from `created` + a timeout",
           'float(_waited) - time.time()' in pending_body
           and 'float(d.get("created"))' not in pending_body,
@@ -415,6 +425,109 @@ def t_a_waiting_routine_card_counts_the_request_down():
               t.is_alive() and state_of(G, row["id"]) == "pending",
               {"alive": t.is_alive(), "state": state_of(G, row["id"])})
         t.join(timeout=10)      # it ends when the window does; quiet the thread
+
+
+# ---------------------------------------------------------------------------
+# 2b. WHICH MOMENT THE TIMER COUNTS FROM, AND THE GRACE IT MUST NOT SHOW
+# ---------------------------------------------------------------------------
+
+def t_the_timer_counts_from_the_request_moment_not_from_created():
+    """Test A: a caller-bounded request, where the two formulas disagree.
+
+    `check()` writes `created` and `waited_until` from the same clock reading,
+    so a request whose wait is the action's own 900 has
+    `waited_until == created + 900` - and a timer that counted from `created`
+    would print the same number. That is why the ordinary seed cannot tell the
+    two formulas apart.
+
+    A caller that passes its OWN `timeout=` is the real, producible case where
+    the two moments differ: `waited = timeout`, so
+    `waited_until == created + timeout` while
+    `created + the action's window` is still 900. The gate cannot make a
+    request "start waiting late" - the moment is written at the INSERT and the
+    wait begins there - so this is the closest real card the harness can
+    raise, and nothing is written into the database by hand.
+
+    The shipped timer must read `waited_until`. Counting from `created`
+    instead would answer ~900 here, which is what makes this test bite.
+    """
+    d, why = built()
+    if d is None:
+        return skip(why)
+    G = load_module("jarvis_gate", d)
+    with simulated_clock(G) as clock:
+        box = {}
+        t = ask(G, "send_email", box, timeout=120)
+        row = wait_for_row(G, box)
+        if row is None:
+            return check("the caller-bounded card was raised", False,
+                         box.get("no_row", "no pending row"))
+        with closing(G._connect()) as c:
+            r = c.execute("SELECT created,waited_until FROM approvals WHERE id=?",
+                          (row["id"],)).fetchone()
+        created, waited = float(r["created"]), float(r["waited_until"])
+        check("the card's request is bounded at 120, not the action's 900",
+              round(waited - created) == 120, (created, waited))
+        shipped = row.get("expires_in")
+        from_waited = ceil_seconds(waited - clock.now)
+        from_created = ceil_seconds(created + WINDOW - clock.now)
+        check("the timer counts the request's own 120 seconds left",
+              shipped == from_waited and shipped <= 120, (shipped, from_waited))
+        check("... and NOT the 900 a `created` + action-window count would give",
+              isinstance(shipped, int) and abs(from_created - shipped) > 600,
+              (shipped, from_created))
+        clock.advance(60)
+        later = row_of(G, row["id"])
+        check("... and it still follows `waited_until` a minute later",
+              later is not None
+              and later.get("expires_in") == ceil_seconds(waited - clock.now),
+              None if later is None else (later.get("expires_in"),
+                                          waited - clock.now))
+        clock.advance(61)                 # past the caller's own bound
+        t.join(timeout=10)
+
+
+def t_a_stopped_request_shows_no_grace_on_the_card():
+    """Test B: the 60-second grace is never counted down.
+
+    A routine card whose request has ENDED is still 'pending' for the sweep's
+    grace (the 2026-10-28 rule), but no request can act on it any more. If the
+    timer added the grace to the seconds it shows, the card would promise time
+    the gate refuses. The field must be ABSENT there - both apps read 0 as
+    "expired now" - and the next read after the grace must take the card off
+    the queue. A grace-carrying implementation would show ~59 seconds above.
+    """
+    d, why = built()
+    if d is None:
+        return skip(why)
+    G = load_module("jarvis_gate", d)
+    with simulated_clock(G) as clock:
+        box = {}
+        t = ask(G, "send_email", box)
+        row = wait_for_row(G, box)
+        if row is None:
+            return check("the routine card was raised", False, "no row")
+        with closing(G._connect()) as c:
+            waited = float(c.execute(
+                "SELECT waited_until FROM approvals WHERE id=?",
+                (row["id"],)).fetchone()["waited_until"])
+        clock.advance(WINDOW + 1)         # the request stops waiting
+        t.join(timeout=10)
+        inside = row_of(G, row["id"])
+        check("inside the grace the card is still pending (setup)",
+              inside is not None and state_of(G, row["id"]) == "pending",
+              None if inside is None else state_of(G, row["id"]))
+        grace_if_shown = ceil_seconds(waited + 60 - clock.now)
+        check("... the grace is still running, so a grace-carrying timer would show it",
+              grace_if_shown >= 1, grace_if_shown)
+        check("... and the card carries NO timer: the grace is not counted down",
+              inside is not None and "expires_in" not in inside,
+              None if inside is None else sorted(inside))
+        clock.advance(62)
+        gone = row_of(G, row["id"])
+        check("... and after the 60-second grace the read sweep takes it off",
+              gone is None and state_of(G, row["id"]) == "expired",
+              (gone, state_of(G, row["id"])))
 
 
 # ---------------------------------------------------------------------------
@@ -614,50 +727,49 @@ def t_a_deny_still_clears_the_card_and_a_late_approve_still_409s():
 
 
 # ---------------------------------------------------------------------------
-# 7. THE BITE PROOF: without this patch the timer is not there
+# 7. THE BITE PROOF: the base with that block cut out carries no timer
 # ---------------------------------------------------------------------------
 
-def t_the_timer_is_the_new_patch_and_not_the_base():
-    """The two-patch stack - everything the owner has today - sends NO timer.
+def t_the_timer_is_in_the_base_and_not_an_earlier_layer():
+    """The base with EXACTLY the timer block cut out sends NO timer.
 
     This is what makes the rest of this file bite: if `expires_in` were coming
-    from the published base or from an earlier patch, the assertions above would
-    pass without `show-card-timer.patch` and this test would be measuring
+    from the base's 2026-10-28 layer or from an earlier patch, the assertions
+    above would pass without the timer block and this test would be measuring
     nothing.
     """
-    two, why = built((EXPIRY_PATCH, DEADLINE_PATCH))
-    if two is None:
+    without, why = built(timer=False)
+    if without is None:
         return skip(why)
-    G2 = load_module("jarvis_gate", two)
+    G2 = load_module("jarvis_gate", without)
     with simulated_clock(G2) as clock:
         box = {}
         t = ask(G2, "send_email", box)
         row = wait_for_row(G2, box)
         if row is None:
-            return check("the routine card was raised on the two-patch stack", False,
-                         "no row")
-        check("WITHOUT show-card-timer.patch the same card carries NO expires_in",
+            return check("the routine card was raised without the timer block",
+                         False, "no row")
+        check("WITHOUT the timer block the same card carries NO expires_in",
               "expires_in" not in row, sorted(row))
         clock.advance(60)
         listed = row_of(G2, row["id"])
         check("...and it still carries none a minute later",
               listed is not None and "expires_in" not in listed,
               listed and sorted(listed))
-        check("...so every countdown assertion in this file comes from this patch",
-              "expires_in" in Path(G2.__file__).read_text(encoding="utf-8")
-              and 'd["expires_in"]' not in Path(G2.__file__).read_text(encoding="utf-8"),
-              "the two-patch stack already emits the field - it cannot be this patch's")
+        check("...so every countdown assertion in this file comes from that block",
+              'd["expires_in"]' not in Path(G2.__file__).read_text(encoding="utf-8"),
+              "the cut-out copy already emits the field - it cannot be the timer block")
         t.join(timeout=10)
 
-    three, why = built()
-    if three is None:
+    full, why = built()
+    if full is None:
         return skip(why)
-    G3 = load_module("jarvis_gate", three)
+    G3 = load_module("jarvis_gate", full)
     with simulated_clock(G3):
         box = {}
         t = ask(G3, "send_email", box)
         row = wait_for_row(G3, box)
-        check("WITH the patch the same card carries it (the difference is the patch)",
+        check("WITH the block the same card carries it (the difference is the block)",
               row is not None and row.get("expires_in") == WINDOW,
               {"row": row, "error": box.get("error"), "no_row": box.get("no_row"),
                "file": G3.__file__})
@@ -665,13 +777,15 @@ def t_the_timer_is_the_new_patch_and_not_the_base():
 
 
 if __name__ == "__main__":
-    for fn in (t_the_three_patch_stack_is_the_published_base_plus_patches,
+    for fn in (t_the_base_carries_the_timer,
                t_a_waiting_routine_card_counts_the_request_down,
+               t_the_timer_counts_from_the_request_moment_not_from_created,
+               t_a_stopped_request_shows_no_grace_on_the_card,
                t_a_ceremony_card_and_an_ended_request_carry_no_timer,
                t_the_field_is_never_zero_or_negative,
                t_nothing_expires_or_is_refused_because_of_the_field,
                t_a_deny_still_clears_the_card_and_a_late_approve_still_409s,
-               t_the_timer_is_the_new_patch_and_not_the_base):
+               t_the_timer_is_in_the_base_and_not_an_earlier_layer):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

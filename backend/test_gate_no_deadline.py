@@ -13,12 +13,16 @@ the read-time sweep left a timed-out request's card on `/api/pending` with a
 live Approve that was guaranteed to answer `409 LATE_APPROVAL` after Windows
 Hello - the "zombie Approve button" (Gemini F3, ruling f).
 
-WHAT THE STACK DOES NOW (`backend/no-deadline-cards.patch`, applied after
-`no-expiry-cards.patch`), THE HONEST SYNTHESIS:
+WHAT THE PUBLISHED BASE DOES NOW (the 2026-10-28 no-deadline ruling;
+`no-deadline-cards.patch` and `no-expiry-cards.patch` were retired into the base
+on 2026-11-26), THE HONEST SYNTHESIS:
 
-  * NO screen draws a countdown, and `/api/pending` sends no `expires_in` for
-    any card: while a request is genuinely waiting its card shows Approve and
-    Deny and no clock;
+  * NO card has a deadline of its own, and nothing is refused because a clock
+    reached zero. Since 2026-10-30 `/api/pending` DOES send `expires_in` for a
+    routine card whose REQUEST is still waiting - a display-only countdown of
+    that request's remaining wait, proven by
+    `backend/test_gate_card_timer.py` - and it is absent once the request has
+    stopped waiting;
   * the REQUEST that raised a routine card still stops waiting after the
     shipped window - a thread held for ever is not a permission. `waited_until`,
     written at the INSERT, is the last moment a "yes" can still be carried out;
@@ -38,16 +42,18 @@ WHAT THE STACK DOES NOW (`backend/no-deadline-cards.patch`, applied after
 
 WHAT THIS PROVES
 
-  1. t_the_stack_is_the_published_base_plus_both_patches
-     Both patches apply with `git apply` to `jarvis-backend/jarvis_gate.py`,
-     the result compiles, `timeout_for()` is the REQUEST window (None for the
-     four ceremonies, the shipped 900 for the rest), `pending()` still runs
-     `_expire_overdue()` before its SELECT, the queue emits no `expires_in`,
-     and the rows carry `waited_until`. The base is not edited to make it fit.
+  1. t_the_base_carries_both_changes
+     The published base itself carries both changes: `timeout_for()` is the
+     REQUEST window (None for the four ceremonies, the shipped 900 for the
+     rest), `pending()` still runs `_expire_overdue()` before its SELECT, the
+     timer it sends is the row's own `waited_until`, and the rows carry
+     `waited_until`. There is no patch to apply and no `backend/` twin.
   2. t_a_card_whose_request_ended_is_still_pending_inside_the_grace
-     The request ends at the shipped window (the caller reads timed_out); the
-     ROW is still 'pending', `pending()` still serves it, and it carries no
-     `expires_in` - so no screen can draw a countdown or "Timed out".
+     A waiting routine card carries the request's timer; the request ends at
+     the shipped window (the caller reads timed_out); the ROW is still
+     'pending', `pending()` still serves it, and the timer is gone - so no
+     screen can draw a clock or "Timed out" for a card that has stopped
+     waiting.
   3. t_the_read_sweep_takes_the_card_after_the_grace_so_no_approve_is_left
      Advance past `waited_until + 60`; the NEXT `pending()` settles it: the row
      is 'expired' (a lapse, never a denial), it is not listed, and an Approve
@@ -74,10 +80,11 @@ WHAT THIS PROVES
      The "the same request is already waiting for you" bug cannot come back
      through a card whose request has gone.
 
-HOW THE GATE IS LOADED. As `backend/test_gate_no_expiry.py` does it: the
-published base in `jarvis-backend/` is copied to a scratch folder, both patches
-are applied with `git apply` (no fuzz), and the result is imported. Needs
-nothing from the owner's PC and no network; runs anywhere git does.
+HOW THE GATE IS LOADED. `jarvis_gate.py` is the owner's file; this repository
+holds the published base in `jarvis-backend/`. This suite copies that base into
+a scratch folder as it is - since 2026-11-26 it carries both changes, so no
+patch is applied and `git` is not needed - and imports the result. Needs
+nothing from the owner's PC and no network.
 """
 from __future__ import annotations
 
@@ -102,8 +109,6 @@ sys.path.insert(0, str(HERE))
 import _gitapply  # noqa: E402  (beside this file; its docstring says why)
 from _where import REPO  # noqa: E402
 
-EXPIRY_PATCH = HERE / "no-expiry-cards.patch"
-DEADLINE_PATCH = HERE / "no-deadline-cards.patch"
 BASE = REPO / "jarvis-backend"
 BACKEND = REPO / "backend"
 TOML = BASE / "jarvis-framework.toml"
@@ -146,15 +151,13 @@ _BUILT: dict = {}
 
 
 def built() -> tuple:
-    """(folder holding the patched gate and the two SHIPPED copies, why not)."""
+    """(folder holding the base gate and the two SHIPPED copies, why not).
+
+    The base is copied as it is: since 2026-11-26 it carries the no-expiry and
+    no-deadline changes itself, so no patch is applied and `git` is not needed.
+    """
     if "dir" in _BUILT:
         return _BUILT["dir"], ""
-    git = shutil.which("git")
-    if not git:
-        return None, "git is not installed, so the patch cannot be applied"
-    for patch in (EXPIRY_PATCH, DEADLINE_PATCH):
-        if not patch.is_file():
-            return None, f"{patch.name} is missing"
     base_gate = BASE / "jarvis_gate.py"
     if not base_gate.is_file():
         return None, f"{base_gate} is missing"
@@ -168,14 +171,6 @@ def built() -> tuple:
         if not src.is_file():
             return None, f"{src} is missing"
         d.joinpath(name).write_bytes(src.read_bytes().replace(b"\r\n", b"\n"))
-    env = _gitapply.env_for(git, d)
-    for patch in (EXPIRY_PATCH, DEADLINE_PATCH):
-        r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
-                            "apply", str(patch)], cwd=str(d), capture_output=True,
-                           text=True, env=env)
-        if r.returncode != 0:
-            return None, (f"git apply refused {patch.name}: "
-                          f"{(r.stderr or r.stdout).strip().splitlines()[:3]}")
     _BUILT["dir"] = d
     return d, ""
 
@@ -295,7 +290,7 @@ def seed(gate, action: str, waited_until, age: float = 0.0) -> str:
 # 1. The stack's own footing
 # ---------------------------------------------------------------------------
 
-def t_the_stack_is_the_published_base_plus_both_patches():
+def t_the_base_carries_both_changes():
     text = TOML.read_text(encoding="utf-8")
     m = re.search(r"^\s*approval_timeout_seconds\s*=\s*(\d+)\s*$", text, re.M)
     check("the shipped settings declare approval_timeout_seconds", m is not None)
@@ -305,13 +300,16 @@ def t_the_stack_is_the_published_base_plus_both_patches():
 
     d, why = built()
     if d is None:
-        return check("both patches apply to the published base", False, why)
-    check("no-expiry-cards.patch and no-deadline-cards.patch apply with git", True)
-    check("...and the base was not edited to make them fit",
-          "waited_until" not in (BASE / "jarvis_gate.py").read_text(encoding="utf-8"),
-          "the base already contains the change - re-anchor the patch instead")
-
+        return check("the published base carries both changes", False, why)
     G = load_module("jarvis_gate", d)
+    check("the published base itself carries the 2026-10-28 no-deadline change",
+          G.APPROVAL_NEVER_EXPIRES and G.timeout_for("pair_device") is None
+          and callable(getattr(G, "still_waiting", None))
+          and callable(getattr(G, "_wait_open", None))
+          and callable(getattr(G, "_expire_overdue", None)))
+    check("...and no `backend/jarvis_gate.py` twin was invented for it",
+          not (BACKEND / "jarvis_gate.py").exists())
+
     after = Path(G.__file__).read_text(encoding="utf-8")
     # The EXACT def line, not a bare "def pending": the queue builder must be
     # the function this reads, and a helper whose name starts with the same
@@ -320,20 +318,18 @@ def t_the_stack_is_the_published_base_plus_both_patches():
     # `after.split("def pending")` landed inside it and every check below read
     # the wrong body. The old split was always ambiguous; it is now precise.
     pending_body = after.split("def pending() -> list[dict]:")[1].split("def decide(")[0]
-    check("the patched module compiles", True)     # importing it is the proof
+    check("the base module compiles", True)     # importing it is the proof
     for action in NEVER_EXPIRES:
         check(f"{action}: its REQUEST waits for its own flow",
               G.timeout_for(action) is None, G.timeout_for(action))
     for action in ROUTINE:
         check(f"{action}: its REQUEST keeps the shipped 900",
               G.timeout_for(action) == float(MINUTES_15), G.timeout_for(action))
-    check("the patch adds no second copy of a shipped module",
-          set(re.findall(r"^\+\+\+ b/(.+)$",
-                         DEADLINE_PATCH.read_text(encoding="utf-8"), re.M))
-          == {"jarvis_gate.py"})
-    check("...and it is the one that removes the countdown",
-          'd["expires_in"]' not in pending_body,
-          "pending() still emits expires_in")
+    # The timer's formula (`waited_until`, never `created` + the action's
+    # window) is proved by BEHAVIOUR in backend/test_gate_card_timer.py -
+    # `t_the_timer_counts_from_the_request_moment_not_from_created`, whose
+    # caller-bounded card makes the two formulas disagree. Not pinned here as
+    # source text: that would be debt the source-pin ceiling does not allow.
     check("...while KEEPING #965's read-time sweep",
           "_expire_overdue(c)" in pending_body,
           "pending() no longer settles a card whose request has finished")
@@ -367,7 +363,9 @@ def t_a_card_whose_request_ended_is_still_pending_inside_the_grace():
         if row is None:
             return check("the routine card was raised", False,
                          box.get("no_row", "no pending row"))
-        check("a routine card carries no expires_in at all", "expires_in" not in row, row)
+        check("a waiting routine card carries the request's display-only timer",
+              row.get("expires_in") in (MINUTES_15, MINUTES_15 - 1),
+              row.get("expires_in"))
 
         clock.advance(MINUTES_15 - 1)
         time.sleep(0.4)
@@ -637,7 +635,7 @@ def t_a_lapsed_card_does_not_swallow_a_new_identical_request():
 
 
 if __name__ == "__main__":
-    for fn in (t_the_stack_is_the_published_base_plus_both_patches,
+    for fn in (t_the_base_carries_both_changes,
                t_a_card_whose_request_ended_is_still_pending_inside_the_grace,
                t_the_read_sweep_takes_the_card_after_the_grace_so_no_approve_is_left,
                t_a_late_approval_is_refused_with_the_reason_and_the_card_leaves,

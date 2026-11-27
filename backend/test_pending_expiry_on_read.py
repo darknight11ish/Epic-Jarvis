@@ -2,18 +2,19 @@
 
     python3 test_pending_expiry_on_read.py
 
-THIS SUITE IS ABOUT ITS PATCH IN ISOLATION, AND THE STACK EXTENDS IT
-(2026-10-28). It proves the every-read sweep `no-expiry-cards.patch` added for
-the owner's "approval cards that are expired" report. The owner then ruled
-that no card shows a time limit ("if there doesn't need to be a time limit
-don't have one"), and `no-deadline-cards.patch` - applied AFTER this one in the
-stack - KEEPS this sweep and changes only what it keys on: a routine row
-records the moment its request stops waiting (`waited_until`) and is settled
-once that plus the same 60-second grace has passed, while the four ceremonies
-have no such moment and are never touched. A card is drawn with no countdown
-at all. Both halves are proven on the full stack by
-`backend/test_gate_no_deadline.py`; this file keeps the evidence for the patch
-it is about.
+THIS SUITE IS ABOUT A CHANGE THAT IS NOW THE PUBLISHED BASE'S OWN (2026-11-26).
+It proves the every-read sweep `no-expiry-cards.patch` added for the owner's
+"approval cards that are expired" report. The owner then ruled that no card
+shows a time limit ("if there doesn't need to be a time limit don't have one"),
+and `no-deadline-cards.patch` - which came after it in the stack - KEEPS this
+sweep and changes only what it keys on: a routine row records the moment its
+request stops waiting (`waited_until`) and is settled once that plus the same
+60-second grace has passed, while the four ceremonies have no such moment and
+are never touched. A card is drawn with no countdown at all. On 2026-11-26 both
+patches were retired into `jarvis-backend/jarvis_gate.py`, so this suite copies
+the base and drives the sweep exactly as it ships; the full card life is
+proven by `backend/test_gate_no_deadline.py` and
+`backend/test_gate_card_timer.py` against the same base.
 
 WHY THIS EXISTS
 
@@ -75,11 +76,10 @@ WHAT THIS PROVES
 HOW THE GATE IS LOADED. `jarvis_gate.py` is the owner's file; this repository
 holds the published base in `jarvis-backend/` (see jarvis-backend/README.md and
 backend/test_base_matches_repo.py). This suite copies that base into a scratch
-folder and applies `no-expiry-cards.patch` to it with `git apply`, so what it
-drives is the patch's real output on the file it is published against - not a
-copy typed to suit the test.
+folder and drives it directly: since 2026-11-26 the base carries the sweep
+itself, so no patch file is applied and `git` is not needed.
 
-Needs nothing from the owner's PC and no network. Runs anywhere git does.
+Needs nothing from the owner's PC and no network.
 """
 from __future__ import annotations
 
@@ -100,7 +100,6 @@ sys.path.insert(0, str(HERE))
 import _gitapply  # noqa: E402  (beside this file; its docstring says why)
 from _where import REPO  # noqa: E402
 
-PATCH = HERE / "no-expiry-cards.patch"
 BASE = REPO / "jarvis-backend"
 
 #: The shipped `approval_timeout_seconds` #378 left on 2026-10-13: 15 minutes.
@@ -126,25 +125,18 @@ def check(name, cond, detail=""):
 # ---------------------------------------------------------------------------
 
 def built():
-    """(folder holding the patched gate, why not)."""
-    git = shutil.which("git")
-    if not git:
-        return None, "git is not installed, so the patch cannot be applied"
-    if not PATCH.is_file():
-        return None, f"{PATCH.name} is missing"
+    """(folder holding the base gate, why not).
+
+    The base is copied as it is: since 2026-11-26 it carries the read-time
+    sweep itself (`no-expiry-cards.patch` was retired), so no patch is applied
+    and `git` is not needed.
+    """
     base_gate = BASE / "jarvis_gate.py"
     if not base_gate.is_file():
         return None, f"{base_gate} is missing"
     d = Path(tempfile.mkdtemp(prefix="jarvis-read-sweep-"))
     d.joinpath("jarvis_gate.py").write_bytes(
         base_gate.read_bytes().replace(b"\r\n", b"\n"))
-    env = _gitapply.env_for(git, d)
-    r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
-                        "apply", str(PATCH)], cwd=str(d), capture_output=True,
-                       text=True, env=env)
-    if r.returncode != 0:
-        return None, (f"git apply refused {PATCH.name}: "
-                      f"{(r.stderr or r.stdout).strip().splitlines()[:2]}")
     return d, ""
 
 
@@ -193,15 +185,24 @@ def seed(G, action: str = "send_email", age: float = 0.0,
     A row written straight into the table is the state a card is left in when
     its waiting thread dies - which is the case this suite is about and the one
     a `check()`-driven test cannot reach without killing a process.
+
+    THE REQUEST'S END IS WRITTEN, as `check()` writes it: `waited_until` is the
+    row's `created` plus the fifteen-minute window (the 2026-10-28 model), and
+    a ceremony action carries NULL because its own flow, not a clock, settles
+    it. Without the column the sweep's own rule - a routine row with no awaited
+    moment predates the change and is settled at once - would take every
+    routine card on the first read, which is not the state described below.
     """
     G._init()
     rid = uuid.uuid4().hex[:12]
+    created = time.time() - age
+    waited_until = None if action in NEVER_EXPIRES else created + MINUTES_15
     with closing(G._connect()) as c:
         c.execute(
             "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,"
-            "raised,target_digest) VALUES (?,?,?,?,?,?,?,?,?)",
-            (rid, action, "ask", detail, prompt, state, time.time() - age,
-             None, None))
+            "raised,target_digest,waited_until) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (rid, action, "ask", detail, prompt, state, created,
+             None, None, waited_until))
     return rid
 
 
@@ -372,14 +373,20 @@ def t_a_swept_card_no_longer_blocks_an_identical_request():
     stale = seed(G, action=action, age=MINUTES_15 + GRACE + 60,
                  detail="{}", prompt=prompt)
     with closing(G._connect()) as c:
-        check("a stuck card is what 'the same request is already waiting for "
-              "you' was matching",
-              G._pending_card_id(c, action, detail, prompt) == stale)
+        check("a card whose request has stopped waiting is NOT 'the same "
+              "request already waiting for you' - nothing can run its yes",
+              G._pending_card_id(c, action, detail, prompt) is None)
     G.pending()
     with closing(G._connect()) as c:
         check("...and after the read settles it, a new identical request gets "
               "a card of its own",
               G._pending_card_id(c, action, detail, prompt) is None)
+    # CONTROL: the dedupe still works for a card whose request IS waiting,
+    # which is what the refusal above is for.
+    live = seed(G, action=action, age=1.0, detail="{}", prompt="a different ask")
+    with closing(G._connect()) as c:
+        check("CONTROL: a live identical request still reuses its card",
+              G._pending_card_id(c, action, detail, "a different ask") == live)
 
 
 if __name__ == "__main__":

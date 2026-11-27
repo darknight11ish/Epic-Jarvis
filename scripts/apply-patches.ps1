@@ -279,48 +279,13 @@ $PATCHES = @(
     # `d["notice"]` line); ui-control-wiring and note-capture only add lines
     # above it, so anywhere after approval-notice works - last is simplest.
     'approval-expiry.patch'
-    # Which cards expire at all (the owner's ruling of 2026-10-23, Q1): ONLY
-    # pairing a device, registering a phone's approval key and restoring a
-    # backup wait without a deadline; every routine card keeps the 15-minute
-    # window approval-expiry just added. Its context in jarvis_gate.pending()
-    # is approval-expiry's output, so it must come after that patch; its other
-    # hunks sit on the module's own APPROVAL_TIMEOUT block, on check()'s
-    # deadline line, and on the stale-row sweep in _init(), none of which an
-    # earlier patch writes. Its jarvis_owner_check.py and jarvis_devices.py
-    # halves are those modules' own lines: both are shipped whole, not
-    # patched. Windows Hello still guards every risky card, and the re-read
-    # after the prompt is what keeps a card with no deadline answerable only
-    # while it is the live one.
-    'no-expiry-cards.patch'
-    # NO card shows a countdown (the owner's ruling of 2026-10-28: "if there
-    # doesn't need to be a time limit don't have one"), and a card whose
-    # request has stopped waiting leaves the queue: #965's read-time sweep is
-    # KEPT, re-keyed on the moment recorded on the row (`waited_until`) plus
-    # the same 60-second grace, so no screen is handed a live Approve that can
-    # only answer 409. A late yes inside the grace is still refused in plain
-    # words, and a Deny always works. Its context is no-expiry-cards' output -
-    # the APPROVAL_NEVER_EXPIRES block, timeout_for()'s docstring, check()'s
-    # deadline line and pending()'s sweep call - so it MUST come after that
-    # patch; its other hunks sit on the module's own INSERT, late-answer block,
-    # decide(), _pending_card_id() and withdraw() docstring, none of which an
-    # earlier patch writes. Its jarvis_owner_check.py half is the shipped
-    # module.
-    'no-deadline-cards.patch'
-    # THE TIMER ON EVERY CARD WITH A LIMITED TIME (the owner's ruling of
-    # 2026-10-30: "if there is a card with a limited time of any kind, be sure
-    # to put the timer on it"). It puts `expires_in` back on `/api/pending` for
-    # a routine card whose REQUEST is still waiting, as the whole seconds left
-    # until the row's own `waited_until` - never 0, never negative, and absent
-    # for a ceremony card (no `waited_until`) and for a request that has
-    # stopped waiting. DISPLAY ONLY: the 2026-10-28 no-deadline ruling is not
-    # weakened, no card gains a deadline of its own, nothing auto-approves, a
-    # Deny always works, and the read-time sweep and the late-approval 409 are
-    # untouched. The 60-second grace is NOT counted down (see the patch's own
-    # note): a clock that outlived the request would promise what the gate
-    # refuses. Its context is no-deadline-cards' output - pending()'s SELECT and
-    # the comment block where `expires_in` used to be - so it MUST come after
-    # that patch; nothing else in the list writes those lines.
-    'show-card-timer.patch'
+    # RETIRED 2026-11-26: `no-expiry-cards.patch`, `no-deadline-cards.patch` and
+    # `show-card-timer.patch` used to sit here (positions 36-38). Their content
+    # is now IN the published base (`jarvis-backend/jarvis_gate.py`), so
+    # applying them to a file brought to that base would refuse - the 2026-10-28
+    # request-bounding machinery and the 2026-10-30 card timer are base content,
+    # not patch content. See
+    # decisions.d/2026-11-26-the-base-gate-carries-the-request-bounding.md.
     # Refuses every spelling of "every network interface" ("0", "0x0", ...)
     # as the bind address. Its context is loopback-too's output (the
     # _loopback_companion function and its call in main()), so it goes
@@ -3367,6 +3332,13 @@ $SHIPPED = @(
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     # It is the LAST entry, and it stays last.
+    # The homework loop (jarvis_homework.py, 2026-11-26): replay a sentence the
+    # owner complained about through the REAL matcher, say which route claimed
+    # it or that none did, explain the code location through
+    # jarvis_self_improve, and stop wherever a card has to answer. It edits
+    # nothing, pushes nothing and merges nothing. Read-only, so a private chat
+    # hands it to the model instead. Its suite is backend/test_homework_loop.py.
+    'jarvis_homework.py'         # the homework loop: the routing replay, the honest explanation, the merge gate that names the seven checks
     'jarvis_bench.py'
 )
 

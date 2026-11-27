@@ -1613,6 +1613,19 @@ def _match(text, now: float, conversation: Optional[str] = None,
     if _STOP_EVERYTHING.fullmatch(s):
         return Intent("stop_all")
 
+    # --- the homework loop (2026-11-26) --------------------------------------
+    # "do homework on that" / "homework about the boiler chat" - point at an
+    # exchange, replay ITS routing through this very function, and explain it.
+    # Asked HERE, before the open/settings grammars, because a real neighbour
+    # swallow was measured on this tree: "start homework about the note merge"
+    # reached `open_app` (the "start <program>" shape) and so never reached a
+    # note lane. The trigger requires the word "homework" and an asking verb
+    # around it, so "open my notes", "start a timer" and "let's do the
+    # shopping" keep the lanes they had.
+    hwk = _homework_intent(s)
+    if hwk is not None:
+        return hwk
+
     # --- the hybrid/cloud settings, asked plainly (2026-11-18) ---------------
     # The owner's own words for the three things he keeps asking about, read
     # from THIS PC's files and answered in a second: which cloud service is
@@ -17244,6 +17257,56 @@ def _accounts_module():
 
 
 # --------------------------------------------------------------------------
+#   The homework loop, asked in chat (2026-11-26)
+# --------------------------------------------------------------------------
+# The owner's own words: *"I would like to easily be able to do get homework
+# with Atlas to fix these things by just asking in the same conversation or in
+# a different conversation and referring to an older conversation"*. So the
+# sentence is the entry point: "do homework on that" points at the exchange in
+# front of him, and "do homework on the boiler chat" at an older one by its
+# subject.
+#
+# THIS GRAMMAR ONLY DECIDES THAT HE ASKED. Everything after that - finding the
+# exchange, replaying the routing through `match` itself, reading the code
+# location out of the source - lives in `jarvis_homework.py`, which writes
+# nothing, calls no model for the routing fact and can push and merge nothing.
+# Adding "and draft the fix" also asks for the change to be DRAFTED (still not
+# applied): that is `jarvis_self_improve.draft`'s own refusal boundary, and the
+# cards that carry it are the model's tools, not this lane's.
+_WAKE_PREFIX = r"(?:(?:hey|hi|ok|okay|atlas|jarvis)\b[,\s]+)*"
+_HOMEWORK = re.compile(
+    _WAKE_PREFIX +
+    r"(?:(?:do|start|begin|give\s+me|get\s+me|let'?s\s+do|lets\s+do|"
+    r"can\s+we\s+do|we\s+should\s+do)\s+(?:some\s+|a\s+bit\s+of\s+)?homework"
+    r"(?:\s+(?:on|about|with\s+me\s+on|for|over)\s+(.*))?"
+    r"|(?:some\s+)?homework\s+(?:on|about)\s+(.*))"
+    r"(?:\s*,?\s*please)?")
+#: The clause that also asks for a DRAFT - "do homework on that and draft the
+#: fix". Removed from the reference BEFORE it is looked up, or the title search
+#: would look for "note merge and draft the fix" and find nothing.
+_HOMEWORK_DRAFT = re.compile(
+    r"\s+(?:and\s+|then\s+|also\s+)*(?:draft|write|prepare|propose)\s+.*$", re.I)
+
+
+def _homework_intent(s: str) -> Optional[Intent]:
+    """The intent for "do homework on that", or None.
+
+    `ref` is what the owner pointed at, in his own words - "" means the
+    exchange in this conversation. `jarvis_homework.clean_reference` decides
+    what counts as "this one" and what is a conversation's name, so that rule
+    lives in one place. `draft` asks for the fix to be drafted as well.
+    """
+    match = _HOMEWORK.fullmatch(s)
+    if not match:
+        return None
+    ref = (match.group(1) or match.group(2) or "").strip(" ,.;:!?")
+    draft = _HOMEWORK_DRAFT.search(s) is not None
+    if draft:
+        ref = _HOMEWORK_DRAFT.sub("", ref).strip(" ,.;:!?")
+    return Intent("homework_loop", {"ref": ref, "draft": draft})
+
+
+# --------------------------------------------------------------------------
 #   The two local review gates, answered here and not by the model (16E)
 # --------------------------------------------------------------------------
 # "review my branch" and "check the records before I push" are the two
@@ -17364,6 +17427,51 @@ def _run_self_review(intent: Intent, *, live: bool = False) -> Result:
                       intent.name, read=["review_changes"])
     return Result(str(out.get("text") or ""), intent.name,
                   read=["review_changes"])
+
+
+def _homework_module():
+    """`jarvis_homework`, or None on a backend that predates it."""
+    try:
+        import jarvis_homework as HW
+        return HW
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _run_homework(intent: Intent, *, messages=None, live: bool = False) -> Result:
+    """Answer the homework loop from `jarvis_homework`.
+
+    Read-only and cardless: the module reads the encrypted history through its
+    own readers, runs THIS matcher in process, asks `jarvis_self_improve` for
+    the code location, and drafts nothing unless the owner asked for a draft -
+    and even then the draft is words, never an applied change. The answer is
+    marked `private` because it quotes the owner's own chat back to him, which
+    is the same marking a memory answer carries.
+
+    A missing module, an exchange that cannot be found and a loop that fails
+    are each ONE plain sentence: never a traceback, and never a claim that
+    something was replayed when it was not.
+    """
+    HW = _homework_module()
+    if HW is None:
+        return Result(_HOMEWORK_MISSING, intent.name, private=True)
+    args = dict(intent.f or {})
+    try:
+        out = HW.homework(str(args.get("ref") or ""), messages=messages or (),
+                          draft=bool(args.get("draft")), live=live)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"I could not run the homework loop "
+                      f"({type(exc).__name__}), so nothing was looked at.",
+                      intent.name, private=True)
+    reply = str(getattr(out, "reply", "") or "").strip()
+    if not reply:
+        return Result("I could not run the homework loop, so nothing was looked "
+                      "at.", intent.name, private=True)
+    return Result(reply, intent.name, private=True)
+
+
+_HOMEWORK_MISSING = ("Your PC's Jarvis has no homework loop yet - run "
+                     "apply-patches.ps1 on the PC. Nothing was looked at.")
 
 
 ACCOUNTS_MISSING = ("Your PC's Jarvis cannot read its accounts list yet - run "
@@ -34996,6 +35104,15 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # nothing is asked. `live` only changes the length: Live speaks its answer.
     if n in ("review_packet", "record_check"):
         return _run_self_review(intent, live=live)
+    # The homework loop (2026-11-26): point at an exchange, replay its routing
+    # through `match` itself, explain the code location, and refuse to act
+    # beyond a draft. Read-only and cardless - `jarvis_homework` writes no file,
+    # opens no socket and calls no GitHub tool - so nothing is planned here and
+    # nothing is asked. `messages` is this turn's own history, which is where
+    # "do homework on that" finds the exchange in the conversation in front of
+    # him; an older one is read from the encrypted log.
+    if n == "homework_loop":
+        return _run_homework(intent, messages=messages, live=live)
     # The measured self-facts and the six hard safety sentences (2026-11-06).
     # Each is a fixed answer from the module that owns the value: no model, no
     # card, no write. A private chat's gate decides about the self-facts on its
@@ -36430,6 +36547,14 @@ READ_ONLY_INTENTS = frozenset({
     # and the record check read a checkout on this PC and write nothing, so
     # neither may take away what "cancel that" would undo.
     "review_packet", "record_check",
+    # The homework loop (2026-11-26): it reads the encrypted chat history
+    # through the readers History already uses, runs `match` in process, reads
+    # the source through `jarvis_self_improve`, and writes nothing at all - no
+    # file, no socket, no GitHub token, no card. So it must not take away what
+    # "cancel that" would undo. `homework_loop` is also why a private chat
+    # hands this sentence to the model instead of answering it here: quoting an
+    # earlier exchange back is exactly what a private chat must not do.
+    "homework_loop",
     # "what's next on this project" (2026-11-19): a READ of the project's own
     # stores that writes nothing and raises no card. Its write sibling
     # (`project_benchmark_log`) is deliberately ABSENT - it can write and can

@@ -28,25 +28,26 @@ one-shot:
     `cancel_scheduled` tool row and `github_mode`'s risk + tool rows. A model
     that does not answer both is refused and the backup is put back.
 
-THE BASE IS A PUBLISHED SNAPSHOT, NOT A SUPERSET OF THE LIVE FILE. It was
-copied out of the owner's backend on 2026-10-06 and has been grown by hand
-since; the live gate is that program plus the patch stack's later hunks.
-Measured for this replacement, the base does NOT carry the 2026-10-28
-request-bounding machinery (`waited_until`, `_wait_open`, `_expire_overdue`,
-`still_waiting`) or the 2026-10-30 card timer: its `pending()` still counts a
-card down from `created`. So this tool restores the base's approval model -
-the new rows and the base's own fixes, with the older countdown - and it does
-not merge the patch-carried behaviour back in. That is said on every run,
-before anything is written, and in the pull request that ships it. If the
-patch-carried behaviour has to survive, it must be taken into the base first;
-that is a separate, reviewed change and not something this one-shot tool can
-invent.
+THE BASE IS A PUBLISHED SNAPSHOT, BUT IT NOW CARRIES THE APPROVAL MODEL THE
+LIVE GATE HAS. It was copied out of the owner's backend on 2026-10-06 and has
+been grown by hand since; the live gate is that program plus the patch stack's
+later hunks. Measured for the 2026-11-26 replacement, the base did NOT carry
+the 2026-10-28 request-bounding machinery (`waited_until`, `_wait_open`,
+`_expire_overdue`, `still_waiting`) or the 2026-10-30 card timer, so writing it
+would have destroyed them. The same day's second change put all of that INTO
+the base and retired the three patches that carried it
+(`no-expiry-cards.patch`, `no-deadline-cards.patch`,
+`show-card-timer.patch`), so the file this tool writes keeps the model the
+owner's install has. `approval_model_note()` still measures what the base
+actually carries and says so before a write; with today's base the note is
+empty because there is nothing to warn about.
 
-This tool does NOT apply patches either. Measured 2026-11-26: 58 of the 62
-`jarvis_gate.py` patches do not apply to the published base, and 56 of 62 do
-not apply to the live file, so neither is "the patch stack's pre-image". The
-replacement is a lineage reset onto the file the repository publishes, and
-new gate rows reach it through `jarvis-backend/jarvis_gate.py` +
+This tool does NOT apply patches either. Measured 2026-11-26 over the 59
+`jarvis_gate.py` patches that remain in the stack: 58 do not apply to the
+published base, and 56 of the 62 then-current ones did not apply to the live
+file, so neither is "the patch stack's pre-image". The replacement is a lineage
+reset onto the file the repository publishes, and new gate rows reach it
+through `jarvis-backend/jarvis_gate.py` +
 `tools/repair_live_backend_gaps.py`, not through a new patch.
 
 WHY THE HASHES ARE IN THE FILE AND NOT A FLAG. A flag would make the guard
@@ -98,10 +99,13 @@ LIVE_GATE_SHA256 = (
     "c2a31981d7863c1a08e2200cc208c8f0950bead1503d40614cbcaa0ce06a2f95"
 )
 
-#: The base that was diffed against it (232,674 bytes). A moved base needs
-#: `--allow-new-base`, which says so in the output.
+#: The base that was diffed against it (232,674 bytes when the 2026-11-26
+#: replacement was measured; 254,627 bytes / 4,140 lines since the same day's
+#: second change put the 2026-10-28 request-bounding machinery and the
+#: 2026-10-30 card timer INTO the base). A moved base needs `--allow-new-base`,
+#: which says so in the output.
 BASE_GATE_SHA256 = (
-    "03964d30ebdd944be4b257d06e1948853441d93dfb82a3a2c95d9ff0e3db284c"
+    "be9f7469c1dfe833efc60f3e85bb6863215e6a7bbafe6fd5643ca80421d558a6"
 )
 
 #: The rows the replacement must prove are there after the write. They are
@@ -189,20 +193,21 @@ def _line_delta(old: bytes, new: bytes) -> tuple[int, int]:
 def approval_model_note(base_bytes: bytes) -> str:
     """What approval model the base carries, measured from its own bytes.
 
-    The base is a published snapshot, not a superset of the live file. The
-    request-bounding rewrite of 2026-10-28/30 is patch-carried, so a base
-    without `waited_until` still counts a card down from `created` and sweeps
-    stale rows only at start-up. Saying that out loud before a write is the
-    difference between a replacement and a surprise.
+    The base is a published snapshot, and the request-bounding rewrite of
+    2026-10-28/30 used to be patch-carried. Since 2026-11-26 the published
+    base CARRIES it, so the state this warns about is only reachable by
+    `--allow-new-base` naming an older base on purpose - and then the warning
+    is the difference between a replacement and a surprise.
     """
     if b"waited_until" in base_bytes:
         return ""
     return ("NOTE: this base carries the older countdown model - `pending()` "
             "counts a card down from `created` and stale rows are swept only "
-            "at start-up. The live file's patch-carried 2026-10-28 read-time "
-            "sweep, no-deadline ceremonies and `still_waiting()` are NOT in "
-            "it, and neither is the 2026-10-30 card timer. Those must be "
-            "taken into the base separately if they are to survive.")
+            "at start-up. The 2026-10-28 read-time sweep, the no-deadline "
+            "ceremonies, `still_waiting()` and the 2026-10-30 card timer are "
+            "NOT in it. They are base content since 2026-11-26, so an older "
+            "base was named with --allow-new-base and this write would replace "
+            "them.")
 
 
 def reimport_check(live_dir: Path) -> tuple[bool, str]:
@@ -347,11 +352,10 @@ def replace_gate(
     out("re-import: a fresh interpreter imported the written file and found "
         f"`{_MUST_HAVE[0]}` (cardless) and `{_MUST_HAVE[1]}` (its own risk and "
         "tool rows).")
-    out("NEXT: the live gate is now the published base. New gate rows reach it "
-        "through jarvis-backend/jarvis_gate.py + "
-        "tools/repair_live_backend_gaps.py, not through a new patch; the "
-        "patch-carried approval behaviour named above is not part of the base "
-        "and this tool does not invent it.")
+    out("NEXT: the live gate is now the published base, which carries the "
+        "2026-10-28 request-bounding machinery and the 2026-10-30 card timer. "
+        "New gate rows reach it through jarvis-backend/jarvis_gate.py + "
+        "tools/repair_live_backend_gaps.py, not through a new patch.")
     return 0
 
 

@@ -498,7 +498,7 @@ SUBSYSTEMS = (
         "modules": (
             "jarvis_self_portrait", "jarvis_self_improve", "jarvis_creator",
             "jarvis_identity", "jarvis_feedback", "selftest", "jarvis_self_code",
-            "jarvis_recent_changes",
+            "jarvis_recent_changes", "jarvis_homework",
         ),
         "paths": ("VERSION",),
         "key_modules": ("jarvis_self_portrait", "jarvis_self_code",
@@ -507,7 +507,8 @@ SUBSYSTEMS = (
         "tests": ("backend/test_self_portrait.py", "backend/test_self_facts.py",
                   "backend/test_self_knowledge.py", "backend/test_identity.py",
                   "backend/test_self_knowledge_honesty.py",
-                  "backend/test_creator_mode.py"),
+                  "backend/test_creator_mode.py",
+                  "backend/test_homework_loop.py"),
         "docs": ("docs/SELF-AWARENESS.md", "docs/ARCHITECTURE.md",
                  "docs/SELF-CODE-MAP.md"),
     },

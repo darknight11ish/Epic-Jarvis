@@ -104,13 +104,30 @@ def _block(text, marker):
 
 
 def t_site_1_the_row_keeps_it():
-    """Not a leak. The queue must hold the real thing or nobody can decide."""
+    """Not a leak. The queue must hold the real thing or nobody can decide.
+
+    Read as the STATEMENT that builds the queue, not as a whole-file literal.
+    The literal pin this replaces was
+    `"...prompt,created,raised FROM approvals" in s`, and the 2026-11-26 base
+    change - the three retired request-bounding patches, now base content -
+    added `waited_until` to that column list and split the string across two
+    literals. The behaviour was correct and the pin went red, which is the
+    "re-measure the site" failure `_block()` exists to stop. What must stay
+    true is the RULE, not the layout: the SELECT that feeds `pending()` still
+    reads `FROM approvals` and still carries `detail` and `prompt`, the two
+    columns holding what the owner is being asked about.
+    """
     s = src(GATE)
     if s is None:
         return check("the row stores what is being asked about", False, f"no {GATE}")
+    pending_body = _block(s, "def pending(")
+    check("pending() is still there to check", bool(pending_body))
+    select = _block(pending_body, "rows = c.execute(") or pending_body
     check("the row stores what is being asked about",
-          "SELECT id,action,tier,detail,prompt,created,raised FROM approvals" in s,
-          "pending() must return the real text - this is the one site that should")
+          "FROM approvals" in select
+          and all(col in select for col in SECRET_KEYS),
+          "pending() must return the real text - this is the one site that should: "
+          f"{select[:200]}")
 
 
 def t_site_2_the_route_is_behind_both_checks():

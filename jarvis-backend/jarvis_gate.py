@@ -27,6 +27,38 @@ Every path that is not an explicit approval denies:
   - the database cannot be opened at all         -> denied
 That last one matters. A gate that opens when it breaks is not a gate, so if
 this module cannot do its job it refuses rather than waving things through.
+
+A TIMER IS DRAWN, AND IT COUNTS THE REQUEST (the owner's ruling of 2026-10-30:
+"if there is a card with a limited time of any kind, be sure to put the timer
+on it"). The ruling below still holds for the CARD - no card carries a
+deadline of its own and nothing is refused because a clock reached zero - but
+a card whose REQUEST has a limited life now says so, in plain words, on every
+screen: `pending()` sends `expires_in` (whole seconds left until the row's own
+`waited_until`) while that request is still waiting, and both apps count it
+down. It is DISPLAY ONLY: the sweep, the refusal of a late tap and the 409 are
+exactly the ones the 2026-10-28 ruling left in place.
+
+NO TIMER WAS DRAWN ON THE CARD ITSELF, AND A CARD WHOSE REQUEST HAS FINISHED
+LEAVES (2026-10-28: "if there doesn't need to be a time limit don't have
+one"). The card offers Approve and Deny and no deadline of its own. What is
+bounded is the REQUEST: the thread that raised the card waits
+`approval_timeout_seconds` and then stops, because a thread held for ever is
+not a permission, and when it stops there is nothing left to carry out a
+"yes". The row records that moment (`waited_until`), and an approval is taken
+only while it is still open - a late tap is refused in plain words, never
+recorded as a yes that nothing runs.
+
+THE CARD LEAVES WITH ITS REQUEST, NOT WITH A COUNTDOWN (2026-10-28). Once
+`waited_until` plus the same 60-second grace has passed, `pending()`'s
+read-time sweep (`_expire_overdue`) marks the row 'expired' - #965's rule,
+kept, so no screen is ever handed a live Approve guaranteed to answer 409. It
+is a lapse, never a decision, and no client drives it: the sweep runs on the
+PC, at the moment the queue is read, from this machine's clock.
+
+The four cards of the owner's 2026-10-23 ruling (pairing a device, an approval
+key, a restore) carry no `waited_until` at all: their request waits until the
+flow withdraws the card, so they are answerable for as long as the owner
+needs and the sweep never touches them. See APPROVAL_NEVER_EXPIRES.
 """
 
 from __future__ import annotations
@@ -67,6 +99,176 @@ APPROVAL_TIMEOUT = float(os.environ.get(
     "JARVIS_APPROVAL_TIMEOUT",
     _cfg("autonomy", "approval_timeout_seconds", 900)))
 POLL_SECONDS = 0.25
+
+# Cards that do NOT expire: the three flows the owner approved on 2026-10-23
+# (ruling Q1), and nothing else. Pairing a device (its QR/text code, and the
+# old shared key's "bring back"), registering a phone's approval key, and
+# restoring a backup are interactive ceremonies the owner starts and has to
+# finish AT THIS PC: finding a recovery code, signing in on a new tablet, or
+# reconnecting after a restore can each take longer than the 15-minute window
+# #378 gives every ordinary card. A card that lapses half way through one of
+# those loses work and has to be started again from scratch.
+#
+# What is NOT here, on purpose: the twenty-three-action list this work was
+# rescued from. "Forget a time frame" and every switch that loosens a rule
+# (web search, reading tools, notifications, learning, limits, the voice bar)
+# are NOT exempt: those are exactly the cards a stale "yes" makes dangerous,
+# and the owner's ruling keeps them on the ordinary 15-minute window.
+#
+# The names are the gate's OWN action ids - the strings jarvis_devices.py and
+# jarvis_backup.py pass to check() and jarvis-framework.toml declares - not
+# tool names, not flow names, and not anything a caller supplies.
+#   pair_device, unretire_shared_key, register_approval_key   jarvis_devices.py
+#   restore_backup                                            jarvis_backup.py
+#
+# There is no "flow" argument anywhere in this module: an action is exempt
+# because its own id is in the set below, so no caller can ask for no deadline
+# by naming a flow, by omitting one, or by sending 0, a negative number or an
+# unknown name. timeout_for() treats every value that is not exactly one of
+# these ids as an ordinary 15-minute card - see its own docstring.
+#
+# Since 2026-10-28 no screen draws a countdown any more, but the window still
+# bounds the REQUEST: it is written on the row as `waited_until` when the card
+# is raised, and once it (plus the same 60-second grace) has passed
+# `_expire_overdue()` takes the card off the queue on the next read. So these
+# four are still the only ones whose row has no such moment at all - their own
+# flows withdraw them, and nothing else does.
+APPROVAL_NEVER_EXPIRES = frozenset({
+    "pair_device", "unretire_shared_key", "register_approval_key",
+    "restore_backup",
+})
+
+
+def timeout_for(action: Any) -> Optional[float]:
+    """How long `action`'s card waits for a person, or None: no deadline.
+
+    None is not a very long time - it is the absence of one. A caller must
+    treat it as "wait", never as "wait for a while": there is no number here
+    to round, and adding one (an hour, a day) would only move the refusal to a
+    moment nobody chose. `check()` is the caller that matters; `pending()`
+    reads it too, so a card with no deadline carries no `expires_in` and the
+    apps show no countdown rather than one that never ends.
+
+    THE ONLY WAY IN IS THE EXACT ACTION ID. A value that is not one of the
+    strings in APPROVAL_NEVER_EXPIRES - None, "", 0, -1, a flow name such as
+    "pairing", the wrong case, a padded or truncated name, an unknown name -
+    is an ordinary 15-minute card. The `str()` is deliberate: it turns an
+    unhashable or non-string value into something that cannot be in the set
+    instead of raising, so a malformed value fails closed rather than
+    escaping the check. A caller-supplied `timeout=` on check() still wins
+    over this: a caller that passes one is deciding for itself, which is what
+    the suites do.
+
+    SINCE 2026-10-28 THIS IS THE REQUEST'S PATIENCE, NOT THE CARD'S LIFETIME.
+    No card is refused because a clock reached zero. The number returned here
+    is written on the row as `waited_until`, and once it (plus the same
+    60-second grace) has passed `_expire_overdue()` takes the card off the
+    queue on the next read - see `_wait_open()` for the decision itself. Since
+    2026-10-30 `pending()` also shows that same moment to the screens, as
+    `expires_in`, in plain words, so a card with a limited life cannot run out
+    silently. The four ceremonies below answer None here because their rows
+    carry no `waited_until` and only their own flow's withdraw() settles them.
+    """
+    try:
+        name = str(action) if action is not None else ""
+    except Exception:
+        return APPROVAL_TIMEOUT
+    return None if name in APPROVAL_NEVER_EXPIRES else APPROVAL_TIMEOUT
+
+
+def _wait_open(row: Any) -> bool:
+    """Whether a request can still act on this card's answer.
+
+    `row` is an approvals row (or a mapping with `action` / `waited_until`).
+    A NULL `waited_until` means "no request-side number" and is True only for
+    the four ceremonies; a routine row that predates this patch has no
+    `waited_until` either, and is False - an old row's request cannot be
+    waiting, because this code was not there to bound it. Every other row is
+    compared with this PC's clock at the moment of the decision.
+
+    This is the whole of the decision-time revalidation: the card's own row is
+    the one the request wrote, and the moment it wrote is the only thing that
+    says whether its thread can still run the action. It is read here, never
+    stored as an "expired" flag, so no sweep can invent an answer.
+    """
+    try:
+        action = row.get("action") if isinstance(row, dict) else row["action"]
+        waited_until = (row.get("waited_until") if isinstance(row, dict)
+                        else row["waited_until"])
+    except Exception:
+        return False
+    if waited_until is None:
+        return timeout_for(action) is None
+    try:
+        return time.time() < float(waited_until)
+    except (TypeError, ValueError):
+        return False
+
+
+def _expire_overdue(c: sqlite3.Connection) -> int:
+    """Settle every card whose request can no longer act on it. Returns how many.
+
+    This is the sweep `_init()` has always run, made callable, and `pending()`
+    runs it before it reads. It marks a 'pending' row 'expired' once the
+    moment recorded on the row (`waited_until`, written when the card was
+    raised) is more than the same 60-second grace past. The bug the read-time
+    half closes is that `_init()` runs ONCE PER PROCESS (its `if _inited:
+    return` guard), so a card whose waiting thread died with an earlier
+    process - a restart, a killed backend, a request abandoned - stayed
+    'pending' for the life of the next one. `/api/pending` kept serving it,
+    every app drew a card it could only caption "Timed out" and could not
+    answer, the count at the top called it "waiting on you", and a NEW request
+    identical to it was told "the same request is already waiting for you"
+    about a card nobody was waiting on. `pending()` calls this before it
+    reads, so the list a client is handed holds only rows some living request
+    can still act on - the property `_init()`'s comment always claimed.
+
+    IT IS A LAPSE, NOT A DECISION. The state written is 'expired' - what a
+    timed-out `check()` records - never 'denied': a denial is an answer, and
+    inventing one would put words in the owner's mouth. It approves nothing.
+
+    IT CANNOT TAKE A LIVE CARD. The moment is recomputed HERE, from this
+    process's clock, at the moment of the call; no client sends an id, so a
+    stale page has nothing to ask with and cannot name a card. A card whose
+    request is still waiting has `waited_until` in the future and is left
+    alone. The grace is deliberately the same one `_init()` used: a card is
+    not torn away the instant its request's wait ends, because `check()`
+    honours a decision that lands a moment late and its own thread may still
+    be about to write. The cost is bounded and said: an overdue row can be
+    served for up to a minute past its wait, and after that only until the
+    next read.
+
+    A CARD WITH NO WAIT IS NEVER TOUCHED (`APPROVAL_NEVER_EXPIRES`): its
+    `waited_until` is NULL, the four ceremonies are settled only by their own
+    flow's `withdraw()`, and the `action NOT IN (...)` guard below keeps them
+    out of both branches.
+
+    A ROUTINE ROW WITH NO `waited_until` at all predates this patch. Nothing
+    can approve it (`_wait_open()` is False on it), which is exactly why it is
+    settled here rather than left on screen offering a live Approve that would
+    answer 409: it has no request to act on an answer.
+
+    The cheap SELECT first is not decoration: `/api/pending` is read often,
+    and a read that has nothing to settle must not take a write lock.
+    """
+    now = time.time()
+    cutoff = now - 60
+    forever = sorted(APPROVAL_NEVER_EXPIRES)
+    marks = ",".join("?" * len(forever))
+    overdue = (
+        f"state='pending' AND ("
+        f"(waited_until IS NOT NULL AND waited_until < ?)"
+        f" OR (waited_until IS NULL AND action NOT IN ({marks})))")
+    args = (cutoff, *forever)
+    if c.execute(f"SELECT 1 FROM approvals WHERE {overdue} LIMIT 1",
+                 args).fetchone() is None:
+        return 0
+    cur = c.execute(
+        f"UPDATE approvals SET state='expired', decided=?"
+        f" WHERE {overdue}",
+        (now, *args))
+    return cur.rowcount
+
 
 # An action nobody thought to classify is not thereby safe. Configurable, but
 # only downward-unsafe by explicit choice - the default stays "ask".
@@ -120,12 +322,35 @@ def _init() -> None:
                     decided_by TEXT
                 )""")
             c.execute("CREATE INDEX IF NOT EXISTS ix_state ON approvals(state, created)")
-            # A process that died mid-wait leaves its row 'pending' forever,
-            # and the HUD keeps offering it. Anything older than the timeout
-            # plus a grace period cannot still have a waiter.
-            c.execute("UPDATE approvals SET state='expired', decided=? "
-                      "WHERE state='pending' AND created < ?",
-                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60))
+            # WHEN the request that raised this card stops waiting (2026-10-28).
+            # Seconds since 1970, or NULL for the four ceremonies whose own
+            # flow withdraws the card. Written once, at the INSERT, from the
+            # request's own decision (`check()`'s `timeout` or the shipped
+            # wait); `_wait_open()` decides an answer with it and
+            # `_expire_overdue()` lapses the row with it. Added after the fact
+            # so a database from before it existed still opens.
+            try:
+                c.execute("ALTER TABLE approvals ADD COLUMN waited_until REAL")
+            except sqlite3.OperationalError:
+                pass                          # already there
+            # A process that died mid-wait leaves its row 'pending', and the
+            # HUD keeps offering it. `_expire_overdue()` settles a routine row
+            # once the moment recorded on it (`waited_until`) plus a grace has
+            # passed - a card no living request can act on. Not for a card with
+            # NO wait (APPROVAL_NEVER_EXPIRES): such a card is supposed to sit
+            # there until the owner answers it, and sweeping it on age would
+            # expire by the back door the very ceremonies this change exists to
+            # leave waiting. The cost is said plainly: a deliberate card whose
+            # waiting thread died stays pending, and stays on screen, until the
+            # owner withdraws it or starts the pairing/restore again. That is
+            # the smaller risk of the two for these four, and it is why
+            # withdraw() exists below and why the pairing and approval-key
+            # flows call it when their session is cancelled or replaced. Every
+            # other action, including every action nobody thought to classify,
+            # is swept as before - and `pending()` runs the same sweep on every
+            # read, so a card this process cannot otherwise reach does not
+            # outlive it.
+            _expire_overdue(c)
             c.execute("""
                 CREATE TABLE IF NOT EXISTS taint (
                     key   TEXT PRIMARY KEY,
@@ -2067,12 +2292,21 @@ def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
     whose detail no longer parses is skipped rather than guessed at - the
     failure direction is a second card, never a wrong merge between two
     different requests.
+
+    A card whose request has STOPPED WAITING is not reused (2026-10-28). It
+    stays 'pending' until the queue's read-time sweep takes it off, but
+    nothing can act on a "yes" to it, so a new identical request gets a card
+    of its own rather than being told "the same request is already
+    waiting for you" about one nobody is waiting on.
     """
     want = _pending_target(action, detail, prompt)
     rows = c.execute(
-        "SELECT id, detail, prompt, target_digest FROM approvals"
-        " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
+        "SELECT id, detail, prompt, target_digest, action, waited_until"
+        " FROM approvals WHERE state='pending' AND action=? ORDER BY created",
+        (action,)).fetchall()
     for row in rows:
+        if not _wait_open(row):
+            continue
         stored_digest = row["target_digest"]
         if stored_digest:
             if stored_digest == want:
@@ -2337,6 +2571,8 @@ def check(action: str,
     # are one BEGIN IMMEDIATE transaction, so two processes raising the same
     # thing at the same moment cannot both miss and both insert.
     reused = False
+    waited = None
+    waited_until = None
     try:
         _init()
         rid = None
@@ -2348,6 +2584,17 @@ def check(action: str,
                 reused = rid is not None
                 if not reused:
                     rid = uuid.uuid4().hex[:12]
+                    # WHEN THIS REQUEST STOPS WAITING (2026-10-28). A caller
+                    # that passed its own `timeout=` bounds its own wait;
+                    # otherwise the action decides, and None means the four
+                    # ceremonies whose flow withdraws the card. This is NOT the
+                    # card's lifetime - the read-time sweep is what settles the
+                    # card, on this moment plus its grace - it is the last
+                    # moment a "yes" can still be carried out, so it is written
+                    # on the row and re-read at the decision instead of being
+                    # assumed from a clock.
+                    waited = timeout_for(action) if timeout is None else timeout
+                    waited_until = None if waited is None else now + waited
                     # The digest covers the WHOLE request, including detail
                     # past the 4000 characters the row keeps (F-680-2).
                     target_digest = _pending_target(action, detail, prompt)
@@ -2359,12 +2606,12 @@ def check(action: str,
                     # already bounds every value, and the column is TEXT.
                     c.execute(
                         "INSERT INTO approvals (id,action,tier,detail,prompt,state,"
-                        "created,raised,target_digest)"
-                        " VALUES (?,?,?,?,?,'pending',?,?,?)",
+                        "created,raised,target_digest,waited_until)"
+                        " VALUES (?,?,?,?,?,'pending',?,?,?,?)",
                         (rid, action, tier, json.dumps(detail)[:4000],
                          (prompt or "")[:2000], now,
                          json.dumps(raised) if raised else None,
-                         target_digest))
+                         target_digest, waited_until))
                 c.execute("COMMIT")
             except Exception:
                 c.execute("ROLLBACK")
@@ -2413,7 +2660,13 @@ def check(action: str,
     _push(_note["title"],
           _note["body"] + f"\n(id {rid}) - open Jarvis to decide")
 
-    deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
+    # The wait is the row's own `waited_until`, written a few lines above from
+    # this request's decision: the shipped wait, the caller's own `timeout=`,
+    # or None for the four ceremonies. None is the no-deadline case and must
+    # not be read as "already past" (`time.time() < None` raises in Python 3):
+    # with no deadline the wait ends when the row does - answered, withdrawn,
+    # or replaced.
+    deadline = waited_until
     # One connection for the whole wait rather than one per poll.
     watch = None
     try:
@@ -2421,7 +2674,10 @@ def check(action: str,
             watch = _connect()
         except Exception:
             watch = None
-        while time.time() < deadline:
+        # None is the no-deadline case, and it must not be read as "already
+        # past" (`time.time() < None` raises in Python 3): with no deadline
+        # the wait ends when the row does - answered, withdrawn, or replaced.
+        while deadline is None or time.time() < deadline:
             time.sleep(POLL_SECONDS)
             try:
                 if watch is None:
@@ -2439,6 +2695,12 @@ def check(action: str,
                     pass
                 watch = None
                 continue
+            if row is not None and row["state"] not in ("pending", "approved", "denied"):
+                # Withdrawn, or swept by another process's start-up: the card
+                # is not waiting any more, so neither is this. Without this
+                # line a card with no deadline would keep polling a row that
+                # exists and can never change again.
+                break
             if row is None:
                 break
             if row["state"] == "approved":
@@ -2463,40 +2725,51 @@ def check(action: str,
             except Exception:
                 pass
 
-    # A human can answer in the gap between the last poll and this UPDATE.
-    # The WHERE guard means their row is not overwritten - but the old code
-    # then returned "expired" anyway, so the DB said approved, the HUD said
-    # approved, the audit said expired, and the action did not run. Honour a
-    # decision that landed late rather than pretending it did not.
+    # The wait is over without an answer. A human can answer in the gap between
+    # the last poll and this read, and that answer is still this request's to
+    # honour - the row and the request were the same thing until now.
+    #
+    # THE ROW IS LEFT 'pending' (2026-10-28), and what settles it is NOT a
+    # countdown: no app draws a clock any more. `pending()`'s read-time sweep
+    # (`_expire_overdue`) lapses it once `waited_until` plus the same
+    # 60-second grace has passed - the moment this request stopped waiting is
+    # on the row, so the sweep needs no guess - and `_wait_open()` refuses an
+    # approval at the exact moment even before that read lands. The exception
+    # is a caller that bounded its OWN wait: a probe leaves nothing behind,
+    # because with its wait over there is no request to act on an answer.
     try:
         with closing(_connect()) as c:
-            cur = c.execute("UPDATE approvals SET state='expired', decided=?"
-                            " WHERE id=? AND state='pending'", (time.time(), rid))
-            if cur.rowcount == 0:
-                row = c.execute("SELECT state,decided_by FROM approvals WHERE id=?",
-                                (rid,)).fetchone()
-                if row and row["state"] == "approved":
-                    if not _approval_stamped(rid, action):
-                        return _unstamped_approval(rid, tier, action, row)
-                    _audit("gate.approved", {"id": rid, "action": action,
-                                             "by": row["decided_by"], "late": True})
-                    return Verdict(True, tier, action, "approved by a human", rid,
-                                   outcome="approved")
-                if row and row["state"] == "denied":
-                    _audit("gate.denied", {"id": rid, "action": action,
-                                           "by": row["decided_by"], "late": True})
-                    _propose_constraint_from_denial(action, detail)
-                    return Verdict(False, tier, action, "denied by a human", rid,
-                                   outcome="denied")
+            row = c.execute("SELECT state,decided_by FROM approvals WHERE id=?",
+                            (rid,)).fetchone()
+            if row and row["state"] == "approved":
+                if not _approval_stamped(rid, action):
+                    return _unstamped_approval(rid, tier, action, row)
+                _audit("gate.approved", {"id": rid, "action": action,
+                                         "by": row["decided_by"], "late": True})
+                return Verdict(True, tier, action, "approved by a human", rid,
+                               outcome="approved")
+            if row and row["state"] == "denied":
+                _audit("gate.denied", {"id": rid, "action": action,
+                                       "by": row["decided_by"], "late": True})
+                _propose_constraint_from_denial(action, detail)
+                return Verdict(False, tier, action, "denied by a human", rid,
+                               outcome="denied")
+            if timeout is not None:
+                c.execute("UPDATE approvals SET state='expired', decided=?"
+                          " WHERE id=? AND state='pending'", (time.time(), rid))
     except Exception:
         pass
-    _audit("gate.expired", {"id": rid, "action": action})
-    # Refused, because an unanswered request must not run. But recorded as
+    _audit("gate.wait_finished", {"id": rid, "action": action})
+    # Refused, because an unanswered request must not run. Recorded as
     # timed_out rather than denied: nobody decided anything here, and a caller
     # that retries on the owner's return is behaving correctly where retrying
-    # a denial would not be.
+    # a denial would not be. The card is a lapse, not a decision: the next
+    # queue read takes it off (after the grace), and an approval sent to it
+    # before that is refused by _wait_open() with the reason.
     return Verdict(False, tier, action,
-                   "nobody answered in time, so it was refused", rid,
+                   "nobody answered before the request stopped waiting, so it "
+                   "was refused; the card leaves the queue on the next read "
+                   "and a late approval is refused with the reason", rid,
                    outcome="timed_out")
 
 
@@ -2753,8 +3026,17 @@ def pending() -> list[dict]:
     """
     _init()
     with closing(_connect()) as c:
+        # A card whose request has stopped waiting is not waiting for anybody,
+        # even while its row still says 'pending' (see _expire_overdue).
+        # Settle that BEFORE the SELECT, so no client - the phone's Approvals
+        # list, the desktop's three surfaces, the HUD - is handed a live
+        # Approve that a late tap can only answer 409. This is #965's rule,
+        # kept: no card shows a countdown any more, and a request that has
+        # finished still takes its card off the queue on the next read.
+        _expire_overdue(c)
         rows = c.execute(
-            "SELECT id,action,tier,detail,prompt,created,raised FROM approvals"
+            "SELECT id,action,tier,detail,prompt,created,raised,waited_until"
+            " FROM approvals"
             " WHERE state='pending' ORDER BY created").fetchall()
     out = []
     for r in rows:
@@ -2776,19 +3058,51 @@ def pending() -> list[dict]:
         d["replaces_kind"] = _kinds.get("kind")
         d["replaces_heading"] = _kinds.get("heading", "")
         d["replaces_note"] = _kinds.get("note", "")
-        # approval-expiry.patch: how many seconds this card has left before
-        # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
-        # from just after the row is written, so `created` plus that is the
-        # deadline. Sent as seconds LEFT, not a clock time, so a phone whose
-        # clock disagrees with this PC still counts down correctly. A row
-        # whose `created` is not a number gets no field, and the clients then
-        # show no countdown rather than a wrong one.
-        try:
-            d["expires_in"] = max(0, int(float(d.get("created"))
-                                         + float(APPROVAL_TIMEOUT)
-                                         - time.time()))
-        except (TypeError, ValueError):
-            pass
+        # THE TIMER ON A CARD WITH A LIMITED TIME (2026-10-30). The owner's
+        # ruling: "if there is a card with a limited time of any kind, be sure
+        # to put the timer on it". So a routine card whose REQUEST is still
+        # waiting is sent the seconds it has left, and every screen counts
+        # them down in plain words - the app-builder card that ran out on him
+        # twice without a clock is exactly the case this closes.
+        #
+        # WHAT IT COUNTS, AND WHY IT IS `waited_until` AND NOT A CARD DEADLINE.
+        # The 2026-10-28 ruling is not weakened: the card still has no time
+        # limit of its own, and nothing is refused because a countdown reached
+        # zero. The number is the request's own last moment, the one the
+        # read-time sweep and the late-approval 409 already use, so the clock on
+        # the screen and the refusal behind it are the same moment - a timer
+        # that promised longer than the gate honours would be worse than none.
+        #
+        # THE 60-SECOND GRACE IS NOT SHOWN. The row survives `waited_until` by
+        # up to a minute before the next read settles it, but no request can act
+        # on it any more, and a countdown that reached zero and then kept
+        # counting would say the opposite of what the gate does. So the field is
+        # sent only while `waited_until` is still in the future: past it the
+        # clients draw the same card with no clock, as they already do for a
+        # ceremony card - approval-expiry.patch's own "0 means expired now"
+        # reason is the same one.
+        #
+        # NEVER 0 and NEVER NEGATIVE: both apps read 0 as "expired now". The
+        # remainder is rounded UP, so a fraction of a second left reads "1s
+        # left" rather than making the field vanish a second early.
+        #
+        # NOTHING FOR A CEREMONY CARD (`waited_until` NULL: pairing a device, an
+        # approval key, a restore) and nothing for a row whose request has
+        # already stopped waiting - an absent field is "no timer", which both
+        # clients have drawn that way since 2026-10-23. `waited_until` itself is
+        # dropped before the row is returned: the screens are told how long is
+        # left, never the PC's own clock reading.
+        _waited = d.pop("waited_until", None)
+        if _waited is not None:
+            try:
+                _secs_left = float(_waited) - time.time()
+            except (TypeError, ValueError):
+                _secs_left = 0.0
+            _whole = int(_secs_left)
+            if _secs_left > _whole:
+                _whole += 1
+            if _whole >= 1:
+                d["expires_in"] = _whole
         # Why this is being asked about at all, when the table said otherwise.
         # A card shows this instead of a coloured dot: the reason is the thing
         # that changes the decision.
@@ -2837,10 +3151,27 @@ def pending() -> list[dict]:
 
 
 def decide(request_id: str, approved: bool, by: str = "hud") -> bool:
-    """Returns False if the id is unknown or already decided, so a double tap
-    on Approve cannot resurrect something that already timed out."""
+    """Record one answer. False if the id is unknown, already settled, or - for
+    an APPROVE - when no request is waiting to act on it any more.
+
+    THE DECISION-TIME REVALIDATION (2026-10-28). A card can still be on screen
+    after its request has stopped waiting - until the next read settles it - so
+    a tap can arrive after that moment; it must not be recorded as a yes that
+    nothing will carry out. `_wait_open()` is the check: the row's own
+    `waited_until` against this PC's clock.
+
+    A DENY never needs it. Refusing is the safe direction, it approves
+    nothing, and clearing an old card with Deny is exactly what the
+    no-deadline ruling expects the owner to be able to do.
+    """
     _init()
     with closing(_connect()) as c:
+        if approved:
+            row = c.execute("SELECT action, waited_until FROM approvals"
+                            " WHERE id=? AND state='pending'",
+                            (request_id,)).fetchone()
+            if row is None or not _wait_open(row):
+                return False
         # Once decided, the prompt and detail have done their job. Keeping a
         # verbatim shell command or recipient list in this table for ever
         # would make it the unredacted twin of the audit log.
@@ -2851,6 +3182,64 @@ def decide(request_id: str, approved: bool, by: str = "hud") -> bool:
             ("approved" if approved else "denied", time.time(),
              str(by or "hud")[:64], request_id))
         return cur.rowcount > 0
+
+
+def still_waiting(request_id: str) -> bool:
+    """Whether a request can still act on this card's answer. READ ONLY.
+
+    The question `jarvis_owner_check.approve_check()` asks before it raises a
+    Windows Hello prompt or stamps an approval: a card that is past its
+    request's wait must be refused in plain words and taken off the list, not
+    approved into nothing. Since 2026-10-28 a card can outlive its request, so
+    this is the answer that keeps "approved" and "nothing ran" from appearing
+    on two screens at once.
+
+    False for an unknown id, an already-decided row, and a row whose request
+    can no longer act on it (see `_wait_open`). A DENY does not ask this:
+    refusing is always safe.
+    """
+    _init()
+    try:
+        with closing(_connect()) as c:
+            row = c.execute("SELECT action, waited_until FROM approvals"
+                            " WHERE id=? AND state='pending'",
+                            (request_id,)).fetchone()
+    except Exception:
+        return False
+    return row is not None and _wait_open(row)
+
+
+def withdraw(request_id: str, why: str = "") -> bool:
+    """Take a card off the list because the work it asked about is gone.
+
+    Not a decision - nobody said yes or no - so the row is recorded exactly as
+    a lapse is (state 'expired', and the waiter it wakes reports timed_out,
+    "nobody answered"), never as a denial: a denial is an answer, it proposes
+    a memory rule, and inventing one would be putting words in the owner's
+    mouth. What this adds is the one thing a card with NO clock cannot do for
+    itself: the four ceremonies have no `waited_until`, so no read-time sweep
+    will ever take one off, and a pairing or approval-key card whose session
+    was cancelled or replaced would sit in the list for ever, answerable but
+    never answerable-to-anything. The pairing and approval-key flows call it
+    when their session is cancelled or replaced; `_expire_overdue` uses the
+    same state on every read for the routine cards; and `jarvis_owner_check`
+    calls it when a late approval finds no request.
+
+    The waiting thread polls the row, so the UPDATE below ends its wait on the
+    next tick, exactly as a lapse does. Returns False for an unknown id or one
+    already decided, so a cancel after the fact changes nothing. Called
+    through getattr by jarvis_devices.py, so a backend without this patch
+    keeps working exactly as it did.
+    """
+    _init()
+    with closing(_connect()) as c:
+        cur = c.execute("UPDATE approvals SET state='expired', decided=?"
+                        " WHERE id=? AND state='pending'",
+                        (time.time(), request_id))
+        gone = cur.rowcount > 0
+    if gone:
+        _audit("gate.withdrawn", {"id": request_id, "why": why})
+    return gone
 
 
 def history(limit: int = 50) -> list[dict]:
