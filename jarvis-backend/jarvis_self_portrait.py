@@ -630,8 +630,9 @@ def tool_inventory() -> dict:
       * `registered` - `jarvis_agent.TOOLS`, the tools this backend has built;
       * `enabled`    - the names switched on in `[tools].enabled` of the
         owner's own settings file, read through
-        `jarvis_asks_first.tools_enabled_set()` - the SAME read the "What asks
-        first" page makes, never a second copy and never a default.
+        `jarvis_asks_first.tools_enabled_read()` - the SAME read the "What
+        asks first" page makes (`tools_enabled_set()` is its set-only view),
+        never a second copy and never a default.
 
     A tool's OWN switch can still hold it back at turn time (`web_search`'s
     separate on/off, browser control's second-card rule, the data sandbox) -
@@ -642,6 +643,14 @@ def tool_inventory() -> dict:
     `enabled` is None (never 0) when the settings file cannot be read: a PC
     without the framework module, or with a damaged file, is said as unknown
     rather than as "no tools", exactly like an unread switch.
+
+    THAT PROMISE WAS BROKEN UNTIL 2026-11-26. It read
+    `tools_enabled_set()`, which answered `set()` for a FAILED read, so the
+    `except` below never saw one and `enabled` came back 0. Every chat answer
+    built from it then said "0 switched on ... your settings file names no
+    tool" about a file nothing had read (the awareness audit's H2). It now
+    reads `tools_enabled_read()`, whose `names` is None exactly when the read
+    failed, so 0 can only ever mean "the file was read and names nothing".
     """
     registered = None
     try:
@@ -650,19 +659,29 @@ def tool_inventory() -> dict:
     except Exception:                       # noqa: BLE001 - said as unknown
         registered = None
     enabled = None
+    why = ""
     try:
         import jarvis_asks_first as AF
-        wanted = set(AF.tools_enabled_set() or ())
-        # Names this backend has never had are not tools; the legacy
-        # `email_read` spelling is read as the tool it means by real_tool().
-        real = {str(getattr(AF, "real_tool", lambda n: n)(n)) for n in wanted}
-        registered_set = set(registered or ())
-        enabled = sorted(n for n in real
-                         if not registered_set or n in registered_set)
-    except Exception:                       # noqa: BLE001 - said as unknown
+        read = AF.tools_enabled_read()
+        wanted = read.get("names")
+        if wanted is None:
+            # CANNOT READ IS NOT NONE ENABLED. `read["why"]` names which read
+            # failed, in words, and no count is invented from it.
+            said = str(read.get("why") or "").strip()
+            why = ("The settings file could not be read"
+                   + (f" ({said})" if said else "")
+                   + ", so which tools are offered is unknown.")
+        else:
+            # Names this backend has never had are not tools; the legacy
+            # `email_read` spelling is read as the tool it means by real_tool().
+            real = {str(getattr(AF, "real_tool", lambda n: n)(n)) for n in wanted}
+            registered_set = set(registered or ())
+            enabled = sorted(n for n in real
+                             if not registered_set or n in registered_set)
+    except Exception as exc:                # noqa: BLE001 - said as unknown
         enabled = None
-    why = "" if enabled is not None else (
-        "The settings file could not be read, so which tools are offered is unknown.")
+        why = ("The settings file could not be read "
+               f"({type(exc).__name__}), so which tools are offered is unknown.")
     return {"registered": len(registered) if registered is not None else None,
             "registered_names": registered or [],
             # ALL of the names, for an answer that must LIST every tool rather
@@ -677,7 +696,7 @@ def tool_inventory() -> dict:
             "enabled": len(enabled) if enabled is not None else None,
             "enabled_names": enabled or [],
             "source": ("jarvis_agent.TOOLS and "
-                       "jarvis_asks_first.tools_enabled_set()"),
+                       "jarvis_asks_first.tools_enabled_read()"),
             "why": why}
 
 
