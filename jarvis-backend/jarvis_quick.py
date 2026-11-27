@@ -20670,8 +20670,20 @@ def _organizer_selection(raw) -> list:
 #: owner's other shapes keep their own doors: "note this"/"make a note: X" is
 #: the daily note, "add milk to my shopping list" is the list, "remind me"
 #: is the reminder and "email ..." is email. None of those match here.
+#:
+#: "add", AND THE BARE "new note called ..." SHAPE (DEF-105's chat half,
+#: 2026-11-26). The owner's own "add a note titled Ideas 2027" was answered with
+#: the create refusal because only create|make|start reached this reader, while
+#: `_NOTE_CREATE_REFUSED` DID accept "add" and "new note" - so the two were read
+#: as the same sentence. They are not: a naming word plus a name is a create.
+#: The naming-word requirement is what keeps this narrow, and it is load-bearing:
+#: "add a note Ideas 2027" has no `called/named/titled`, so it still files its
+#: words into the daily note (`_NOTE_TEXT_SPACE` below) and never becomes a file
+#: name. "add a note" with nothing after it still reaches
+#: `_NOTE_CREATE_REFUSED`, because a create with no name is not a create.
 _NOTE_CREATE_NAMED = re.compile(
-    r"(?:create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note"
+    r"(?:(?:create|make|start|add)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?"
+    r"|(?:a\s+|one\s+)?new\s+)note"
     r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
     r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+)"
     r"|\s+and\s+(?:put|write|add)\s+(?P<text2>.+?)\s+(?:in|into)\s+it)?$")
