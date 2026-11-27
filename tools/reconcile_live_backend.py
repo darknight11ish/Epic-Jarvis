@@ -1511,68 +1511,14 @@ DELTA_TABLE = {
             "replace_file": GATE_FINAL_PENDING_OLD_FILE,
         },
     },
-    # The owner's 2026-10-23 card-expiry ruling (PR #773), rewritten by #965 on
-    # 2026-10-28: a patch that touches `jarvis_gate.py` in nine disjoint places,
-    # which a single anchor insert cannot express. It is carried as the twelve
-    # literal region pairs in NOEXPIRY_REGIONS - eight for the #773 half and four
-    # for #965's - applied in order (see that table for why the chain is split,
-    # and `backend/test_reconcile_live_backend.py` for the byte-for-byte proof).
-    # The top-level probes are one post-image line from EVERY region: all twelve
-    # present means the whole patch is in; anything less sends the region loop
-    # over the file, where each region whose own probe is present is skipped and
-    # each remaining one must find its OLD block exactly once - a half-applied
-    # gate is refused on that region, never guessed at. Before #965 updated this
-    # entry the probes were the #773 eight, all of which a live gate deployed by
-    # #773 satisfies - so the tool said ALREADY_PRESENT and `_expire_overdue`
-    # stayed off the owner's PC. That is what the twelve-probe tuple fixes.
-    #
-    # `no-deadline-cards.patch` is applied AFTER this one and rewrites TEN of
-    # these twelve regions again (its hunks were cut against this patch's own
-    # output, so a gate carrying both holds no-deadline's text where #965's
-    # regions were; only regions 5 and 6 still match their block - measured
-    # 2026-10-30). All twelve probes therefore fail on that gate, and without a
-    # second proof a second deploy would re-refuse a patch it had already
-    # applied. `or_probes` is that proof: every no-deadline hunk that rewrote a
-    # region here was cut against this patch's output, so that patch's complete
-    # six-probe post-image means this patch was carried first. A gate with
-    # neither set still goes region by region, and is still refused when a
-    # region's OLD block is not exactly once - nothing is guessed.
-    "no-expiry-cards.patch": {
-        "jarvis_gate.py": {
-            "probes": tuple(r["probes"][0] for r in NOEXPIRY_REGIONS),
-            "or_probes": NODEADLINE_PROBES,
-            "regions": NOEXPIRY_REGIONS,
-        },
-    },
-    # no-deadline-cards.patch (2026-10-28, the owner's ruling: "if there
-    # doesn't need to be a time limit don't have one"; Gemini F3 / ruling f
-    # kept #965's read-time sweep, re-keyed on `waited_until`). SIXTEEN hunks
-    # in disjoint regions of `jarvis_gate.py`, so `"hunks": True`: each
-    # pre-image block is replaced by its post-image block, in file order, and a
-    # pre-image that is missing or not exactly once refuses the whole file.
-    # EIGHT of them edit no-expiry-cards.patch's own output, so this entry only
-    # works when that patch is already deployed - which the order in `$PATCHES`
-    # (and the live PC, where #773 is deployed) gives it. The probes are one
-    # post-image line from six different regions; none of them exists in the
-    # published base or in the pre-image, so only a gate that really carries the
-    # whole patch counts as present, and a half-applied file is finished by the
-    # per-hunk check rather than replaced twice. Its `jarvis_owner_check.py`
-    # half is a SHIPPED module, copied whole by deploy step 1.
-    # Hunk 9 is the exception: on this PC the block it edits exists in a shape
-    # no hunk pre-image matches (see NODEADLINE_H9_* above), so `adapted_hunks`
-    # substitutes the measured live block and the block with the column added.
-    # The other fifteen hunks are still the patch's own bytes.
-    "no-deadline-cards.patch": {
-        "jarvis_gate.py": {
-            "probes": NODEADLINE_PROBES,
-            "hunks": True,
-            "adapted_hunks": {
-                9: {"file": NODEADLINE_H9_NEW_FILE,
-                    "replace_file": NODEADLINE_H9_OLD_FILE,
-                    "probes": ('"created,raised,target_digest,waited_until)"',)},
-            },
-        },
-    },
+    # RETIRED 2026-11-26: the entries for `no-expiry-cards.patch` and
+    # `no-deadline-cards.patch` lived here. Their content - the whole
+    # 2026-10-28 request-bounding machinery - is now the published base's
+    # (`jarvis-backend/jarvis_gate.py`), and the patches left `$PATCHES`, so no
+    # deploy plans them and a per-patch delta for them could only fire on a
+    # name nothing asks for. The region tables above (`NOEXPIRY_REGIONS`,
+    # `NODEADLINE_*`) are kept with their own notes as the record of what those
+    # entries carried; nothing reads them through DELTA_TABLE any more.
     # PWA Slice 3a (2026-10-23): the browser's own files, as TWO literal
     # inserts - the whitelist table + its handler in front of the class, and
     # the three-line dispatch branch in front of the page route. Neither

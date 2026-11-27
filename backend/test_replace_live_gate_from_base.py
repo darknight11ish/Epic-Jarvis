@@ -155,8 +155,13 @@ def main() -> int:
           tuple(mod._MUST_HAVE) == ("cancel_scheduled", "github_mode"),
           repr(mod._MUST_HAVE))
     check("the tool measures the base's approval model rather than guessing it",
-          "countdown" in mod.approval_model_note(base)
-          and mod.approval_model_note(b"waited_until\n") == "")
+          mod.approval_model_note(base) == ""
+          and "countdown" in mod.approval_model_note(b"an older base\n"),
+          mod.approval_model_note(base))
+    check("...and today's base really carries the 2026-10-28 model, so the "
+          "note being empty is a measurement, not a default",
+          b"waited_until" in base and b"_wait_open" in base
+          and b"_expire_overdue" in base and b"still_waiting" in base)
 
     # 1. The refusal path: a file that is not the one measured.
     refused = a_live_folder()
@@ -183,8 +188,8 @@ def main() -> int:
     check("... and makes no backup",
           not list(check_only.glob("jarvis_gate.py.bak.*")))
     check("... and says it was a check", "check only" in out, out)
-    check("... and names the base's older approval model, so it is not a surprise",
-          "countdown model" in out and "NOT in" in out, out)
+    check("... and does not warn about an older approval model, because the "
+          "base carries today's", "countdown model" not in out, out)
 
     # 3. The write: backup, base bytes, re-import.
     done = a_live_folder(live)

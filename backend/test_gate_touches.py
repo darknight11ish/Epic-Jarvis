@@ -72,10 +72,12 @@ Card prose is not a target and is not searched. So:
   6. everything else the gate refuses today, it still refuses (section 4).
 
 `jarvis-backend/jarvis_gate.py` is this repository's published copy of the
-gate (jarvis-backend/README.md says where it came from), so the module under
-test here is the one the patch in `backend/` is written against. That patch,
-`gate-touches.patch`, is what carries this to the owner's own backend; the
-last check in this file pins it into the stack.
+gate (jarvis-backend/README.md says where it came from). Since 2026-11-26 it
+carries the 2026-10-28 request-bounding machinery and the 2026-10-30 card
+timer as its own content, which rewrote the same `check()` ask branch
+`gate-touches.patch` writes - so the base is now a LATER lineage than that
+patch's post-image. The patch is still registered in the stack and the base
+still carries its change; the last check asserts both facts together.
 
 Runs in repo mode (JARVIS_BACKEND unset), from the repository root:
 
@@ -1045,21 +1047,25 @@ def t_no_other_patch_already_rewrites_that_call():
           sorted(set(allowed)) == ["no-auto-approve.patch"], sorted(set(allowed)))
 
 
-def t_the_patch_applies_to_the_published_gate():
-    """`git apply` on a copy of the file the patch names.
+def t_the_published_base_already_carries_this_patch():
+    """The base carries this patch's change, and has moved past the patch.
 
-    `jarvis-backend/jarvis_gate.py` is the state the WHOLE stack leaves, so
-    the patch is rehearsed the way the patcher rehearses it: take the change
-    back out, which is the text the owner's own file holds, then apply it
-    forwards and compare with the published copy byte for byte. A patch that
-    cannot do both would apply to nothing.
+    Until 2026-11-26 `jarvis-backend/jarvis_gate.py` was the patch's own
+    post-image, so the patch could be reversed out of it and re-applied byte
+    for byte. That day the base took in the 2026-10-28 request-bounding
+    patches and the 2026-10-30 timer, which rewrite the same `check()` ask
+    branch this patch writes - so the base is now a LATER lineage, and the
+    patch neither reverses out of it nor applies to it. The change itself is
+    already there (checked above); this asserts that the two facts stay
+    together, because a base that lost the change, or a patch that started to
+    apply to the base again, both mean somebody should look.
 
     Skips honestly when git is missing."""
     import shutil
     import subprocess
     git = shutil.which("git")
     if not git:
-        return skip("git is not installed, so the patch cannot be rehearsed here")
+        return skip("git is not installed, so the rehearsal cannot run here")
     d = Path(tempfile.mkdtemp(prefix="jarvis-gate-touches-patch-"))
     try:
         # LF, deliberately: `.gitattributes` is `* text=auto eol=lf` while
@@ -1072,21 +1078,14 @@ def t_the_patch_applies_to_the_published_gate():
         (d / "p.patch").write_bytes(PATCH.read_bytes().replace(b"\r\n", b"\n"))
         back = subprocess.run([git, "apply", "-R", "p.patch"], cwd=d,
                               capture_output=True, text=True)
-        check("the patch reverses out of the published gate (which is how the "
-              "patcher recognises and replaces an older version)", back.returncode == 0,
-              back.stderr.strip())
-        if back.returncode != 0:
-            return
-        before = _normalised(d / "jarvis_gate.py")
-        check("... and what is left is the old rule, and only that",
-              "hit = _touches_protected(prompt, detail)" in before
-              and "_target_blobs" not in before)
-        fwd = subprocess.run([git, "apply", "p.patch"], cwd=d,
+        check("... and the base has moved past it: it no longer reverses out",
+              back.returncode != 0,
+              "it reversed out again - re-check which lineage the base is")
+        fwd = subprocess.run([git, "apply", "--check", "p.patch"], cwd=d,
                              capture_output=True, text=True)
-        check("... and it applies forwards again", fwd.returncode == 0,
-              fwd.stderr.strip())
-        check("... giving back the published file, line endings aside",
-              _normalised(d / "jarvis_gate.py") == armed)
+        check("... and it does not apply to the base forwards either",
+              fwd.returncode != 0,
+              "it applied to the base - the base is its pre-image again")
     finally:
         shutil.rmtree(d, ignore_errors=True)
 

@@ -51,7 +51,9 @@ _TMP = Path(tempfile.mkdtemp(prefix="jarvis-card-payload-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP)
 os.environ["JARVIS_APPROVALS_DB"] = str(_TMP / "approvals.db")
 os.environ["JARVIS_NTFY_TOPIC"] = ""
-# Long enough that no row inserted below is expired by _init()'s sweep.
+# Long enough that no row inserted below is expired by the read-time sweep:
+# _insert writes the moment the request would still be waiting, and this is how
+# far ahead that is.
 os.environ["JARVIS_APPROVAL_TIMEOUT"] = "600"
 
 # The same framework stub the other gate suites use: redaction on, a real tier
@@ -75,7 +77,13 @@ import jarvis_gate as G  # noqa: E402
 
 
 def _insert(rid, action, detail, prompt, state="pending"):
-    """One waiting row, written the same shape check() writes."""
+    """One waiting row, written the same shape check() writes.
+
+    That includes `waited_until`: the moment the request that raised this card
+    would still be waiting for. Without it the row is a card nobody is waiting
+    on, and `pending()` settles it as expired before any of these checks can
+    read it - which is the live behaviour, not a test detail.
+    """
     G._init()
     if isinstance(detail, str):
         detail_text = detail
@@ -83,9 +91,10 @@ def _insert(rid, action, detail, prompt, state="pending"):
         detail_text = json.dumps(detail)
     with sqlite3.connect(str(G.DB_PATH)) as c:
         c.execute(
-            "INSERT OR REPLACE INTO approvals (id,action,tier,detail,prompt,state,created)"
-            " VALUES (?,?,?,?,?,?,?)",
-            (rid, action, "ask", detail_text, prompt, state, time.time()))
+            "INSERT OR REPLACE INTO approvals (id,action,tier,detail,prompt,state,created,"
+            "waited_until) VALUES (?,?,?,?,?,?,?,?)",
+            (rid, action, "ask", detail_text, prompt, state, time.time(),
+             time.time() + float(G.APPROVAL_TIMEOUT)))
 
 
 def _row(rid):

@@ -137,6 +137,19 @@ def t_the_late_patches_are_pinned_and_not_new():
     check("every patch after the audit's position 29 that reads original text is "
           "pinned, so none of them is a new patch arriving unnoticed", not unpinned,
           f"unpinned late patch(es): {unpinned}")
+    # 2026-11-26: THREE LEFT THE WALK, and they are why the count reads
+    # TWENTY-SEVEN instead of the thirty this comment grew to. On that day
+    # `no-expiry-cards.patch`, `no-deadline-cards.patch` and
+    # `show-card-timer.patch` were retired into the published base
+    # (`jarvis-backend/jarvis_gate.py`), so `$PATCHES` no longer lists them and
+    # `tools/check_patch_original_text.py` no longer walks them. Their 9 + 8 + 1
+    # invented hunks left with them, and every POSITION below that is larger than
+    # 35 shifted DOWN by three (the two numbers in this comment history are the
+    # positions each patch had when it landed; they are the record, not a
+    # renumbering). Measured, not argued: the walk prints 27.
+    #
+    # Everything below this line is the history of how the count reached thirty,
+    # kept as the reason each patch was pinned. Positions in it are dated.
     # 2026-10-30: THREE patches raise the count by one each, and all are in this
     # merged stack - this branch's show-card-timer.patch at position 38 (one of
     # its three hunks reads `pending()`'s own SELECT line); the Q2 ruling's
@@ -202,8 +215,8 @@ def t_the_late_patches_are_pinned_and_not_new():
     # skill-install-note.patch and packs-tamper-on-load.patch already are. The
     # walk prints 30, and backend/_stack.py's jarvis_skills.py RATCHET moves
     # 6 -> 11.
-    check("the thirty exceptions the tool's docstring names are the "
-          "thirty the walk finds", len(late) == 30,
+    check("the twenty-seven exceptions the tool's docstring names are the "
+          "twenty-seven the walk finds", len(late) == 27,
           f"the walk found {len(late)}: {late}")
 
 
