@@ -408,11 +408,26 @@ ROWS = [
                     for p in VAULT.rglob("*.md")), "no boiler note")),
     ("create a note called recipes with milk and eggs", CREATE,
      words_in("recipes.md", "milk", "eggs")),
-    # KNOWN GAP (2026-11-24, found by this corpus): "add a note titled X" is
-    # refused as an unreadable note change instead of creating the note. The row
-    # pins today's behaviour so the gap is visible; fixing the create grammar
-    # flips this row to CREATE.
-    ("add a note titled Ideas 2027", ("note_change_refused",), None),
+    # THE DEF-105 CHAT HALF (2026-11-26). "add" names a note when a naming word
+    # follows the note noun, and the bare "new note called ..." shape does too;
+    # all four are creates now (they were `note_change_refused` before). The
+    # three neighbours under them are the limit of that rule and must not move.
+    ("add a note titled Ideas 2027", CREATE,
+     lambda r: (here("Ideas 2027.md"), "no Ideas 2027.md")),
+    ("add a note called Ideas 2027", CREATE,
+     lambda r: (here("Ideas 2027.md"), "no Ideas 2027.md")),
+    ("add a note named Ideas 2027", CREATE,
+     lambda r: (here("Ideas 2027.md"), "no Ideas 2027.md")),
+    ("new note called Trip", CREATE,
+     lambda r: (here("Trip.md"), "no Trip.md")),
+    # No naming word: the words are the BODY, filed into today's daily note and
+    # never a file name.
+    ("add a note Ideas 2027", ("note_made",),
+     lambda r: (not here("Ideas 2027.md"), "it created a named note")),
+    # No note noun at all, so no lane: the list owns this one elsewhere.
+    ("add milk to the list", ("<not-note>",), nothing_written()),
+    # A create phrase with no name is still refused, and writes nothing.
+    ("add a note", ("note_change_refused",), nothing_written()),
     ("make a note called", ("note_create_ask", "note_create_refused"),
      lambda r: (not any(p.name.lower().startswith("make") for p in VAULT.rglob("*.md")),
                 "a file was made from a nameless sentence")),
@@ -879,6 +894,44 @@ def short_merge_ambiguity_cases():
           intent_of(res) in MERGED, f"{intent_of(res)}: {said(res)[:160]}")
 
 
+def def105_routing_cases() -> None:
+    """The router's own table for DEF-105's chat half (2026-11-26).
+
+    The corpus rows above drive the real fast path, so they prove what the owner
+    ends up with; this block pins the ROUTE, which is what was wrong. Before the
+    change the four named shapes all answered `note_change_refused`, because
+    `_NOTE_CREATE_NAMED` accepted only create|make|start. The three neighbours
+    are the limit of the rule: a create phrase with no naming word is a BODY
+    (note_make), a sentence with no note noun reaches no lane at all, and a
+    create phrase with no name is still refused.
+    """
+    print()
+    print("-- DEF-105: the router's own table " + "-" * 8)
+    cases = [
+        # (sentence, expected intent or None for no lane, expected name)
+        ("add a note titled Ideas 2027", "note_create", "Ideas 2027"),
+        ("add a note called Ideas 2027", "note_create", "Ideas 2027"),
+        ("add a note named Ideas 2027", "note_create", "Ideas 2027"),
+        ("new note called Trip", "note_create", "Trip"),
+        # The neighbours: no naming word -> the words are the body ...
+        ("add a note Ideas 2027", "note_make", None),
+        # ... no note noun -> no lane ...
+        ("add milk to the list", None, None),
+        # ... and no name after the verb -> still refused, never a file name.
+        ("add a note", "note_change_refused", None),
+    ]
+    for text, want, name in cases:
+        got = Q.match(text, now=NOW)
+        intent = got.name if got is not None else None
+        fields = dict(getattr(got, "f", {}) or {})
+        ok = intent == want
+        detail = f"got {intent!r} {fields!r}, wanted {want!r}"
+        if ok and name is not None:
+            ok = str(fields.get("name") or "") == name
+            detail += f" with name {name!r}"
+        check(f"{text!r} routes to {want or 'no lane'}", ok, detail)
+
+
 def main() -> int:
     print(f"note grammar corpus - {len(ROWS)} sentences, clock fixed at "
           f"2026-11-24 21:30 local")
@@ -907,6 +960,7 @@ def main() -> int:
     alias_writer_cases()
     full_control_cases()
     short_merge_ambiguity_cases()
+    def105_routing_cases()
     print()
     print(f"{len(PASSED)} passed, {len(FAILED)} failed")
     for name in FAILED:
