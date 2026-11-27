@@ -919,7 +919,13 @@ def t_the_route_reads_switches_and_deletes():
           # `sandbox` 158 -> 159 - and the manifest, its README, registry.json and
           # the catalogue were regenerated together. This pin moves with them, so
           # a numbers-only edit that forgets it goes red here.
-          and manifest["stack_order"] == 156, manifest.get("stack_order"))
+          # MOVED DOWN on 2026-11-26: `no-expiry-cards.patch`,
+          # `no-deadline-cards.patch` and `show-card-timer.patch` were RETIRED into
+          # the published base and left the stack, so every GENERATED position
+          # above them moved DOWN by three and the hand-numbered block followed -
+          # media-index 156 -> 153, `sandbox` 159 -> 156 - with the catalogue and
+          # the READMEs re-taken together. This pin moves with them.
+          and manifest["stack_order"] == 153, manifest.get("stack_order"))
     check("...and the README says it replaces no patch", "replaces NO patch"
           in (plugin_dir / "README.md").read_text(encoding="utf-8"))
 
