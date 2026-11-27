@@ -69,6 +69,13 @@ rule now, here and (by that commit) there:
     said to be a sentence or an instruction, and the owner is asked for just
     the note's name. It is NEVER truncated into a plausible-looking title - a
     truncated title is a wrong note, and the owner would never learn it.
+  - an EXPLICIT creation phrase is the owner NAMING the note, not a command to
+    be read as its name (2026-11-26, DEF-105): "add a note titled Ideas 2027"
+    and "new note called Ideas 2027" are peeled off BEFORE the check, and the
+    words after the phrase are the name. They are still judged by the rules
+    above, so "add a note titled delete everything" is refused as an
+    instruction rather than filed - the phrase says WHICH words are the name,
+    not that every word after it is one.
   - a name that already means one of the owner's notes is refused in the ONE
     resolver's own words (`jarvis_notes.resolve_note`, merged 2026-11-16):
     "there is already a note at ...", or the resolver's own two-candidate
