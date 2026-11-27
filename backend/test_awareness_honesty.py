@@ -364,6 +364,8 @@ def the_wake_answer_reads_the_live_phrase():
             encoding="utf-8")
         phrase = _shipped_phrase()
         check("the shipped template really sets a wake phrase", bool(phrase), phrase)
+        row = FG.row_by_id(FG.WAKE_ROW)
+        catalogue_title = str(row["title"])
 
         # MATCHING is the catalogue's own word, not the live read: the row is
         # found the same way whether the PC listens for Atlas or Jarvis.
@@ -373,45 +375,54 @@ def the_wake_answer_reads_the_live_phrase():
               and got.f.get("id") == "wake-word",
               (got.name if got else None, got.f if got else None))
 
-        # A fresh install: the shipped setting.
+        # A fresh install: the shipped setting differs from the list's title,
+        # so the answer must carry BOTH - the title (so the row still names
+        # itself on any PC, settings file or not) and the live phrase.
         _write_toml(shipped)
-        expected = f'Say "{FG.wake_phrase_title(phrase)}"'
-        title = FG.display_title(FG.row_by_id(FG.WAKE_ROW))
-        check("a fresh PC's wake row says the SHIPPED phrase, not a typed one",
-              title == expected, (title, expected))
+        live = FG.wake_phrase_title(phrase)
+        title = FG.display_title(row)
+        check("a fresh PC's wake row keeps the catalogue's own title",
+              catalogue_title in title, (title, catalogue_title))
+        check("... and adds the SHIPPED phrase as a second clause",
+              live in title and title != catalogue_title, (title, live))
         first = answer("what is my wake word").reply.splitlines()[0]
-        check("... and the answer a person hears opens with it",
-              first == expected + ".", first)
+        check("... and the answer a person hears opens with that",
+              first == title + ".", first)
         first = answer("is the wake word on").reply.splitlines()[0]
         check("... and so does 'is the wake word on'",
-              first.startswith(expected), first)
+              first.startswith(title), first)
         first = answer("how do I change the wake word").reply.splitlines()[0]
         check("... and 'how do I change the wake word'",
-              first.startswith(expected), first)
+              first.startswith(title), first)
 
-        # An existing PC that was never re-pointed must be told its OWN phrase.
+        # An existing PC left on hey_jarvis: the title already names its phrase,
+        # so the answer is the catalogue title alone - no redundant clause.
         _write_toml(shipped.replace(f'wake_phrase = "{phrase}"',
                                     'wake_phrase = "hey_jarvis"'))
-        title = FG.display_title(FG.row_by_id(FG.WAKE_ROW))
+        title = FG.display_title(row)
         first = answer("what is my wake word").reply.splitlines()[0]
-        check("a PC left on hey_jarvis is told hey_jarvis, not the new default",
-              title == 'Say "Hey Jarvis"' and first == 'Say "Hey Jarvis".',
+        check("a PC left on hey_jarvis is told hey_jarvis, with no stale clause",
+              title == catalogue_title and first == catalogue_title + ".",
               (title, first))
 
-        # A file with no line at all: honest, and names no phrase.
+        # A file with no line at all: honest, and still names the row.
         _write_toml("\n".join(line for line in shipped.splitlines()
                               if "wake_phrase" not in line))
+        title = FG.display_title(row)
         first = answer("what is my wake word").reply.splitlines()[0]
-        check("no wake_phrase line: the answer says it cannot read it",
-              "cannot read" in first, first)
-        check("... and it names neither phrase it could have guessed",
-              "Hey Atlas" not in first and "Hey Jarvis" not in first, first)
+        check("no wake_phrase line: the answer says it cannot read the phrase",
+              "cannot read" in title and "cannot read" in first, (title, first))
+        check("... and still carries the catalogue's own title",
+              catalogue_title in title, (title, catalogue_title))
 
-        # No settings module at all (the checkout's own state): same answer.
+        # No settings module at all (a checkout, and a CI runner): the same
+        # honest branch, and the title is STILL there - the CI case that this
+        # suite must not bless by comparing the answer with itself.
         had_module = sys.modules.get("jarvis_framework")
         sys.modules["jarvis_framework"] = None   # makes `import` raise ImportError
         try:
             _phrase, why = FG.wake_phrase_now()
+            title = FG.display_title(row)
             first = answer("what is my wake word").reply.splitlines()[0]
         finally:
             if had_module is None:
@@ -420,8 +431,10 @@ def the_wake_answer_reads_the_live_phrase():
                 sys.modules["jarvis_framework"] = had_module
         check("no settings reader: the wake read says why it could not read",
               "could not be read" in why, why)
-        check("... and the answer says so instead of naming a phrase",
-              "cannot read" in first, first)
+        check("... the answer names the catalogue's row and says it cannot read",
+              catalogue_title in title and "cannot read" in title, title)
+        check("... and the answer a person hears still names the row",
+              catalogue_title in first and "cannot read" in first, first)
     finally:
         _restore_toml_env(had)
 

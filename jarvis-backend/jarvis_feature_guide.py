@@ -191,23 +191,36 @@ def wake_phrase_title(phrase: str) -> str:
 
 
 def display_title(row: dict) -> str:
-    """A row's title as an ANSWER should say it - live where it can be.
+    """A row's title as an ANSWER says it - the catalogue's own words FIRST.
 
-    Every row keeps the catalogue's own title. The one exception is the
-    wake-word row: its title IS a phrase ("Say \"Hey Jarvis\""), and the phrase
-    this PC answers to is a setting (see `wake_phrase_now`), so the answer
-    reads it. On a PC whose own `[voice] wake_phrase` is still `hey_jarvis`
-    this says "Hey Jarvis" - true of that PC, and the reason this is a read
-    rather than a replaced string in the list.
+    THE RULE THAT KEEPS THE ANSWER FALSIFIABLE (2026-11-26, the wake phrase).
+    The catalogue title is ALWAYS in the answer, verbatim: every suite that
+    requires a row's own title in its answer stays strict, on a PC with a
+    settings file and on a CI runner without one. What the row cannot know -
+    which phrase THIS PC answers to - is added as a second clause, read live:
+
+      * the live phrase is the one the title already names -> the title alone;
+      * a different live phrase -> 'Say "Hey Jarvis" in the list; this PC
+        listens for "Hey Atlas"' (so a PC left on hey_jarvis while the list
+        says Atlas, or the other way round, is told both truths in one
+        sentence);
+      * the setting cannot be read -> '<title> in the list; I cannot read which
+        phrase this PC listens for right now: <why>'.
+
+    Every row but the wake word returns the catalogue title unchanged, so this
+    is one live word and not a second name table.
     """
     title = str(row.get("title") or "").strip()
     if str(row.get("id") or "") != WAKE_ROW:
         return title
     phrase, why = wake_phrase_now()
-    if phrase:
-        return f'Say "{wake_phrase_title(phrase)}"'
-    return ("Say the phrase this PC listens for (I cannot read which one it is "
-            "right now" + (f": {why}" if why else "") + ")")
+    live = wake_phrase_title(phrase) if phrase else ""
+    if live and live.lower() in title.lower():
+        return title
+    if live:
+        return f'{title} in the list; this PC listens for "{live}"'
+    return (f"{title} in the list; I cannot read which phrase this PC listens "
+            "for right now" + (f": {why}" if why else ""))
 
 
 
