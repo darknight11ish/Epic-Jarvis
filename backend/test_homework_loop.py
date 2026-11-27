@@ -183,7 +183,7 @@ def t_the_swallow_reading_is_built_from_names_not_opinions():
 
 
 def t_the_real_matcher_on_this_tree():
-    """Measured on cac8a8824 - these sentences, through the real `match`."""
+    """Measured on this tree - these sentences, through the real `match`."""
     rows = [
         # (sentence, intent, kind) as measured on this checkout before the test
         ("look for notes that have copies", "note_duplicates", "claimed"),
@@ -191,9 +191,12 @@ def t_the_real_matcher_on_this_tree():
         ("which github tools do you have", "tools_in_category", "claimed"),
         ("show me the email tools", "tools_in_category", "claimed"),
         ("combine my notes", None, "unclaimed"),
-        # A REAL neighbour on this tree: "start X about Y" reaches `open_app`
-        # before any note grammar, and the lane shares no word with the words.
-        ("start homework about the note merge", "open_app", "swallowed"),
+        # THE SENTENCE THIS LANE EXISTS FOR. Measured BEFORE this pull request:
+        # `start homework about the note merge` reached `open_app` - the "start
+        # <program>" grammar - and so never reached a note lane at all. It is
+        # the reason `_homework_intent` is asked before the open/settings
+        # grammars in `_match`, and this row is what fails if it is moved back.
+        ("start homework about the note merge", "homework_loop", "claimed"),
     ]
     for text, want, kind in rows:
         got = H.replay(text, now=NOW)
@@ -203,9 +206,6 @@ def t_the_real_matcher_on_this_tree():
     check("... and an unclaimed sentence names the routes it looks like",
           bool(got.looks_like) and all("note" in one for one in got.looks_like),
           got.looks_like)
-    got = H.replay("start homework about the note merge", now=NOW)
-    check("... and a swallow names the note route it looks like",
-          "note_merge" in got.looks_like, got.looks_like)
 
 
 # --------------------------------------------------------------------------
@@ -556,6 +556,106 @@ def t_the_spoken_answer_is_short():
 
 
 # --------------------------------------------------------------------------
+#   7. The one routing entry in jarvis_quick.py
+# --------------------------------------------------------------------------
+
+def t_the_owner_can_ask_for_this_in_chat():
+    """The lane exists, is read-only, and the owner's sentences reach it."""
+    import jarvis_quick as Q
+    cases = [
+        ("do homework on that", {"ref": "that", "draft": False}),
+        ("do homework with me on this", {"ref": "this", "draft": False}),
+        ("homework on the boiler chat", {"ref": "the boiler chat", "draft": False}),
+        ("do homework on the boiler chat", {"ref": "the boiler chat", "draft": False}),
+        ("lets do homework on the conversation about the boiler",
+         {"ref": "the conversation about the boiler", "draft": False}),
+        ("I want to do homework on that", {"ref": "that", "draft": False}),
+        ("give me homework on that chat", {"ref": "that chat", "draft": False}),
+        ("hey atlas do homework on the boiler", {"ref": "the boiler", "draft": False}),
+        ("atlas, do homework on that", {"ref": "that", "draft": False}),
+        ("do homework", {"ref": "", "draft": False}),
+        # The swallowed sentence, and the draft clause removed from the
+        # reference BEFORE it is looked up as a title.
+        ("start homework about the note merge",
+         {"ref": "the note merge", "draft": False}),
+        ("do homework on the note merge and draft the fix",
+         {"ref": "the note merge", "draft": True}),
+    ]
+    for text, want in cases:
+        got = Q.match(text, now=NOW)
+        check(f"chat: {text!r} reaches the homework lane, with {want!r}",
+              got is not None and got.name == "homework_loop" and dict(got.f) == want,
+              None if got is None else (got.name, dict(got.f)))
+    check("the homework lane is read-only, so it cannot clear what 'cancel that' "
+          "would undo", "homework_loop" in Q.READ_ONLY_INTENTS)
+    check("... and a private chat hands it to the model instead of quoting the "
+          "owner's own chat back",
+          Q.answer("do homework on that", private=True) is None)
+
+
+def t_the_lane_does_not_steal_a_neighbour():
+    """The sentences around it keep the lane they had: measured, both ways."""
+    import jarvis_quick as Q
+    for text, want in [
+        ("open my notes", "open_app"),
+        ("start a timer", "open_app"),
+        ("open notes", "open_app"),
+        ("start the shopping list", "open_app"),
+        ("show me the email tools", "tools_in_category"),
+        ("find duplicate notes", "note_duplicates"),
+        ("can you merge two notes", "note_merge_ask"),
+        ("list all of your tools", "tools_list_all"),
+    ]:
+        got = Q.match(text, now=NOW)
+        check(f"neighbour kept: {text!r} -> {want!r}",
+              got is not None and got.name == want,
+              None if got is None else got.name)
+    for text in ("do my homework", "can you help me with my homework",
+                 "what is homework"):
+        check(f"... and schoolwork that is not this lane stays with the model: "
+              f"{text!r}", Q.match(text, now=NOW) is None,
+              Q.match(text, now=NOW))
+
+
+def t_the_dispatch_answers_it_without_a_model():
+    """`run()` reaches the homework runner, and the answer is marked private."""
+    import jarvis_quick as Q
+    real = H.explain
+    H.explain = lambda *a, **k: H.Explanation(
+        found=False, text="Could not establish this: the suite said so.")
+    try:
+        got = Q._run_homework(Q.Intent("homework_loop", {"ref": "", "draft": False}),
+                              messages=[{"role": "user", "content": "combine my notes"},
+                                        {"role": "assistant",
+                                         "content": "Do you mean pull requests?"}])
+        check("the runner answers from the loop's own words",
+              got.intent == "homework_loop" and "combine my notes" in got.reply
+              and "Could not establish this" in got.reply, got.reply)
+        check("... and marks the answer private, because it quotes his chat",
+              got.private is True, got)
+        ran = Q.run(Q.Intent("homework_loop", {"ref": "", "draft": False}), None,
+                    NOW, messages=[{"role": "user", "content": "combine my notes"},
+                                   {"role": "assistant", "content": "No idea."}])
+        check("run() reaches the homework runner, not a fallback",
+              ran is not None and ran.intent == "homework_loop",
+              None if ran is None else ran.intent)
+        missing = Q._HOMEWORK_MISSING
+        H.homework = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        try:
+            got = Q._run_homework(Q.Intent("homework_loop"))
+            check("a loop that fails is one plain sentence, not a traceback",
+                  got.intent == "homework_loop" and "RuntimeError" in got.reply
+                  and "Nothing was changed" not in got.reply, got.reply)
+        finally:
+            del H.homework
+        check("... and a PC without the module says which command installs it",
+              "apply-patches" in missing and "Nothing was looked at" in missing,
+              missing)
+    finally:
+        H.explain = real
+
+
+# --------------------------------------------------------------------------
 #   main
 # --------------------------------------------------------------------------
 
@@ -576,7 +676,10 @@ def main():
                t_the_merge_gate_reads_its_rule_from_jarvis_github,
                t_the_gate_never_guesses_a_verdict,
                t_the_answer_is_the_measurement_and_nothing_else,
-               t_the_spoken_answer_is_short):
+               t_the_spoken_answer_is_short,
+               t_the_owner_can_ask_for_this_in_chat,
+               t_the_lane_does_not_steal_a_neighbour,
+               t_the_dispatch_answers_it_without_a_model):
         try:
             fn()
         except Exception:                             # noqa: BLE001
