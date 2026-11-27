@@ -13402,12 +13402,72 @@ _PRIVACY_TOOL_INTENTS = frozenset({
 })
 
 
+#: The words that name the removal tool, for the questions the fallback below
+#: still has to answer (2026-11-26). Kept HERE rather than read from
+#: `jarvis_privacy_removal`, because this path runs precisely when that module
+#: cannot be imported at all - which is every installed copy, since the module
+#: is repository-only (test_shipped_modules.REPO_ONLY_IMPORTS).
+_PRIVACY_TOOL = (r"(?:data removal(?: tool)?|personal data removal(?: tool)?|"
+                 r"personal info removal(?: tool)?|"
+                 r"personal information removal(?: tool)?|"
+                 r"privacy removal(?: tool)?)")
+_PRIVACY_ARTICLE = r"(?:the|my|your|a|an)\s+"
+
+#: The explainer QUESTIONS an installed copy must still answer honestly. This
+#: is NOT a second copy of the module's grammar: it claims only whole sentences
+#: that NAME the removal tool, so a longer request that merely mentions it
+#: ("remind me to look at data removal tomorrow") keeps its own lane, and a
+#: capability that needs the module (the mode change, the five engine
+#: sentences, the portals) is not claimed at all - there is nothing on this PC
+#: to run them with.
+_PRIVACY_QUESTIONS = (
+    rf"(?:whats|what is|what are|what does|what can|what cant|what cannot) "
+    rf"(?:{_PRIVACY_ARTICLE})?{_PRIVACY_TOOL}(?: do| work| for)?",
+    rf"(?:how does|how do) (?:{_PRIVACY_ARTICLE})?{_PRIVACY_TOOL} work",
+    rf"how private is (?:{_PRIVACY_ARTICLE})?{_PRIVACY_TOOL}",
+    rf"what are the limits of (?:{_PRIVACY_ARTICLE})?{_PRIVACY_TOOL}",
+    rf"(?:tell me about|explain) (?:{_PRIVACY_ARTICLE})?{_PRIVACY_TOOL}",
+    rf"(?:can|could|will|would) you (?:remove|delete|take down) my "
+    rf"(?:personal info|personal information|personal data|details) from the "
+    rf"internet",
+)
+
+
+def _privacy_prompt_without_tool(normalized: str, raw: str = "") -> Optional[Intent]:
+    """The removal QUESTION, answered by intent when the module cannot load.
+
+    THE BUG THIS FIXES (measured 2026-11-26 on the owner's live backend): the
+    module is repository-only, so on an installed copy `_privacy_prompt` hit
+    its ImportError and returned None BEFORE `privacy_explain` could ever be
+    dispatched - "what is the data removal tool" reached no lane at all and the
+    local model made an answer up. `_run_privacy_explain`'s "not set up on this
+    PC" sentence was written and unreachable.
+
+    So the question is still claimed here, and the answer still comes from the
+    explainer, which reads the truth off this PC. Nothing is guessed: the
+    reply says the tool is not set up here and that this PC cannot say what it
+    does. Whole-sentence only, like the module's own grammar, so nothing longer
+    is swallowed. When the module IS importable this function is never called.
+    """
+    said = str(raw or normalized or "").lower().replace("\u2019", "'")
+    said = re.sub(r"[^a-z0-9]+", " ", said.replace("'", ""))
+    said = " ".join(said.split())
+    for pattern in _PRIVACY_QUESTIONS:
+        if re.fullmatch(pattern, said):
+            return Intent("privacy_explain", {"topic": "overview"})
+    return None
+
+
 def _privacy_prompt(s: str, text: str) -> Optional[Intent]:
     """The data removal sentence, or None (see jarvis_privacy_removal)."""
     try:
         import jarvis_privacy_removal as PR
     except Exception:                                       # noqa: BLE001
-        return None
+        # The module is not on this PC (every installed copy - it is
+        # repository-only). The QUESTION still gets an honest answer from the
+        # explainer rather than falling through to the model; see
+        # `_privacy_prompt_without_tool`.
+        return _privacy_prompt_without_tool(s, text)
     try:
         got = PR.prompt(s, text)
     except Exception:                                       # noqa: BLE001
@@ -13423,8 +13483,14 @@ def _run_privacy_explain(f: dict) -> Result:
     try:
         import jarvis_privacy_removal as PR
     except Exception:                                       # noqa: BLE001
-        return Result("The data removal tool is not set up on this PC, so there is "
-                      "nothing to read yet.", "privacy_explain")
+        # The measured answer for an installed copy, reached by
+        # `_privacy_prompt_without_tool` above. It says what is true - the tool
+        # is not set up here - and claims no ability and no procedure, because
+        # this PC has none to describe.
+        return Result("The data removal tool is not set up on this PC yet: the "
+                      "part of Atlas that answers for it is not available here, so "
+                      "I cannot say what it does or how to use it. Nothing was "
+                      "guessed, and nothing was changed.", "privacy_explain")
     return Result(PR.privacy_explain(str(f.get("topic") or "overview")),
                   "privacy_explain")
 
