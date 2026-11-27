@@ -705,6 +705,16 @@ LIVE_GATE_ALREADY_REPAIRED = frozenset({
     # The owner's live gate, read 2026-11-06: 194,597 B, all six unknown-risk
     # probes present exactly once, and the app-builder/timer/history probes too.
     "61a34b1eff2627d9c50b7589c1f4bb4a07b0a887559fd246bc3de2507e8df0f1",
+    # The owner's live gate of 2026-11-26, THIS TOOL'S OWN OUTPUT (DEF-110).
+    # 243,288 B, sha256 measured on the live folder after the nine-row repair:
+    # every one of the fourteen repairs reports "already present" on it (the
+    # run below prints fourteen `ok` lines), and the tool then refused it with
+    # exit 2 because the hash was not listed - so a caller checking exit codes
+    # saw a failure for a gate that needed nothing. Re-measured 2026-11-27
+    # 02:2x PT, same bytes, same fourteen lines. Listing it is the whole fix:
+    # the caller returns "already" before any anchor is consulted and nothing
+    # is written.
+    "2d9ad18d327d29cbd7cf1ef561a122b783fa95b21b06c08f1bfea1adca84f383",
 })
 
 #: A live-lineage gate is ~175-185 KB. The published-base pre-image this
