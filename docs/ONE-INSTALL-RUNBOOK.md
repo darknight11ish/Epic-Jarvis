@@ -571,6 +571,32 @@ in ONE place").
    Windows says it "protected your PC" because the build is unsigned: **More info -> Run anyway**
    (INSTALL section 2.2). No UAC prompt; it installs for your account under `%LOCALAPPDATA%`.
 
+   **If the installer loops instead of installing, use the fallback below.** Measured on this PC
+   on 2026-11-26, driven page by page (DEF-108): the NSIS installer reaches **Already Installed**
+   and `Next` returns to that same page, so the install never starts; `/UPDATE /S` exits **0** in
+   0.4 s and `/UPDATE /S /D=…` exits **0** in 0.2 s, and both install nothing - a zero exit code
+   from the silent switch is **not** a success here, which is exactly why this is written down.
+   The same happens on a build whose version number is already the installed one.
+
+   **The non-elevated fallback that works on this PC: extract the MSI and copy the files.** It needs
+   no administrator rights and registers nothing:
+
+   1. Extract the build's `.msi` (it sits beside the `nsis` folder in the same `bundle` directory):
+
+      `$msi = Get-ChildItem "D:\jarvis-cache\cargo-target\release\bundle\msi\*.msi" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; $out = "$env:TEMP\jarvis-msi-extract"; $null = New-Item -ItemType Directory -Force -Path $out; $p = Start-Process msiexec.exe -ArgumentList @('/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$out`"") -Wait -PassThru; "msiexec exit $($p.ExitCode)"; Get-ChildItem -Recurse "$out" -Filter 'jarvis-desktop.exe' | ForEach-Object { $_.FullName }`
+
+      It exits **0** and the last line prints where the extracted program landed. Nothing is
+      installed and no registry entry is written.
+   2. Back up the installed copy first, then copy the extracted files over it:
+
+      `$live = "$env:LOCALAPPDATA\Jarvis Desktop"; Copy-Item -Recurse -Force $live "$live.bak-$(Get-Date -f yyyyMMdd-HHmmss)"; $src = Split-Path (Get-ChildItem -Recurse "$env:TEMP\jarvis-msi-extract" -Filter 'jarvis-desktop.exe' | Select-Object -First 1).FullName; Copy-Item -Force "$src\*" $live; (Get-Item "$live\jarvis-desktop.exe").VersionInfo.FileVersion`
+
+      The last line must print the version you built. Measured on this PC on 2026-11-26 with
+      0.2.519: four files copied, every hash matching the MSI payload, and the app started.
+   3. Two limits, said plainly: an extracted copy is **not** a registered install, so Settings ->
+      Apps keeps showing the old version and `uninstall.exe` stays the old one; and this is a
+      recovery for **this PC**, not the normal path. If the installer works on your machine, use it.
+
 4. Point it at the backend (INSTALL section 2.5): tray icon -> **Settings and help...** ->
    **More options** -> **Starting Jarvis for you** -> **Find it for me** for the program, the full
    path of `jarvis_hud.py` for the arguments, then the switch, **Save**, **Start**. Leave its address
