@@ -555,9 +555,18 @@ ROWS = [
     ("merge my two Newsletter notes", ("note_merge_ask",), nothing_written()),
     ("can you merge the pull request", ("<not-note>",), nothing_written()),
     ("merge pull request 12", ("<not-note>",), nothing_written()),
+    # The short form's guard (2026-11-26): two things that are not notes reach no
+    # lane at all; before it they were answered in the note lane's words.
+    ("merge the two invoices and send them", ("<not-note>",), nothing_written()),
     ("merge my Shopping note and my Ideas note", MERGED, merge_landed("Shopping.md",
                                                                      "Ideas.md")),
     ("merge my Ideas note into my Shopping note", MERGED, trashed("Ideas.md")),
+    # THE SHORT FORM (2026-11-26): the same two notes with no "note" noun where
+    # the grammar above needed one. Both reached NO lane before this change, so
+    # the model improvised; they are the two sentences the owner typed.
+    ("merge Ideas and Shopping", MERGED, merge_landed("Ideas.md", "Shopping.md")),
+    ("merge my two notes Ideas and Shopping", MERGED,
+     merge_landed("Ideas.md", "Shopping.md")),
     ("copy my Shopping note", ("note_copied", "note_copy_waiting"),
      copied("Shopping copy.md")),
     ("add this to the top of my Shopping note", ("note_append_ask",),
@@ -820,6 +829,56 @@ def full_control_cases():
     check("... and the file is really gone", not (trash / "Old.md").exists())
 
 
+def short_merge_ambiguity_cases():
+    """`merge Ideas and Shopping` is two notes OR one note with that title.
+
+    The router carries BOTH readings, the whole phrase as one name first, so the
+    choice is made against the REAL vault and is never guessed: a note literally
+    called "Ideas and Shopping" makes the lane ASK and write nothing, and only
+    when no such note exists do the two real notes merge (survivor first-named,
+    behind the one delete card). Measured 2026-11-26: the sentence reached no
+    lane at all before this change.
+    """
+    print()
+    print("-- the short merge form and the one-note title " + "-" * 8)
+
+    # (a) No note called "Ideas and Shopping": two names, two real notes.
+    reset_all()
+    put("Ideas.md", "# Ideas\n\n- eggs\n")
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    BEFORE.clear()
+    BEFORE.update(snapshot())
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("merge Ideas and Shopping")
+    check("'merge Ideas and Shopping' merges the two notes it names",
+          intent_of(res) in MERGED, f"{intent_of(res)}: {said(res)[:160]}")
+    good, why = merge_landed("Ideas.md", "Shopping.md")(res)
+    check("... the first named survives and the second is in the trash", good, why)
+    check("... under ONE delete card, never a silent write",
+          GATE["calls"] == ["delete_vault_notes"], GATE["calls"])
+
+    # (b) ONE note really carries the whole phrase: ask, do not assume a split.
+    reset_all()
+    put("Ideas.md", "# Ideas\n\n- eggs\n")
+    put("Shopping.md", "# Shopping\n\nmilk\n")
+    put("Ideas and Shopping.md", "# One note\n\nboth words in one title\n")
+    BEFORE.clear()
+    BEFORE.update(snapshot())
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("merge Ideas and Shopping")
+    check("a note really called 'Ideas and Shopping' makes the short form ASK",
+          intent_of(res) == "note_merge_ask",
+          f"{intent_of(res)}: {said(res)[:160]}")
+    good, why = nothing_written()(res)
+    check("... and nothing was merged, carded or changed", good, why)
+
+    # (c) The same title present does not disturb the explicit "... into ...".
+    GATE["calls"], GATE["cards"] = [], []
+    res = ask("merge my Ideas note into my Shopping note")
+    check("... while the explicit 'into' form still merges",
+          intent_of(res) in MERGED, f"{intent_of(res)}: {said(res)[:160]}")
+
+
 def main() -> int:
     print(f"note grammar corpus - {len(ROWS)} sentences, clock fixed at "
           f"2026-11-24 21:30 local")
@@ -847,6 +906,7 @@ def main() -> int:
             check(f"... and the vault agrees ({text!r})", good, why)
     alias_writer_cases()
     full_control_cases()
+    short_merge_ambiguity_cases()
     print()
     print(f"{len(PASSED)} passed, {len(FAILED)} failed")
     for name in FAILED:
