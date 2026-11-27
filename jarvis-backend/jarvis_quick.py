@@ -20922,19 +20922,42 @@ _NOTE_DUPLICATES_CAPABILITY = re.compile(
     r"(?:duplicate|duplicated)\s+notes?\s*\??$")
 
 
+_NOTE_SECTION_DELETE_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:delete|remove|erase|cut|drop)\s+"
+    r"(?:(?:a|an|one|the|my|any)\s+)*(?:whole\s+)?sections?"
+    r"(?:\s+(?:of|from|in|inside)\s+(?:(?:a|the|my|this|one)\s+)*"
+    r"(?:note|notes|obsidian\s+note))?\s*\??$"
+    r"|(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:delete|remove|cut)\s+"
+    r"(?:(?:a|one|the)\s+)?sections?\s*\??$")
+
+
 def _note_capability_question(raw) -> Optional[Intent]:
-    """The two bare note-capability questions, read from the RAW sentence.
+    """The bare note-capability questions, read from the RAW sentence.
 
     Deliberately not `normalize_spoken_command`: that is what strips "can you",
     and the whole point of this lane is to tell the QUESTION from the command
     that follows it. Case, spacing and a trailing question mark are the only
     normalising done.
+
+    DEF-106 (2026-11-27): "can you empty the trash" and "can you delete a
+    section of a note" used to lose their "can you" on the way in, so they
+    arrived at the command lanes as ORDERS - the first answered "The approval
+    gate refused it", the second went looking for a note called "section of a".
+    Both are questions and both are answerable read-only, so they are read here,
+    where the sentence still has its "can you".
     """
     text = " ".join(str(raw or "").strip().casefold().split())
     if _NOTE_DUPLICATES_CAPABILITY.fullmatch(text):
         return Intent("note_duplicates_capability")
     if _NOTE_DELETE_CAPABILITY.fullmatch(text):
         return Intent("note_delete_capability")
+    if _NOTE_TRASH_CAPABILITY.fullmatch(text):
+        # The order form asks for the card (ask=False); the question form is the
+        # SAME intent with ask=True, which answers without touching the vault.
+        return Intent("note_empty_trash", {"ask": True})
+    if _NOTE_SECTION_DELETE_CAPABILITY.fullmatch(text):
+        return Intent("note_section_delete_capability")
     return None
 
 
@@ -21860,6 +21883,24 @@ _NOTE_SECTION_DELETE = re.compile(
     r"(?P<head>.+?)\s+section\s+(?:from|out\s+of|in)\s+(?:my\s+|the\s+)?"
     r"(?P<name>.+?)\s*[.!?]?$", re.I)
 
+#: The section verb with NOTHING to act on (DEF-106, 2026-11-27): "delete a
+#: section of a note", "delete a section". Before this, that sentence fell past
+#: the section lane into the NOTE-delete lane and looked for a note called
+#: "section of a". A section verb with no section is a request for the missing
+#: detail, so it goes to the section handler, which already answers by asking
+#: for one.
+_NOTE_SECTION_ASK_SHAPE = re.compile(
+    r"(?:delete|remove|cut|drop|take)\s+(?:out\s+)?"
+    r"(?:(?:a|an|one|the|some|any)\s+)*(?:whole\s+)?sections?"
+    r"(?:\s+(?:of|from|out\s+of|in)\s+(?:(?:a|an|one|the|my|this)\s+)*"
+    r"(?:note|notes|obsidian\s+note))?\s*[.!?]?$", re.I)
+
+#: Words that are never a real section NAME when they stand where the heading
+#: goes: "remove one section from a note" must ask, not hunt for a heading
+#: called "one" in a note called "a note".
+_NOTE_SECTION_PLACEHOLDERS = frozenset(
+    {"a", "an", "the", "one", "this", "that", "some", "any", "my", "your"})
+
 #: "add this to the top of my Shopping note" and its family. The POSITION is the
 #: verb's, never part of the note's name: before this pattern existed the append
 #: reader took the whole tail as the name and asked "What should I add to \"top
@@ -22607,12 +22648,21 @@ def _note_control_asking(s: str) -> Optional[Intent]:
             return Intent("note_copy", {"name": name,
                                         "as": (m.group("alias") or "").strip()})
     # --- deleting ONE section of a note ------------------------------------
+    # DEF-106 (2026-11-27): "delete a section of a note" used to fall past this
+    # lane into the NOTE-delete lane and look for a note called "section of a".
+    # A section verb with nothing to act on is a request for the missing detail,
+    # which is exactly what the section handler already says when name or
+    # heading is empty - so it is sent there instead of being read as a note.
     m = _NOTE_SECTION_DELETE.fullmatch(s)
     if m:
         head = m.group("head").strip()
         name = _note_name_only(m.group("name"))
-        if head and name:
+        if (head and name and head.casefold() not in _NOTE_SECTION_PLACEHOLDERS
+                and name.casefold() not in _NOTE_NAME_EMPTY):
             return Intent("note_section_delete", {"name": name, "heading": head})
+        return Intent("note_section_delete", {"name": "", "heading": ""})
+    if _NOTE_SECTION_ASK_SHAPE.fullmatch(s):
+        return Intent("note_section_delete", {"name": "", "heading": ""})
     # --- adding a line at a POSITION ---------------------------------------
     m = _NOTE_INSERT_TOP.fullmatch(s)
     if m:
@@ -25056,6 +25106,16 @@ def _run_note_duplicates(f: dict) -> Result:
     if f.get("asked_delete"):
         said = "Nothing has been deleted. " + said
     return Result(said, "note_duplicates")
+
+
+def _run_note_section_delete_capability() -> Result:
+    """"can you delete a section of a note?" - yes, and here is the door."""
+    return Result(
+        'Yes - I can delete one section from a note, and only that section. Say '
+        'it as "delete the Warm-up section from my workout log" and I will show '
+        'you exactly what goes on one card first; nothing is removed until you '
+        'approve it, and the old text is copied before it changes.',
+        "note_section_delete_capability")
 
 
 def _run_note_delete_capability() -> Result:
@@ -35391,6 +35451,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # "can you find duplicates?" - the scan exists, and its bounds are the
         # ones the scan itself uses. Read-only.
         return _run_note_duplicates_capability()
+    if n == "note_section_delete_capability":
+        # "can you delete a section of a note?" (DEF-106, 2026-11-27): a
+        # QUESTION about the verb, answered read-only. The order form still
+        # raises its one card.
+        return _run_note_section_delete_capability()
     if n == "note_location":
         return _run_note_location(f, hidden=_notes_write_hidden())
     if n == "note_append":
@@ -36770,6 +36835,7 @@ READ_ONLY_INTENTS = frozenset({
     # card, and the two capability answers only say what the code does. None of
     # the three may take away what "cancel that" would undo.
     "note_duplicates", "note_delete_capability", "note_duplicates_capability",
+    "note_section_delete_capability",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",
