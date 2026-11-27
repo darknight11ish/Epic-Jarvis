@@ -956,7 +956,29 @@ jobs:
             echo "::error::the live suite did not run (a skip is not a pass) - see the log"; exit 1; }
           exit "$status"
 
-  backend-windows:
+  # SHARDED 2026-11-27 - FOUR SHARDS PLUS THE REQUIRED AGGREGATOR, the same
+  # shape as `backend-shard` + `backend` above and for the same measured reason:
+  # the one job had grown to a five-hour ceiling. THIS JOB'S NAME IS NOT THE
+  # REQUIRED CHECK ANY MORE - `backend-windows` below is, and it is green only
+  # when every shard is. The suite LIST, the direct `python <suite>` invocation
+  # (repo mode, not `run_suites.py` - the comment below says why that is
+  # deliberate) and every suite name in it are unchanged; only WHICH shard runs
+  # a given suite changed.
+  #
+  # HOW A SUITE IS PLACED: the array is sliced by POSITION, exactly like
+  # `run_suites.py --shard I/N` (`position % N == I - 1`), with N taken from
+  # `strategy.job-total` so the split cannot drift from the matrix. A shard that
+  # selects no suite is a FAILURE, not an empty green. That is why the array
+  # stays one list in one job instead of four hand-edited lists: a suite added
+  # to it is picked up by a shard automatically, and the placed-by-position rule
+  # is the one the Ubuntu runner already uses.
+  #
+  # WHAT MUST STAY: `backend/test_base_matches_repo.py` now runs in the required
+  # `backend-windows` aggregator BY NAME, as well as in its shard - the
+  # two-file rule is the one check this job has always carried that a shard
+  # alone could quietly lose, and the required check must keep proving it.
+  backend-windows-shard:
+    name: backend-windows-shard (${{ matrix.shard }}/${{ strategy.job-total }})
     # The Windows half of the backend job above. CI ran the backend suites on
     # Ubuntu only, which is why about fifteen of them turned out to assume
     # Linux (docs/HANDOFF-2026-10-04-test-suite-fixes.md, section 7 item 3).
@@ -1109,16 +1131,22 @@ jobs:
     #        same-second name collision the checks exist for is untouched: it is
     #        a backup FILE name (jarvis-backup-<stamp>-2), not a folder name.
     runs-on: windows-latest
-    # 90 minutes, chosen rather than derived. Measured on the owner's 24-core
-    # PC while another audit was running: 31 minutes of suite time in repo mode
-    # with the live model, 43 minutes in the CI-like pass with eight shards
-    # contending. The Ubuntu job that runs about 450 suites has a 60-minute
-    # limit (measured 2026-10-27: `backend/test_*.py` is 451 files, and this
-    # line said "about 230 suites ... 25-minute", both stale); a Windows runner
-    # is slower and has no graphics card. The frontend
-    # job above was CANCELLED at 45 minutes with every test still passing, so
-    # this ceiling is deliberately generous rather than tight.
-    timeout-minutes: 120
+    # 60 MINUTES PER SHARD, derived from the recorded whole-job measurement
+    # rather than guessed. Measured on the owner's 24-core PC while another
+    # audit was running: 31 minutes of suite time in repo mode with the live
+    # model, 43 minutes in the CI-like pass with eight shards contending - that
+    # is the WHOLE list, which is now split four ways by position, so a shard is
+    # roughly a quarter of it plus the ~4 minutes of setup every shard carries.
+    # 60 is about four times the expected 15, the same generous shape as
+    # `backend-shard`'s 60 for a 39-minute worst shard, and below the old 120
+    # because a shard that really runs for an hour is a hang, not a slow suite.
+    timeout-minutes: 60
+    # ONE RED SHARD MUST NOT CANCEL THE OTHER THREE: the run should list every
+    # Windows failure it found, the same rule as `backend-shard` above.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # SAME REASON AS THE `backend` JOB, and it matters more here: this job runs
     # the four guarded suites DIRECTLY by name in the list below, not through
     # run_suites.py, so the runner's layer-2 skip does not apply. Without the
@@ -1179,6 +1207,13 @@ jobs:
       # from requirements.lock.
       - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29 pyyaml==6.0.3 fsrs==6.3.2
       - name: Backend suites that need no file from the owner's PC, on Windows
+        # SHARD: this matrix value. SHARDS: `strategy.job-total`, the length of
+        # the matrix list, so the divisor cannot drift from the matrix and
+        # silently drop a shard's worth of suites (the same rule as the Ubuntu
+        # shard job, which is handed the same pair).
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
         # One step, not two: an environment variable set in one step does not
         # reach the next one.
         run: |
@@ -1204,9 +1239,11 @@ jobs:
           $env:PYTHONIOENCODING = 'utf-8'
           $env:PYTHONDONTWRITEBYTECODE = '1'
 
-          # Every suite in the list, in name order. A suite that fails does not
-          # stop the rest: one red run lists every Windows failure at once.
-          $suites = @(
+          # Every suite in the list, in name order - THE ONE LIST, the same
+          # names and the same order the single job carried. A suite that fails
+          # does not stop the rest: one red run lists every Windows failure in
+          # this shard at once.
+          $all = @(
             # Back in the list on 2026-10-06, with the account addresses: it
             # needs nothing from the owner's PC (every module it imports is
             # shipped whole) and was run here on Windows 11 with the same
@@ -1464,6 +1501,29 @@ jobs:
             'test_wiki.py',
             'test_youtube.py'
           )
+          # PLACE EACH SUITE IN ONE SHARD BY POSITION - `position % N == I - 1`,
+          # the exact split `backend/run_suites.py --shard I/N` uses on the
+          # Ubuntu side, with I and N read from the matrix above. Every suite in
+          # the list runs in exactly one shard, the split is the same on every
+          # run, and a new name added to the list is picked up without touching
+          # this code.
+          $shard = [int]$env:SHARD
+          $shards = [int]$env:SHARDS
+          $suites = @()
+          for ($i = 0; $i -lt $all.Count; $i++) {
+            if (($i % $shards) -eq ($shard - 1)) {
+              $suites += $all[$i]
+            }
+          }
+          # A SHARD THAT SELECTS NO SUITE IS A FAILURE, NOT AN EMPTY GREEN. This
+          # is the rule `backend/test_suites_shard.py` proves for the Ubuntu
+          # runner; here it is four lines because a matrix that silently dropped
+          # a shard would otherwise report green having run nothing.
+          if ($suites.Count -eq 0) {
+            Write-Output "::error::shard $shard/$shards selected no suite - that is a failure, not an empty green"
+            exit 1
+          }
+          "Shard $shard/$($shards): $($suites.Count) of $($all.Count) backend suites selected"
           # Each suite's output also goes to its own file, so a failure can name
           # its own assertion in the annotation rather than only the file name.
           # WHY: on 2026-10-12 one suite failed here and it took three people and
@@ -1489,12 +1549,63 @@ jobs:
             }
             Write-Output "::endgroup::"
           }
-          "$($suites.Count) backend suites ran on Windows"
+          "Shard $shard/$($shards): $($suites.Count) backend suites ran on Windows"
           if ($failed.Count -gt 0) {
-            Write-Output "::error::$($failed.Count) backend suite(s) failed on Windows: $($failed -join ', ')"
+            Write-Output "::error::$($failed.Count) backend suite(s) failed on Windows in shard $shard/$($shards): $($failed -join ', ')"
             exit 1
           }
-          "Every backend suite in this job passed on Windows."
+          "Every backend suite shard $shard/$($shards) selected passed on Windows."
+
+  # THIS IS THE REQUIRED CHECK NAMED `backend-windows`, AND THE NAME MUST NOT
+  # MOVE. It is one of the ruleset's seven required status checks (CLAUDE.md),
+  # so renaming it blocks every merge. It does no suite work of its own: it
+  # exists so the required name survives sharding, exactly like `backend` above
+  # (and `frontend` before it). GitHub aggregates a matrix job's result into
+  # `needs.backend-windows-shard.result`, so "success" here means every shard
+  # passed; a failed or cancelled shard turns this job red.
+  #
+  # `if: always()` matters: without it a cancelled matrix would SKIP this job,
+  # and a required check that never reports blocks a merge just as hard as a red
+  # one - which is the failure this aggregator exists to make visible.
+  #
+  # IT ALSO RUNS `backend/test_base_matches_repo.py` BY NAME. That suite is the
+  # two-file rule (`backend/<file>` and `jarvis-backend/<file>` kept equal), the
+  # one check this job has always carried that a shard alone could quietly lose
+  # when the list is sliced; running it here means the required check itself
+  # still proves it, not only whichever shard happened to receive it. It is a
+  # few seconds and needs nothing but the checkout, so the job stays an
+  # aggregator with one tiny check.
+  backend-windows:
+    name: backend-windows
+    needs: [backend-windows-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: The published base still matches this repository, by name
+        run: python backend/test_base_matches_repo.py
+        # Runs even when a shard is red: the shard result is judged in the step
+        # below, and this check's own answer should still be visible on the run.
+        if: always()
+      - name: Require every Windows shard to be green
+        shell: bash
+        # The gate, and the ONLY thing that can turn this required check red for
+        # a shard's reason. `always()` keeps it running when the step above
+        # failed, so the log names BOTH answers.
+        if: always()
+        run: |
+          set -euo pipefail
+          result="${{ needs.backend-windows-shard.result }}"
+          echo "backend-windows-shard result: ${result}"
+          if [ "${result}" != "success" ]; then
+            echo "::error::one or more Windows backend shards did not succeed (${result})"
+            exit 1
+          fi
+          echo "All Windows backend shards succeeded."
 
   credential-manager:
     # The pairing token lives in Windows Credential Manager (CLAUDE.md rule 3,
