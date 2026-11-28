@@ -4138,24 +4138,3 @@ _RISK.update({
 _RISK.update({
     "connect_mail": ("yes", "local", "saves your mail address and an app password in Windows Credential Manager on this PC and then reads ONLY how many messages the inbox holds, to prove the login works - no sender, no subject, no date and no message body is read, nothing is marked as read, nothing is sent anywhere, and deleting the saved entries is instant"),
 })
-
-# ===== the note rows that describe work nobody built =====================
-#
-#   # DORMANT, AND SAYING SO RATHER THAN PRETENDING (2026-11-27, the owner's
-#   # ruling Q3). Seven names in this table describe work that was specified
-#   # and never built, so nothing in this program can carry them out:
-#   #   read_joplin_note, edit_joplin_note, delete_joplin_note,
-#   #   read_logseq_page, edit_logseq_page, delete_logseq_page,
-#   #   create_logseq_page
-#   # The ruling was "delete the seven unreachable rows". They are NOT one
-#   # table, which is why they are marked instead of removed: each also has an
-#   # `_ACTION_PATTERNS` entry - a prose heuristic that CAN fire, so deleting
-#   # only this row would make ordinary note-reading prose resolve to an action
-#   # with no row, which the gate renders as "permanent and able to leave this
-#   # PC" - and the delete/edit four are also in `_REPLACES_ACTIONS`, the
-#   # two-press guard the owner asked for on 2026-10-21, and in
-#   # `_REPLACES_KINDS`, which decides a card's warning words. Removing them is
-#   # therefore a refactor of those safety tables, not a row cleanup, and the
-#   # owner chose the honest minimum: keep them, and say here that they are
-#   # dormant. They leave together with the tools, when those are built.
-#
