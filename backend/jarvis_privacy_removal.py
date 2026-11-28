@@ -294,13 +294,13 @@ CONSENT_ACTION = "change_own_config"
 #: being asked to agree to - and the masked labels from HIS profile, never a
 #: value. The spec's own wording (2026-11-26, section 0).
 CLOUD_CONSENT_TEXT = (
-    "Switch personal data removal to Optery's cloud API?\n"
+    "Switch personal data removal to Optery's cloud service?\n"
     "From then on, your name, home address, phone number and email address - the "
-    "details in the removal profile on this PC - are sent over HTTPS to Optery's "
-    "API at optery.com, so their service can scan brokers and file removals for "
+    "details in the removal profile on this PC - are sent over HTTPS to Optery at "
+    "optery.com, so their service can scan brokers and file removals for "
     "you. Nothing is sent before you approve this card, and denying it leaves "
     "data removal exactly as it is now.\n"
-    "What stays true either way: every send and every API call still needs its "
+    "What stays true either way: every send and every request still needs its "
     "own approval card, and a removal is never reported as done until the verify "
     "pass confirms it."
 )
