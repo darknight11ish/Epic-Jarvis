@@ -715,6 +715,17 @@ LIVE_GATE_ALREADY_REPAIRED = frozenset({
     # the caller returns "already" before any anchor is consulted and nothing
     # is written.
     "2d9ad18d327d29cbd7cf1ef561a122b783fa95b21b06c08f1bfea1adca84f383",
+    # THE SAME SHAPE AGAIN, one repair later (2026-11-28). The Price Radar
+    # switch added two repairs (`price-radar-risk`, `price-radar-no-rule`), so
+    # this tool's own output grew by 1,043 B - 243,288 -> 244,331 B - and the
+    # hash above stopped matching the gate it had just written. Measured: both
+    # repairs applied, every other repair printed `ok ... already present`, and
+    # the run still ended `REFUSED: ... live-lineage gate this repair does not
+    # recognise (sha256 eef45cf4...)` with exit 2 - on bytes this tool had
+    # produced seconds earlier. Listing the new output is the whole fix, as it
+    # was for DEF-110; a caller reading the exit code saw a failure for a gate
+    # that needed nothing.
+    "eef45cf49e3af6dd2c9ee592a6936ece9de702bcc17c2272c19c6d17538932bc",
 })
 
 #: A live-lineage gate is ~175-185 KB. The published-base pre-image this
