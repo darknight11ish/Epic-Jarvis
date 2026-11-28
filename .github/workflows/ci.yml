@@ -822,6 +822,25 @@ jobs:
           fi
           echo "All backend shards succeeded."
 
+      # NO `shutil.rmtree` MAY BE ABLE TO REACH THE CHECKOUT (owner's ruling Q2,
+      # 2026-11-27). On that day a lane's scratch helper ran `rmtree(".")` -
+      # `Path("")` IS `"."` - and deleted this working tree and most of `.git`.
+      # The rule has two tiers: the shapes that delete a checkout whatever
+      # follows them (`""`, `"."`, `".."`, the home directory) FAIL HERE, and
+      # every other site the checker cannot trace is a CEILING recorded in
+      # `tools/safe-rmtree-baseline.json` that may only go DOWN - so an existing
+      # fixture is not a blocker and a NEW unguarded site is. It lives in this
+      # job, which GATES a merge, rather than in `audit`, which does not: a rule
+      # whose whole purpose is that no run can delete the tree must be enforced
+      # by the job that can stop one.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: No rmtree can reach the checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/check_safe_rmtree.py
+          python backend/test_check_safe_rmtree.py
+
   # THE SUITES THAT STILL NEED THE OWNER'S OWN FILES - INFORMATIONAL.
   #
   # WHY THIS JOB EXISTS (2026-10-27, the partner test-health corrections, item
