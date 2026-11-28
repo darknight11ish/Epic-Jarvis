@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
-    "A finished update is answered from this PC's own stamps, never by the model",
-    "the startup line names the version that is installed, not the crate's 0.2.0",
-    'The defect register drops the rows the code already fixed, and files the update gaps it found',
-    'a date sentence writes a date, and a name sentence writes an alias',
-    'Full GitHub mode, slice 1: ONE PC-only card turns on the twenty GitHub tools, GitHub-only cloud forwarding, and a one-chat per-file approval',
+    'The Windows CI job is four shards behind one required check, and a checker now catches the shape that deleted a checkout',
+    "The app-triggered updater deploys the release's commit, never the checkout's HEAD",
+    'The one-command updater hands a deploy-managed backend to the deploy tool',
+    'Two measured defects are on the register instead of in a chat message',
+    'The one-install runbook carries the installer fallback that worked on this PC',
 )
 
 
