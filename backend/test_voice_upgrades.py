@@ -45,6 +45,19 @@ from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+
+# THE SUITE OWNS ITS CONFIG (DEF-110, 2026-11-27). This file was green in CI and
+# red at the desk, and the difference was the environment: CI points
+# JARVIS_CONFIG_DIR and OPENJARVIS_CONFIG_DIR at a temp folder, so the modules
+# under test see an empty config, while on this PC they read the owner's real
+# one and one check ("one sentence reads the built-in voice once...") failed.
+# A suite that passes only inside the runner's bubble proves nothing about the
+# machine it ships to, so the isolation is set here, before the imports below
+# pull the modules in.
+_VOICE_TMP = Path(tempfile.mkdtemp(prefix="jarvis-voice-upgrades-"))
+os.environ["JARVIS_CONFIG_DIR"] = str(_VOICE_TMP)
+os.environ["OPENJARVIS_CONFIG_DIR"] = str(_VOICE_TMP)
+
 from _where import BACKEND, REPO, require_shipped  # noqa: E402
 
 for p in (HERE / "rebuilt",):
