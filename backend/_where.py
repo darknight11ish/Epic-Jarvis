@@ -1931,6 +1931,24 @@ SHIPPED = (
     # instead. Its suite is backend/test_homework_loop.py. The same entry, in
     # the same position, is in scripts/apply-patches.ps1 $SHIPPED, above
     # jarvis_bench.py, which stays LAST.
+    # The personal data removal tool (jarvis_privacy_removal.py, 2026-11-26 and
+    # SHIPPED on 2026-11-27): find where the owner's name, address, phone and
+    # email are listed by data brokers, ask those brokers to delete the
+    # listings through the owner's own Gmail App Password, and check afterwards
+    # whether they really went. Local by default; the two cloud modes raise ONE
+    # consent card that says his details would leave the PC. Its suite is
+    # backend/test_privacy_removal.py (316 checks).
+    #
+    # SHIPPED LATE, ON THE OWNER'S OWN RULING. PR 1 and PR 2 deliberately left
+    # it out of this tuple - "only the pull request that wires a live caller may
+    # ship a module whole" - and the chat grammar, the settings-registry row and
+    # the Privacy tool group were all written as GUARDED imports so an install
+    # without it behaved exactly as before. That caller is wired (the five
+    # `_PRIVACY_TOOL_INTENTS` in jarvis_quick.py), the owner asked for it to be
+    # usable on 2026-11-27, and this entry is what makes the deploy carry it.
+    # The same entry, in the same position, is in scripts/apply-patches.ps1
+    # $SHIPPED, above jarvis_bench.py, which stays LAST.
+    "jarvis_privacy_removal.py",
     "jarvis_homework.py",    "jarvis_bench.py"
 )
 

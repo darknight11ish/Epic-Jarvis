@@ -895,30 +895,40 @@ def _guarded_imports(path: Path, module: str) -> list:
     return out
 
 
-def t_the_module_is_not_in_shipped_yet():
+def t_the_module_is_shipped_now_that_the_caller_is_wired():
+    """2026-11-27: the owner asked for the tool to be usable on his PC.
+
+    The old pin here said the module must NOT be in `_where.SHIPPED`, on the
+    ruling that "only the pull request that wires a live caller may ship a
+    module whole". That caller is wired (the five `_PRIVACY_TOOL_INTENTS` in
+    jarvis_quick.py, the settings-registry row and the Privacy tool group), so
+    the pin is inverted rather than deleted: shipping it is now the fact this
+    suite protects, and un-shipping it would be the regression.
+    """
     import _where
-    check("the owner's ruling holds: the module is NOT in _where.SHIPPED",
-          "jarvis_privacy_removal.py" not in _where.SHIPPED)
-    check("... and the published base does not carry it either",
-          not (HERE.parent / "jarvis-backend" / "jarvis_privacy_removal.py").is_file())
+    check("the module IS in _where.SHIPPED, so the deploy carries it",
+          "jarvis_privacy_removal.py" in _where.SHIPPED)
+    check("... and the published base carries it too, byte for byte",
+          (HERE.parent / "jarvis-backend" / "jarvis_privacy_removal.py").is_file()
+          and (HERE.parent / "jarvis-backend" / "jarvis_privacy_removal.py").read_bytes()
+          == (HERE / "jarvis_privacy_removal.py").read_bytes())
     # The three tables that have to be told the truth, read as DATA - the same
-    # objects the two suites themselves use, not a copy of their text.
+    # objects the two suites themselves use, not a copy of their text. Each one
+    # held this module while it was unshipped; shipping it means every one of
+    # them must have let go, or the records disagree with the tree.
     import test_base_matches_repo as TBM
     import test_shipped_modules as TSM
-    check("... it is on NOT_SHIPPED with its reason, so the shipped-module suite "
-          "stays honest",
-          "jarvis_privacy_removal.py" in TSM.NOT_SHIPPED
-          and len(TSM.NOT_SHIPPED["jarvis_privacy_removal.py"]) > 80,
+    check("... and it is no longer in the shipped-module suite's NOT_SHIPPED list",
+          "jarvis_privacy_removal.py" not in TSM.NOT_SHIPPED,
           str(TSM.NOT_SHIPPED.get("jarvis_privacy_removal.py"))[:80])
     sites = ("jarvis_quick.py", "jarvis_asks_first.py", "jarvis_settings_registry.py")
-    check("... and every one of its three call sites is in that suite's guarded-"
-          "import table",
-          all((site, "jarvis_privacy_removal") in TSM.REPO_ONLY_IMPORTS
-              for site in sites),
+    check("... and none of its three call sites is still called an optional import",
+          not any((site, "jarvis_privacy_removal") in TSM.REPO_ONLY_IMPORTS
+                  for site in sites),
           str([site for site in sites
-               if (site, "jarvis_privacy_removal") not in TSM.REPO_ONLY_IMPORTS]))
+               if (site, "jarvis_privacy_removal") in TSM.REPO_ONLY_IMPORTS]))
     check("... and the base's import walk is told the truth about it",
-          "jarvis_privacy_removal" in TBM.OPTIONAL_IMPORTS)
+          "jarvis_privacy_removal" not in TBM.OPTIONAL_IMPORTS)
     # And the guard is REAL, proved by walking jarvis_quick.py's own ast: every
     # import of this module there sits inside a try that catches Exception, so
     # a copy of the file in the published base - which does not carry the
@@ -1939,7 +1949,7 @@ def main():
                t_the_manual_work_is_counted_for_the_owner_only,
                t_the_official_portal_checklist_can_be_ticked,
                t_the_two_rows_bite_when_reverted,
-               t_the_module_is_not_in_shipped_yet,
+               t_the_module_is_shipped_now_that_the_caller_is_wired,
                # --- PR 2, the local engine -------------------------------------
                t_the_directory_parses_into_the_brokers_table,
                t_a_refresh_writes_the_cache_here_and_the_table,
