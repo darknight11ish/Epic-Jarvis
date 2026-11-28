@@ -588,7 +588,7 @@ def t_the_guide_no_longer_says_no_switch_beside_switch_it_on():
         check(f"{feature_id}: it no longer says 'has no switch of its own'",
               "has no switch of its own" not in low, words)
         check(f"{feature_id}: the Status line stays the contract's own label "
-              f"(display rewords are phone-only + app-lock)",
+              f"(display rewords are phone-only, app-lock and config-only)",
               FG.status_label(FG.row_by_id(feature_id)) ==
               FG.label_for(FG.row_by_id(feature_id)), words[:200])
     state = FG.state("github research")
