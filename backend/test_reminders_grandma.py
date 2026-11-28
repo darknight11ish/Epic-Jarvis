@@ -495,6 +495,43 @@ def t_the_existing_phrasings_still_work():
               None if job is None else (time_text(job["due"]), time_text(due)))
 
 
+def t_the_owners_around_and_send_me_phrasings_are_reminders():
+    """His own sentence, 2026-11-27, measured on the live PC.
+
+    "Send me a reminder tomorrow at around 1pm to research adding Starlink to
+    Elizabeth's phone once she switches plans" matched NOTHING in the reminder
+    grammar: "send me a reminder" was not a lead the grammar knew, and
+    "around 1pm" was not a clock it could read. So the model answered - and
+    claimed "I've proposed a reminder ... I'll let you know once you've
+    approved the card" while /api/pending was empty before and after. His own
+    words: "i m never get a card asking for a reminder".
+
+    A reminder is `auto` in the gate: it is set at once and no card is raised
+    by design (see set_reminder in the tier table). Every sentence below must
+    therefore reach reminder_set, and none may reach the model.
+    """
+    for sentence in (
+        "Send me a reminder tomorrow at around 1pm to research adding Starlink "
+        "to Elizabeth's phone once she switches plans.",
+        "send me a reminder tomorrow at 1pm to call the dentist",
+        "send me a reminder tomorrow at approximately 1pm to call the dentist",
+        "give me a reminder tomorrow at 9am to pay the bill",
+        "remind me tomorrow at around 1pm to call the dentist",
+        "remind me around 1pm tomorrow to call the dentist",
+        "set a reminder for tomorrow at 1pm to research Starlink",
+    ):
+        got = Q.match(sentence, NOW)
+        check(f"a reminder, not the model: {sentence[:50]!r}",
+              got is not None and got.name == "reminder_set",
+              got.name if got is not None else "went to the model")
+    got = Q.match("Send me a reminder tomorrow at around 1pm to research adding "
+                  "Starlink to Elizabeth's phone once she switches plans.", NOW)
+    if got is not None:
+        check("... and the title is the action, without the qualifier",
+              "Starlink" in (got.f.get("text") or "")
+              and "around" not in (got.f.get("text") or ""),
+              str(got.f.get("text"))[:80])
+
 def main():
     try:
         for name, fn in list(globals().items()):
