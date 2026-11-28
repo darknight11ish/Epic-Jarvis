@@ -3452,6 +3452,19 @@ def _resolve_commit(repo, want: str) -> str:
     return out.splitlines()[-1].strip()
 
 
+def _is_ancestor(repo, older: str, newer: str) -> bool:
+    """Is `older` an ancestor of (or equal to) `newer`? False when unknown.
+
+    `git merge-base --is-ancestor` exits 0 for yes, 1 for no, and anything else
+    when it cannot answer - and "cannot answer" must never be read as "yes",
+    because the caller uses this to decide which of two commits is NEWER.
+    """
+    if not older or not newer:
+        return False
+    code, _out, _err = _git(repo, "merge-base", "--is-ancestor", older, newer)
+    return code == 0
+
+
 def updater_endpoint(repo) -> str:
     """The desktop release feed's URL, read from the app's own updater config.
 
@@ -3578,13 +3591,42 @@ def resolve_deploy_commit(repo, *, ref=None) -> dict:
             release_why = (f"the published release names commit "
                            f"{release['commit'][:12]}, but this checkout does not "
                            f"have it")
-    if published:
-        from_words = PIN_PUBLISHED_WORDS
-        if release["version"]:
-            from_words = f"the published desktop release {release['version']}"
-        return {"commit": published, "from": from_words, "why": "", "note": note}
-    why_release = release_why or "the published release was not read"
     origin = _resolve_commit(repo, PIN_BRANCH)
+    release_words = PIN_PUBLISHED_WORDS
+    if release["version"]:
+        release_words = f"the published desktop release {release['version']}"
+
+    # THE RELEASE MARKER IS NOT A TIP (DEF-100's second half, 2026-11-27).
+    # `latest.json` names the commit the DESKTOP INSTALLER was built from, and
+    # that release lags `main` between releases - so preferring it
+    # unconditionally DEPLOYED A DOWNGRADE on this PC (c424daa492b3 ->
+    # 17a92e5f86de) until a second run passed `--ref`. When both are known the
+    # NEWER one wins, decided by ANCESTRY and never by date: deploying an
+    # ancestor of what is already here moves the owner's machine backwards.
+    if published and origin:
+        if published == origin:
+            return {"commit": published, "from": release_words, "why": "", "note": note}
+        if _is_ancestor(repo, published, origin):
+            return {"commit": origin, "why": "",
+                    "from": f"{PIN_BRANCH}, which is newer than {release_words}",
+                    "note": note or (
+                        f"{release_words} names {published[:12]}, which is an ancestor "
+                        f"of {PIN_BRANCH}; deploying it would have moved this PC "
+                        f"backwards, so {PIN_BRANCH} was used instead")}
+        if _is_ancestor(repo, origin, published):
+            return {"commit": published, "from": release_words, "why": "", "note": note}
+        # Diverged: neither contains the other, so ancestry cannot choose. This
+        # repository's own tip wins and the note says plainly what was seen,
+        # rather than presenting the newer-LOOKING one as the newer one.
+        return {"commit": origin, "why": "",
+                "from": f"{PIN_BRANCH} (it and the release have diverged)",
+                "note": note or (
+                    f"{release_words} names {published[:12]}, which has diverged from "
+                    f"{PIN_BRANCH}; {PIN_BRANCH} was used and neither is an ancestor of "
+                    f"the other")}
+    if published:
+        return {"commit": published, "from": release_words, "why": "", "note": note}
+    why_release = release_why or "the published release was not read"
     if origin:
         return {"commit": origin, "why": "", "note": note or why_release,
                 "from": (f"{PIN_BRANCH} after a read-only git fetch"

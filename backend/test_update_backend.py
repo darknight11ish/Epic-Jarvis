@@ -4501,23 +4501,60 @@ def t_a_manual_ref_head_still_deploys_the_commit_head_names():
           [line for line in said if line.startswith("PIN")])
 
 
-def t_the_published_release_s_commit_is_preferred_over_origin_main():
+def t_a_release_that_lags_origin_main_never_wins():
+    """DEF-100's second half, measured on the owner's PC 2026-11-27.
+
+    The release manifest names the commit the DESKTOP INSTALLER was built from,
+    and that release lags `main` between releases. Preferring it
+    unconditionally deployed a DOWNGRADE on this PC - `c424daa492b3` went to
+    `17a92e5f86de`, an ancestor of both main and what was already installed -
+    and only a second run with `--ref` put it back.
+
+    This fixture is exactly that shape: `head` is the release's commit and
+    `origin` is its CHILD. The newer commit must win, decided by ancestry.
+    """
     root = _make_root()
     fixture = _pin_repo(root)
     repo, backend = fixture["repo"], fixture["backend"]
     seen, said = {}, []
     fake = FakeRun(_refusal_then_suites(repo, backend))
-    # The release names the commit the checkout is on; origin/main is the newer
-    # one. A pin that ignored the release would deploy origin/main instead.
     with _with_published({"version": "0.2.519", "commit": fixture["head"],
                           "why": ""}):
         code = U.update(repo, backend, "responsive", run=fake, say=said.append,
                         clock=lambda: 0.0, timings_path=root / "timings.json",
                         deploy=_pin_deploy(backend, seen), full_proof=True)
-    check("the published release's own commit wins over origin/main",
-          code == 0 and seen.get("sha") == fixture["head"],
+    check("a release commit that is an ANCESTOR of origin/main does not win",
+          code == 0 and seen.get("sha") == fixture["origin"],
           (code, seen.get("sha"), fixture["head"], fixture["origin"]))
-    check("... and the PIN line names the release it came from",
+    check("... and the PIN line says which commit is newer",
+          any(line.startswith("PIN ")
+              and "newer than the published desktop release 0.2.519" in line
+              for line in said), [line for line in said if line.startswith("PIN")])
+    check("... and the run says why the release was not used",
+          any("would have moved this PC backwards" in line for line in said),
+          [line for line in said if "backwards" in line])
+
+
+def t_a_release_that_is_origin_main_itself_names_the_release():
+    """The two agree: the release words are still what the PIN line says."""
+    root = _make_root()
+    fixture = _pin_repo(root)
+    repo, backend = fixture["repo"], fixture["backend"]
+    seen, said = {}, []
+    fake = FakeRun(_refusal_then_suites(repo, backend))
+    # The UPSTREAM's main is moved back to the release's commit, not just this
+    # checkout's remote ref: the run does its own read-only `git fetch origin`
+    # first, which would put refs/remotes/origin/main straight back.
+    _pin_git(repo, "push", "-q", "-f", "origin", f"{fixture['head']}:refs/heads/main")
+    with _with_published({"version": "0.2.519", "commit": fixture["head"],
+                          "why": ""}):
+        code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                        clock=lambda: 0.0, timings_path=root / "timings.json",
+                        deploy=_pin_deploy(backend, seen), full_proof=True)
+    check("when the release IS origin/main, that commit is deployed",
+          code == 0 and seen.get("sha") == fixture["head"],
+          (code, seen.get("sha"), fixture["head"]))
+    check("... and the PIN line still names the release it came from",
           any(line.startswith("PIN  the published desktop release 0.2.519")
               for line in said), [line for line in said if line.startswith("PIN")])
 
