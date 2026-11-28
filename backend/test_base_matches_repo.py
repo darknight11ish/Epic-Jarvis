@@ -554,19 +554,14 @@ def t_the_stale_twin_check_agrees_with_the_rule():
 #: entry below for exactly that reason. The check below fails a stale entry, so
 #: an entry left behind would be red rather than quiet.
 OPTIONAL_IMPORTS = {
-    #: The personal data removal tool (2026-11-26, PR 1 of 3). The owner's own
-    #: ruling for this slice: "do not register `jarvis_privacy_removal.py` in
-    #: `SHIPPED` until the PR that wires live callers to it". So the base cannot
-    #: carry the module, `jarvis_quick.py` imports it inside a try that catches
-    #: Exception, and the four trigger sentences fall through to the model on a
-    #: base without it - which is exactly what the base did before this PR.
-    #: The entry is deleted by the PR that puts the module in SHIPPED (PR 3),
-    #: the same way the storage entry was deleted by #1117; until then the
-    #: check below proves it is not stale.
-    "jarvis_privacy_removal": "PR 1 of 3 wires the chat caller only; the base does not "
-                              "carry the module until it ships, and jarvis_quick.py's "
-                              "import of it is the guarded try/except Exception that "
-                              "keeps a base without it working",
+    # EMPTY, AND THAT IS THE POINT (2026-11-27). The personal data removal tool
+    # held this table's only entry, and its own comment said the entry "is
+    # deleted by the PR that puts the module in SHIPPED (PR 3)". That PR is
+    # this one: the owner asked for the tool to be usable, the module is in
+    # `_where.SHIPPED`, and the published base carries it, so there is no
+    # longer an import the base satisfies by falling through. A stale entry
+    # here would be red (the check below fails one), so an empty table is the
+    # honest report rather than a tidy-up.
 }
 
 

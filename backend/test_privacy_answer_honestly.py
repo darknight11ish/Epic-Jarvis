@@ -156,13 +156,21 @@ def answer(sentence):
 # ---------------------------------------------------------------------------
 
 
-def t_the_published_base_really_does_not_carry_the_module():
+def t_the_module_ships_and_the_answer_still_works_without_it():
+    """2026-11-27: the module ships now, so this pin is inverted, not dropped.
+
+    The situation it guarded has not gone away. A PC that has not deployed yet
+    still has no module, and the removal question must answer honestly there -
+    which is what `no_privacy_module()` simulates, and what the rest of this
+    suite measures. Both facts have to be true at once: shipped where it exists,
+    honest where it does not.
+    """
     base = ROOT / "jarvis-backend"
-    check("the published base does not carry jarvis_privacy_removal.py",
-          not (base / "jarvis_privacy_removal.py").exists(),
+    check("the published base carries jarvis_privacy_removal.py",
+          (base / "jarvis_privacy_removal.py").exists(),
           str(base / "jarvis_privacy_removal.py"))
-    check("... and the owner's ruling still holds: it is not in _where.SHIPPED",
-          "jarvis_privacy_removal.py" not in _where.SHIPPED,
+    check("... and it is in _where.SHIPPED, so the deploy copies it",
+          "jarvis_privacy_removal.py" in _where.SHIPPED,
           str([n for n in _where.SHIPPED if "privacy" in n]))
     repo_copy = HERE / "jarvis_quick.py"
     base_copy = base / "jarvis_quick.py"
@@ -368,7 +376,7 @@ def t_the_unclaimed_neighbours_stay_unclaimed_with_the_module_present():
 
 
 def main():
-    for fn in (t_the_published_base_really_does_not_carry_the_module,
+    for fn in (t_the_module_ships_and_the_answer_still_works_without_it,
                t_the_measured_sentence_reached_no_lane_before_this_fix,
                t_the_question_still_reaches_the_explainer_without_the_module,
                t_the_answer_is_the_pinned_honest_sentence,

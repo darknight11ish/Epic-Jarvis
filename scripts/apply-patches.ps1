@@ -3338,6 +3338,14 @@ $SHIPPED = @(
     # jarvis_self_improve, and stop wherever a card has to answer. It edits
     # nothing, pushes nothing and merges nothing. Read-only, so a private chat
     # hands it to the model instead. Its suite is backend/test_homework_loop.py.
+    # The personal data removal tool (jarvis_privacy_removal.py, 2026-11-26,
+    # SHIPPED 2026-11-27): find the owner's listings in a cached directory of
+    # data brokers, ask those brokers to delete them through his own Gmail App
+    # Password, and check afterwards whether they went. Local by default; the
+    # two cloud modes raise ONE consent card. The same entry, in the same
+    # position, is in backend/_where.py's SHIPPED list. It sits BEFORE
+    # jarvis_bench.py, which stays LAST.
+    'jarvis_privacy_removal.py'
     'jarvis_homework.py'         # the homework loop: the routing replay, the honest explanation, the merge gate that names the seven checks
     'jarvis_bench.py'
 )
