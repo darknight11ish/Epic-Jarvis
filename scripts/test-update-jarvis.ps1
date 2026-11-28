@@ -352,6 +352,97 @@ try {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# --- the deploy route, when the backend carries DEPLOY-MANIFEST ----------------
+#
+# The one test here that runs the updater as a PROGRAM instead of lifting
+# functions out of it, because the handoff is top-level code. A backend with
+# DEPLOY-MANIFEST beside VERSION is deploy-managed: the updater must run
+# `py -3 -B tools\update_backend.py --repo ... --backend ... --mode responsive`
+# and exit with that tool's own code, BEFORE the patcher it calls. The deploy
+# tool is a stub that exits 7, so "the delegate ran" and "its code came back"
+# are both asserted. Remove the handoff and this case fails: the run falls back
+# to the old route, so none of the assertions about the delegate can hold.
+$routeRoot = Join-Path ([IO.Path]::GetTempPath()) ('jarvis-update-route-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $routeRoot | Out-Null
+try {
+    $routeRepo = Join-Path $routeRoot 'repo'
+    $routeScripts = Join-Path $routeRepo 'scripts'
+    $routeTools = Join-Path $routeRepo 'tools'
+    New-Item -ItemType Directory -Force -Path $routeScripts, $routeTools | Out-Null
+    Copy-Item -LiteralPath $Script -Destination (Join-Path $routeScripts 'update-jarvis.ps1')
+    $routeUpdate = Join-Path $routeScripts 'update-jarvis.ps1'
+    # The updater refuses to start without this beside it; the stub records a
+    # call, which is exactly what must NOT happen on the deploy route.
+    Set-Content -LiteralPath (Join-Path $routeScripts 'apply-patches.ps1') -Encoding ASCII -Value @'
+$ErrorActionPreference = 'Continue'
+Set-Content -LiteralPath (Join-Path $PSScriptRoot 'patcher-called.txt') -Value ($args -join ' ')
+exit 0
+'@
+    # The stub deploy tool: records its arguments, then exits 7 so this test can
+    # tell a propagated code from an ordinary success.
+    Set-Content -LiteralPath (Join-Path $routeTools 'update_backend.py') -Encoding ASCII -Value @'
+import pathlib
+import sys
+here = pathlib.Path(__file__).resolve().parent
+(here / "deploy-called.txt").write_text(" ".join(sys.argv[1:]), encoding="utf-8")
+raise SystemExit(7)
+'@
+    $routeBackend = Join-Path $routeRoot 'backend'
+    New-Item -ItemType Directory -Force -Path $routeBackend | Out-Null
+    Set-Content -LiteralPath (Join-Path $routeBackend 'jarvis_hud.py') -Value 'print("stand-in")'
+    Set-Content -LiteralPath (Join-Path $routeBackend 'VERSION') -Value '9.9.9'
+    Set-Content -LiteralPath (Join-Path $routeBackend 'DEPLOY-MANIFEST') -Value '{"kind": "stand-in"}'
+
+    function Invoke-UpdateProgram([string[]] $Arguments) {
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $lines = & powershell @Arguments 2>&1 | Out-String
+            $code = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $prev
+        }
+        return @{ Code = $code; Out = $lines }
+    }
+
+    $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $routeUpdate,
+                 '-BackendPath', $routeBackend, '-SkipDesktop', '-NoCheck')
+    $ran = Invoke-UpdateProgram $runArgs
+
+    $deployCall = Join-Path $routeTools 'deploy-called.txt'
+    $patcherCall = Join-Path $routeScripts 'patcher-called.txt'
+    Assert-That (Test-Path -LiteralPath $deployCall) 'a DEPLOY-MANIFEST backend runs tools\update_backend.py'
+    $deployArgs = ''
+    if (Test-Path -LiteralPath $deployCall) {
+        $deployArgs = (Get-Content -LiteralPath $deployCall -Raw).Trim()
+    }
+    Assert-That ($deployArgs -match ('--repo ' + [regex]::Escape($routeRepo))) 'the deploy tool is given --repo <this repository>'
+    Assert-That ($deployArgs -match ('--backend ' + [regex]::Escape($routeBackend))) 'the deploy tool is given --backend <this backend>'
+    Assert-That ($deployArgs -match '--mode responsive') 'the deploy tool is given --mode responsive'
+    Assert-That ($ran.Code -eq 7) "the deploy tool's exit code is propagated (got $($ran.Code), wanted 7)"
+    Assert-That ($ran.Out -match 'route: tools\\update_backend\.py \(found DEPLOY-MANIFEST beside VERSION\)') 'the run says which route it took and the marker it found'
+    Assert-That (-not (Test-Path -LiteralPath $patcherCall)) 'the delegate ran INSTEAD of the patcher'
+
+    # The other half: the same folder with the manifest removed takes the
+    # patcher route. -Print keeps this safe on a desk where the app is running
+    # and changes nothing; the -Print cases above already prove the patcher
+    # itself runs, so what is asserted here is the route line and the delegate
+    # staying away.
+    Remove-Item -LiteralPath (Join-Path $routeBackend 'DEPLOY-MANIFEST') -Force
+    Remove-Item -LiteralPath $deployCall -Force -ErrorAction SilentlyContinue
+    $plain = Invoke-UpdateProgram ($runArgs + @('-Print'))
+    Assert-That ($plain.Code -eq 0) "a backend with no DEPLOY-MANIFEST still runs as today (exit $($plain.Code))"
+    Assert-That ($plain.Out -match 'route: scripts\\apply-patches\.ps1 \(no DEPLOY-MANIFEST beside VERSION\)') 'the run says it took the patcher route and found no marker'
+    Assert-That (-not (Test-Path -LiteralPath $deployCall)) 'a backend with no DEPLOY-MANIFEST does not run the deploy tool'
+} finally {
+    # Only the folder this test just made: a GUID under %TEMP%, never "", "."
+    # or the repository root.
+    if ($routeRoot -and (Test-Path -LiteralPath $routeRoot) -and
+        ((Split-Path -Leaf $routeRoot) -like 'jarvis-update-route-*')) {
+        Remove-Item -LiteralPath $routeRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host ""
 Write-Host "$($script:Passed) passed, $($script:Failed) failed" -ForegroundColor Cyan
 if ($script:Failed -gt 0) { exit 1 }

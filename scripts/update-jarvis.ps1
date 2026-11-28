@@ -1118,6 +1118,57 @@ if ($Print) {
     Say "  -Print: this run will report the plan and change nothing." Yellow
 }
 
+# --- 1b. the deploy route, when this backend is deploy-managed ------------------
+#
+# A backend the deploy tool has sealed carries DEPLOY-MANIFEST beside VERSION.
+# Such an install is updated by tools\update_backend.py, which runs the same
+# patcher and then proves the bounded checks at a chosen pace - so THIS script
+# hands the whole run over and exits with the tool's own code. A patch-only
+# backend (no manifest: the ordinary case) carries on exactly as it always did.
+#
+# This runs before anything patching-shaped, and before the git pull below: the
+# deploy tool pins the release commit itself (DEF-099), so there is nothing for
+# this folder to pull first.
+if (-not $SkipPatches) {
+    $deployManifest = Join-Path $BackendPath 'DEPLOY-MANIFEST'
+    $deployVersion  = Join-Path $BackendPath 'VERSION'
+    $deployTool     = Join-Path $RepoRoot 'tools\update_backend.py'
+    if ((Test-Path -LiteralPath $deployManifest -PathType Leaf) -and
+        (Test-Path -LiteralPath $deployVersion -PathType Leaf)) {
+        Info "route: tools\update_backend.py (found DEPLOY-MANIFEST beside VERSION)"
+        if ($Print) {
+            Info "would run: py -3 -B `"$deployTool`" --repo `"$RepoRoot`" --backend `"$BackendPath`" --mode responsive"
+            Finish-Run 'print'
+        }
+        # The brief names `py -3`, not Find-Python: this route is the one the
+        # deploy tool documents, and -B keeps Python from writing __pycache__
+        # into the repository folder.
+        $launcher = Get-Command 'py' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $launcher) {
+            Bad "the py launcher is not on PATH, so tools\update_backend.py cannot be run"
+            Add-Problem 'the backend is deploy-managed, but the py launcher needed to run tools\update_backend.py is not on PATH'
+            Finish-Run 'stopped'
+        }
+        Say ""
+        $code = Invoke-NativeLogged 'py' @('-3', '-B', $deployTool, '--repo', $RepoRoot, '--backend', $BackendPath, '--mode', 'responsive') -LogTo $script:ChildLog
+        Say ""
+        if ($code -ne 0) {
+            Bad "tools\update_backend.py exited $code - read its own screen above"
+        } else {
+            Ok "the backend was updated by tools\update_backend.py"
+        }
+        if ($script:RunLog) {
+            Write-Host "Log of this run: $($script:RunLog)" -ForegroundColor Gray
+        }
+        # Finish-Run would end with 1 whatever the tool said; a caller has to be
+        # able to tell this tool's refusal (2) from its success (0), so this
+        # route ends with the tool's own code after the same log scrub.
+        Protect-LogFiles
+        exit $code
+    }
+    Info "route: scripts\apply-patches.ps1 (no DEPLOY-MANIFEST beside VERSION)"
+}
+
 # --- 2. the newest code --------------------------------------------------------
 Step 2 $Total 'Getting the newest code'
 
