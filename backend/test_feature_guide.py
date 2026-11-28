@@ -171,12 +171,14 @@ OWNER_QUESTION_EXCEPTIONS = {
     # The other eight questions still explain the row, and the state answer is
     # still checked against the module in backend/test_antislop.py.
     ("anti-slop", "is {} on"): {"settings_antislop_state"},
-    # The price radar's own fixed grammar owns "how do I turn on ...": it
-    # answers with the settings-file line ("[price_radar] enabled = true") and
-    # the honest "no chat approval card for that switch exists yet" sentence,
-    # which is the complete answer to that one question. The row is still
-    # explained by the other eight, and the radar's real chat lookup is its own
-    # grammar (2026-10-31 ruling 3), not a fall-through.
+    # The price radar's own fixed grammar owns "how do I turn on ..." and still
+    # answers in its own words. Since 2026-11-27 those words are stale - the
+    # radar HAS a chat approval card now (`price_radar_enable`), and the radar
+    # lane's `where`/`asks` say so - but the sentence itself lives in
+    # `jarvis_quick.py`, which this lane does not touch; the intent mapping is
+    # unchanged, so the exception stays until that lane rewords it. The row is
+    # still explained by the other eight, and the radar's real chat lookup is
+    # its own grammar (2026-10-31 ruling 3), not a fall-through.
     ("price-radar", "how do I turn on {}"): {"price_radar_enable"},
     # Wave 8.2 (2026-11-07): once a row's words are also a TOOL switch's, the
     # new `tool_switch_state` answer owns "is it on" and reads the same switch
