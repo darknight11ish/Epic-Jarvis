@@ -1640,6 +1640,57 @@ def t_it_is_dispatched_and_arrives_without_a_card():
           res is not None and BY_ID["folders"]["what"] in res.reply)
 
 
+def t_a_question_about_a_destructive_verb_answers_and_never_starts_it():
+    """DEF-106, the owner's ruling of 2026-11-27: questions answer, orders card.
+
+    Measured before the fix, on the live PC: "can you empty the trash" lost its
+    "can you" to the normaliser, arrived as the ORDER and answered "The approval
+    gate refused it"; "can you delete a section of a note" arrived as a note
+    delete looking for a note called "section of a". Both are QUESTIONS.
+
+    Every assertion below states behaviour that was WRONG before the fix, so
+    reverting the fix reddens this test rather than silently passing.
+    """
+    got = Q.match("can you empty the trash")
+    check("a trash QUESTION keeps its ask flag",
+          got is not None and got.name == "note_empty_trash"
+          and got.f.get("ask") is True, (got.name, got.f) if got else None)
+    got = Q.match("empty the vault trash")
+    check("... and the ORDER still asks for its one card",
+          got is not None and got.name == "note_empty_trash"
+          and got.f.get("ask") is False, (got.name, got.f) if got else None)
+    res, _intent = _answer("can you empty the trash")
+    check("... the question is ANSWERED, not refused",
+          res is not None and "refused" not in res.reply.lower(),
+          res.reply[:200] if res is not None else None)
+
+    got = Q.match("can you delete a section of a note")
+    check("a section QUESTION answers from its own capability lane",
+          got is not None and got.name == "note_section_delete_capability",
+          got.name if got is not None else None)
+    got = Q.match("delete a section of a note")
+    check("... the section ORDER asks which one, instead of hunting a note "
+          "called 'section of a'",
+          got is not None and got.name == "note_section_delete"
+          and not got.f.get("name") and not got.f.get("heading"),
+          (got.name, got.f) if got else None)
+    got = Q.match("delete the Warm-up section from my workout log")
+    check("... while a real section order keeps its own note and heading",
+          got is not None and got.name == "note_section_delete"
+          and got.f.get("name") == "workout log"
+          and got.f.get("heading") == "Warm-up",
+          (got.name, got.f) if got else None)
+
+    got = Q.match("can you delete my notes")
+    check("the older capability questions are unchanged",
+          got is not None and got.name == "note_delete_capability",
+          got.name if got is not None else None)
+    got = Q.match("delete my Shopping note")
+    check("... and a note delete that NAMES its note is still a request",
+          got is not None and got.name == "note_delete",
+          got.name if got is not None else None)
+
+
 def t_the_measured_report_quote_is_reproduced():
     """The three answers the report quotes, reproduced in-process."""
     report = REPO / ".dsh-scratch" / "SELF-AWARENESS-2026-11-06" / "results.json"
@@ -1709,6 +1760,7 @@ def main(argv=None):
                t_it_is_read_only,
                t_the_thresholds_decline_rather_than_guess,
                t_it_is_dispatched_and_arrives_without_a_card,
+               t_a_question_about_a_destructive_verb_answers_and_never_starts_it,
                t_the_measured_report_quote_is_reproduced):
         print(f"\n--- {fn.__name__} ---")
         try:
