@@ -144,6 +144,13 @@ STALE_PLANNED = {
     "notifications",        # 'turn on alarm sounds' -> settings_bool
     "pictures",             # 'turn on Ask for a picture, and keep it' -> feature_switch
     "prompt-coach",         # 'turn on Check a prompt before you send it'
+    # 2026-11-27: NEW, and recorded rather than silently omitted. The price
+    # and flight radar's typed switch landed before its Settings card, so the
+    # row is honestly `planned` for the Settings half (SETTINGS_GAPS records
+    # the owner) while 'turn on the price radar' already changes it. It leaves
+    # this set in the same commit that draws the card, exactly as DEF-037's
+    # rule asks.
+    "price-radar",          # 'turn on the price radar' -> settings_bool
     "second-card",          # 'turn on one bigger model on both cards' -> settings_bool
     "topics",               # 'stop using my work topic' -> topic_mode
     "weather-sky",          # 'turn on the sun and moon' -> animal_sky
@@ -744,9 +751,16 @@ def main(argv=None):
     # a chat and its own approval card, with nothing stored to turn on or off,
     # so there is no setting to read; 107 + 1 -> 108 Command-Only, 183 + 1 ->
     # 184 features. Measured from the contract, not chosen.
+    # 2026-11-27 (the price radar's switch): the price and flight radar's row
+    # LEFT Command-Only for Switchable/Adjustable when its ONE
+    # `price_radar_enable` card landed - "turn on the price radar" writes the
+    # switch, so the old "no switch needed" label had become false. It has no
+    # Settings card yet, so it is a planned Switchable row (SETTINGS_GAPS names
+    # setup-ui), not an enforced one. 44 + 1 -> 45 Switchable, 108 -> 107
+    # Command-Only; 184 features. Measured from the contract, not chosen.
     expected_label_counts = {
-        LAB_SWITCH: 44, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 18,
-        LAB_COMMAND: 108, LAB_ALWAYS: 12,
+        LAB_SWITCH: 45, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 18,
+        LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
     # THE MESSAGE IS BUILT FROM THE PIN, NEVER RETYPED (2026-11-13 audit,
     # finding 4). The two literals that used to sit in the messages below said

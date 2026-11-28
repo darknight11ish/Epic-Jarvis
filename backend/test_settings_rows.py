@@ -268,13 +268,16 @@ def t_setting_links_are_real():
     # SETTINGS_ROWS row exists yet, so it is sixteen. `wifi_auto_reconnect`
     # joined on 2026-11-08 (ruling Q4): its desktop control is the Wi-Fi
     # feature's own card plus the settings registry row, not a generated
-    # toggle row, so it is seventeen.
+    # toggle row, so it is seventeen. `price_radar` joined on 2026-11-27: the
+    # typed switch is real, but neither app draws a Settings control for it yet
+    # (the contract records that gap with owner setup-ui), so it is eighteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known seventeen",
+    check("...and the BoolSettings with no desktop row are the known eighteen",
           orphans == ["antislop", "big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
                       "jarvis_calendar", "lights_without_card", "media_index",
-                      "phone_notifications", "second_card_combined",
+                      "phone_notifications", "price_radar",
+                      "second_card_combined",
                       "second_card_suggest_correction", "second_card_suggest_struggle",
                       "smartwatch_notifications", "voice_check_locked",
                       "wifi_auto_reconnect", "write_like_me"], str(orphans))
@@ -407,8 +410,8 @@ def t_bool_settings_is_the_measured_thirteen():
     control is the Wi-Fi feature's own card, not a generated toggle row, while
     the chat phrases, the Live path and the phone contract are real.
     """
-    check("BOOL_SETTINGS holds its thirty-nine spoken settings",
-          len(R.BOOL_SETTINGS) == 39, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its forty spoken settings",
+          len(R.BOOL_SETTINGS) == 40, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

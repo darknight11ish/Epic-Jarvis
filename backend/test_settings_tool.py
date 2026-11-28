@@ -827,9 +827,10 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
           " 2026-10-28, the Jarvis calendar on 2026-10-29, one moment on"
           " 2026-11-01, learn_paraphrase on 2026-11-02, the two added on"
           " 2026-11-03 (Wave B's pc_setup_notification and the locked-phone"
-          " voice check), hands-free mode on 2026-11-04, and the auto Wi-Fi"
-          " reconnect on 2026-11-08",
-          len(R.BOOL_SETTINGS) == 39, str(len(R.BOOL_SETTINGS)))
+          " voice check), hands-free mode on 2026-11-04, the auto Wi-Fi"
+          " reconnect on 2026-11-08, and the price and flight radar's one"
+          " switch on 2026-11-27",
+          len(R.BOOL_SETTINGS) == 40, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

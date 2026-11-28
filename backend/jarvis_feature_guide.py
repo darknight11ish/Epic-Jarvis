@@ -3168,11 +3168,10 @@ NO_COMMAND_REASON = {
     # the two chat sentences. Hence not-a-setting, not a missing control.
     "call-recording": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "model-knowledge": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
-    # The price radar has a switch, but it is the settings file's own
-    # `[price_radar] enabled` line, not a registered BoolSetting, and it has no
-    # chat approval card yet - so the ROW is a read/behaviour, and the switch it
-    # does have is named in its own `where`/`limit`.
-    "price-radar": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The price radar's row LEFT this table on 2026-11-27: it has a registered
+    # BoolSetting and ONE `price_radar_enable` card now, so EXTRA_CONTROLS above
+    # links the switch and the matrix derives "switch" for it. A stale entry
+    # here FAILS the suite, which is why it is deleted in the same change.
     # The owner's 2026-11-02 life-coach set (JARVIS-API section 180). Both are
     # ACTIONS with no setting behind them - there is nothing to switch on or
     # off - and neither app has a screen for them yet, so the row's own `where`
@@ -3241,6 +3240,14 @@ EXTRA_CONTROLS = {
     # answered with the wrong control. `SECTION_MATES_NOT_THIS_FEATURE` above
     # drops the section-mate, leaving this one.
     "anti-slop": ("antislop",),
+    # The price and flight radar's switch (2026-11-27). The row names the
+    # settings file's own `[price_radar] enabled` line in its `where`, not a
+    # Settings card - neither app draws one yet - so the link cannot come from
+    # `covers`. The switch is real now: ON raises ONE `price_radar_enable`
+    # card, OFF is instant. This is the classification correction the switch
+    # itself forces: without it the row kept answering "Command-Only ... no
+    # switch needed" while "turn on the price radar" changed its setting.
+    "price-radar": ("price_radar",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control
@@ -3270,7 +3277,20 @@ EXTRA_CONTROLS = {
 #: through src-tauri/src/calendar_settings.rs). So the entry that used to sit
 #: here was removed rather than left to look like a gap nobody owns - the same
 #: way `memory-learning` and `history` left this dict.
-SETTINGS_GAPS = {}
+SETTINGS_GAPS = {
+    # The price and flight radar (2026-11-27). The typed switch is REAL and
+    # tested - "turn on the price radar" is ONE `price_radar_enable` card and
+    # nothing is read until it is approved; OFF is instant - but NEITHER app
+    # draws a Settings control for it yet (both Settings pages only list the
+    # feature in the All-features directory). Recorded here on purpose, with
+    # its owner, because a typed path that looked "covered" in the matrix would
+    # be the exact lie this table exists to prevent.
+    "price-radar": {"controls": ("price_radar",),
+                    "desktop": "setup-ui", "phone": "setup-ui",
+                    "reason": ("The typed switch is real, but neither app draws a "
+                               "price-radar control yet - the next slice adds it to "
+                               "Settings on both apps.")},
+}
 
 #: Feature ids whose ADJUST phrase does not sit behind a `settings.<id>` cover
 #: (the catalogue names a Brain page), with the Settings place that proves it.
@@ -3902,6 +3922,10 @@ CARD_ON_LOOSENING = frozenset({
     "screen_picture",        # SP.request(...) registry:662-668
     "lights_without_card",   # request_lights(...) registry:605-611
     "sandbox_exec",          # "ON is ONE normal approval card" registry:700-705
+    # The price and flight radar (2026-11-27): ON is ONE `price_radar_enable`
+    # card and nothing is read until it is approved; OFF is instant, cardless
+    # and withdraws a waiting card - the same shape as the rows above.
+    "price_radar",
 })
 #: ...and the five whose setter says it never asks. `humour` is the row the
 #: semantic read caught: `set_humor` - "At once either way - it changes wording

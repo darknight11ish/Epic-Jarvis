@@ -1072,8 +1072,13 @@ def t_settings_gaps_are_real_named_and_owned():
     # it. The pin stays: a new gap has to be recorded here on purpose, with an
     # owner and a reason, and the loop below still proves every recorded entry
     # is a real feature with real typed controls.
-    check("no Settings gap is recorded today",
-          set(FG.SETTINGS_GAPS) == set(),
+    # NO gap was recorded from 2026-10-30 until 2026-11-27, and the pin stays
+    # exact so a gap cannot quietly appear: the price and flight radar's typed
+    # switch landed on 2026-11-27 before either app drew a Settings control for
+    # it, so SETTINGS_GAPS names that ONE gap with its owner (setup-ui). It
+    # empties again when the card is drawn, exactly as the entries before it did.
+    check("the only Settings gap recorded today is the price radar's, on purpose",
+          set(FG.SETTINGS_GAPS) == {"price-radar"},
           sorted(FG.SETTINGS_GAPS))
     for fid, gap in FG.SETTINGS_GAPS.items():
         row = by_id.get(fid)
@@ -2119,7 +2124,11 @@ def t_the_card_sentence_is_only_where_a_card_really_is():
     # Settings cards exist since 2026-10-30 (the phone's row, then the
     # desktop's "Jarvis Calendar" card), so the Settings gap it used to record
     # is gone - the count itself is about the switch, not about that record.
-    check("there are single-switch Switchable rows to check", len(single) == 15,
+    # 16 on 2026-11-27: the price and flight radar's row joined as a
+    # single-switch Switchable row when its ONE `price_radar_enable` card
+    # landed (`EXTRA_CONTROLS` links it; there is no Settings card yet, which
+    # is why the contract records it as planned for the Settings half).
+    check("there are single-switch Switchable rows to check", len(single) == 16,
           len(single))
     R = FG._registry()
     real_keys = {b.key for b in getattr(R, "BOOL_SETTINGS", ())}
