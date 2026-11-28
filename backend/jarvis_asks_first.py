@@ -1337,6 +1337,11 @@ HARD_LIMITS = frozenset({
     "schedule_action",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
+    # The price and flight radar's ONE switch (2026-11-27): jarvis_price_radar
+    # refuses to raise the card at any tier but "ask" (a looser line would hide
+    # the only consent for outbound page reads), the same shape as
+    # web_search_enable above - so it is never loosened from an app.
+    "price_radar_enable",
     # Updating Jarvis itself (2026-10-26): the module refuses anything but a
     # person's yes, and the card replaces this PC's executable and patches the
     # folder Jarvis runs from. It must never become a standing yes.
@@ -1584,6 +1589,11 @@ GROUPS = (
                       # and sharing" below.
                       "grant_web_search_conversation", "revoke_web_search_grant",
                       "web_search_enable", "web_research", "research_authenticated",
+                      # The price and flight radar's ONE switch (jarvis_price_radar.py,
+                      # 2026-11-27). A card can name it, so the page names it
+                      # (test_asks_first.py); the switch writes the settings file's
+                      # own [price_radar] enabled line only after that card.
+                      "price_radar_enable",
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",

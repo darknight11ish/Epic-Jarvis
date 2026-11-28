@@ -630,6 +630,17 @@
        "windows_hello": false
       },
       {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
+       "windows_hello": false
+      },
+      {
        "action": "control_browser",
        "confirmations": 1,
        "fixed": false,
@@ -3598,6 +3609,17 @@
        "windows_hello": false
       },
       {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
+       "windows_hello": false
+      },
+      {
        "action": "control_browser",
        "confirmations": 1,
        "fixed": false,
@@ -6559,6 +6581,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
        "windows_hello": false
       },
       {
@@ -9534,6 +9567,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
        "windows_hello": false
       },
       {
@@ -12514,6 +12558,17 @@
        "windows_hello": false
       },
       {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
+       "windows_hello": false
+      },
+      {
        "action": "control_browser",
        "confirmations": 1,
        "fixed": false,
@@ -15488,6 +15543,17 @@
        "windows_hello": false
       },
       {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
+       "windows_hello": false
+      },
+      {
        "action": "control_browser",
        "confirmations": 1,
        "fixed": false,
@@ -18452,6 +18518,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
        "windows_hello": false
       },
       {
@@ -21424,6 +21501,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
        "windows_hello": false
       },
       {
@@ -24410,6 +24498,17 @@
        "windows_hello": false
       },
       {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
+       "windows_hello": false
+      },
+      {
        "action": "control_browser",
        "confirmations": 1,
        "fixed": false,
@@ -27380,6 +27479,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
        "windows_hello": false
       },
       {
@@ -30362,6 +30472,17 @@
        "windows_hello": false
       },
       {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
+       "windows_hello": false
+      },
+      {
        "action": "control_browser",
        "confirmations": 1,
        "fixed": false,
@@ -33333,6 +33454,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search GitHub signed in as you",
+       "windows_hello": false
+      },
+      {
+       "action": "price_radar_enable",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "price_radar_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the price radar",
        "windows_hello": false
       },
       {
