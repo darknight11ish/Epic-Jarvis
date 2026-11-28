@@ -1314,10 +1314,12 @@ PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)
 #: The Status line a CONFIG-ONLY row shows (the owner's Q3 ruling, 2026-11-27).
 #: DISPLAY ONLY, the same shape as the two rewords beside it: the five approved
 #: label strings and their pinned counts stay `label_for()`'s. But a feature
-#: that exists in code and is off by default in the settings file - the price
-#: radar ships `[price_radar] enabled = false` - has a switch, and the derived
+#: that exists in code and is off by default in the settings file - the product
+#: check ships `[product_check] enabled = false` - has a switch, and the derived
 #: Command-Only label's words ("Runs When You Ask - No Switch Needed") are false
-#: for it: it does not run until that file is edited. The new sentence says the
+#: for it: it does not run until that file is edited. (The price radar used to
+#: be this rule's example; on 2026-11-27 it gained a real ONE-card switch, so it
+#: no longer qualifies and this sentence left it.) The new sentence says the
 #: truth the row's own `where` already records. A row is reworded only when its
 #: own text says BOTH things (see `config_only_row()`), so the label cannot be
 #: attached to a feature by an id list, and a row that also names an in-app
@@ -1325,7 +1327,7 @@ PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)
 CONFIG_ONLY_DISPLAY_LABEL = ("Off by default (config file only — no in-app switch "
                              "yet)")
 
-#: A settings-file line: `[price_radar] enabled = true`. The catalogue writes
+#: A settings-file line: `[product_check] enabled = true`. The catalogue writes
 #: these in the owner's own words, so this is what identifies a config-only row.
 _CONFIG_LINE_WORDS = re.compile(r"\[[a-z][a-z0-9_]*\]\s*[a-z][a-z0-9_]*\s*=\s*\S",
                                 re.IGNORECASE)

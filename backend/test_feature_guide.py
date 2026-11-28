@@ -1890,7 +1890,7 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
 def t_a_config_only_row_reports_off_by_default_not_command_only():
     """The owner's Q3 ruling (2026-11-27): a config-file switch is still a switch.
 
-    The price radar exists in code but ships off: `[price_radar] enabled =
+    The product check exists in code but ships off: `[product_check] enabled =
     false` in `jarvis-framework.toml`, and turning it on is a hand edit of that
     file. The derived Command-Only label nevertheless read "Runs When You Ask -
     No Switch Needed", which is false in the one place the owner reads a
@@ -1903,42 +1903,54 @@ def t_a_config_only_row_reports_off_by_default_not_command_only():
     line in the shape `[section] key = value` AND an explicit "no in-app
     switch"/"no screen yet". A row that also names an in-app switch keeps its
     label, because "config file only" would be a new lie for it.
+
+    THIS TEST USED THE PRICE RADAR AS ITS EXAMPLE UNTIL 2026-11-27. On that day
+    the radar gained a real ONE-card switch, so its `where` no longer carries
+    the settings-file line and it no longer qualifies; the product check is the
+    row that still does. The rule and every general check below are unchanged.
     """
     check("the new sentence is the owner's exact wording",
           FG.CONFIG_ONLY_DISPLAY_LABEL ==
           "Off by default (config file only \u2014 no in-app switch yet)",
           FG.CONFIG_ONLY_DISPLAY_LABEL)
-    radar = FG.row_by_id("price-radar")
-    check("the price-radar row is a real catalogue row", radar is not None)
-    if radar is None:
+    checked = FG.row_by_id("product-check")
+    check("the product-check row is a real catalogue row", checked is not None)
+    if checked is None:
         return
     check("...its own words say off by default, config line, no in-app switch",
-          "off by default" in (radar["where"] + radar["asks"]).lower()
-          and "[price_radar] enabled = true" in radar["where"]
-          and "no in-app switch" in radar["where"], radar["where"])
+          "off by default" in (checked["where"] + checked["asks"]).lower()
+          and "[product_check] enabled = true" in checked["where"]
+          and "no in-app switch" in checked["where"], checked["where"])
     check("...so the row qualifies from its text, not from an id list",
-          FG.config_only_row(radar) is True, radar["where"])
+          FG.config_only_row(checked) is True, checked["where"])
     check("...and its Status line is the new config-only sentence",
-          FG.status_label(radar) == FG.CONFIG_ONLY_DISPLAY_LABEL,
-          FG.status_label(radar))
+          FG.status_label(checked) == FG.CONFIG_ONLY_DISPLAY_LABEL,
+          FG.status_label(checked))
     check("...which is a reword, not the contract label",
-          FG.status_label(radar) != FG.label_for(radar)
-          and FG.label_for(radar) == FG.LABEL_COMMAND_ONLY,
-          (FG.status_label(radar), FG.label_for(radar)))
-    said = str(FG.explain("price radar").get("words") or "")
+          FG.status_label(checked) != FG.label_for(checked)
+          and FG.label_for(checked) == FG.LABEL_COMMAND_ONLY,
+          (FG.status_label(checked), FG.label_for(checked)))
+    said = str(FG.explain("product check").get("words") or "")
     check("...and the real 'tell me about' answer carries it",
           f"Status: {FG.CONFIG_ONLY_DISPLAY_LABEL}." in said
           and FG.LABEL_COMMAND_ONLY not in said, said[:400])
-    changed = FG.change("price radar")
+    changed = FG.change("product check")
     check("...and 'can I change it?' says the same thing",
           changed.get("ok") and changed.get("label") ==
           FG.CONFIG_ONLY_DISPLAY_LABEL
           and f"Status: {FG.CONFIG_ONLY_DISPLAY_LABEL}." in
           str(changed.get("words") or ""), changed.get("label"))
+    # The radar LEFT this rule with its switch, and that is checked directly:
+    # a row with a real switch must never be reworded "config file only".
+    radar = FG.row_by_id("price-radar")
+    check("the price radar no longer qualifies (it has a real switch now)",
+          radar is not None and FG.config_only_row(radar) is False
+          and FG.status_label(radar) != FG.CONFIG_ONLY_DISPLAY_LABEL,
+          FG.status_label(radar) if radar else None)
     # EVERY config-only row, not just the one the owner noticed. The rule is
-    # general or it is just a patch for the price radar.
+    # general or it is just a patch for one row.
     config_only = [row for row in SOURCE if FG.config_only_row(row)]
-    check("the rule finds more than the price radar",
+    check("the rule finds more than one row",
           len(config_only) > 1, [r["id"] for r in config_only])
     check("every config-only row reads the new sentence",
           all(FG.status_label(row) == FG.CONFIG_ONLY_DISPLAY_LABEL
