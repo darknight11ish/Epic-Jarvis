@@ -133,8 +133,12 @@ CI_YML = HERE.parent / ".github" / "workflows" / "ci.yml"
 
 #: The REQUIRED backend jobs, which must not be able to launch a browser at all
 #: (2026-11-17). `backend` is the aggregator over the shards, `backend-windows`
-#: the other required backend half; none of the three may install Playwright.
-REQUIRED_BACKEND_JOBS = ("backend", "backend-shard", "backend-windows")
+#: the other required backend half - and since 2026-11-27 that half is an
+#: aggregator too, with `backend-windows-shard` running the suites (the matrix
+#: job is what must not install a browser; a job that only reads
+#: `needs.<job>.result` cannot launch one).
+REQUIRED_BACKEND_JOBS = ("backend", "backend-shard", "backend-windows",
+                         "backend-windows-shard")
 
 #: THE ONLY ci.yml JOBS ALLOWED TO INSTALL PLAYWRIGHT, AND WHY EACH MUST.
 #: `frontend-shard` is REQUIRED and is a browser job by nature: every suite in
@@ -791,10 +795,23 @@ def t_ci_keeps_the_code_only_checks():
                              backend_block or "")), (backend_block or "")[:400])
     # The Windows job names the four directly (the runner layer does not apply
     # there). Quoted entries only: the comment above its `env:` names them too.
-    windows = _job_block(text, "backend-windows")
-    check("ci.yml has the `backend-windows` job", bool(windows), "backend-windows")
+    # SINCE 2026-11-27 that job is `backend-windows-shard` (a matrix), and the
+    # required `backend-windows` is the aggregator over it - so the suite-list
+    # pin reads the job that CARRIES the list, and the required name is checked
+    # to be an aggregator rather than to hold the list. The fallback keeps this
+    # readable if the two jobs are ever one again.
+    windows = _job_block(text, "backend-windows-shard")
+    windows_name = "backend-windows-shard" if windows else "backend-windows"
+    windows = windows or _job_block(text, "backend-windows")
+    check(f"ci.yml has the `{windows_name}` job", bool(windows), windows_name)
+    if windows_name == "backend-windows-shard":
+        required = _job_block(text, "backend-windows")
+        check("the required `backend-windows` check is the aggregator over "
+              "`backend-windows-shard`",
+              bool(re.search(r"needs:\s*\[?[^\]\n]*backend-windows-shard",
+                             required or "")), (required or "")[:400])
     for suite in GUARDED:
-        check(f"ci.yml's `backend-windows` job still runs {suite} by name",
+        check(f"ci.yml's `{windows_name}` job still runs {suite} by name",
               f"'{suite}'" in windows)
 
 
