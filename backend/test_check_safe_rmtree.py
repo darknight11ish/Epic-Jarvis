@@ -14,6 +14,7 @@ this file itself asserts is inside that folder - the rule the checker enforces,
 applied to the test that enforces it.
 """
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -142,9 +143,55 @@ def t_the_checker_refuses_an_empty_tree_rather_than_passing_it():
         remove_only_inside_temp(root)
 
 
+def t_the_hard_tier_is_the_rulings_list_and_not_the_tracers_guess():
+    """The owner's Q2 list, on the ARGUMENT TEXT, not on the checker's DANGER kind.
+
+    The checker reports an untraceable module constant as "the home directory":
+    `rmtree(TMP)`, where TMP is a `tempfile.mkdtemp()` result, is a scratch dir
+    every backend test makes. A tier built on that label hard-failed 20 such
+    fixtures on the day this was wired. The hard tier must name the shapes that
+    delete a checkout, and nothing else.
+    """
+    mod = load_tool()
+    for text in ('""', "''", '"."', "'.'", '".."', "'..'",
+                 "Path.home()", "str(Path.home())", "os.path.expanduser('~')"):
+        row = ("backend/test_x.py", 1, "t", text, f"shutil.rmtree({text})", "", "danger")
+        check(f"hard tier catches {text}", mod._is_hard(row) is True, text)
+    for text in ("TMP", "TMP / d", "CONF", "ARTIFACT_DIR", "venv", "child",
+                 "Path(__file__).parent"):
+        row = ("backend/test_x.py", 1, "t", text, f"shutil.rmtree({text})", "", "danger")
+        check(f"... and does NOT hard-fail {text!r}", mod._is_hard(row) is False, text)
+
+
+def t_the_ratchet_refuses_to_grow():
+    """A ceiling may only go down; a NEW unguarded site is refused."""
+    mod = load_tool()
+    saved = mod.BASELINE
+    root = Path(tempfile.mkdtemp(prefix="safe-rmtree-ratchet-"))
+    try:
+        mod.BASELINE = root / "baseline.json"
+        mod.BASELINE.write_text(json.dumps(
+            {"backend_unknown": [["backend/test_x.py", "t", "TMP"]],
+             "tools_unknown": []}), encoding="utf-8")
+        grew = [("backend/test_x.py", 1, "t", "TMP", "rmtree(TMP)", "", "unknown"),
+                ("backend/test_y.py", 2, "u", "OTHER", "rmtree(OTHER)", "", "unknown")]
+        check("a NEW unguarded site makes the writer refuse",
+              mod.write_baseline(grew) == 1)
+        check("... and the recorded ceiling is not overwritten",
+              "test_y.py" not in mod.BASELINE.read_text(encoding="utf-8"))
+        same = [grew[0]]
+        check("... while the same set writes through",
+              mod.write_baseline(same) == 0)
+    finally:
+        mod.BASELINE = saved
+        remove_only_inside_temp(root)
+
+
 def main(argv=None):
     tests = (t_the_checker_catches_every_shape_that_deleted_a_checkout,
-             t_the_checker_refuses_an_empty_tree_rather_than_passing_it)
+             t_the_checker_refuses_an_empty_tree_rather_than_passing_it,
+             t_the_hard_tier_is_the_rulings_list_and_not_the_tracers_guess,
+             t_the_ratchet_refuses_to_grow)
     for fn in tests:
         print(f"--- {fn.__name__} ---")
         try:

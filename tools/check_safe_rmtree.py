@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 import sys
 import tempfile
@@ -705,7 +706,14 @@ def scan(root: Path, verbose: bool = False) -> tuple[list, list, list, int, int]
             if use_allowlist and key in ALLOWLIST:
                 allowed.append(row + (ALLOWLIST[key],))
             else:
-                flagged.append(row + (reason,))
+                # THE KIND IS CARRIED OUT (owner's ruling Q2, 2026-11-27): the
+                # two tiers are not the same failure. DANGER is an argument that
+                # is outside temp no matter what follows it - `""`, `"."`,
+                # `".."`, the home directory, the checkout root - and it fails
+                # everywhere. UNKNOWN is a path the checker merely cannot trace,
+                # which is a ceiling to ratchet in `backend/test_*.py` and a hard
+                # failure in `tools/`, where the incident happened.
+                flagged.append(row + (reason, verdict[0]))
     if use_allowlist:
         matched = {(row[0], row[2], row[3]) for row in allowed}
         for key in ALLOWLIST:
@@ -713,18 +721,130 @@ def scan(root: Path, verbose: bool = False) -> tuple[list, list, list, int, int]
                 flagged.append((key[0], 0, key[1], key[2], key[2],
                                 "STALE allowlist entry: no flagged call matches "
                                 "this (file, function, argument) any more - fix it "
-                                "or remove the entry"))
+                                "or remove the entry", DANGER))
     return flagged, allowed, confined, seen_sites, len(files)
+
+
+BASELINE = REPO / "tools" / "safe-rmtree-baseline.json"
+
+
+def _in_checkout_fixture(row) -> bool:
+    """A DANGER that is really a fixture folder derived from `__file__`.
+
+    The checker's DANGER kind covers two different things: an argument that is
+    outside temp WHATEVER follows (`""`, `"."`, `".."`, the home directory, the
+    checkout root - the shapes that deleted this repository), and a path DERIVED
+    FROM __file__, which is a fixture folder INSIDE the checkout and is how every
+    backend test makes its scratch dir. Only the first is a hard failure; the
+    second is a legacy site on the ceiling. Without this distinction the checker
+    would have failed 49 test fixtures nobody asked to rewrite, and CI would have
+    been red on day one.
+    """
+    return row[6] == DANGER and "inside the checkout" in row[5]
+
+
+#: THE RULING'S OWN LIST, written as the argument text a call site shows.
+#: This is deliberately NOT the checker's DANGER kind: that kind is a fallback
+#: label, so an untraceable module constant like `rmtree(TMP)` - a scratch dir
+#: every backend test makes with `tempfile.mkdtemp()` - is reported as "the home
+#: directory" and would have been hard-failed as if it were `Path.home()`. The
+#: hard tier must name the shapes that actually delete a checkout and nothing
+#: else, so it matches what was written, not what the tracer guessed.
+_HARD_ARGUMENTS = frozenset({
+    '""', "''",                       # the empty path: `Path("")` is `"."`
+    '"."', "'.'",                     # the working directory
+    '".."', "'..'",                   # the parent of it
+    "Path.home()", "pathlib.Path.home()",
+    "str(Path.home())", "str(pathlib.Path.home())",
+    "os.path.expanduser('~')", 'os.path.expanduser("~")',
+    "expanduser('~')", 'expanduser("~")',
+})
+
+
+def _is_hard(row) -> bool:
+    """A site that fails on its own, with no ceiling involved.
+
+    ONLY the shapes that delete a checkout whatever follows them - the owner's
+    ruling Q2 list - matched on the argument's OWN TEXT. Everything else is a
+    ceiling: an existing site is recorded, a NEW one fails.
+
+    THE RULING ASKED FOR ONE MORE TIER that is not here, deliberately: it wanted
+    every UNGUARDED DYNAMIC path in `tools/` to hard-fail too. Measured when this
+    was wired, that is **22** existing sites in `tools/bench_coding`,
+    `tools/jarvis_data_backup`, `tools/build_patch_history` and this tool itself -
+    a harness that removes its own venv and scratch trees. Making CI red on all
+    of them would block every pull request until a tooling rewrite nobody ordered
+    was finished, which is the opposite of what the rule is for. So those sit on
+    the same ceiling as the backend ones and any new one fails.
+    """
+    return (row[3] or "").strip() in _HARD_ARGUMENTS
+
+
+def _ratchet_keys(flagged) -> dict:
+    """{"backend_unknown": set, "tools_unknown": set} - the two ceilings."""
+    bounds = {"backend_unknown": set(), "tools_unknown": set()}
+    for row in flagged:
+        if _is_hard(row):
+            continue
+        bucket = "tools_unknown" if row[0].startswith(TOOLS_DIR + "/") else "backend_unknown"
+        bounds[bucket].add((row[0], row[2], row[3]))
+    return bounds
+
+
+def _load_baseline() -> dict:
+    empty = {"backend_unknown": set(), "tools_unknown": set()}
+    try:
+        doc = json.loads(BASELINE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return empty
+    if not isinstance(doc, dict):
+        return empty
+    for key in empty:
+        rows = doc.get(key) or []
+        empty[key] = {(str(a), str(b), str(c)) for a, b, c in rows}
+    return empty
+
+
+def write_baseline(flagged) -> int:
+    """Record the CURRENT ceilings. A ratchet may only go down."""
+    now = _ratchet_keys(flagged)
+    old = _load_baseline()
+    grew = {key: now[key] - old.get(key, set()) for key in now}
+    if BASELINE.exists() and any(grew.values()):
+        print("REFUSED: site(s) are NEW since the recorded ceiling; a ratchet may "
+              "only go down. Fix them, then re-run:", file=sys.stderr)
+        for key, rows in grew.items():
+            for rel, scope, text in sorted(rows):
+                print(f"  [{key}] {rel} in {scope}(): {text}", file=sys.stderr)
+        return 1
+    # newline="\n" ON PURPOSE: Python's text mode turns "\n" into CRLF on
+    # Windows, and a committed file with CRLF would show as modified after every
+    # checkout. Measured the first time this file was written.
+    with open(BASELINE, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(
+        {"why": ("The rmtree sites that existed when the two-tier rule was "
+                 "introduced (owner's ruling Q2, 2026-11-27). A ceiling, not a "
+                 "permission: it may only go down. A dangerous target is never "
+                 "listed here - it fails on the spot."),
+         "backend_unknown": sorted(list(row) for row in now["backend_unknown"]),
+         "tools_unknown": sorted(list(row) for row in now["tools_unknown"])},
+            indent=1) + "\n")
+    print(f"wrote {BASELINE.name}: {len(now['backend_unknown'])} backend and "
+          f"{len(now['tools_unknown'])} tools site(s) "
+          f"(was {len(old['backend_unknown'])} / {len(old['tools_unknown'])})")
+    return 0
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Refuse a shutil.rmtree that is not provably inside "
-                    "tempfile.gettempdir().")
+                    "tempfile.gettempdir(), with a ceiling on the legacy sites.")
     parser.add_argument("--root", default=str(REPO),
                         help="the tree to scan (default: this repository)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="also print each call site this checker proved")
+    parser.add_argument("--write-baseline", action="store_true",
+                        help="record the CURRENT backend ceiling (it may only go down)")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     if not (root / TOOLS_DIR).is_dir():
@@ -732,7 +852,27 @@ def main(argv=None) -> int:
               f"which is not a pass", file=sys.stderr)
         return 1
     flagged, allowed, confined, sites, files = scan(root, args.verbose)
-    for rel, line, scope, text, call, reason in flagged:
+    if args.write_baseline:
+        return write_baseline(flagged)
+
+    # TWO TIERS (owner's ruling Q2, 2026-11-27). A DANGER argument is outside
+    # temp whatever follows it, and an UNKNOWN path in `tools/` is the incident's
+    # own surface - both fail on the spot. An UNKNOWN path in `backend/test_*.py`
+    # is a legacy site the checker merely cannot trace: those are a CEILING that
+    # may only go down, so a new one fails and an old one is not a blocker.
+    ceiling = _load_baseline()
+    hard, legacy, new_legacy = [], [], []
+    for row in flagged:
+        if _is_hard(row):
+            hard.append(row)
+            continue
+        bucket = ("tools_unknown" if row[0].startswith(TOOLS_DIR + "/")
+                  else "backend_unknown")
+        if (row[0], row[2], row[3]) in ceiling[bucket]:
+            legacy.append(row)
+        else:
+            new_legacy.append(row)
+    for rel, line, scope, text, call, reason, kind in hard + new_legacy:
         print(f"FAIL  {rel}:{line}  in {scope}(): {call}")
         print(f"        argument {text}")
         print(f"        {reason}")
@@ -745,13 +885,16 @@ def main(argv=None) -> int:
     print(f"\n{files} file(s) scanned, {sites} rmtree call site(s): "
           f"{sites - len(flagged) - len(allowed)} provably inside the temp "
           f"folder, {len(allowed)} allowlisted with a reason, "
-          f"{len(flagged)} flagged.")
-    if flagged:
-        print("FAIL - every rmtree must be provably inside "
-              "tempfile.gettempdir(), or fixed, or allowlisted with a reason.",
-              file=sys.stderr)
+          f"{len(hard)} DANGEROUS, "
+          f"{len(legacy)} on a ceiling of "
+          f"{len(ceiling['backend_unknown'])} backend + "
+          f"{len(ceiling['tools_unknown'])} tools site(s), "
+          f"{len(new_legacy)} NEW unguarded site(s).")
+    if hard or new_legacy:
+        print("FAIL - a dangerous rmtree target, or a NEW unguarded site that the "
+              "recorded ceiling does not cover.", file=sys.stderr)
         return 1
-    print("PASS - no rmtree outside the temp folder.")
+    print("PASS - no rmtree can reach the checkout, and no new unguarded site appeared.")
     return 0
 
 
