@@ -1839,17 +1839,24 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
                 bad.append((row["id"], "a phone row's label was reworded for no reason",
                             status))
         elif status != FG.label_for(row):
-            # One non-phone row is reworded on purpose: an Always-On row whose
-            # rule is also a real switch with an OFF path must not read out
-            # "Cannot Be Turned Off" (2026-10-26 semantic read, finding 2). See
-            # ALWAYS_ON_DISPLAY - and the count/directory checks below.
+            # Two kinds of non-phone row are reworded on purpose: an Always-On
+            # row whose rule is also a real switch with an OFF path must not
+            # read out "Cannot Be Turned Off" (2026-10-26 semantic read,
+            # finding 2), and a config-only row must not read out "Runs When
+            # You Ask" (the owner's Q3 ruling, 2026-11-27). See
+            # ALWAYS_ON_DISPLAY and CONFIG_ONLY_DISPLAY_LABEL - and the
+            # count/directory checks below.
             if FG.ALWAYS_ON_DISPLAY.get(row["id"]) == status:
                 if FG.label_for(row) != FG.LABEL_ALWAYS_ON:
                     bad.append((row["id"], "a non-Always-On row was reworded", status))
+            elif FG.config_only_row(row) and status == FG.CONFIG_ONLY_DISPLAY_LABEL:
+                if FG.label_for(row) != FG.LABEL_COMMAND_ONLY:
+                    bad.append((row["id"], "a non-Command-Only row was reworded",
+                                status))
             else:
                 bad.append((row["id"], "a non-phone row was reworded", status))
     check("every row's Status line agrees with its surface", not bad, bad[:8])
-    check("...and exactly one non-phone row has a display reword",
+    check("...and exactly one Always-On row has a display reword",
           list(FG.ALWAYS_ON_DISPLAY) == ["app-lock"], list(FG.ALWAYS_ON_DISPLAY))
     five = [row for row in phone
             if FG.label_for(row) in (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
@@ -1871,6 +1878,108 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
     check("...and 'can I change it?' carries the same Status line",
           out.get("ok") and f"Status: {FG.PHONE_ONLY_DISPLAY_LABEL}." in str(out.get("words")),
           str(out.get("words"))[:160])
+
+
+def t_a_config_only_row_reports_off_by_default_not_command_only():
+    """The owner's Q3 ruling (2026-11-27): a config-file switch is still a switch.
+
+    The price radar exists in code but ships off: `[price_radar] enabled =
+    false` in `jarvis-framework.toml`, and turning it on is a hand edit of that
+    file. The derived Command-Only label nevertheless read "Runs When You Ask -
+    No Switch Needed", which is false in the one place the owner reads a
+    feature's kind: it does not run at all until the file is edited. Every
+    config-only row now reads "Off by default (config file only - no in-app
+    switch yet)", while `label_for()`, the five contract labels and their
+    pinned counts do not move.
+
+    The qualification is the row's OWN text, never an id list: a settings-file
+    line in the shape `[section] key = value` AND an explicit "no in-app
+    switch"/"no screen yet". A row that also names an in-app switch keeps its
+    label, because "config file only" would be a new lie for it.
+    """
+    check("the new sentence is the owner's exact wording",
+          FG.CONFIG_ONLY_DISPLAY_LABEL ==
+          "Off by default (config file only \u2014 no in-app switch yet)",
+          FG.CONFIG_ONLY_DISPLAY_LABEL)
+    radar = FG.row_by_id("price-radar")
+    check("the price-radar row is a real catalogue row", radar is not None)
+    if radar is None:
+        return
+    check("...its own words say off by default, config line, no in-app switch",
+          "off by default" in (radar["where"] + radar["asks"]).lower()
+          and "[price_radar] enabled = true" in radar["where"]
+          and "no in-app switch" in radar["where"], radar["where"])
+    check("...so the row qualifies from its text, not from an id list",
+          FG.config_only_row(radar) is True, radar["where"])
+    check("...and its Status line is the new config-only sentence",
+          FG.status_label(radar) == FG.CONFIG_ONLY_DISPLAY_LABEL,
+          FG.status_label(radar))
+    check("...which is a reword, not the contract label",
+          FG.status_label(radar) != FG.label_for(radar)
+          and FG.label_for(radar) == FG.LABEL_COMMAND_ONLY,
+          (FG.status_label(radar), FG.label_for(radar)))
+    said = str(FG.explain("price radar").get("words") or "")
+    check("...and the real 'tell me about' answer carries it",
+          f"Status: {FG.CONFIG_ONLY_DISPLAY_LABEL}." in said
+          and FG.LABEL_COMMAND_ONLY not in said, said[:400])
+    changed = FG.change("price radar")
+    check("...and 'can I change it?' says the same thing",
+          changed.get("ok") and changed.get("label") ==
+          FG.CONFIG_ONLY_DISPLAY_LABEL
+          and f"Status: {FG.CONFIG_ONLY_DISPLAY_LABEL}." in
+          str(changed.get("words") or ""), changed.get("label"))
+    # EVERY config-only row, not just the one the owner noticed. The rule is
+    # general or it is just a patch for the price radar.
+    config_only = [row for row in SOURCE if FG.config_only_row(row)]
+    check("the rule finds more than the price radar",
+          len(config_only) > 1, [r["id"] for r in config_only])
+    check("every config-only row reads the new sentence",
+          all(FG.status_label(row) == FG.CONFIG_ONLY_DISPLAY_LABEL
+              for row in config_only),
+          [(r["id"], FG.status_label(r)) for r in config_only])
+    check("...and none of them still prints the Command-Only sentence",
+          all(FG.LABEL_COMMAND_ONLY not in FG.explain_words(row)
+              for row in config_only), [r["id"] for r in config_only])
+    # Display only: the contract label, the directory data both apps render and
+    # the five pinned counts are exactly as approved.
+    check("...while label_for() keeps the contract's Command-Only label",
+          all(FG.label_for(row) == FG.LABEL_COMMAND_ONLY for row in config_only),
+          [(r["id"], FG.label_for(r)) for r in config_only])
+    directory = {r["id"]: r for r in FG.abilities_directory()}
+    check("...and both apps' directory data keeps the contract label",
+          all(directory[str(r["id"])]["label"] == FG.LABEL_COMMAND_ONLY
+              for r in config_only),
+          [(r["id"], directory[str(r["id"])]["label"]) for r in config_only])
+    counts = {label: sum(1 for row in SOURCE if FG.label_for(row) == label)
+              for label in FG.CONTROL_LABELS}
+    check("...and the five-label counts are exactly the contract's",
+          counts == CONTRACT_LABEL_COUNTS, counts)
+    # A genuine Command-Only ability - "run a retirement what-if", asked in
+    # chat, no settings-file line and no switch - keeps the approved label.
+    genuine = FG.row_by_id("retirement")
+    check("a genuine Command-Only row is unchanged",
+          genuine is not None
+          and FG.config_only_row(genuine) is False
+          and FG.status_label(genuine) == FG.LABEL_COMMAND_ONLY,
+          FG.status_label(genuine) if genuine else None)
+    # A row that names an in-app switch as well as a config line is NOT "config
+    # file only": reverse-engineering needs `rea_investigate` in Settings AND
+    # `[rea] enabled = true`; phone-apps needs `control_phone` in Settings.
+    # Rewording either to "no in-app switch yet" would be a new false sentence.
+    for fid in ("reverse-engineering", "phone-apps"):
+        row = FG.row_by_id(fid)
+        check(f"{fid} names an in-app switch, so it is not reworded",
+              row is not None and FG.config_only_row(row) is False
+              and FG.status_label(row) == FG.label_for(row),
+              (FG.config_only_row(row) if row else None,
+               FG.status_label(row) if row else None))
+    # The detector reads the words, not the row: take the config line away and
+    # the same row no longer qualifies.
+    stripped = dict(radar)
+    stripped["where"] = "Ask in chat; it runs when you ask and has no switch."
+    stripped["asks"] = ""
+    check("the detector follows the text, not the id",
+          FG.config_only_row(stripped) is False, stripped["where"])
 
 
 def t_a_settings_path_is_a_place_not_a_sentence():
@@ -2819,6 +2928,7 @@ if __name__ == "__main__":
                t_the_galaxy_is_both_apps_and_its_answer_says_so,
                t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone,
                t_a_phone_only_status_line_agrees_with_its_surface,
+               t_a_config_only_row_reports_off_by_default_not_command_only,
                t_a_settings_path_is_a_place_not_a_sentence,
                t_app_lock_is_never_said_to_be_unturnoffable,
                t_the_card_sentence_is_only_where_a_card_really_is,
