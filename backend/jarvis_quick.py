@@ -854,6 +854,16 @@ class Clock:
 def parse_clock(s: str) -> Optional[Clock]:
     s = s.strip()
     s = re.sub(r"^at\s+", "", s)
+    # "AROUND 1PM" IS A TIME (2026-11-27, the owner's own sentence). He asked
+    # for "a reminder tomorrow at around 1pm" and got no reminder at all: the
+    # qualifier was never stripped here, so the clock would not parse, the
+    # reminder grammar declined the sentence, and the MODEL answered - claiming
+    # it had proposed a card that /api/pending shows was never raised. "about"
+    # already worked by another route; around/roughly/approximately did not.
+    # A qualifier is the owner being approximate, not a different time.
+    s = re.sub(r"^(?:around|about|roughly|approximately|approx\.?)\s+", "", s)
+    if not s:
+        return None
     if s in ("noon", "midday", "12 noon"):
         return Clock(12, 0, "24")
     if s == "midnight":
@@ -3397,6 +3407,16 @@ _REMIND_LEAD = (r"(?:(?:can|could|would|will)\s+you\s+|please\s+|"
 _REMIND_ASK = (_REMIND_LEAD
                + r"(?:remind(?:\s+me)?"
                  r"|(?:add|set|make|create|schedule|put)\s+(?:a|an)?\s*"
+                 r"(?:new\s+)?reminder"
+                 # "SEND ME A REMINDER" (2026-11-27, the owner's own sentence).
+                 # "Send me a reminder tomorrow at around 1pm to research
+                 # adding Starlink to Elizabeth's phone" matched nothing here,
+                 # so the model answered and CLAIMED a card it never raised -
+                 # "/api/pending" was empty before and after, and he said "I
+                 # never get a card asking for a reminder". Send/give/drop are
+                 # how a person asks for one; they belong to the same verb the
+                 # rest of this alternation already covers.
+                 r"|(?:send|give|drop)\s+(?:me\s+)?(?:a|an)?\s*"
                  r"(?:new\s+)?reminder"
                  r"|(?:a|an)\s+(?:new\s+)?reminder"
                  r"|new\s+reminder|reminder)")
