@@ -1299,12 +1299,59 @@ def change_words(row: dict) -> str:
 #: from `surface` here, and from nothing else.
 PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)"
 
+#: The Status line a CONFIG-ONLY row shows (the owner's Q3 ruling, 2026-11-27).
+#: DISPLAY ONLY, the same shape as the two rewords beside it: the five approved
+#: label strings and their pinned counts stay `label_for()`'s. But a feature
+#: that exists in code and is off by default in the settings file - the price
+#: radar ships `[price_radar] enabled = false` - has a switch, and the derived
+#: Command-Only label's words ("Runs When You Ask - No Switch Needed") are false
+#: for it: it does not run until that file is edited. The new sentence says the
+#: truth the row's own `where` already records. A row is reworded only when its
+#: own text says BOTH things (see `config_only_row()`), so the label cannot be
+#: attached to a feature by an id list, and a row that also names an in-app
+#: switch keeps its label - "config file only" would be false for it.
+CONFIG_ONLY_DISPLAY_LABEL = ("Off by default (config file only — no in-app switch "
+                             "yet)")
+
+#: A settings-file line: `[price_radar] enabled = true`. The catalogue writes
+#: these in the owner's own words, so this is what identifies a config-only row.
+_CONFIG_LINE_WORDS = re.compile(r"\[[a-z][a-z0-9_]*\]\s*[a-z][a-z0-9_]*\s*=\s*\S",
+                                re.IGNORECASE)
+#: ...and the row's own claim that the switch is NOT in an app yet. Deliberately
+#: narrow: "switch it on in Settings" means an in-app switch exists, so a row
+#: that says that is never reworded. Reverse-engineering is the measured case -
+#: it needs `rea_investigate` in Settings AND `[rea] enabled = true`, so
+#: "config file only, no in-app switch yet" would be a new lie.
+_NO_IN_APP_SWITCH_WORDS = re.compile(r"\bno in-app switch\b|\bno screen yet\b",
+                                     re.IGNORECASE)
+
+
+def config_only_row(row: dict) -> bool:
+    """Does the row's OWN words describe a feature switched only in the file?
+
+    Two facts, both read from `where`/`asks` and nothing else:
+
+      * a settings-file line in the shape `[section] key = value` - the switch
+        the row records; and
+      * an explicit "no in-app switch" / "no screen yet" - so the answer's new
+        claim ("no in-app switch yet") is the row's own claim, not an inference.
+
+    And the row must be Command-Only: a Switchable or Always-On row's Status
+    line is a different contract label and is not this ruling's business.
+    """
+    if label_for(row) != LABEL_COMMAND_ONLY:
+        return False
+    text = f"{row.get('where') or ''} {row.get('asks') or ''}"
+    return bool(_CONFIG_LINE_WORDS.search(text)
+                and _NO_IN_APP_SWITCH_WORDS.search(text))
+
 
 def status_label(row: dict) -> str:
     """The five-label kind as the Status line says it - `surface` first.
 
-    Only a phone-only row whose label is one of the two Settings-shaped labels
-    is reworded; every other row returns its contract label untouched, so the
+    A phone-only row whose label is one of the two Settings-shaped labels, an
+    Always-On row with a real OFF path, and a config-only row each get their own
+    sentence; every other row returns its contract label untouched, so the
     counts and both apps' directories are exactly as approved. The phone lists'
     own rendering of that label (a data-level change in both apps) is recorded
     as a separate PR, not done here.
@@ -1319,6 +1366,10 @@ def status_label(row: dict) -> str:
         # Always-On row with a real OFF path must not read out "Cannot Be
         # Turned Off" (see ALWAYS_ON_DISPLAY).
         return ALWAYS_ON_DISPLAY.get(str(row.get("id") or ""), label)
+    if label == LABEL_COMMAND_ONLY and config_only_row(row):
+        # The owner's Q3 ruling (2026-11-27): "runs when you ask" is false for
+        # a feature that is off by default behind a settings-file line.
+        return CONFIG_ONLY_DISPLAY_LABEL
     return label
 
 
