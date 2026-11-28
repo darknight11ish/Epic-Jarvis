@@ -573,6 +573,269 @@ def t_switch_and_poll_floor():
           not any(hasattr(R, verb) for verb in ("post", "put", "delete", "patch")))
 
 
+def t_switch_card_and_wiring():
+    """The switch: OFF at once, ONE approval card to turn it ON.
+
+    The owner's ruling of 2026-11-27 turned `[price_radar] enabled` from a
+    hand edit into a real switch. This pins the whole shape the other switches
+    use: nothing is written until the card is approved, a denial (or a card
+    withdrawn by OFF) changes nothing, OFF is immediate and cardless, and the
+    wiring the card needs is really there - action `price_radar_enable`, tier
+    "ask" in BOTH shipped settings files, its own `_RISK` row in the published
+    gate (a normal card, not the unclassified fallback), a `BOOL_SETTINGS` row
+    whose setter is this module's own `request_enabled`, and "turn on the price
+    radar" reaching it.
+
+    No network and no card is really raised: the gate, the thread and the
+    writer are injected, and every file written is in this suite's temp folder.
+    """
+    class _Verdict:
+        def __init__(self, allowed, *, tier="ask", outcome="approved", reason=""):
+            self.allowed = allowed
+            self.tier = tier
+            self.outcome = outcome
+            self.reason = reason
+
+    def attempt(on, verdict, *, tier="ask", sync=True):
+        """One request(), with a recording apply and a sync or parked card."""
+        calls, parked = [], []
+
+        def spawn(fn):
+            (fn() if sync else parked.append(fn))
+
+        def apply(value):
+            calls.append(("apply", value))
+            return {"ok": True}
+
+        def gate(action, detail, prompt):
+            calls.append(("gate", action, detail))
+            return verdict
+
+        code, body = R.request(on, apply, gate=gate, tier_of=lambda a: tier,
+                              spawn=spawn)
+        return code, body, calls, parked
+
+    real = R.fw
+    R.fw = _FakeFw({"enabled": False})
+    try:
+        R._reset_for_tests()
+
+        # --- ON raises exactly ONE card and writes NOTHING until answered --
+        code, body, calls, parked = attempt(True, _Verdict(True), sync=False)
+        writes = [c for c in calls if c[0] == "apply"]
+        check("ON answers 202 waiting, not 'it is on'",
+              code == 202 and body.get("waiting") is True
+              and body.get("enabled") is False, (code, body))
+        check("...and wrote NOTHING while the card waits", writes == [], writes)
+        check("...the switch still reads off while the card waits",
+              R.switch_state()["waiting"] is True and R.enabled() is False,
+              R.switch_state())
+        check("...the card says prices only, read-only, never a booking",
+              "read-only" in R.CARD_TEXT and "never books" in R.CARD_TEXT
+              and "Nothing is read until you approve" in R.CARD_TEXT)
+        parked[0]()          # the person says yes
+        gates = [c for c in calls if c[0] == "gate"]
+        check("...it raised exactly ONE card, under price_radar_enable",
+              len(gates) == 1 and gates[0][1] == "price_radar_enable",
+              (len(gates), gates))
+        check("...and the card's detail says the change itself sends nothing",
+              gates and gates[0][2].get("leaves_this_pc") is False, gates)
+        check("approval writes the setting exactly once",
+              [c for c in calls if c[0] == "apply"] == [("apply", True)], calls)
+        st = R.switch_state()
+        check("...and the switch reports how the card ended",
+              st["waiting"] is False and st["last"]["outcome"] == "enabled", st)
+
+        # --- nothing else turns it on --------------------------------------
+        for verdict, want in ((_Verdict(False, outcome="denied"), "denied"),
+                              (_Verdict(False, outcome="timed_out"), "timed_out"),
+                              (_Verdict(True, tier="auto"), "refused")):
+            R._reset_for_tests()
+            writes.clear()
+            attempt(True, verdict)
+            check(f"a {want} card changes nothing",
+                  [c for c in writes if c[0] == "apply"] == []
+                  and R.switch_state()["last"]["outcome"] == want,
+                  (writes, R.switch_state()))
+
+        R._reset_for_tests()
+        writes.clear()
+
+        def broken_gate(action, detail, prompt):
+            raise RuntimeError("no gate")
+
+        code, body = R.request(True, lambda v: writes.append(("apply", v)) or {"ok": True},
+                              gate=broken_gate, tier_of=lambda a: "ask",
+                              spawn=lambda fn: fn())
+        check("a gate that cannot be asked raises nothing and says why",
+              code == 202 and [c for c in writes if c[0] == "apply"] == []
+              and R.switch_state()["last"]["message"] == R.SWITCH_GATE_FAILED_WORDS,
+              (code, R.switch_state()))
+
+        R._reset_for_tests()
+        code, body = attempt(True, _Verdict(True), tier="auto")[0:2]
+        check("a tier that is not 'ask' refuses BEFORE any card (503)",
+              code == 503 and "must be 'ask'" in body.get("error", ""), (code, body))
+
+        check("a request that is not true/false is a 400",
+              attempt("yes", _Verdict(True))[0] == 400)
+
+        # --- OFF is immediate, cardless, and withdraws a waiting card ------
+        R._reset_for_tests()
+        _code, _body, _calls, first_parked = attempt(True, _Verdict(True), sync=False)
+        code, body, calls, _ = attempt(False, _Verdict(True))
+        check("OFF writes at once and is never carded",
+              code == 200 and body.get("waiting") is False
+              and [c for c in calls if c[0] == "apply"] == [("apply", False)]
+              and [c for c in calls if c[0] == "gate"] == [],
+              (code, body, calls))
+        check("...and it says the radar is off", body.get("message") == R.SWITCH_OFF_WORDS)
+        first_parked[0]()    # the old card is answered AFTER the off
+        check("approving a withdrawn card changes NOTHING",
+              R.switch_state()["last"]["outcome"] == "withdrawn",
+              R.switch_state())
+
+        # --- a write that fails is said, never claimed ---------------------
+        R._reset_for_tests()
+
+        def refuses(value):
+            raise R.SwitchRefused("the file could not be written")
+
+        code, body = R.request(True, refuses, gate=lambda a, d, p: _Verdict(True),
+                              tier_of=lambda a: "ask", spawn=lambda fn: fn())
+        check("an approved card whose write fails ends 'failed', not 'enabled'",
+              R.switch_state()["last"]["outcome"] == "failed", R.switch_state())
+
+        # --- already on: no second card ------------------------------------
+        R._reset_for_tests()
+        R.fw = _FakeFw({"enabled": True})
+        code, body, calls, _ = attempt(True, _Verdict(True))
+        check("asking to turn on an already-on radar raises no second card",
+              code == 200 and body.get("enabled") is True
+              and [c for c in calls if c[0] == "gate"] == [], (code, body, calls))
+        R.fw = _FakeFw({"enabled": False})
+
+        # --- the real writer, on a copy of a settings file -----------------
+        cfg = TMP / "switch-jarvis-framework.toml"
+        cfg.write_text("# the owner's own file\n"
+                       "[price_radar]\n"
+                       "# the line this switch owns\n"
+                       "enabled = false\n"
+                       "\n"
+                       "[autonomy.tiers]\n"
+                       "price_radar_enable = \"ask\"\n", encoding="utf-8")
+        out = R.set_enabled(True, path=cfg)
+        text = cfg.read_text(encoding="utf-8")
+        check("set_enabled writes [price_radar] enabled = true",
+              out.get("ok") is True and "enabled = true" in text, out)
+        check("...and keeps every comment and every other line",
+              text.startswith("# the owner's own file\n")
+              and "# the line this switch owns" in text
+              and 'price_radar_enable = "ask"' in text, text)
+        check("...a second identical write is a no-op, not a rewrite",
+              R.set_enabled(True, path=cfg).get("changed") is False)
+        R.set_enabled(False, path=cfg)
+        check("...and OFF writes false",
+              "enabled = false" in cfg.read_text(encoding="utf-8"))
+
+        bare = TMP / "switch-no-section.toml"
+        bare.write_text("[autonomy.tiers]\nweb_research = \"ask\"\n", encoding="utf-8")
+        R.set_enabled(True, path=bare)
+        check("a file with no [price_radar] section gains ONE, at the end",
+              bare.read_text(encoding="utf-8").endswith(
+                  "[price_radar]\nenabled = true\n"),
+              bare.read_text(encoding="utf-8"))
+        try:
+            R.set_enabled(True, path=TMP / "not-there.toml")
+            check("a missing settings file refuses instead of inventing one", False)
+        except R.SwitchRefused as exc:
+            check("a missing settings file refuses instead of inventing one",
+                  "could not find" in str(exc), str(exc))
+
+        # --- the registry's door is THIS module's writer -------------------
+        backup = R.request_enabled
+        seen = []
+        R.request_enabled = lambda on, **kw: (
+            seen.append(on), (200, {"ok": True, "enabled": on,
+                                    "message": "done"}))[1]
+        try:
+            import jarvis_settings_registry as SR
+            out = SR.set_price_radar(False)
+        finally:
+            R.request_enabled = backup
+        check("set_price_radar in the settings registry calls request_enabled",
+              seen == [False] and out.ok is True, (seen, out))
+    finally:
+        R.fw = real
+        R._reset_for_tests()
+        R.set_sources(())
+        R.register_alert_renderer(None)
+        R._F2_INSTALLED = False
+
+    # --- the wiring the card above needs --------------------------------
+    import tomllib
+    for name in ("backend/rebuilt/jarvis-framework.toml",
+                 "jarvis-backend/jarvis-framework.toml"):
+        doc = tomllib.loads((HERE.parent / name).read_text(encoding="utf-8"))
+        check(f"{name}: price_radar_enable is 'ask'",
+              doc.get("autonomy", {}).get("tiers", {}).get("price_radar_enable")
+              == "ask", doc.get("autonomy", {}).get("tiers", {})
+              .get("price_radar_enable"))
+        check(f"{name}: [price_radar] enabled still ships false",
+              doc.get("price_radar", {}).get("enabled") is False,
+              doc.get("price_radar"))
+
+    import _base
+    gate_folder = _base.folder("jarvis_gate.py")
+    if gate_folder is None:
+        skip("the published gate is not in this checkout, so its row is not read")
+    else:
+        _base.put_on_path(gate_folder)
+        import jarvis_gate as GATE
+        risk = GATE.risk_for(R.SWITCH_ACTION)
+        check("the published gate has its own _RISK row for price_radar_enable",
+              risk.get("classified") is True, risk)
+        check("...reversible and local, so it is ONE normal card (no Windows Hello "
+              "demand from the unclassified fallback)",
+              risk.get("reversible") == "yes" and risk.get("reach") == "local"
+              and risk.get("swipe_ok") is True, risk)
+        check("...and a denial cannot become a standing rule",
+              R.SWITCH_ACTION in GATE._NO_RULE_FROM_DENIAL, sorted(GATE._NO_RULE_FROM_DENIAL)[:6])
+
+    import jarvis_settings_registry as SR
+    setting = SR.find_bool_setting("the price radar")
+    check("BOOL_SETTINGS has the switch, named the owner's words",
+          setting is not None and setting.key == "price_radar"
+          and setting.set is SR.set_price_radar, setting)
+    check("...and it names no Settings card, because this build draws none",
+          setting is not None and setting.section is None, setting)
+    import jarvis_feature_guide as FG
+    check("asking about it reads the module, never a copy of the value",
+          "price_radar" in FG.STATE_READERS, sorted(FG.STATE_READERS)[:6])
+    import jarvis_quick as Q
+    for phrase, want_on in (("turn on the price radar", True),
+                            ("turn off the price radar", False)):
+        got = Q.match(phrase)
+        check(f"'{phrase}' reaches the price_radar switch",
+              got is not None and got.name == "settings_bool"
+              and got.f.get("key") == "price_radar" and got.f.get("on") is want_on,
+              (got.name if got else None, got.f if got else None))
+
+    # --- the catalogue says it honestly, and names the real card ----------
+    rows = json.loads((HERE.parent / "features" / "features.json")
+                      .read_text(encoding="utf-8"))
+    row = next(r for r in rows if r.get("id") == "price-radar")
+    check("the feature list names ONE card to turn it on",
+          row.get("gate") == [R.SWITCH_ACTION]
+          and "approval card" in row.get("asks", "")
+          and "turn on the price radar" in row.get("where", ""), row)
+    check("...and no longer says there is no card",
+          "no chat approval card" not in row.get("where", "")
+          and "no chat approval card" not in row.get("asks", ""), row
+          .get("where", ""))
+
+
+
 # ==========================================================================
 #   5. The store: whole cents, last-known-good, stale, the outside-text diff
 # ==========================================================================
@@ -848,6 +1111,7 @@ def main():
         ("parser", t_parser),
         ("ssrf", t_ssrf_and_fetch),
         ("switch", t_switch_and_poll_floor),
+        ("switch-card", t_switch_card_and_wiring),
         ("store", t_store),
         ("check-route", t_check_route),
         ("integration", t_integration_points),

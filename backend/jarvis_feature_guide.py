@@ -479,6 +479,17 @@ def _read_handsfree():
     return M.enabled() is True
 
 
+def _read_price_radar():
+    """The price and flight radar's one switch (2026-11-27, jarvis_price_radar.py).
+
+    Read from the module itself, never from a copy of the rule: `enabled()`
+    reads `[price_radar] enabled` fresh and fails to OFF, so a settings file
+    that cannot be read can never teach this answer that the radar is on. It is
+    the SAME reader the radar itself uses before any page is fetched."""
+    import jarvis_price_radar as M
+    return M.enabled() is True
+
+
 def _read_antislop():
     """The Anti-Slop filter's master switch (2026-10-28).
 
@@ -693,6 +704,7 @@ STATE_READERS = {
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
     "handsfree": _read_handsfree,
+    "price_radar": _read_price_radar,
     "antislop": _read_antislop,
     "jarvis_calendar": _read_jarvis_calendar,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),

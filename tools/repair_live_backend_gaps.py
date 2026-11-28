@@ -1605,6 +1605,57 @@ CONNECT_MAIL_RISK = Repair(
 )
 
 
+#: The price and flight radar's switch (2026-11-27). `[price_radar] enabled`
+#: used to be reachable only by editing the settings file by hand; the owner
+#: asked for the switch every other feature has - ONE card to turn it on,
+#: instant and cardless to turn it off - and chose that shape explicitly. The
+#: published base carries the action's `_RISK` row and its
+#: `_NO_RULE_FROM_DENIAL` entry in the end-of-file update blocks (the region no
+#: patch's hunk claims); the live install predates both, so without these two
+#: repairs `risk_for("price_radar_enable")` answers the `_UNKNOWN_RISK`
+#: fallback ("no"/"outbound", classified False): a local, reversible config
+#: write warned as leaving the PC and demanding Windows Hello, and a denied
+#: card offering a standing rule that would stop the radar ever being offered
+#: again. The row text is copied from the published base byte for byte.
+#:
+#: WHY THE ROWS SIT INSIDE THE LITERALS HERE. This is the LIVE file and no patch
+#: is applied after this write, so the base's end-of-file rule does not bind -
+#: `note-edit` above uses the same shape for the same reason.
+PRICE_RADAR_RISK = Repair(
+    name="price-radar-risk",
+    filename="jarvis_gate.py",
+    probes=('"price_radar_enable": ("yes", "local",',),
+    anchor="_RISK: dict[str, tuple[str, str, str]] = {\n",
+    replace_with=(
+        "_RISK: dict[str, tuple[str, str, str]] = {\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-27): the price and\n"
+        "    # flight radar's switch. The published base has this row in an\n"
+        "    # end-of-file `_RISK.update` block; this install predates it, so the\n"
+        "    # gate fell back to _UNKNOWN_RISK ('no'/'outbound', classified\n"
+        "    # False). Copied from jarvis-backend/jarvis_gate.py byte for byte.\n"
+        '    "price_radar_enable": ("yes", "local", "turns the read-only price and flight radar on, so Jarvis may read Google Flights\' public search page - and a product page you hand it - when you ask it to check prices; it never books, holds a seat, adds to a cart or starts a checkout, sends no cookie, saved login or tracking tag, and turning it off again is instant and reads nothing more"),\n'
+    ),
+    why="without this row a local, reversible switch write is classified as an "
+        "unclassified action that leaves the PC, so its one card demands Windows "
+        "Hello",
+)
+
+PRICE_RADAR_NO_RULE = Repair(
+    name="price-radar-no-rule",
+    filename="jarvis_gate.py",
+    probes=('"price_radar_enable",  # jarvis_price_radar.py acts only on tier "ask"',),
+    anchor="_NO_RULE_FROM_DENIAL = frozenset({\n",
+    replace_with=(
+        "_NO_RULE_FROM_DENIAL = frozenset({\n"
+        "    # tools/repair_live_backend_gaps.py (2026-11-27): a denied enable\n"
+        "    # answers that ONE card, never a standing rule.\n"
+        '    "price_radar_enable",  # jarvis_price_radar.py acts only on tier "ask": ONE card to turn the radar on; a denial answers that one card and must not become a standing rule (2026-11-27)\n'
+    ),
+    why="without this entry a denial would offer to remember 'no' as a standing "
+        "rule that stops Jarvis ever offering to turn the radar on again",
+)
+
+
 REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               NOTE_DELETE_RISK, NOTE_DELETE_NO_RULE,
                               EMPTY_TRASH_RISK, EMPTY_TRASH_NO_RULE,
@@ -1613,6 +1664,7 @@ REPAIRS = {r.name: r for r in (GATE_ROWS, NOTE_EDIT_RISK,
                               GITHUB_MODE_GATE_ROWS,
                               CANCEL_SCHEDULED_TOOL_ACTION,
                               CONNECT_MAIL_RISK,
+                              PRICE_RADAR_RISK, PRICE_RADAR_NO_RULE,
                               GATE_TOOL_ACTIONS, HISTORY_ROUTES, CARD_TIMER,
                               UNKNOWN_RISK)}
 

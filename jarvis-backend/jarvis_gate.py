@@ -4138,3 +4138,40 @@ _RISK.update({
 _RISK.update({
     "connect_mail": ("yes", "local", "saves your mail address and an app password in Windows Credential Manager on this PC and then reads ONLY how many messages the inbox holds, to prove the login works - no sender, no subject, no date and no message body is read, nothing is marked as read, nothing is sent anywhere, and deleting the saved entries is instant"),
 })
+
+# --------------------------------------------------------------------------
+#   Turning the price and flight radar on (jarvis_price_radar.py, the owner's
+#   ruling of 2026-11-27)
+# --------------------------------------------------------------------------
+# HERE, AT THE END OF THE FILE, for the reason every block above gives: almost
+# every line inside `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL` is some
+# earlier patch's hunk context, and the very end of this file is the one region
+# no patch's hunk claims. The updates run at import, before any `check()` or
+# `risk_for()` call, so the gate sees the rows exactly as if they sat inside the
+# literals (the owner's ruling of 2026-11-14: base +
+# tools/repair_live_backend_gaps.py, never a new patch).
+#
+# WHY THIS ACTION EXISTS. `[price_radar] enabled` used to be reachable only by
+# editing the settings file by hand; the owner asked for the switch every other
+# feature has - ONE approval card to turn it on, instant and cardless to turn it
+# off - and chose that shape explicitly. `price_radar_enable` is that card's own
+# ask, so it may only exist at tier "ask" (jarvis_price_radar.request refuses at
+# any other tier), and the shipped [autonomy.tiers] carries the line.
+#
+# WHY "yes" AND "local". Reversible: turning it off writes the one line back and
+# is instant. Local: the change itself sends nothing - it writes one line in the
+# owner's own settings file, the same shape and reasoning as
+# `web_search_enable` - and the page reads only happen when the owner asks the
+# radar to check a route. Not the unclassified "no"/"outbound" fallback, which
+# would demand Windows Hello for a local, reversible config write.
+#
+# AND WHY THE DENIAL RULE. A denied enable card answers THAT card. Without the
+# `_NO_RULE_FROM_DENIAL` entry the gate would offer to remember "no" as a
+# standing rule, and the owner could never turn the radar on again without
+# editing the file by hand - the exact hole this switch closes.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "price_radar_enable",  # jarvis_price_radar.py acts only on tier "ask": ONE card to turn the radar on; a denial answers that one card and must not become a standing rule (2026-11-27)
+}
+_RISK.update({
+    "price_radar_enable": ("yes", "local", "turns the read-only price and flight radar on, so Jarvis may read Google Flights' public search page - and a product page you hand it - when you ask it to check prices; it never books, holds a seat, adds to a cart or starts a checkout, sends no cookie, saved login or tracking tag, and turning it off again is instant and reads nothing more"),
+})

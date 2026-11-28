@@ -4570,7 +4570,7 @@
       "name": "Flight prices and a price history",
       "group": "Money and health",
       "surface": "both",
-      "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
+      "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; say \"turn on the price radar\" and ONE approval card turns it on - nothing is read until you approve that card, and turning it off is instant.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -10675,6 +10675,23 @@
       "owner": "gpu-pinning",
       "reason": "PC-only by nature (ARCHITECTURE section 8, ruling Q4): reconnecting THIS PC's Wi-Fi from the phone is refused by the route (it refuses every device but this PC), so the desktop Settings switch and the PC's own typed sentences are its only controls. The phone neither shows nor changes it.",
       "label_note": "PC-only setting: the switch is on the desktop, and the phone's typed sentence is refused by the route rather than acted on."
+    },
+    {
+      "key": "price_radar",
+      "names": [
+        "price radar",
+        "flight radar",
+        "price and flight radar",
+        "flight price radar"
+      ],
+      "section": null,
+      "desktop_row": null,
+      "turn_on": "turn on price radar",
+      "turn_off": "turn off price radar",
+      "resolved": true,
+      "status": "planned",
+      "owner": "setup-ui",
+      "reason": "typed switch works but neither app draws a price-radar Settings card yet, so asking is the switch's only control"
     }
   ],
   "setting_rows": [

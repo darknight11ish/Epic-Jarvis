@@ -2567,6 +2567,25 @@ def set_wifi_auto_reconnect(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --- the price and flight radar (jarvis_price_radar.py, 2026-11-27) --------
+
+def set_price_radar(on: bool, *, peer=None, local=None) -> Outcome:
+    """The radar's ONE switch: OFF at once, ON is ONE approval card.
+
+    `jarvis_price_radar.request_enabled` is the ONE implementation this chat
+    phrase, any Settings row and the module's own route all reach - never a
+    second writer. It raises the `price_radar_enable` card only on the way ON
+    and writes nothing until the owner approves it; OFF is instant, cardless
+    and withdraws a waiting card. No scheduled check runs until this switch is
+    on (the owner's ruling of 2026-11-27)."""
+    try:
+        import jarvis_price_radar as R
+    except Exception:
+        return _missing("the price and flight radar")
+    code, out = R.request_enabled(bool(on))
+    return _say(code, out)
+
+
 BOOL_SETTINGS: tuple = (
     BoolSetting("background_learning",
                ("background learning", "automatic learning", "learn automatically",
@@ -2878,6 +2897,21 @@ BOOL_SETTINGS: tuple = (
                 "reconnect wi-fi automatically",
                 "automatic wi-fi reconnection"),
                "wifi-reconnect", set_wifi_auto_reconnect),
+    # The price and flight radar's one switch (2026-11-27, the owner's ruling).
+    # OFF at once, never carded; ON is ONE approval card (`price_radar_enable`)
+    # that writes the settings file's own `[price_radar] enabled` line only
+    # after the owner says yes - the module's own `request_enabled` decides
+    # that, never this table. `section` IS None ON PURPOSE: this build draws no
+    # price-radar card on either Settings page, so naming a section would point
+    # "open ..." at a control that does not exist (the fourth switch where None
+    # is the reason - see anti-slop, one_moment and voice_check_locked above).
+    # The feature list's row stays Command-Only (now you can turn it on by
+    # asking), and its `gate` names the card so the catalogue's own card claim
+    # stays true (tools/check_feature_list.py rule 9).
+    BoolSetting("price_radar",
+               ("price radar", "flight radar", "price and flight radar",
+                "flight price radar"),
+               None, set_price_radar),
 )
 
 _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
