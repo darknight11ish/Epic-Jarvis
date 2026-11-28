@@ -411,6 +411,10 @@
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
     },
     {
+      "action": "price_radar_enable",
+      "title": "Jarvis wants to turn on the price radar"
+    },
+    {
       "action": "product_check",
       "title": "Jarvis wants to read a product page in your own browser"
     },
@@ -1817,6 +1821,18 @@
       "notice": {
         "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)",
         "summary": "Jarvis wants to change its power mode.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "price_radar_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on the price radar",
+        "summary": "Jarvis wants to turn on the price radar.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
