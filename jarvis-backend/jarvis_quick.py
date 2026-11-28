@@ -16038,15 +16038,25 @@ _INTERNET_ACCESS = re.compile(
 #: "refresh your abilities" is the fourth: it re-reads the self portrait, which
 #: changes nothing and restarts nothing.
 _SELF_TOOLS = re.compile(
-    r"(?:what|which)\s+tools\s+(?:do\s+you|does\s+jarvis|have\s+you|are\s+you)\s+"
+    r"(?:what|which)\s+tools\s+(?:do\s+you|do\s+i|does\s+jarvis|have\s+you|"
+    r"are\s+you)\s+"
     r"(?:have|got|use|using|offered)\b.*"
     r"|what\s+tools\s+(?:can\s+you\s+use|are\s+you\s+using|do\s+you\s+use|"
-    r"do\s+you\s+have)\b.*"
+    r"do\s+you\s+have|do\s+i\s+have)\b.*"
     # The pass-2 test's own phrasing (2026-11-06): "how many tools do you have
     # switched on right now" named a COUNT, and the counting form below is the
     # one the answer already gives ("N of them are switched on").
-    r"|how\s+many\s+tools\s+(?:do\s+you|does\s+jarvis|have\s+you)\s+"
+    #
+    # AND THE OWNER'S OWN FIRST PERSON (owner's ruling Q2, 2026-11-27). Measured
+    # on the live backend at 12:45 that day: "how many tools do I have" was the
+    # ONE phrasing of this family that fell through to the model, because every
+    # alternation here said "do you". The model answered "You have 45 optional
+    # plug-ins" - a different noun and a fourth number, against 46 enabled in
+    # the settings file and 48 on the Reach page. The question a person asks
+    # about his own PC is "do I have", so both pronouns are read now.
+    r"|how\s+many\s+tools\s+(?:do\s+you|do\s+i|does\s+jarvis|have\s+you)\s+"
     r"(?:have|got|use|using|offered|switched\s+on|enabled|active)\b.*"
+    r"|how\s+many\s+tools\s+(?:are\s+there|exist)\b.*"
     r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?tools\s*\??$")
 
 #: THE QUESTION THAT ASKS FOR THE WHOLE INVENTORY (2026-11-25). "Can you list
@@ -28774,6 +28784,14 @@ def _run_tools_inventory(intent: Intent) -> Result:
     body += (" A tool's own switch can still hold it back for one turn - web "
              "search, browser control and the data sandbox have their own - so "
              "the live page is Settings, \"What asks first\".")
+    # THE ONE CLAUSE THE OWNER ASKED FOR (ruling Q2, 2026-11-27). The Reach page
+    # shows its own number (48 on this PC) and this answer shows the settings
+    # list's (46); they count slightly different things, so a reader who sees
+    # both must not read the difference as a contradiction. "Can differ" is the
+    # claim that is certainly true - this module never asserts WHY, because the
+    # count on that page is jarvis_reach's to explain, not this one's.
+    body += (" The Reach page counts what the model is offered rather than this "
+             "settings list, so its number can differ by one or two.")
     return Result(head + body, intent.name)
 
 

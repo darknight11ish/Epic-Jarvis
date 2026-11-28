@@ -357,6 +357,31 @@ def the_full_list_phrasings_reach_the_complete_inventory():
               got.name if got else "went to the model")
 
 
+def the_first_person_count_question_reaches_the_inventory():
+    """The owner's ruling Q2 (2026-11-27): the count is never the model's.
+
+    Measured on the live backend at 12:45 that day: "how many tools do I have"
+    was the ONE phrasing of this family that fell through, because every
+    alternation said "do you". The model answered "You have 45 optional
+    plug-ins" - a different noun and a fourth number, against 46 enabled in the
+    settings file and 48 on the Reach page. The question a person asks about his
+    own PC is "do I have", so it is read now.
+
+    The last check is the other half: a near miss that names no "you"/"jarvis"
+    must keep falling through, exactly as the module's own docstring promises.
+    """
+    for words in ("how many tools do I have", "how many tools do i have",
+                  "what tools do I have", "how many tools are there",
+                  "how many tools do I have switched on"):
+        got = Q.match(words)
+        check(f"first person reaches the inventory: {words!r}",
+              got is not None and got.name == "tools_inventory",
+              got.name if got else "went to the model")
+    got = Q.match("what tools do I need for this job")
+    check("... and a near miss that names no you/jarvis still goes to the model",
+          got is None, got.name if got else "")
+
+
 def the_summary_question_still_summarises():
     """The cap is deliberate for THIS question, and it stays."""
     with _Fixture(FULL_LIST_FIXTURE):
@@ -1044,6 +1069,7 @@ def main() -> int:
         tools_answer_is_the_registry_and_the_live_file()
         tools_answer_follows_a_real_settings_file()
         the_full_list_phrasings_reach_the_complete_inventory()
+        the_first_person_count_question_reaches_the_inventory()
         the_summary_question_still_summarises()
         the_full_list_names_every_tool_exactly_once()
         the_full_list_marks_on_and_off_correctly()
