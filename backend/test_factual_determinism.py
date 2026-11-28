@@ -545,7 +545,13 @@ def t_every_settings_row_answers_a_state_question():
     """SS-1: 38 + 10 + 1 rows, each by its own name, deterministically."""
     fallthrough, misrouted = [], []
     for b in R.BOOL_SETTINGS:
-        shapes = [f"is {b.names[0]} on?", f"what is {b.names[0]} set to?"]
+        shapes = [f"is {b.names[0]} on?", f"what is {b.names[0]} set to?",
+                  # A third shape (2026-11-27): the price radar's own state
+                  # grammar owns the two above ("is the price radar on?" answers
+                  # in the radar's words, reading the SAME switch), so the
+                  # generic settings reader is reached as "is my <name> set to
+                  # on" instead. Every other switch settles on a shape above.
+                  f"is my {b.names[0]} set to on"]
         ok = False
         for phrase in shapes:
             intent_name, res = _state_answer(phrase)

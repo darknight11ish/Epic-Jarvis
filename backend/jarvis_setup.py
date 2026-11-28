@@ -1107,6 +1107,11 @@ BOOL_CARDED = {
     "chat_history": "on",              # "OFF at once, ON is its own card"
     "media_index": "on",               # "ON is ONE normal approval card"
     "lights_without_card": "on",       # request_lights: "ON through ONE approval card"
+    # The price and flight radar (2026-11-27): ON is ONE `price_radar_enable`
+    # card and nothing is read until it is approved; OFF is instant. Listed here
+    # because the guide's CARD_ON_LOOSENING records it, and test_setup.py keeps
+    # the two records equal - one record, no drift.
+    "price_radar": "on",
 }
 
 #: Which DIRECTION of a named CHOICE raises its own existing card. EMPTY on

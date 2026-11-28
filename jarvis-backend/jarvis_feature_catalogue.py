@@ -3,7 +3,7 @@
 The owner's feature list, as data: 184 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 d83656c56696a22452d431dc11cd046bd1c22cf6099f8f0903508f2ad76211f4); the apps' Features pages read their own
+`features/features.json` (sha256 d1f705de1ea91ce5fcd7aabddf9b4d9781ed93d0bf213f367ecbdcc0d29b3002); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "d83656c56696a22452d431dc11cd046bd1c22cf6099f8f0903508f2ad76211f4"
+SOURCE_SHA256 = "d1f705de1ea91ce5fcd7aabddf9b4d9781ed93d0bf213f367ecbdcc0d29b3002"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1019,8 +1019,8 @@ FEATURES = (
         "group": "Money and health",
         "title": "Flight prices and a price history",
         "what": "A read-only price and flight radar: ask it to check a route and dates and it reads Google Flights' public search page, and it keeps a local price history with target prices. Prices only - it never books, holds a seat, adds to a cart or checks out.",
-        "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
-        "asks": "A lookup asks nothing: the radar is read-only. Turning it on is a hand edit of the settings file today, with no card; turning it off is immediate.",
+        "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; say \"turn on the price radar\" and ONE approval card turns it on - nothing is read until you approve that card, and turning it off is instant.",
+        "asks": "A lookup asks nothing: the radar is read-only. Turning it on raises ONE approval card; nothing is written or read until you approve it. Turning it off is immediate, never asks, and withdraws a waiting card.",
         "limit": "Off by default, so nothing is searched until it is on. Google Flights' public page is unofficial and experimental, so it can change or break; a failed read says so and no price is invented. It never books, holds a seat, adds to a cart or checks out - there is no such code path.",
         "surface": "both",
         "aliases": ["airfare", "flight cost", "flight price", "price history for flights", "tracks flight prices and a price history"],

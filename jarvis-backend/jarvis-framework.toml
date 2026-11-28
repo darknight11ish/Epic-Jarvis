@@ -1037,6 +1037,15 @@ receive_uploaded_document = "ask"
 # delete_call_recording, also "ask".
 record_call              = "ask"
 
+# The price and flight radar's ONE switch (jarvis_price_radar.py; the owner's
+# ruling of 2026-11-27; jarvis-backend/jarvis_gate.py carries the action's own
+# _RISK row in its end-of-file update block). OFF at once, never carded; ON is
+# ONE approval card that writes [price_radar] enabled = true only after the
+# owner says yes. It must be "ask": jarvis_price_radar.request refuses to raise
+# the card at any other tier, because turning the radar on starts outbound page
+# reads and no check has a card of its own.
+price_radar_enable       = "ask"
+
 # Talking to Jarvis changes what needs a card, what needs a second yes, and
 # what needs Windows Hello, one action and one thing at a time (2026-11-05,
 # jarvis_approval_policy.py; the owner's ask). "What asks first" is still

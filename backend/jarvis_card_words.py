@@ -412,6 +412,9 @@ TITLES = {
     # in Credential Manager. The title is spoken and drawn on a lock screen, so
     # it names the account, never the provider's product name.
     "connect_mail": "connect your mail account",
+    # The price and flight radar's ONE switch (2026-11-27): one card to turn it
+    # on, instant to turn it off.
+    "price_radar_enable": "turn on the price radar",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -671,6 +674,9 @@ SUMMARY = {
     # glance - the full card says the value goes to Credential Manager and that
     # the one test reads only a count.
     "connect_mail": "connect your mail account",
+    # The price and flight radar's ONE switch (2026-11-27): one card to turn it
+    # on, instant to turn it off.
+    "price_radar_enable": "turn on the price radar",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above

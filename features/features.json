@@ -1792,10 +1792,13 @@
     "group": "Money and health",
     "title": "Flight prices and a price history",
     "what": "A read-only price and flight radar: ask it to check a route and dates and it reads Google Flights' public search page, and it keeps a local price history with target prices. Prices only - it never books, holds a seat, adds to a cart or checks out.",
-    "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
-    "asks": "A lookup asks nothing: the radar is read-only. Turning it on is a hand edit of the settings file today, with no card; turning it off is immediate.",
+    "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; say \"turn on the price radar\" and ONE approval card turns it on - nothing is read until you approve that card, and turning it off is instant.",
+    "asks": "A lookup asks nothing: the radar is read-only. Turning it on raises ONE approval card; nothing is written or read until you approve it. Turning it off is immediate, never asks, and withdraws a waiting card.",
     "limit": "Off by default, so nothing is searched until it is on. Google Flights' public page is unofficial and experimental, so it can change or break; a failed read says so and no price is invented. It never books, holds a seat, adds to a cart or checks out - there is no such code path.",
     "surface": "both",
+    "gate": [
+      "price_radar_enable"
+    ],
     "aliases": [
       "airfare",
       "flight cost",

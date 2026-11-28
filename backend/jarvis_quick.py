@@ -15321,6 +15321,7 @@ CHANGE_BY_ASKING = frozenset({
     "briefing_senders", "big_coder", "better_voice", "chat_history",
     "write_like_me", "big_model", "big_model_wiki",
     "big_model_deep_questions",
+    "price_radar",  # 2026-11-27: its switch exists; OFF instant, ON its one card
 })
 
 

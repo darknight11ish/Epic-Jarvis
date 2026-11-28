@@ -479,6 +479,17 @@ def _read_handsfree():
     return M.enabled() is True
 
 
+def _read_price_radar():
+    """The price and flight radar's one switch (2026-11-27, jarvis_price_radar.py).
+
+    Read from the module itself, never from a copy of the rule: `enabled()`
+    reads `[price_radar] enabled` fresh and fails to OFF, so a settings file
+    that cannot be read can never teach this answer that the radar is on. It is
+    the SAME reader the radar itself uses before any page is fetched."""
+    import jarvis_price_radar as M
+    return M.enabled() is True
+
+
 def _read_antislop():
     """The Anti-Slop filter's master switch (2026-10-28).
 
@@ -693,6 +704,7 @@ STATE_READERS = {
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
     "handsfree": _read_handsfree,
+    "price_radar": _read_price_radar,
     "antislop": _read_antislop,
     "jarvis_calendar": _read_jarvis_calendar,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),
@@ -1302,10 +1314,12 @@ PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)
 #: The Status line a CONFIG-ONLY row shows (the owner's Q3 ruling, 2026-11-27).
 #: DISPLAY ONLY, the same shape as the two rewords beside it: the five approved
 #: label strings and their pinned counts stay `label_for()`'s. But a feature
-#: that exists in code and is off by default in the settings file - the price
-#: radar ships `[price_radar] enabled = false` - has a switch, and the derived
+#: that exists in code and is off by default in the settings file - the product
+#: check ships `[product_check] enabled = false` - has a switch, and the derived
 #: Command-Only label's words ("Runs When You Ask - No Switch Needed") are false
-#: for it: it does not run until that file is edited. The new sentence says the
+#: for it: it does not run until that file is edited. (The price radar used to
+#: be this rule's example; on 2026-11-27 it gained a real ONE-card switch, so it
+#: no longer qualifies and this sentence left it.) The new sentence says the
 #: truth the row's own `where` already records. A row is reworded only when its
 #: own text says BOTH things (see `config_only_row()`), so the label cannot be
 #: attached to a feature by an id list, and a row that also names an in-app
@@ -1313,7 +1327,7 @@ PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)
 CONFIG_ONLY_DISPLAY_LABEL = ("Off by default (config file only — no in-app switch "
                              "yet)")
 
-#: A settings-file line: `[price_radar] enabled = true`. The catalogue writes
+#: A settings-file line: `[product_check] enabled = true`. The catalogue writes
 #: these in the owner's own words, so this is what identifies a config-only row.
 _CONFIG_LINE_WORDS = re.compile(r"\[[a-z][a-z0-9_]*\]\s*[a-z][a-z0-9_]*\s*=\s*\S",
                                 re.IGNORECASE)
@@ -3156,11 +3170,10 @@ NO_COMMAND_REASON = {
     # the two chat sentences. Hence not-a-setting, not a missing control.
     "call-recording": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "model-knowledge": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
-    # The price radar has a switch, but it is the settings file's own
-    # `[price_radar] enabled` line, not a registered BoolSetting, and it has no
-    # chat approval card yet - so the ROW is a read/behaviour, and the switch it
-    # does have is named in its own `where`/`limit`.
-    "price-radar": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The price radar's row LEFT this table on 2026-11-27: it has a registered
+    # BoolSetting and ONE `price_radar_enable` card now, so EXTRA_CONTROLS above
+    # links the switch and the matrix derives "switch" for it. A stale entry
+    # here FAILS the suite, which is why it is deleted in the same change.
     # The owner's 2026-11-02 life-coach set (JARVIS-API section 180). Both are
     # ACTIONS with no setting behind them - there is nothing to switch on or
     # off - and neither app has a screen for them yet, so the row's own `where`
@@ -3229,6 +3242,14 @@ EXTRA_CONTROLS = {
     # answered with the wrong control. `SECTION_MATES_NOT_THIS_FEATURE` above
     # drops the section-mate, leaving this one.
     "anti-slop": ("antislop",),
+    # The price and flight radar's switch (2026-11-27). The row names the
+    # settings file's own `[price_radar] enabled` line in its `where`, not a
+    # Settings card - neither app draws one yet - so the link cannot come from
+    # `covers`. The switch is real now: ON raises ONE `price_radar_enable`
+    # card, OFF is instant. This is the classification correction the switch
+    # itself forces: without it the row kept answering "Command-Only ... no
+    # switch needed" while "turn on the price radar" changed its setting.
+    "price-radar": ("price_radar",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control
@@ -3258,7 +3279,20 @@ EXTRA_CONTROLS = {
 #: through src-tauri/src/calendar_settings.rs). So the entry that used to sit
 #: here was removed rather than left to look like a gap nobody owns - the same
 #: way `memory-learning` and `history` left this dict.
-SETTINGS_GAPS = {}
+SETTINGS_GAPS = {
+    # The price and flight radar (2026-11-27). The typed switch is REAL and
+    # tested - "turn on the price radar" is ONE `price_radar_enable` card and
+    # nothing is read until it is approved; OFF is instant - but NEITHER app
+    # draws a Settings control for it yet (both Settings pages only list the
+    # feature in the All-features directory). Recorded here on purpose, with
+    # its owner, because a typed path that looked "covered" in the matrix would
+    # be the exact lie this table exists to prevent.
+    "price-radar": {"controls": ("price_radar",),
+                    "desktop": "setup-ui", "phone": "setup-ui",
+                    "reason": ("The typed switch is real, but neither app draws a "
+                               "price-radar control yet - the next slice adds it to "
+                               "Settings on both apps.")},
+}
 
 #: Feature ids whose ADJUST phrase does not sit behind a `settings.<id>` cover
 #: (the catalogue names a Brain page), with the Settings place that proves it.
@@ -3890,6 +3924,10 @@ CARD_ON_LOOSENING = frozenset({
     "screen_picture",        # SP.request(...) registry:662-668
     "lights_without_card",   # request_lights(...) registry:605-611
     "sandbox_exec",          # "ON is ONE normal approval card" registry:700-705
+    # The price and flight radar (2026-11-27): ON is ONE `price_radar_enable`
+    # card and nothing is read until it is approved; OFF is instant, cardless
+    # and withdraws a waiting card - the same shape as the rows above.
+    "price_radar",
 })
 #: ...and the five whose setter says it never asks. `humour` is the row the
 #: semantic read caught: `set_humor` - "At once either way - it changes wording

@@ -33,9 +33,11 @@ page's ``tfs`` parameter and reads that blob.
 THE SWITCH, AND WHAT "OFF" MEANS. ``[price_radar] enabled`` is read fresh,
 defaults to **false**, and with it off every check answers without building a
 request or opening a socket (the suite spies on the opener and proves it).
-Turning it on is one ``change_own_config`` approval card; turning it off is
-immediate (it only takes something away). No scheduled checks run until the
-owner turns it on.
+Turning it on is ONE ``price_radar_enable`` approval card (the owner's ruling
+of 2026-11-27; before it, this line was the only way and there was no card at
+all); turning it off is immediate (it only takes something away) and withdraws
+a waiting card. Nothing is written or read until the card is approved. No
+scheduled checks run until the owner turns it on.
 
 THE HARD REFUSAL INVARIANTS (baked in, each tested):
 
@@ -118,8 +120,12 @@ import os
 import re
 import sqlite3
 import sys
+import tempfile
+import threading
+import time
 import urllib.error
 import urllib.request
+import uuid as _uuid
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
@@ -251,6 +257,388 @@ def install_f2() -> bool:
     if installed:
         _F2_INSTALLED = True
     return installed
+
+
+# ==========================================================================
+#   The switch: OFF at once, ONE card to turn it ON
+# ==========================================================================
+#
+# THE OWNER'S RULING (2026-11-27). `[price_radar] enabled` used to be
+# reachable only by editing `jarvis-framework.toml` by hand - the feature list
+# said so, honestly, and this module had no setter at all. The owner chose the
+# shape every other switch here already has: ONE approval card to turn it ON,
+# and OFF at once with no card. The card's action is `price_radar_enable`
+# ("ask" in the shipped `[autonomy.tiers]`), and its `_RISK` row ("yes",
+# "local") is what keeps the card a normal card rather than the gate's
+# unclassified fallback, which would demand Windows Hello for a local,
+# reversible config write.
+#
+# WHY THE ACTION IS THIS FEATURE'S OWN, NOT `change_own_config`. It names the
+# thing being turned on, so a denial answers this one card and cannot become a
+# standing rule that stops the radar ever being offered again (the action is
+# in `_NO_RULE_FROM_DENIAL`), and the audit log says which switch moved.
+#
+# THE SHAPE IS `jarvis_watch_notify.request`. ON answers 202
+# {"waiting": true} at once and the card is decided on its own thread; only a
+# gate answer that is tier "ask" with outcome "approved" writes the setting.
+# Denied, timed out, refused, or turned off while the card waited: nothing is
+# written. OFF writes at once, is never carded, and withdraws a waiting card.
+
+SWITCH_ACTION = "price_radar_enable"
+
+CARD_TEXT = "\n".join([
+    "Turn on the price and flight radar.",
+    "",
+    "While it is on, Jarvis can read Google Flights' public search page - and, "
+    "when you ask it to, a product page - to check prices, and it keeps a "
+    "local price history with target prices.",
+    "",
+    "It is read-only: prices only. It never books, holds a seat, adds to a "
+    "cart or starts a checkout, and it sends no cookie, saved login or "
+    "tracking tag.",
+    "",
+    "The pages are other companies' public pages, not published APIs, so they "
+    "can change or break without notice.",
+    "",
+    "Nothing is read until you approve this card. Turning it off is instant, "
+    "from either app, and never asks.",
+    "",
+    "If you say no: nothing changes and the radar stays off.",
+])
+
+SWITCH_LAST_WORDS = {
+    "enabled": "You approved the card, so the price and flight radar is on.",
+    "denied": "The card was turned down, so the price and flight radar stayed off.",
+    "timed_out": "Nobody answered the card in time, so the price and flight radar "
+                 "stayed off.",
+    "refused": "Your PC's settings do not let this be approved, so the price and "
+               "flight radar stayed off.",
+    "withdrawn": "You turned the price and flight radar off while the card waited, "
+                 "so approving it changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so the price "
+              "and flight radar stayed off.",
+}
+SWITCH_GATE_FAILED_WORDS = ("The approval card could not be raised, so the price and "
+                            "flight radar stayed off.")
+SWITCH_WAITING_WORDS = ("Waiting for your approval. The radar reads prices only if "
+                        "you approve the card, on your PC or phone.")
+SWITCH_ALREADY_WORDS = "The price and flight radar is already on."
+SWITCH_OFF_WORDS = "The price and flight radar is off. Nothing will be read."
+
+#: The switch's own state. In memory only: a waiting card is a doorbell, not a
+#: record, and the decision itself is in approvals.db and the audit log.
+_SWITCH_LOCK = threading.Lock()
+_SWITCH_PENDING: dict = {}          # {"id", "since"} while an ON card waits
+_SWITCH_WITHDRAWN: set = set()
+_SWITCH_LAST: dict = {}             # {"outcome", "why", "at", "message"}
+_SWITCH_LATEST: dict = {}           # {"id"} - only the newest card sets _LAST
+#: Held from an approved card's "was it withdrawn?" check through
+#: `set_enabled(True)`, and from OFF's withdrawing through `set_enabled(False)`:
+#: the lesson of jarvis_learning_switch.py's own R5.
+_SWITCH_APPLY = threading.Lock()
+
+
+class SwitchRefused(Exception):
+    """The setting could not be saved, so nothing is claimed about it."""
+
+
+CONFIG_NAME = "jarvis-framework.toml"
+
+
+def framework_path() -> Optional[Path]:
+    """The owner's `jarvis-framework.toml`, found the way the backend finds it.
+
+    `fw.config_path()` searches the settings folder, the backend's own folder
+    and one directory up - so in this repository it can also find the SHIPPED
+    copy. `set_enabled` only ever writes where a caller says (tests pass a
+    path); on the owner's PC the search finds the live file, exactly as every
+    other switch module's own writer does.
+    """
+    if fw is not None:
+        try:
+            got = fw.config_path()
+            if got is not None:
+                return Path(got)
+        except Exception:
+            pass
+    return _config_dir() / CONFIG_NAME
+
+
+def _rewrite_bool(text: str, section: str, key: str, value: bool) -> str:
+    """`[section] key = <value>` in `text`, added or replaced, nothing else
+    touched - comments, order and every other line survive the change.
+
+    The same function `jarvis_handsfree.py` uses: the whole file is a person's
+    own settings file, so a switch may never rewrite it by parsing and
+    re-serialising it."""
+    want = "true" if value else "false"
+    lines = text.splitlines(keepends=True)
+    head = f"[{section}]"
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == head:
+            start = i
+            break
+    if start is None:
+        sep = "" if not text or text.endswith("\n") else "\n"
+        return f"{text}{sep}\n{head}\n{key} = {want}\n"
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        s = lines[j].strip()
+        if s.startswith("[") and s.endswith("]"):
+            end = j
+            break
+    for j in range(start + 1, end):
+        s = lines[j].strip()
+        if s.startswith("#") or "=" not in s:
+            continue
+        name = s.split("=", 1)[0].strip()
+        if name == key:
+            indent = lines[j][:len(lines[j]) - len(lines[j].lstrip())]
+            lines[j] = f"{indent}{key} = {want}\n"
+            return "".join(lines)
+    insert = f"{key} = {want}\n"
+    if end > 0 and not lines[end - 1].endswith("\n"):
+        lines[end - 1] = lines[end - 1] + "\n"
+    lines.insert(end, insert)
+    return "".join(lines)
+
+
+def _read_back(p: Path):
+    """The value the file itself now holds, or None when it cannot be parsed."""
+    try:
+        import tomllib
+        doc = tomllib.loads(Path(p).read_text(encoding="utf-8-sig"))
+        return bool((doc.get(SWITCH_SECTION) or {}).get(SWITCH_KEY, False))
+    except Exception:
+        return None
+
+
+def _reload() -> None:
+    try:
+        if fw is not None:
+            fw.reload_framework()
+    except Exception:
+        pass
+
+
+def set_enabled(on: bool, *, path: Optional[Path] = None) -> dict:
+    """Write `[price_radar] enabled` atomically, then read it back.
+
+    Raises :class:`SwitchRefused` when the file cannot be read or written, or
+    when the write is not read back as the value asked for: a switch that says
+    it is on and is not is worse than one that says it failed. `path` exists
+    for the suite; the real caller writes the owner's live settings file."""
+    on = bool(on)
+    p = Path(path) if path is not None else framework_path()
+    if not p.is_file():
+        raise SwitchRefused("Jarvis could not find your settings file "
+                            f"({CONFIG_NAME}), so nothing was changed.")
+    try:
+        raw = p.read_bytes()
+    except OSError as exc:
+        raise SwitchRefused("Your settings file could not be read "
+                            f"({type(exc).__name__}), so nothing was changed.")
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise SwitchRefused("Your settings file is not valid UTF-8 text, so "
+                            "nothing was changed.")
+    new = _rewrite_bool(text, SWITCH_SECTION, SWITCH_KEY, on)
+    changed = new != text
+    if changed:
+        data = (b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8")
+        fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, p)
+        except OSError as exc:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise SwitchRefused("Your settings file could not be written "
+                                f"({type(exc).__name__}), so nothing was changed.")
+    _reload()
+    got = _read_back(p)
+    if got is not None and got != on:
+        raise SwitchRefused("The setting was written but is not being read back "
+                            f"as {'on' if on else 'off'}, so nothing is claimed.")
+    if path is None and _config_enabled() != on:
+        raise SwitchRefused("The setting was written but the backend is not reading "
+                            f"it as {'on' if on else 'off'}, so nothing is claimed.")
+    _audit("price_radar.switch", {"enabled": on, "changed": changed})
+    return {"ok": True, "enabled": on, "changed": changed}
+
+
+def _audit(event: str, detail: dict) -> None:
+    try:
+        if fw is not None:
+            fw.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _tier(action: str) -> str:
+    try:
+        if fw is not None:
+            return str(fw.action_tier(action))
+    except Exception as exc:
+        return f"unreadable ({type(exc).__name__})"
+    return "unreadable (no jarvis_framework)"
+
+
+def _spawn(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="jarvis-price-radar-card", daemon=True).start()
+
+
+def _finish(pid: str, outcome: str, why: str = "", message: Optional[str] = None) -> None:
+    with _SWITCH_LOCK:
+        if _SWITCH_PENDING.get("id") == pid:
+            _SWITCH_PENDING.clear()
+        _SWITCH_WITHDRAWN.discard(pid)
+        if _SWITCH_LATEST.get("id") not in (None, pid):
+            return
+        _SWITCH_LAST.clear()
+        _SWITCH_LAST.update(outcome=outcome, why=why, at=time.time(),
+                            message=message or SWITCH_LAST_WORDS.get(outcome, ""))
+    _audit("price_radar.card", {"outcome": outcome})
+
+
+def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
+            tier_of: Callable[[str], str]) -> None:
+    """Decide ONE waiting ON card. Only "approved" at tier "ask" writes."""
+    try:
+        v = gate(SWITCH_ACTION, {"text": CARD_TEXT,
+                                 "what": "turn the read-only price radar on",
+                                 "leaves_this_pc": False}, CARD_TEXT)
+    except Exception as exc:
+        return _finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})",
+                       SWITCH_GATE_FAILED_WORDS)
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    if vtier != "ask" or tier_of(SWITCH_ACTION) != "ask":
+        return _finish(pid, "refused",
+                       f"the gate answered at tier {vtier!r}, which is not a person "
+                       "saying yes")
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish(pid, outcome)
+        return _finish(pid, "refused", str(getattr(v, "reason", "refused")))
+    with _SWITCH_APPLY:
+        with _SWITCH_LOCK:
+            withdrawn = pid in _SWITCH_WITHDRAWN
+        if withdrawn:
+            return _finish(pid, "withdrawn",
+                           "you turned the radar off while the card was waiting")
+        try:
+            out = apply(True) or {}
+        except SwitchRefused as exc:
+            return _finish(pid, "failed", str(exc))
+        except Exception as exc:
+            return _finish(pid, "failed", f"{type(exc).__name__}")
+        if out.get("ok") is False:
+            return _finish(pid, "failed", str(out.get("error", "")))
+        _finish(pid, "enabled")
+
+
+def request(on, apply: Optional[Callable[[bool], dict]] = None, *,
+            gate: Optional[Callable] = None,
+            tier_of: Optional[Callable[[str], str]] = None,
+            spawn: Optional[Callable] = None) -> tuple:
+    """Ask for the switch to change. Returns (http code, body).
+
+    ON is never applied here: it raises ONE normal approval card and answers
+    202 {"waiting": true}. OFF is immediate (200), withdraws a waiting card and
+    never asks. A gate that cannot be asked, a tier that is not "ask", or a
+    setting that cannot be saved changes nothing and says so."""
+    apply = apply or set_enabled
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    if not isinstance(on, bool):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    if not on:
+        with _SWITCH_APPLY:
+            with _SWITCH_LOCK:
+                if _SWITCH_PENDING:
+                    _SWITCH_WITHDRAWN.add(_SWITCH_PENDING["id"])
+                    _SWITCH_PENDING.clear()
+            try:
+                out = dict(apply(False) or {})
+            except SwitchRefused as exc:
+                return 409, {"ok": False, "enabled": True, "waiting": False,
+                             "error": str(exc)}
+        out.setdefault("ok", True)
+        out.update(enabled=False, waiting=False, message=SWITCH_OFF_WORDS)
+        _audit("price_radar.switch.off", {})
+        return 200, out
+    if enabled():
+        return 200, {"ok": True, "enabled": True, "waiting": False,
+                     "message": SWITCH_ALREADY_WORDS}
+    tier = tier_of(SWITCH_ACTION)
+    if tier != "ask":
+        return 503, {"ok": False, "enabled": False, "waiting": False,
+                     "error": (f"{SWITCH_ACTION} is tier {tier!r} in the settings "
+                               "file; turning the price and flight radar on needs a "
+                               "person to say yes, so it must be 'ask'")}
+    with _SWITCH_LOCK:
+        if _SWITCH_PENDING:
+            return 202, {"ok": True, "enabled": False, "waiting": True,
+                         "message": "A card to turn on the price and flight radar is "
+                                    "already waiting for your approval."}
+        pid = _uuid.uuid4().hex
+        _SWITCH_PENDING.update(id=pid, since=time.time())
+        _SWITCH_LATEST["id"] = pid
+    _audit("price_radar.switch.asked", {})
+    try:
+        spawn(lambda: _decide(pid, apply, gate, tier_of))
+    except Exception:
+        with _SWITCH_LOCK:
+            _SWITCH_PENDING.clear()
+        return 503, {"ok": False, "enabled": False, "waiting": False,
+                     "error": "could not raise the approval card, so nothing changed"}
+    return 202, {"ok": True, "enabled": False, "waiting": True,
+                 "message": SWITCH_WAITING_WORDS}
+
+
+def request_enabled(on, *, gate: Optional[Callable] = None,
+                    tier_of: Optional[Callable[[str], str]] = None,
+                    spawn: Optional[Callable] = None) -> tuple:
+    """The settings registry's own entry point: OFF at once, ON one card.
+
+    It is `request` with this module's real writer, so the chat phrase, the
+    Settings row and any route all reach ONE implementation - never a second
+    writer that could disagree with the card rule."""
+    return request(on, set_enabled, gate=gate, tier_of=tier_of, spawn=spawn)
+
+
+def switch_state() -> dict:
+    """{"enabled", "waiting", "last"} - the switch, as a status view reports it."""
+    with _SWITCH_LOCK:
+        last = dict(_SWITCH_LAST)
+        waiting = bool(_SWITCH_PENDING)
+    return {"enabled": _config_enabled(), "waiting": waiting, "last": last or None}
+
+
+def _reset_for_tests() -> None:
+    with _SWITCH_LOCK:
+        _SWITCH_PENDING.clear()
+        _SWITCH_WITHDRAWN.clear()
+        _SWITCH_LAST.clear()
+        _SWITCH_LATEST.clear()
 
 
 # ==========================================================================

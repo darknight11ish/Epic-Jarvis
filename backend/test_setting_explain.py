@@ -186,8 +186,10 @@ def t_the_counts_and_the_readers_are_the_registrys_own():
     (JARVIS-API section 191), whose reader is `_read_handsfree` in this table.
 
     Thirty-nine on 2026-11-08: `wifi_auto_reconnect`, the auto Wi-Fi reconnect
-    (ruling Q4), whose reader is `_read_wifi_auto_reconnect` in this table."""
-    check("39 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 39,
+    (ruling Q4), whose reader is `_read_wifi_auto_reconnect` in this table.
+    Forty on 2026-11-27: `price_radar`, the price and flight radar's ONE
+    `price_radar_enable` card, whose reader is `_read_price_radar`."""
+    check("40 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 40,
           len(R.BOOL_SETTINGS))
     # 2026-11-25: `answer_style` joined CHOICE_SETTINGS (the typed answer's
     # layout dial beside the manner pair), so ten -> eleven. Measured from the

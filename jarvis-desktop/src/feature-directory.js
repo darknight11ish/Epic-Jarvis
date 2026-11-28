@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "d131bfa4f9fd1a8d481ddcb8e242f76f984a9cc75d7fbecba55d0f98efcdd532",
+  "source_sha256": "1f748ac59fe325e1895c038090facc2c5aa316bf1f32b6b4f5aeb9d4f23517f6",
   "feature_count": 184,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1388,15 +1388,15 @@ export const FEATURE_DIRECTORY = {
       "title": "Flight prices and a price history",
       "group": "Money and health",
       "surface": "both",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "status": "not-a-setting",
-      "label_note": "",
-      "example": "turn on Do arithmetic",
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "status": "planned",
+      "label_note": "Settings control still to come: the switch works in chat today (ONE card to turn it on), and the Settings card is setup-ui's next slice.",
+      "example": "turn on the price radar",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
-      "note": "",
+      "note": "Settings control still to come: the switch works in chat today (ONE card to turn it on), and the Settings card is setup-ui's next slice.",
       "not_a_control": true
     },
     {
