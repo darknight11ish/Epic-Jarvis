@@ -12228,6 +12228,17 @@ def _feature_detail_intent(raw, target: str, mode: str):
 
 
 def _feature_can_do_intent(raw, target: str, capability: str):
+    # A GITHUB ACTION IS NOT A "CAN YOU <X>" FEATURE QUESTION (2026-11-27,
+    # measured on the owner's PC). This lane claimed
+    # "can you do a pull request on the Epic Jarvis GitHub to fix this? i would
+    # like to be able to adjust that setting, which is voice" and answered
+    # "I do not have a feature called 'you a pull request on the epic jarvis
+    # github to fix this? ...'". The sentence asks for work on GitHub, and the
+    # feature list is never the right answer to that, however many feature-ish
+    # words it holds. Returning None hands it to the model, which is the only
+    # lane that can act on it.
+    if _GITHUB_REQUEST_SHAPE.search(str(raw or "")):
+        return None
     row = _feature_detail_row(raw, target)
     if row is not None:
         return Intent("feature_can_do",
@@ -14921,7 +14932,26 @@ def _setting_guide_intent(target: str):
     return Intent("setting_explain", found)
 
 
+#: A sentence that ASKS FOR a GitHub action, or names a pull request at all
+#: (2026-11-27). The feature-guide lane must never answer one of these with the
+#: feature list - see the guard at the top of `_feature_explain_intent`.
+_GITHUB_REQUEST_SHAPE = re.compile(
+    r"\bpull\s+requests?\b"
+    r"|\b(?:do|make|open|raise|create|submit|push|fix|merge)\b[\s\S]{0,40}?"
+    r"\b(?:github|pull\s+request)\b", re.I)
+
+
 def _feature_explain_intent(s: str, raw, target: str, explicit: bool = False):
+    # A GITHUB ACTION IS NOT A FEATURE QUESTION (2026-11-27, measured on the
+    # owner's own PC). "can you do a pull request on the Epic Jarvis GitHub to
+    # fix this? i would like to be able to adjust that setting, which is voice"
+    # was claimed by this lane - the word "setting" made it look explicit - and
+    # answered "I do not have a feature called 'you a pull request on the epic
+    # jarvis github to fix this? ...'". A sentence that ASKS FOR a pull request
+    # belongs to the GitHub lane or to the model; answering it with the feature
+    # list is never right, however many feature-ish words it happens to hold.
+    if _GITHUB_REQUEST_SHAPE.search(str(raw or "")):
+        return None
     row = _feature_lookup_exact(target)
     if row is None and _feature_context_ok(raw, explicit):
         row = _feature_lookup(_feature_without_context(target))
@@ -28568,6 +28598,13 @@ def _open(s: str) -> Optional[Intent]:
         import jarvis_open as OPEN
     except Exception:
         return None
+    # "OPEN A PULL REQUEST" IS NOT "OPEN AN APP" (2026-11-27). Measured on this
+    # tree: "can you open a pull request for me" resolved through
+    # jarvis_open.parse as an app called "a pull request". The word "pull
+    # request" is a GitHub object, never a program on this PC, so the sentence
+    # belongs to the model, which can actually open one.
+    if _GITHUB_REQUEST_SHAPE.search(str(s or "")):
+        return None
     got = OPEN.parse(s)
     if got is None:
         return None
@@ -29181,14 +29218,25 @@ _TOOLS_CATEGORIES = re.compile(
     r"|list\s+(?:all\s+(?:of\s+)?)?(?:your\s+|the\s+)?tools\s+by\s+"
     r"(?:category|categories|group|groups|area|areas)\s*\??$")
 
-#: "which tools are switched off" - the question you ask when one is missing
+#: "which tools are switched off" - the question you ask when one is missing.
+#: THE ADVERB IS PART OF THE SENTENCE (2026-11-27, measured on the owner's PC):
+#: "what tools are currently off" fell to the model and was answered "I'll need
+#: to check your settings", while "what tools are off" was answered from the
+#: inventory. The only difference was the word "currently" - so the adverbial
+#: slot is optional here and in the two shapes below, exactly where a person
+#: puts it.
+_NOW_ADVERB = (r"(?:(?:currently|now|right\s+now|at\s+the\s+moment|"
+               r"at\s+present)\s+)?")
+
 _TOOLS_SWITCHED_OFF = re.compile(
     r"(?:which|what)\s+(?:of\s+your\s+)?(?:tools?|functions?)\s+"
-    r"(?:are|is)\s+(?:switched\s+off|turned\s+off|off|disabled|not\s+on)\s*\??$"
+    r"(?:are|is)\s+" + _NOW_ADVERB +
+    r"(?:switched\s+off|turned\s+off|off|disabled|not\s+on)\s*\??$"
     r"|(?:which|what)\s+tools?\s+(?:have|has)\s+(?:you|jarvis)\s+"
     r"(?:switched|turned)\s+off\s*\??$"
     r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:tools?|functions?)\s+"
-    r"(?:that|which)\s+(?:are\s+)?(?:switched\s+off|off|disabled)\s*\??$")
+    r"(?:that|which)\s+(?:are\s+)?" + _NOW_ADVERB +
+    r"(?:switched\s+off|off|disabled)\s*\??$")
 
 #: "what tools can change my settings" - the ATTRIBUTE form. It is answered
 #: from the settings area (see `_run_tools_settings`), whose own group

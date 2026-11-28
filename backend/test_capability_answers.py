@@ -1691,6 +1691,38 @@ def t_a_question_about_a_destructive_verb_answers_and_never_starts_it():
           got.name if got is not None else None)
 
 
+def t_a_github_request_is_never_answered_with_the_feature_list():
+    """Measured on the owner's own PC, 2026-11-27, in his own words.
+
+    He asked: "can you do a pull request on the Epic Jarvis GitHub to fix this?
+    i would like to be able to adjust that setting, which is voice" - and Atlas
+    answered "I do not have a feature called 'you a pull request on the epic
+    jarvis github to fix this? ...'". Two lanes did it: the "can you <X>"
+    capability lane claimed the sentence because it contains "setting", and
+    "open a pull request" resolved through jarvis_open as an app called "a pull
+    request".
+
+    A GitHub request is work to do, not a feature to describe, so neither lane
+    may claim it. Every check below is the OLD behaviour written as a failure.
+    """
+    for sentence in (
+            "can you do a pull request on the Epic Jarvis GitHub to fix this",
+            "can you do a pull request on the Epic Jarvis GitHub to fix this? "
+            "i would like to be able to adjust that setting, which is voice",
+            "can you open a pull request for me"):
+        got = Q.match(sentence)
+        check(f"a GitHub request is not a feature answer: {sentence[:44]!r}",
+              got is None or got.name not in ("feature_unknown", "open_app"),
+              got.name if got is not None else "the model")
+    # The adverb form of the off question (the same day): "what tools are
+    # currently off" fell to the model while "what tools are off" was answered.
+    got = Q.match("what tools are currently off")
+    check("'what tools are currently off' answers from the switch list",
+          got is not None
+          and got.name in ("tools_switched_off", "tool_switches_on_off"),
+          got.name if got is not None else "went to the model")
+
+
 def t_the_measured_report_quote_is_reproduced():
     """The three answers the report quotes, reproduced in-process."""
     report = REPO / ".dsh-scratch" / "SELF-AWARENESS-2026-11-06" / "results.json"
@@ -1761,6 +1793,7 @@ def main(argv=None):
                t_the_thresholds_decline_rather_than_guess,
                t_it_is_dispatched_and_arrives_without_a_card,
                t_a_question_about_a_destructive_verb_answers_and_never_starts_it,
+               t_a_github_request_is_never_answered_with_the_feature_list,
                t_the_measured_report_quote_is_reproduced):
         print(f"\n--- {fn.__name__} ---")
         try:
